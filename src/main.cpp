@@ -10,6 +10,7 @@
 #include <cstring>
 #include <ctime>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <algorithm>
 
@@ -74,18 +75,19 @@ uniform float uFlash; uniform vec3 uFlashDir;
 uniform vec3 uFlarePos; uniform float uFlareInt;
 uniform vec3 uAmb; uniform vec3 uFogCol; uniform float uFogDen;
 uniform vec3 uLightCol; uniform float uLS; uniform float uLY; uniform float uDead; uniform float uLightMul;
+uniform float uGloss;
 out vec4 finalColor;
 float lhash(vec2 g){ return fract(sin(dot(g, vec2(127.1,311.7)))*43758.5453123); }
 float lightState(vec2 g){
     float h = lhash(g);
     if (h < uDead) return 0.0;                      // dead tube
     float s = 1.0;
-    if (h > 0.86){                                  // faulty tube: intermittent strobe fits
+    if (h > 0.93){                                  // faulty tube: occasional gentle stutter
         float fh = fract(h*97.31);
-        float gate = fract(sin(floor(uTime*0.6+fh*37.0)*12.9898)*43758.5453);
-        if (gate > 0.62){
-            float n = fract(sin(uTime*(9.0+fh*15.0) + fh*211.0)*43758.5453);
-            s = 0.25 + 0.75*step(0.5, n);
+        float gate = fract(sin(floor(uTime*0.45+fh*37.0)*12.9898)*43758.5453);
+        if (gate > 0.74){
+            float n = fract(sin(uTime*(7.0+fh*10.0) + fh*211.0)*43758.5453);
+            s = 0.62 + 0.38*step(0.5, n);
         }
     }
     return s * uBlackout;
@@ -93,6 +95,7 @@ float lightState(vec2 g){
 vec3 roomLight(vec3 P, vec3 N){
     vec2 base = floor((P.xz - uLS*0.5)/uLS + 0.5);
     vec3 light = vec3(0.0);
+    vec3 V = normalize(uViewPos - P);
     for (int dx=-1; dx<=1; dx++)
     for (int dz=-1; dz<=1; dz++){
         vec2 g = base + vec2(float(dx), float(dz));
@@ -102,8 +105,13 @@ vec3 roomLight(vec3 P, vec3 N){
         vec3 ld = lp - P;
         float d2 = dot(ld,ld);
         float atten = 1.0/(1.0 + 0.075*d2);
-        float ndl = clamp(dot(N, normalize(ld))*0.55 + 0.45, 0.0, 1.0);
+        vec3 Ln = normalize(ld);
+        float ndl = clamp(dot(N, Ln)*0.55 + 0.45, 0.0, 1.0);
         light += uLightCol*(st*atten*ndl*2.0*uLightMul);
+        if (uGloss > 0.005){                        // glossy sheen: tile shines, concrete barely
+            float sp = pow(max(dot(normalize(Ln + V), N), 0.0), 64.0);
+            light += uLightCol*(sp*uGloss*st*atten*3.0);
+        }
     }
     // handheld flashlight: cone from the camera along the view direction
     if (uFlash > 0.01){
@@ -111,7 +119,7 @@ vec3 roomLight(vec3 P, vec3 N){
         float fd2 = dot(fv,fv);
         vec3 fn = normalize(fv);
         float cone = pow(max(dot(fn, uFlashDir), 0.0), 26.0);
-        float sput = 0.93 + 0.07*fract(sin(floor(uTime*24.0)*12.9898)*43758.5453);
+        float sput = 0.975 + 0.025*fract(sin(floor(uTime*24.0)*12.9898)*43758.5453);
         float fl = uFlash * cone * sput * 7.5/(1.0 + 0.10*fd2);
         light += vec3(1.0,0.97,0.86) * fl * clamp(dot(N, -fn)*0.6 + 0.4, 0.0, 1.0);
     }
@@ -132,6 +140,7 @@ void main(){
             vec2 g = floor((fragPos.xz - uLS*0.5)/uLS + 0.5);
             float st = lightState(g);
             col = vec3(0.50,0.48,0.44) * roomLight(fragPos, vec3(0.0,-1.0,0.0)) + uLightCol*1.9*st;
+            col *= 0.93 + 0.07*sin(fragUV.x*33.0)*sin(fragUV.y*33.0);   // prismatic lens ribs
         } else if (fragC.a < 0.4){                   // raw emissive (exit glow)
             col = fragC.rgb * 2.4;
         } else {                                     // water surface
@@ -144,6 +153,7 @@ void main(){
     } else {
         vec3 albedo = texture(texture0, fragUV).rgb * fragC.rgb;
         col = albedo * roomLight(fragPos, normalize(fragN));
+        aOut = fragC.a;                              // lets contact shadows stay translucent
     }
     float dist = distance(fragPos, uViewPos);
     float f = clamp(exp(-dist*uFogDen), 0.0, 1.0);
@@ -169,11 +179,21 @@ void main(){
     c.r = texture(texture0, uv + dir*ca).r;
     c.g = texture(texture0, uv).g;
     c.b = texture(texture0, uv - dir*ca).b;
+    vec2 pxs = 1.0/vec2(textureSize(texture0, 0));   // soft bloom off the fluorescents
+    vec3 bl = texture(texture0, uv + pxs*vec2( 3.0, 0.0)).rgb
+            + texture(texture0, uv + pxs*vec2(-3.0, 0.0)).rgb
+            + texture(texture0, uv + pxs*vec2( 0.0, 3.0)).rgb
+            + texture(texture0, uv + pxs*vec2( 0.0,-3.0)).rgb
+            + texture(texture0, uv + pxs*vec2( 2.2, 2.2)).rgb
+            + texture(texture0, uv + pxs*vec2(-2.2, 2.2)).rgb
+            + texture(texture0, uv + pxs*vec2( 2.2,-2.2)).rgb
+            + texture(texture0, uv + pxs*vec2(-2.2,-2.2)).rgb;
+    c += max(bl*0.125 - 0.60, 0.0)*0.6;
     float g = hh(uv*vec2(1287.0,721.0) + vec2(fract(uTime*13.71)*61.0, fract(uTime*7.31)*83.0)) - 0.5;
     c += g * (0.032 + 0.08*uFear);                   // film grain
     float d = length(dir);
     c *= 1.0 - smoothstep(0.34, 0.95, d)*(0.42 + 0.34*uFear); // vignette
-    c *= 0.985 + 0.015*sin(uTime*377.0);             // mains-hum luma shimmer
+    c *= 0.994 + 0.006*sin(uTime*377.0);             // mains-hum luma shimmer
     finalColor = vec4(c, 1.0);
 }
 )GLSL";
@@ -662,6 +682,7 @@ struct AudioSynth {
     AudioStream stream;
     float humTarget = 1, hum = 1, growlTarget = 0, growl = 0;   // humTarget ducks all ambience
     float hissTarget = 0, hiss = 0;                             // burning flare hiss
+    float whisperTarget = 0, whisper = 0;                       // something in the walls
     float tHum = 1, tDrone = 0, tWater = 0;                     // per-level ambience mix targets
     float wHum = 1, wDrone = 0, wWater = 0;
     double ph[16] = {};
@@ -685,6 +706,7 @@ struct AudioSynth {
                 hum += (humTarget - hum) * 2e-5f;
                 growl += (growlTarget - growl) * 4e-5f;
                 hiss += (hissTarget - hiss) * 6e-5f;
+                whisper += (whisperTarget - whisper) * 8e-5f;
                 wHum += (tHum - wHum) * 1.5e-5f;
                 wDrone += (tDrone - wDrone) * 1.5e-5f;
                 wWater += (tWater - wWater) * 1.5e-5f;
@@ -709,7 +731,10 @@ struct AudioSynth {
                 float growlOut = (g * trem + lp2 * 2.2f) * growl * 0.5f;
                 float hissOut = (wn - lp1) * 0.16f * hiss;      // flare burn: bright noise
                 if (hiss > 0.01f) { float c = frand(); if (c > 0.998f) hissOut += c * 0.7f * hiss; }  // crackle
-                short v = (short)(tanhf((amb + growlOut + hissOut) * 1.3f) * 30000);
+                // breathy half-syllables that never resolve into words
+                float syl = fmaxf(0.0f, osc(13, 2.7f)) * (0.5f + 0.5f * osc(14, 0.31f));
+                float whisperOut = (wn - lp1) * 0.20f * whisper * (0.25f + 0.75f * syl);
+                short v = (short)(tanhf((amb + growlOut + hissOut + whisperOut) * 1.3f) * 30000);
                 buf[i * 2] = v; buf[i * 2 + 1] = v;
             }
             UpdateAudioStream(stream, buf, 2048);
@@ -759,7 +784,7 @@ struct MB {
 // walls: wallN[i][k] = north edge of cell (i,k) at z=k*CELL; wallW = west edge at x=i*CELL
 // values: 0 open, 1 wall, 2 exit doorway, 3 window into the dark
 // prop types: 0 none, 1 box stack, 2 filing cabinet, 3 folding table, 4 fallen ceiling tile,
-//             5 couch, 6 armoire, 7 floor lamp, 8 nightstand, 9 bed
+//             5 couch, 6 armoire, 7 floor lamp, 8 nightstand, 9 bed, 10 vending machine
 struct ChunkData {
     uint8_t wallN[CCELLS][CCELLS];
     uint8_t wallW[CCELLS][CCELLS];
@@ -830,12 +855,13 @@ struct World {
             int a = rng.ri(0, CCELLS - 1), b = rng.ri(0, CCELLS - 1);
             if (d.pillar[a][b] || d.prop[a][b]) continue;
             float f = rng.f01();
-            if (level == 1) d.prop[a][b] = f < 0.55f ? 1 : f < 0.80f ? 2 : 3;  // warehouse: no fallen tiles
+            if (level == 1) d.prop[a][b] = f < 0.55f ? 1 : f < 0.78f ? 2 : f < 0.96f ? 3 : 10;  // warehouse
             else if (level == 3)                                               // red halls: someone's bedroom
                 d.prop[a][b] = f < 0.30f ? 9 : f < 0.55f ? 6 : f < 0.80f ? 8 : 7;
             else   // L0: office clutter, plus furniture that has no business here
                 d.prop[a][b] = f < 0.26f ? 1 : f < 0.40f ? 2 : f < 0.50f ? 3 : f < 0.62f ? 4 :
-                               f < 0.74f ? 5 : f < 0.84f ? 6 : f < 0.90f ? 7 : f < 0.96f ? 8 : 9;
+                               f < 0.74f ? 5 : f < 0.84f ? 6 : f < 0.90f ? 7 : f < 0.95f ? 8 :
+                               f < 0.985f ? 9 : 10;
             d.propRot[a][b] = (uint8_t)rng.ri(0, 3);
             // boxes like company: sometimes a neighbouring stack
             if (d.prop[a][b] == 1 && a + 1 < CCELLS && rng.f01() < 0.4f && !d.pillar[a + 1][b] && !d.prop[a + 1][b]) {
@@ -1075,8 +1101,12 @@ struct World {
                 wa.quad({gx,0,gz+0.35f},{gx,0,gz+1.65f},{gx,2.3f,gz+1.65f},{gx,2.3f,gz+0.35f},{1,0,0},
                         {0,1},{1,1},{1,0},{0,0},glow);
             }
-            if (dd.pillar[i][kk])
+            if (dd.pillar[i][kk]) {
                 addBoxSides(wa, gx + 0.42f, 0, gz + 0.42f, gx + 1.58f, wallH, gz + 1.58f);
+                wa.quad({gx+0.30f,0.004f,gz+0.30f},{gx+1.70f,0.004f,gz+0.30f},   // contact shadow
+                        {gx+1.70f,0.004f,gz+1.70f},{gx+0.30f,0.004f,gz+1.70f},
+                        {0,1,0},{0,0},{0.04f,0},{0.04f,0.04f},{0,0.04f}, Color{ 12, 12, 12, 160 });
+            }
             if (dd.prop[i][kk]) {
                 float pcx = gx + 1.0f, pcz = gz + 1.0f;
                 float rot = dd.propRot[i][kk] * 1.5708f;
@@ -1095,8 +1125,16 @@ struct World {
                                wood ? CU0 : MU0, wood ? CV0 : MV0, wood ? CU1 : MU1, wood ? CV1 : MV1,
                                wood ? CU0 : MU0, wood ? CV0 : MV0, wood ? CU1 : MU1, wood ? CV1 : MV1, tint);
                 };
+                auto blob = [&](float hx2, float hz2) {   // soft contact shadow under the piece
+                    auto ptv = [&](float lx, float lz) {
+                        return Vector3{ pcx + lx * ca - lz * sa, ey + 0.006f, pcz + lx * sa + lz * ca };
+                    };
+                    pr.quad(ptv(-hx2, -hz2), ptv(hx2, -hz2), ptv(hx2, hz2), ptv(-hx2, hz2), {0,1,0},
+                            {0.75f,0.75f},{0.75f,0.75f},{0.75f,0.75f},{0.75f,0.75f}, Color{ 12, 12, 12, 160 });
+                };
                 switch (dd.prop[i][kk]) {
                 case 1: {   // box stack
+                    blob(0.58f, 0.58f);
                     float bh = 0.55f + r1 * 0.2f, bhx = 0.34f + r2 * 0.08f;
                     addPropBox(pr, pcx + (r3 - 0.5f) * 0.5f, pcz + (r1 - 0.5f) * 0.5f, rot + r2,
                                bhx, bhx, ey, ey + bh, CU0, CV0, CU1, CV1, CU0, CV0, CU1, CV1);
@@ -1110,10 +1148,12 @@ struct World {
                     break;
                 }
                 case 2:     // filing cabinet
+                    blob(0.34f, 0.42f);
                     addPropBox(pr, pcx, pcz, rot, 0.26f, 0.34f, ey, ey + 1.32f,
                                FU0, FV0, FU1, FV1, MU0, MV0, MU1, MV1);
                     break;
                 case 3: {   // folding table
+                    blob(0.68f, 0.46f);
                     float ty = 0.72f;
                     addPropBox(pr, pcx, pcz, rot, 0.62f, 0.40f, ey + ty - 0.04f, ey + ty,
                                MU0, MV0, MU1, MV1, MU0, MV0, MU1, MV1);
@@ -1147,6 +1187,7 @@ struct World {
                     break;
                 }
                 case 5: {   // couch: mustard upholstery gone grey, facing nothing in particular
+                    blob(0.86f, 0.56f);
                     Color uph = { 172, 152, 96, 255 };
                     part(0, 0.10f, 0.78f, 0.42f, ey + 0.16f, ey + 0.44f, false, uph);   // seat
                     part(0, -0.36f, 0.78f, 0.14f, ey + 0.16f, ey + 0.92f, false, uph);  // backrest
@@ -1156,25 +1197,41 @@ struct World {
                     break;
                 }
                 case 6:     // armoire: a wardrobe looming where no bedroom is
+                    blob(0.54f, 0.46f);
                     part(0, 0, 0.44f, 0.36f, ey, ey + 1.78f, true, Color{ 118, 82, 58, 255 });
                     part(0, 0, 0.48f, 0.40f, ey + 1.78f, ey + 1.90f, true, Color{ 92, 63, 44, 255 });  // cornice
                     part(0, 0.37f, 0.015f, 0.015f, ey + 0.85f, ey + 1.0f, false, Color{ 190, 170, 110, 255 }); // handles
                     break;
                 case 7:     // floor lamp, shade askew, never lit
+                    blob(0.22f, 0.22f);
                     part(0, 0, 0.14f, 0.14f, ey, ey + 0.05f, false, Color{ 66, 62, 60, 255 });
                     part(0, 0, 0.025f, 0.025f, ey, ey + 1.34f, false, Color{ 66, 62, 60, 255 });
                     addPropBox(pr, pcx + 0.05f, pcz, rot + 0.3f, 0.17f, 0.17f, ey + 1.30f, ey + 1.60f,
                                CU0, CV0, CU1, CV1, CU0, CV0, CU1, CV1, Color{ 214, 190, 142, 255 });
                     break;
                 case 8:     // nightstand, nowhere near a bed. usually.
+                    blob(0.36f, 0.36f);
                     part(0, 0, 0.26f, 0.26f, ey, ey + 0.55f, true, Color{ 126, 90, 62, 255 });
                     part(0, 0, 0.30f, 0.30f, ey + 0.55f, ey + 0.60f, true, Color{ 104, 74, 50, 255 });
                     break;
                 case 9: {   // bed: bare stained mattress, headboard against nothing
+                    blob(0.60f, 1.02f);
                     Color wd = { 110, 78, 54, 255 };
                     part(0, 0, 0.52f, 0.92f, ey + 0.12f, ey + 0.26f, true, wd);          // frame
                     part(0, 0.04f, 0.48f, 0.86f, ey + 0.26f, ey + 0.46f, true, Color{ 216, 208, 188, 255 }); // mattress
                     part(0, -0.97f, 0.52f, 0.05f, ey, ey + 0.95f, true, wd);             // headboard
+                    break;
+                }
+                case 10: {  // vending machine: still stocked, still humming, takes doubloons
+                    blob(0.52f, 0.44f);
+                    part(0, 0, 0.44f, 0.36f, ey, ey + 1.85f, false, Color{ 148, 152, 158, 255 });
+                    auto ptv2 = [&](float lx, float ly2, float lz) {
+                        return Vector3{ pcx + lx * ca - lz * sa, ly2, pcz + lx * sa + lz * ca };
+                    };
+                    Color panel = { 66, 90, 122, 60 };   // emissive front: soft cold glow
+                    pr.quad(ptv2(-0.28f, ey + 0.55f, -0.375f), ptv2(0.28f, ey + 0.55f, -0.375f),
+                            ptv2(0.28f, ey + 1.68f, -0.375f), ptv2(-0.28f, ey + 1.68f, -0.375f),
+                            { sa, 0, -ca }, {0,1},{1,1},{1,0},{0,0}, panel);
                     break;
                 }
                 }
@@ -1213,6 +1270,7 @@ struct World {
                 case 7: out[cnt++] = { x0 + 0.82f, z0 + 0.82f, x0 + 1.18f, z0 + 1.18f, ey + 1.62f }; break;  // lamp
                 case 8: out[cnt++] = { x0 + 0.66f, z0 + 0.66f, x0 + 1.34f, z0 + 1.34f, ey + 0.60f }; break;  // nightstand
                 case 9: out[cnt++] = { x0 + 0.30f, z0 + 0.15f, x0 + 1.70f, z0 + 1.85f, ey + 0.46f }; break;  // bed
+                case 10: out[cnt++] = { x0 + 0.50f, z0 + 0.58f, x0 + 1.50f, z0 + 1.42f, ey + 1.85f }; break; // vending
                 }
             }
         }
@@ -1334,16 +1392,16 @@ static float lightAtCPU(float x, float y, float z, float blackout,
 
 // ---------------------------------------------------------------- levels
 struct LevelCfg {
-    float wallH, ls, dead, lightMul, fogDen;
+    float wallH, ls, dead, lightMul, fogDen, gloss;
     Vector3 lightCol, amb, fogCol;
     const char *name;
 };
 static const int NLEVELS = 4;
 static const LevelCfg LEVELS[NLEVELS] = {
-    { 3.0f,  8.0f, 0.06f, 1.00f, 0.055f, {1.00f,0.94f,0.74f}, {0.045f,0.042f,0.030f}, {0.140f,0.125f,0.070f}, "LEVEL 0" },
-    { 4.2f, 12.0f, 0.30f, 0.85f, 0.075f, {0.72f,0.80f,0.95f}, {0.016f,0.017f,0.022f}, {0.018f,0.020f,0.026f}, "LEVEL 1" },
-    { 3.6f,  8.0f, 0.06f, 0.72f, 0.045f, {1.00f,1.00f,0.97f}, {0.16f,0.18f,0.20f},    {0.19f,0.23f,0.27f},    "THE POOLROOMS" },
-    { 3.0f,  8.0f, 0.45f, 0.80f, 0.095f, {1.00f,0.22f,0.15f}, {0.030f,0.008f,0.006f}, {0.055f,0.010f,0.008f}, "THE RED HALLS" },
+    { 3.0f,  8.0f, 0.06f, 1.00f, 0.055f, 0.06f, {1.00f,0.94f,0.74f}, {0.045f,0.042f,0.030f}, {0.140f,0.125f,0.070f}, "LEVEL 0" },
+    { 4.2f, 12.0f, 0.30f, 0.85f, 0.075f, 0.22f, {0.72f,0.80f,0.95f}, {0.016f,0.017f,0.022f}, {0.018f,0.020f,0.026f}, "LEVEL 1" },
+    { 3.6f,  8.0f, 0.06f, 0.72f, 0.045f, 0.55f, {1.00f,1.00f,0.97f}, {0.16f,0.18f,0.20f},    {0.19f,0.23f,0.27f},    "THE POOLROOMS" },
+    { 3.0f,  8.0f, 0.45f, 0.80f, 0.095f, 0.10f, {1.00f,0.22f,0.15f}, {0.030f,0.008f,0.006f}, {0.055f,0.010f,0.008f}, "THE RED HALLS" },
 };
 
 // ---------------------------------------------------------------- entity
@@ -1354,6 +1412,7 @@ struct Entity {
     double nextSpawn = 12.0;
     float gaze = 0, life = 0, unseen = 0;
     float dispY = 0;   // smoothed floor height under him, so he doesn't pop on stairs
+    float lunge = 0;   // mid-chase burst of speed
     int hp = 3;
 };
 
@@ -1393,6 +1452,7 @@ int main() {
     int locLightMul = GetShaderLocation(worldShader, "uLightMul");
     int locFlarePos = GetShaderLocation(worldShader, "uFlarePos");
     int locFlareInt = GetShaderLocation(worldShader, "uFlareInt");
+    int locGloss = GetShaderLocation(worldShader, "uGloss");
     Shader postShader = LoadShaderFromMemory(NULL, POST_FS);
     int locPTime = GetShaderLocation(postShader, "uTime");
     int locPFear = GetShaderLocation(postShader, "uFear");
@@ -1472,6 +1532,28 @@ int main() {
     int frame = 0;
     RenderTexture2D rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
 
+    // pickups, currency, chalk, ambient events, records
+    std::unordered_set<uint64_t> taken;      // world pickups already grabbed (reset per level)
+    std::vector<Vector3> coinsWorld;         // doubloons Clark spills when he goes down
+    std::vector<Vector3> chalk;              // navigation marks
+    int almond = 0, coins = 0;
+    float boostT = 0, crouchCur = 0, whisperT = 0;
+    double nextWhisper = runStart + 45 + grng.f01() * 60;
+    char bestPath[512];
+    snprintf(bestPath, sizeof(bestPath), "%s/.backrooms_best", getenv("HOME") ? getenv("HOME") : ".");
+    int bestEsc = 0, bestKill = 0, bestM = 0;
+    if (FILE *bf = fopen(bestPath, "r")) {
+        if (fscanf(bf, "%d %d %d", &bestEsc, &bestKill, &bestM) != 3) bestEsc = bestKill = bestM = 0;
+        fclose(bf);
+    }
+    auto saveBest = [&]() {
+        bool up = false;
+        if (escapeCount > bestEsc) { bestEsc = escapeCount; up = true; }
+        if (killCount > bestKill) { bestKill = killCount; up = true; }
+        if ((int)distWalked > bestM) { bestM = (int)distWalked; up = true; }
+        if (up) if (FILE *bf = fopen(bestPath, "w")) { fprintf(bf, "%d %d %d\n", bestEsc, bestKill, bestM); fclose(bf); }
+    };
+
     auto applyLevel = [&](int lv) {
         level = lv;
         const LevelCfg &c = LEVELS[lv];
@@ -1491,11 +1573,13 @@ int main() {
         SetShaderValue(worldShader, locLY, &ly, SHADER_UNIFORM_FLOAT);
         SetShaderValue(worldShader, locDead, &c.dead, SHADER_UNIFORM_FLOAT);
         SetShaderValue(worldShader, locLightMul, &c.lightMul, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(worldShader, locGloss, &c.gloss, SHADER_UNIFORM_FLOAT);
         synth.tHum = lv == 0 ? 1.0f : 0.15f;
         synth.tDrone = lv == 1 ? 1.0f : 0.0f;
         synth.tWater = lv == 2 ? 1.0f : 0.0f;
         nextBlackout = lv == 2 ? 1e18 : GetTime() + 30 + grng.f01() * 60;   // no blackouts in the poolrooms
         blackoutEnd = -1;
+        taken.clear(); coinsWorld.clear(); chalk.clear();   // it's a different maze down here
         SetWindowTitle(TextFormat("THE BACKROOMS — %s", c.name));
     };
     applyLevel(0);
@@ -1542,11 +1626,15 @@ int main() {
         float il = sqrtf(ix * ix + iz * iz);
         bool moving = il > 0.01f;
         if (moving) { ix /= il; iz /= il; }
-        bool sprinting = moving && IsKeyDown(KEY_LEFT_SHIFT) && stamina > 0.02f;
+        bool crouched = IsKeyDown(KEY_LEFT_CONTROL);
+        crouchCur += ((crouched ? 1.0f : 0.0f) - crouchCur) * fminf(1, 10 * dt);
+        bool sprinting = moving && IsKeyDown(KEY_LEFT_SHIFT) && stamina > 0.02f && !crouched;
         stamina = clampf(stamina + (sprinting ? -dt / 10.0f : dt / 6.0f), 0, 1);
+        boostT = fmaxf(0, boostT - dt);
         float groundY = world.groundAt(px, pz, py);
         bool inWater = grounded && py < -0.1f && world.poolAt(cellOf(px), cellOf(pz));
-        float speed = (sprinting ? 6.8f : 3.6f) * (inWater ? 0.55f : 1.0f);
+        float speed = (sprinting ? 6.8f : crouched ? 1.9f : 3.6f) * (inWater ? 0.55f : 1.0f)
+                    * (boostT > 0 ? 1.12f : 1.0f);
         float tvx = ix * speed, tvz = iz * speed;
         float accel = moving ? 12.0f : 9.0f;
         velx += (tvx - velx) * fminf(1, accel * dt);
@@ -1586,7 +1674,7 @@ int main() {
         float bobAmt = clampf(spd / 5.3f, 0, 1) * (grounded ? 1.0f : 0.0f);
         stepAcc += spd * dt * (grounded ? 1.0f : 0.0f);
         bobPhase += spd * dt * 1.65f;
-        float eyeY = 1.62f + py + sinf(bobPhase * 3.14159f) * 0.045f * bobAmt;
+        float eyeY = 1.62f - 0.55f * crouchCur + py + sinf(bobPhase * 3.14159f) * 0.045f * bobAmt;
         float stepLen = 1.85f + speed * 0.13f;
         if (stepAcc > stepLen) {
             stepAcc -= stepLen;
@@ -1647,6 +1735,9 @@ int main() {
             else {
                 ammo--; gunCd = 0.42f; muzzleT = 0.09f; recoil = 1.0f;
                 PlaySound(sndShot);
+                // the report carries down every hallway
+                if (ent.st == EState::Hidden) ent.nextSpawn = fmin(ent.nextSpawn, now + 5 + grng.f01() * 6);
+                else if (ent.st == EState::Stalk) ent.gaze += 0.8f;
                 if (ent.st == EState::Stalk || ent.st == EState::Chase || ent.st == EState::Flee) {
                     float ex = ent.x - px, ez = ent.z - pz;
                     float along = ex * f2x + ez * f2z;          // in front of the muzzle
@@ -1657,6 +1748,11 @@ int main() {
                             PlaySound(sndKill);
                             killT = 3.0f; killCount++;
                             ent.st = EState::Die; ent.life = 0;
+                            for (int c2 = 0; c2 < 5; c2++) {   // he spills his doubloons
+                                float aa = c2 * 1.2566f + grng.f01();
+                                coinsWorld.push_back({ ent.x + cosf(aa) * 0.5f, 0, ent.z + sinf(aa) * 0.5f });
+                            }
+                            saveBest();
                         } else {             // staggered: knocked back, bolts
                             PlaySound(sndHit);
                             float dd = sqrtf(ex * ex + ez * ez);
@@ -1681,6 +1777,7 @@ int main() {
             flare.x = px + fwd.x * 0.4f; flare.y = eyeY - 0.15f; flare.z = pz + fwd.z * 0.4f;
             flare.vx = fwd.x * 10.5f; flare.vz = fwd.z * 10.5f; flare.vy = fwd.y * 10.5f + 2.4f;
             PlaySound(sndFlare);
+            if (ent.st == EState::Hidden) ent.nextSpawn = fmin(ent.nextSpawn, now + 12 + grng.f01() * 10);  // he hears the strike
         }
         if (flare.active) {
             if (flare.flying) {
@@ -1713,6 +1810,70 @@ int main() {
             synth.hissTarget = clampf(flare.burn / 1.5f, 0, 1) / (1.0f + 0.05f * (fdx * fdx + fdz * fdz));
         } else synth.hissTarget = 0;
 
+        // ---- pickups, drinking, vending machines, chalk
+        int pci = cellOf(px), pck = cellOf(pz);
+        auto cellKey2 = [](int a, int b) { return ((uint64_t)(uint32_t)a << 32) | (uint32_t)b; };
+        auto bottleAt = [&](int a, int b) {   // almond water, left out for whoever needs it
+            if (world.pillarAt(a, b) || world.propAt(a, b) || world.poolAt(a, b)) return false;
+            return ih(a, b, (uint32_t)world.seed ^ 0xA1A1u) % 331 == 0;
+        };
+        auto coinAt = [&](int a, int b) {     // a doubloon he dropped on his rounds
+            if (world.pillarAt(a, b) || world.propAt(a, b) || world.poolAt(a, b)) return false;
+            return ih(a, b, (uint32_t)world.seed ^ 0xC01Du) % 449 == 0;
+        };
+        for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+            int a = pci + dx, b = pck + dz;
+            uint64_t ky = cellKey2(a, b);
+            if (taken.count(ky)) continue;
+            bool isB = bottleAt(a, b), isC = !isB && coinAt(a, b);
+            if (!isB && !isC) continue;
+            float bxx = a * CELL + 1.0f, bzz = b * CELL + 1.0f;
+            float ddx = px - bxx, ddz = pz - bzz;
+            if (ddx * ddx + ddz * ddz < 0.8f * 0.8f) {
+                taken.insert(ky);
+                if (isB) almond++; else coins++;
+                SetSoundPitch(sndClick, isB ? 1.3f : 1.6f); PlaySound(sndClick);
+            }
+        }
+        for (size_t c2 = 0; c2 < coinsWorld.size();) {   // spilled doubloons
+            float ddx = px - coinsWorld[c2].x, ddz = pz - coinsWorld[c2].z;
+            if (ddx * ddx + ddz * ddz < 0.7f * 0.7f) {
+                coins++;
+                SetSoundPitch(sndClick, 1.6f); PlaySound(sndClick);
+                coinsWorld.erase(coinsWorld.begin() + c2);
+            } else ++c2;
+        }
+        if (IsKeyPressed(KEY_THREE) && almond > 0) {   // drink: catch your breath, steady your hands
+            almond--; stamina = 1.0f; fear *= 0.35f; boostT = 8.0f;
+            SetSoundPitch(splashes[0], 1.5f); SetSoundVolume(splashes[0], 0.5f);
+            PlaySound(splashes[0]);
+        }
+        if (IsKeyPressed(KEY_E)) {   // vending machine: three doubloons a bottle
+            for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+                int a = pci + dx, b = pck + dz;
+                if (world.propAt(a, b) != 10) continue;
+                float mx = a * CELL + 1.0f, mz = b * CELL + 1.0f;
+                float ddx = px - mx, ddz = pz - mz;
+                if (ddx * ddx + ddz * ddz < 1.6f * 1.6f && coins >= 3) {
+                    coins -= 3; almond++;
+                    SetSoundPitch(sndClick, 0.8f); PlaySound(sndClick);
+                }
+            }
+        }
+        if (IsKeyPressed(KEY_M)) {   // chalk mark: the only map you get
+            chalk.push_back({ px + f2x * 0.5f, world.groundAt(px + f2x * 0.5f, pz + f2z * 0.5f, py) + 0.012f,
+                              pz + f2z * 0.5f });
+            if (chalk.size() > 128) chalk.erase(chalk.begin());
+        }
+
+        // ---- whispers in the walls
+        if (whisperT <= 0 && now > nextWhisper && ent.st == EState::Hidden) {
+            whisperT = 4.5f;
+            nextWhisper = now + 70 + grng.f01() * 90;
+        }
+        whisperT = fmaxf(0, whisperT - dt);
+        synth.whisperTarget = whisperT > 0 ? 0.55f : 0.0f;
+
         // ---- blackout events
         bool blackout = now < blackoutEnd;
         if (!blackout && now > nextBlackout) {
@@ -1735,6 +1896,7 @@ int main() {
         float entDist = 1e9f;
         bool entVisible = false;
         if (ent.st == EState::Hidden) {
+            if (sprinting) ent.nextSpawn -= 1.5 * dt;   // running feet echo a long way
             if (now > ent.nextSpawn) {
                 float a = grng.f01() * 6.2831853f;
                 float d = 20 + grng.f01() * 10;
@@ -1748,6 +1910,7 @@ int main() {
             entDist = sqrtf(ex * ex + ez * ez);
             float dirDot = (entDist > 0.01f) ? (fwd.x * ex + fwd.z * ez) / entDist : 1;
             entVisible = entDist < 36 && dirDot > 0.86f && world.lineOfSight(px, pz, ent.x, ent.z);
+            if (crouchCur > 0.7f && entDist > 7) entVisible = false;   // low and quiet: hard to pick out
             if (flare.active && (ent.st == EState::Stalk || ent.st == EState::Chase)) {
                 float fx = ent.x - flare.x, fz = ent.z - flare.z;
                 if (fx * fx + fz * fz < 6.0f * 6.0f) {   // fire is the one thing he remembers
@@ -1763,17 +1926,21 @@ int main() {
             }
             if (ent.st == EState::Chase) {
                 fearT = entDist < 8 ? 1.0f : 0.8f;
-                float chaseSpd = 3.3f + 1.0f * clampf(1 - entDist / 25.0f, 0, 1);
+                ent.lunge = fmaxf(0, ent.lunge - dt);
+                if (entDist < 5.5f && entDist > 1.6f && ent.lunge <= 0 && grng.f01() < dt * 0.5f)
+                    ent.lunge = 0.55f;   // sudden burst — don't let him get close
+                float chaseSpd = 3.3f + 1.0f * clampf(1 - entDist / 25.0f, 0, 1) + (ent.lunge > 0 ? 3.2f : 0.0f);
                 if (entDist > 0.01f) {
                     ent.x -= ex / entDist * chaseSpd * dt;
                     ent.z -= ez / entDist * chaseSpd * dt;
                 }
                 world.collideCircle(ent.x, ent.z, 0.38f);
-                ent.unseen = entVisible ? 0 : ent.unseen + dt;
+                ent.unseen = entVisible ? 0 : ent.unseen + dt * (crouchCur > 0.7f ? 1.7f : 1.0f);
                 if (ent.unseen > 6 && entDist > 14) ent.st = EState::Hidden, ent.nextSpawn = now + 25 + grng.f01() * 40;
                 if (entDist < 1.25f) {   // caught
                     PlaySound(sndScare);
                     caughtT = 2.4f; caughtCount++;
+                    saveBest();
                     float a = grng.f01() * 6.2831853f;
                     Vector2 spot = world.findOpenSpot(px + cosf(a) * 800, pz + sinf(a) * 800);
                     px = spot.x; pz = spot.y; velx = velz = 0;
@@ -1801,6 +1968,7 @@ int main() {
             ent.dispY += (egt - ent.dispY) * fminf(1, 10 * dt);
         }
         fear += (fearT - fear) * fminf(1, 2.2f * dt);
+        if (whisperT > 0) fear = fmaxf(fear, 0.22f);
         synth.growlTarget = (ent.st == EState::Chase) ? 0.75f * clampf(1 - entDist / 35.0f, 0.1f, 1.0f)
                           : (ent.st == EState::Stalk && entVisible) ? 0.22f * clampf(1 - entDist / 35.0f, 0, 1) : 0.0f;
         synth.update();
@@ -1818,6 +1986,7 @@ int main() {
                 if (ddx * ddx + ddz * ddz < 0.72f * 0.72f) {
                     PlaySound(sndWin);
                     escapeT = 6.0f; escapeCount++;
+                    saveBest();
                     applyLevel((level + 1) % 3);      // the exit leads deeper
                     Vector2 spot = world.findOpenSpot(px, pz);
                     px = spot.x; pz = spot.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
@@ -1852,11 +2021,12 @@ int main() {
         float timeF = (float)now;
         Vector3 viewPos = cam.position;
         SetShaderValue(worldShader, locTime, &timeF, SHADER_UNIFORM_FLOAT);
-        SetShaderValue(worldShader, locBlackout, &blackoutCur, SHADER_UNIFORM_FLOAT);
+        float boSend = blackoutCur * (whisperT > 0 ? 0.86f : 1.0f);   // lights sag while it whispers
+        SetShaderValue(worldShader, locBlackout, &boSend, SHADER_UNIFORM_FLOAT);
         SetShaderValue(worldShader, locViewPos, &viewPos, SHADER_UNIFORM_VEC3);
         SetShaderValue(worldShader, locFlash, &flashCur, SHADER_UNIFORM_FLOAT);
         SetShaderValue(worldShader, locFlashDir, &fwd, SHADER_UNIFORM_VEC3);
-        float flick = 0.82f + 0.18f * sinf(timeF * 31.0f) * sinf(timeF * 47.3f + 1.3f);
+        float flick = 0.91f + 0.09f * sinf(timeF * 31.0f) * sinf(timeF * 47.3f + 1.3f);
         float flareInt = flare.active
             ? clampf((FLAREBURN - flare.burn) * 6.0f, 0, 1) * clampf(flare.burn / 1.5f, 0, 1) * flick
             : 0.0f;
@@ -1887,6 +2057,33 @@ int main() {
             if (it != world.chunks.end() && it->second.built && it->second.meshes[4].vertexCount > 0)
                 DrawMesh(it->second.meshes[4], mats[0], ident);
         }
+        for (int dx = -7; dx <= 7; dx++) for (int dz = -7; dz <= 7; dz++) {   // world pickups nearby
+            int a = pci + dx, b = pck + dz;
+            if (taken.count(cellKey2(a, b))) continue;
+            bool isB = bottleAt(a, b), isC = !isB && coinAt(a, b);
+            if (!isB && !isC) continue;
+            float bxx = a * CELL + 1.0f, bzz = b * CELL + 1.0f;
+            float gy = world.floorY(a, b);
+            if (isB) {   // almond water: chubby bottle, faint glow
+                DrawCylinder({ bxx, gy, bzz }, 0.055f, 0.065f, 0.19f, 8, { 88, 122, 176, 255 });
+                DrawCylinder({ bxx, gy + 0.19f, bzz }, 0.02f, 0.05f, 0.07f, 8, { 120, 150, 195, 255 });
+            } else {
+                float bob = sinf((float)now * 2.0f + a * 1.7f + b) * 0.03f;
+                DrawCylinder({ bxx, gy + 0.06f + bob, bzz }, 0.085f, 0.085f, 0.024f, 12, { 214, 172, 66, 255 });
+            }
+        }
+        for (auto &cw : coinsWorld) {
+            float gy = world.floorY(cellOf(cw.x), cellOf(cw.z));
+            float bob = sinf((float)now * 2.4f + cw.x) * 0.03f;
+            DrawCylinder({ cw.x, gy + 0.06f + bob, cw.z }, 0.085f, 0.085f, 0.024f, 12, { 214, 172, 66, 255 });
+        }
+        for (auto &cm : chalk)
+            if (fabsf(cm.x - px) < 30 && fabsf(cm.z - pz) < 30) {
+                DrawCylinderEx({ cm.x - 0.18f, cm.y, cm.z - 0.18f }, { cm.x + 0.18f, cm.y, cm.z + 0.18f },
+                               0.014f, 0.014f, 5, { 228, 228, 218, 200 });
+                DrawCylinderEx({ cm.x - 0.18f, cm.y, cm.z + 0.18f }, { cm.x + 0.18f, cm.y, cm.z - 0.18f },
+                               0.014f, 0.014f, 5, { 228, 228, 218, 200 });
+            }
         if (flare.active) {   // the flare itself: hot core, orange halo, stub of a body
             Vector3 fp = { flare.x, flare.y + 0.05f, flare.z };
             DrawCylinder({ flare.x, flare.y - 0.03f, flare.z }, 0.018f, 0.022f, 0.09f, 8, { 130, 30, 22, 255 });
@@ -1965,8 +2162,13 @@ int main() {
             DrawText(t1, sw / 2 - MeasureText(t1, 52) / 2, sh / 3, 52, Fade({ 220, 205, 150, 255 }, ta));
             const char *t2 = "if you're reading this, you've already noclipped";
             DrawText(t2, sw / 2 - MeasureText(t2, 18) / 2, sh / 3 + 66, 18, Fade({ 160, 150, 110, 255 }, ta * 0.9f));
-            const char *t3 = "WASD walk   SHIFT run   SPACE jump   F flashlight   1/2 weapon   Q flare   R reload   F11 fullscreen";
+            const char *t3 = "WASD walk   SHIFT run   CTRL crouch   SPACE jump   F flashlight   1/2 weapon   3 drink   M chalk   E vend";
             DrawText(t3, sw / 2 - MeasureText(t3, 16) / 2, sh - 60, 16, Fade({ 140, 132, 100, 255 }, ta * 0.8f));
+            if (bestEsc || bestKill || bestM) {
+                const char *tb = TextFormat("best: %d escape%s  ·  %d clark%s put down  ·  %d m wandered",
+                                            bestEsc, bestEsc == 1 ? "" : "s", bestKill, bestKill == 1 ? "" : "s", bestM);
+                DrawText(tb, sw / 2 - MeasureText(tb, 16) / 2, sh / 3 + 98, 16, Fade({ 150, 140, 105, 255 }, ta * 0.8f));
+            }
         }
         if (caughtT > 0) {
             DrawRectangle(0, 0, sw, sh, Fade(BLACK, clampf(caughtT / 2.4f * 1.8f, 0, 1)));
@@ -2007,14 +2209,25 @@ int main() {
             DrawText("F — flashlight", sw - MeasureText("F — flashlight", 16) - 16, sh - 28, 16, { 190, 180, 140, 160 });
         else if (flashOn)
             DrawText("[ flashlight ]", sw - MeasureText("[ flashlight ]", 14) - 16, sh - 26, 14, { 235, 225, 180, 120 });
-        {   // weapons, bottom-left; the selected one is lit
+        {   // inventory, bottom-left; the selected weapon is lit
             const char *w0 = TextFormat("1  flare  ×%d", flares);
             const char *w1 = reloadT > 0 ? "2  revolver  [reloading]"
                                          : TextFormat("2  revolver  %d/%d%s", ammo, MAXAMMO, ammo == 0 ? "  — R" : "");
             Color selc = { 235, 200, 130, 210 }, dimc = { 150, 138, 112, 110 };
+            if (coins > 0)
+                DrawText(TextFormat("doubloons  ×%d", coins), 16, sh - 94, 16, { 214, 178, 92, 170 });
+            DrawText(TextFormat("3  almond water  ×%d", almond), 16, sh - 72, 16,
+                     almond > 0 ? Color{ 150, 190, 235, 170 } : dimc);
             DrawText(w0, 16, sh - 50, 16, weapon == 0 ? selc : dimc);
             DrawText(w1, 16, sh - 28, 16, weapon == 1 ? selc : dimc);
         }
+        if (stamina < 0.98f) {   // sprint bar, bottom centre
+            int bw = 220, bx2 = sw / 2 - bw / 2, by2 = sh - 42;
+            DrawRectangle(bx2 - 1, by2 - 1, bw + 2, 8, { 0, 0, 0, 120 });
+            DrawRectangle(bx2, by2, (int)(bw * stamina), 6, { 200, 180, 120, 160 });
+        }
+        if (crouchCur > 0.5f)
+            DrawText("[ crouched ]", sw / 2 - MeasureText("[ crouched ]", 14) / 2, sh - 62, 14, { 180, 170, 140, 120 });
         if (debugHud) {
             DrawText(TextFormat("%d fps  pos(%.0f, %.0f)  chunks %d  entity %s  d=%.0fm",
                                 GetFPS(), px, pz, (int)world.chunks.size(),
@@ -2035,6 +2248,7 @@ int main() {
         }
     }
 
+    saveBest();
     CloseAudioDevice();
     CloseWindow();
     return 0;
