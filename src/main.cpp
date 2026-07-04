@@ -577,6 +577,7 @@ static Sound makeClick() {
     Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
 }
 
+<<<<<<< HEAD
 static Sound makeFlareStrike() {
     int n = (int)(0.8f * 44100);
     Wave w = makeWaveBuf(n);
@@ -595,6 +596,8 @@ static Sound makeFlareStrike() {
     Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
 }
 
+=======
+>>>>>>> bb7a9663312e01303ae6307b867d48e9e7b1333d
 Sound makeWinChime() {
     int n = (int)(1.8f * 44100);
     Wave w = makeWaveBuf(n);
@@ -618,7 +621,10 @@ Sound makeWinChime() {
 struct AudioSynth {
     AudioStream stream;
     float humTarget = 1, hum = 1, growlTarget = 0, growl = 0;   // humTarget ducks all ambience
+<<<<<<< HEAD
     float hissTarget = 0, hiss = 0;                             // burning flare hiss
+=======
+>>>>>>> bb7a9663312e01303ae6307b867d48e9e7b1333d
     float tHum = 1, tDrone = 0, tWater = 0;                     // per-level ambience mix targets
     float wHum = 1, wDrone = 0, wWater = 0;
     double ph[16] = {};
@@ -641,7 +647,10 @@ struct AudioSynth {
             for (int i = 0; i < 2048; i++) {
                 hum += (humTarget - hum) * 2e-5f;
                 growl += (growlTarget - growl) * 4e-5f;
+<<<<<<< HEAD
                 hiss += (hissTarget - hiss) * 6e-5f;
+=======
+>>>>>>> bb7a9663312e01303ae6307b867d48e9e7b1333d
                 wHum += (tHum - wHum) * 1.5e-5f;
                 wDrone += (tDrone - wDrone) * 1.5e-5f;
                 wWater += (tWater - wWater) * 1.5e-5f;
@@ -664,9 +673,13 @@ struct AudioSynth {
                 float trem = 0.55f + 0.45f * osc(7, 2.1f);
                 lp2 += 0.02f * (wn - lp2);
                 float growlOut = (g * trem + lp2 * 2.2f) * growl * 0.5f;
+<<<<<<< HEAD
                 float hissOut = (wn - lp1) * 0.16f * hiss;      // flare burn: bright noise
                 if (hiss > 0.01f) { float c = frand(); if (c > 0.998f) hissOut += c * 0.7f * hiss; }  // crackle
                 short v = (short)(tanhf((amb + growlOut + hissOut) * 1.3f) * 30000);
+=======
+                short v = (short)(tanhf((amb + growlOut) * 1.3f) * 30000);
+>>>>>>> bb7a9663312e01303ae6307b867d48e9e7b1333d
                 buf[i * 2] = v; buf[i * 2 + 1] = v;
             }
             UpdateAudioStream(stream, buf, 2048);
