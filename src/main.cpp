@@ -276,9 +276,9 @@ static Texture2D makeEntityTex() {
             float dy = (y - 36) / 17.0f;
             if (dy * dy < 1.0f) hspan(y, cx, 15.0f * sqrtf(1 - dy * dy) + rag, body);
         }
-        if (y >= 44 && y <= 64) {                                                    // ragged beard
+        if (y >= 44 && y <= 74) {                                                    // long ragged beard
             float br = vnoise2(0.4f * y, 17.3f, 91u);
-            if (br > 0.28f) hspan(y, cx, 13.0f * (1.0f - (y - 44) / 24.0f) + rag, body);
+            if (br > 0.30f) hspan(y, cx, 13.0f * (1.0f - (y - 44) / 34.0f) + rag, body);
         }
         if (y > 56 && y <= 66) hspan(y, cx, 7 + rag, body);                          // neck
         if (y > 62 && y <= 165) {                                                    // long coat, flared hem
@@ -306,18 +306,18 @@ static Texture2D makeEntityTex() {
         int y = 30 + (x - 46) / 9;
         if (p[y * W + x].a) { p[y * W + x] = { 58, 52, 46, 255 }; p[(y + 1) * W + x] = { 48, 43, 38, 255 }; }
     }
-    // single glowing eye (right side; left is under the patch)
+    // single glowing eye (right side; left is under the patch) — brighter for the close-ups
     {
         float ex = 64 + 7.5f, ey = 36;
-        for (int dy = -6; dy <= 6; dy++) for (int dx = -6; dx <= 6; dx++) {
+        for (int dy = -7; dy <= 7; dy++) for (int dx = -7; dx <= 7; dx++) {
             float d = sqrtf((float)(dx * dx + dy * dy));
             int x = (int)(ex + dx), y = (int)(ey + dy);
             if (x < 0 || x >= W || y < 0 || y >= H || p[y * W + x].a == 0) continue;
-            if (d < 2.6f) p[y * W + x] = { 231, 224, 202, 255 };
-            else if (d < 6.0f) {
-                float t = expf(-(d - 2.6f) * 1.1f) * 0.5f;
+            if (d < 3.0f) p[y * W + x] = { 244, 238, 214, 255 };
+            else if (d < 7.0f) {
+                float t = expf(-(d - 3.0f) * 1.0f) * 0.6f;
                 Color &c = p[y * W + x];
-                c.r = cl8(c.r + 190 * t); c.g = cl8(c.g + 180 * t); c.b = cl8(c.b + 150 * t);
+                c.r = cl8(c.r + 205 * t); c.g = cl8(c.g + 195 * t); c.b = cl8(c.b + 160 * t);
             }
         }
     }
@@ -329,6 +329,28 @@ static Texture2D makeEntityTex() {
             if (fabsf(d - 5.0f) < 1.4f && dy > -3) put((int)(hx + dx), (int)(hy + dy), { 150, 150, 158, 255 });
         }
         for (int y = 186; y < 191; y++) hspan(y, hx, 2, { 120, 120, 126, 255 });     // hook base
+        for (int q = -1; q <= 1; q++) put((int)(hx + 4), (int)(hy + q), { 224, 226, 234, 255 }); // glint
+    }
+    // the movie-poster details: skull on the hat, bandolier, brass buttons
+    auto putIf = [&](int x, int y, Color c) {
+        if (x >= 0 && x < W && y >= 0 && y < H && p[y * W + x].a) p[y * W + x] = c;
+    };
+    {   // bone-white skull emblem, crossbones behind
+        for (int s = -1; s <= 1; s += 2)
+            for (int t = 2; t <= 7; t++) { putIf(64 + s * t, 7 + t, { 188, 180, 156, 255 }); putIf(64 + s * t, 8 + t, { 172, 164, 140, 255 }); }
+        for (int dy = -3; dy <= 3; dy++) for (int dx = -3; dx <= 3; dx++)
+            if (dx * dx + dy * dy * 1.6f < 10.5f) putIf(64 + dx, 8 + dy, { 208, 199, 172, 255 });
+        putIf(62, 7, { 25, 20, 16, 255 }); putIf(63, 7, { 25, 20, 16, 255 });   // sockets
+        putIf(65, 7, { 25, 20, 16, 255 }); putIf(66, 7, { 25, 20, 16, 255 });
+        for (int x = 62; x <= 66; x++) putIf(x, 11, (x & 1) ? Color{ 30, 24, 18, 255 } : Color{ 196, 188, 162, 255 }); // teeth
+    }
+    {   // bandolier slung shoulder to hip, brass studs
+        for (int y = 68; y <= 128; y++) {
+            int xc = 54 + (y - 68) * 22 / 60;
+            for (int dx = -2; dx <= 2; dx++)
+                putIf(xc + dx, y, dx == 0 && (y % 9) < 2 ? Color{ 172, 136, 66, 255 } : Color{ 54, 43, 34, 255 });
+        }
+        for (int y = 82; y <= 152; y += 14) { putIf(59, y, { 158, 124, 58, 255 }); putIf(60, y, { 182, 148, 74, 255 }); } // buttons
     }
     return finishTexture(img, false);
 }
@@ -595,6 +617,27 @@ static Sound makeFlareStrike() {
     Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
 }
 
+static Sound makeGunshot() {
+    int n = (int)(0.9f * 44100);
+    Wave w = makeWaveBuf(n);
+    short *d = (short *)w.data;
+    Rng r(0x6A17ULL);
+    float lp = 0, lp2 = 0;
+    for (int i = 0; i < n; i++) {
+        float t = i / 44100.0f;
+        float wn = r.f01() * 2 - 1;
+        lp += 0.60f * (wn - lp);
+        lp2 += 0.07f * (wn - lp2);
+        float crack = lp * expf(-t * 170.0f) * 2.8f;                          // supersonic crack
+        float body = lp2 * expf(-t * 16.0f) * 2.4f;                           // blast body
+        float thump = sinf(6.2831853f * (72.0f - 30.0f * t) * t) * expf(-t * 8.0f) * 1.2f;
+        float tail = lp2 * expf(-t * 3.2f) * 0.4f;                            // hallway slap-back
+        float s = tanhf((crack + body + thump + tail) * 1.9f) * expf(-t * 0.9f);
+        d[i] = (short)(clampf1(s) * 32000);
+    }
+    Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
+}
+
 Sound makeWinChime() {
     int n = (int)(1.8f * 44100);
     Wave w = makeWaveBuf(n);
@@ -714,8 +757,9 @@ struct MB {
 };
 
 // walls: wallN[i][k] = north edge of cell (i,k) at z=k*CELL; wallW = west edge at x=i*CELL
-// values: 0 open, 1 wall, 2 exit doorway
-// prop types: 0 none, 1 box stack, 2 filing cabinet, 3 folding table, 4 fallen ceiling tile
+// values: 0 open, 1 wall, 2 exit doorway, 3 window into the dark
+// prop types: 0 none, 1 box stack, 2 filing cabinet, 3 folding table, 4 fallen ceiling tile,
+//             5 couch, 6 armoire, 7 floor lamp, 8 nightstand, 9 bed
 struct ChunkData {
     uint8_t wallN[CCELLS][CCELLS];
     uint8_t wallW[CCELLS][CCELLS];
@@ -723,11 +767,12 @@ struct ChunkData {
     uint8_t prop[CCELLS][CCELLS];
     uint8_t propRot[CCELLS][CCELLS];
     uint8_t pool[CCELLS][CCELLS];
+    int8_t elev[CCELLS][CCELLS];   // floor height in decimetres: -5 sunken lounge (L0), +6 loading dock (L1)
     bool built = false;
     Mesh meshes[5] = {};   // 0 floor, 1 ceiling, 2 walls, 3 props, 4 water
 };
 
-struct AABB { float minx, minz, maxx, maxz; };
+struct AABB { float minx, minz, maxx, maxz, top; };   // top: height you can stand on
 
 static int fdiv(int a, int b) { return (a >= 0) ? a / b : -((-a + b - 1) / b); }
 static int cellOf(float x) { return (int)floorf(x / CELL); }
@@ -755,32 +800,42 @@ struct World {
         memset(d.wallW, 0, sizeof(d.wallW));
         memset(d.pillar, 0, sizeof(d.pillar));
         memset(d.pool, 0, sizeof(d.pool));
+        memset(d.elev, 0, sizeof(d.elev));
         uint64_t k = key(cx, cz);
         Rng rng(hash64(k ^ ((uint64_t)seed + (uint64_t)level * 0x51ED270Bu) * 0x9E3779B97F4A7C15ULL));
-        int nseg = level == 0 ? 9 + rng.ri(0, 5) : level == 1 ? 5 + rng.ri(0, 4) : 4 + rng.ri(0, 3);
-        int lenBase = level == 0 ? 4 : 6;
+        bool openChunk = (hash64(k ^ 0xA11CEULL ^ (uint64_t)seed) & 7) == 0;   // occasional open plaza
+        int nseg = level == 0 ? 12 + rng.ri(0, 5) : level == 1 ? 7 + rng.ri(0, 4) : 5 + rng.ri(0, 3);
+        if (openChunk) nseg = 2 + rng.ri(0, 2);
+        int lenBase = level == 0 ? 5 : 6;
         for (int s = 0; s < nseg; s++) {
             bool horiz = rng.next() & 1;
             int len = lenBase + rng.ri(0, 8);
             int a = rng.ri(0, CCELLS - 1), b = rng.ri(0, CCELLS - 1);
             int end = std::min(CCELLS - 1, a + len);
-            int doorAt = (rng.f01() < 0.8f) ? a + 1 + rng.ri(0, std::max(0, end - a - 2)) : -1;
+            int doorAt = (rng.f01() < (level == 0 ? 0.72f : 0.8f)) ? a + 1 + rng.ri(0, std::max(0, end - a - 2)) : -1;
             for (int i = a; i <= end; i++) {
                 if (i == doorAt) continue;
-                if (horiz) d.wallN[i][b] = 1; else d.wallW[b][i] = 1;
+                // rarely a window instead of blank wall; behind it, nothing
+                uint8_t v = ((level == 0 || level == 3) && rng.f01() < 0.035f) ? 3 : 1;
+                if (horiz) d.wallN[i][b] = v; else d.wallW[b][i] = v;
             }
         }
         int np = level == 0 ? 4 + rng.ri(0, 5) : level == 1 ? 10 + rng.ri(0, 8) : 2 + rng.ri(0, 3);
         for (int i = 0; i < np; i++) d.pillar[rng.ri(0, CCELLS - 1)][rng.ri(0, CCELLS - 1)] = 1;
         memset(d.prop, 0, sizeof(d.prop));
         memset(d.propRot, 0, sizeof(d.propRot));
-        int npr = level == 0 ? 5 + rng.ri(0, 7) : level == 1 ? 8 + rng.ri(0, 8) : 0;
+        int npr = level == 0 ? 7 + rng.ri(0, 7) : level == 1 ? 8 + rng.ri(0, 8)
+                : level == 3 ? 5 + rng.ri(0, 6) : 0;
         for (int i = 0; i < npr; i++) {
             int a = rng.ri(0, CCELLS - 1), b = rng.ri(0, CCELLS - 1);
             if (d.pillar[a][b] || d.prop[a][b]) continue;
             float f = rng.f01();
             if (level == 1) d.prop[a][b] = f < 0.55f ? 1 : f < 0.80f ? 2 : 3;  // warehouse: no fallen tiles
-            else d.prop[a][b] = f < 0.40f ? 1 : f < 0.65f ? 2 : f < 0.85f ? 3 : 4;
+            else if (level == 3)                                               // red halls: someone's bedroom
+                d.prop[a][b] = f < 0.30f ? 9 : f < 0.55f ? 6 : f < 0.80f ? 8 : 7;
+            else   // L0: office clutter, plus furniture that has no business here
+                d.prop[a][b] = f < 0.26f ? 1 : f < 0.40f ? 2 : f < 0.50f ? 3 : f < 0.62f ? 4 :
+                               f < 0.74f ? 5 : f < 0.84f ? 6 : f < 0.90f ? 7 : f < 0.96f ? 8 : 9;
             d.propRot[a][b] = (uint8_t)rng.ri(0, 3);
             // boxes like company: sometimes a neighbouring stack
             if (d.prop[a][b] == 1 && a + 1 < CCELLS && rng.f01() < 0.4f && !d.pillar[a + 1][b] && !d.prop[a + 1][b]) {
@@ -793,6 +848,15 @@ struct World {
                 if (d.wallN[i][kk] || d.wallW[i][kk] || d.wallN[i][kk + 1] || d.wallW[i + 1][kk]) continue;
                 float gxc = (float)(cx * CCELLS + i), gzc = (float)(cz * CCELLS + kk);
                 if (fbm2(gxc * 0.11f, gzc * 0.11f, seed ^ 0x77AAu, 3) > 0.565f) d.pool[i][kk] = 1;
+            }
+        }
+        if (level == 0 || level == 1) {   // sunken lounges (L0) / loading docks (L1), never under walls
+            for (int i = 1; i < CCELLS - 1; i++) for (int kk = 1; kk < CCELLS - 1; kk++) {
+                if (d.pillar[i][kk]) continue;
+                if (d.wallN[i][kk] || d.wallW[i][kk] || d.wallN[i][kk + 1] || d.wallW[i + 1][kk]) continue;
+                float gxc = (float)(cx * CCELLS + i), gzc = (float)(cz * CCELLS + kk);
+                if (fbm2(gxc * 0.09f, gzc * 0.09f, seed ^ (level == 0 ? 0x51ABu : 0xD0CCu), 3) > 0.60f)
+                    d.elev[i][kk] = level == 0 ? -5 : 6;
             }
         }
         // rare exit door carved into an existing wall run
@@ -810,8 +874,10 @@ struct World {
                     }
         }
         if (cx == 0 && cz == 0) {   // clear spawn room
-            for (int i = 5; i <= 10; i++) for (int kk = 5; kk <= 10; kk++)
+            for (int i = 5; i <= 10; i++) for (int kk = 5; kk <= 10; kk++) {
                 d.wallN[i][kk] = d.wallW[i][kk] = d.pillar[i][kk] = d.prop[i][kk] = d.pool[i][kk] = 0;
+                d.elev[i][kk] = 0;
+            }
             if (exitTest) { d.wallN[6][11] = 1; d.wallN[7][11] = 2; d.wallN[8][11] = 1; }
         }
     }
@@ -837,11 +903,16 @@ struct World {
         int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
         return data(cx, cz).pool[ci - cx * CCELLS][ck - cz * CCELLS] != 0;
     }
+    float floorY(int ci, int ck) {
+        if (poolAt(ci, ck)) return -0.6f;
+        int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
+        return data(cx, cz).elev[ci - cx * CCELLS][ck - cz * CCELLS] * 0.1f;
+    }
 
     // rotated prop box: 4 sides + top, one UV region for sides, another for the top
     static void addPropBox(MB &mb, float cx, float cz, float yaw, float hx, float hz, float y0, float y1,
                            float u0, float v0, float u1, float v1,
-                           float tu0, float tv0, float tu1, float tv1) {
+                           float tu0, float tv0, float tu1, float tv1, Color tint = WHITE) {
         float ca = cosf(yaw), sa = sinf(yaw);
         auto pt = [&](float lx, float lz) { return Vector3{ cx + lx * ca - lz * sa, 0, cz + lx * sa + lz * ca }; };
         Vector3 corners[5] = { pt(-hx, -hz), pt(hx, -hz), pt(hx, hz), pt(-hx, hz), pt(-hx, -hz) };
@@ -853,11 +924,11 @@ struct World {
             float mx = (a.x + b.x) * 0.5f - cx, mz = (a.z + b.z) * 0.5f - cz;
             if (n.x * mx + n.z * mz < 0) { n.x = -n.x; n.z = -n.z; }
             mb.quad({a.x,y0,a.z},{b.x,y0,b.z},{b.x,y1,b.z},{a.x,y1,a.z}, n,
-                    {u0,v1},{u1,v1},{u1,v0},{u0,v0}, WHITE);
+                    {u0,v1},{u1,v1},{u1,v0},{u0,v0}, tint);
         }
         mb.quad({corners[0].x,y1,corners[0].z},{corners[1].x,y1,corners[1].z},
                 {corners[2].x,y1,corners[2].z},{corners[3].x,y1,corners[3].z},{0,1,0},
-                {tu0,tv0},{tu1,tv0},{tu1,tv1},{tu0,tv1}, WHITE);
+                {tu0,tv0},{tu1,tv0},{tu1,tv1},{tu0,tv1}, tint);
     }
 
     static void addBoxSides(MB &mb, float x0, float y0, float z0, float x1, float y1, float z1, bool bottomFace = false) {
@@ -894,12 +965,56 @@ struct World {
                         {gz/2,0},{(gz+CELL)/2,0},{(gz+CELL)/2,0.3f},{gz/2,0.3f},wcol);
                 if (dry(i+1, kk)) fl.quad({gx+CELL,0,gz},{gx+CELL,0,gz+CELL},{gx+CELL,-0.6f,gz+CELL},{gx+CELL,-0.6f,gz},{-1,0,0},
                         {gz/2,0},{(gz+CELL)/2,0},{(gz+CELL)/2,0.3f},{gz/2,0.3f},wcol);
+                // submerged step along dry edges — tiled bench to walk down into the water
+                auto pstep = [&](float bx0, float bz0, float bx1, float bz1, float nx, float nz) {
+                    float mid = -0.3f, ox = nx * 0.32f, oz = nz * 0.32f;
+                    fl.quad({bx0,mid,bz0},{bx1,mid,bz1},{bx1+ox,mid,bz1+oz},{bx0+ox,mid,bz0+oz},{0,1,0},
+                            {0,0},{1,0},{1,0.16f},{0,0.16f},wcol);
+                    fl.quad({bx0+ox,mid,bz0+oz},{bx1+ox,mid,bz1+oz},{bx1+ox,-0.6f,bz1+oz},{bx0+ox,-0.6f,bz0+oz},{nx,0,nz},
+                            {0,0},{1,0},{1,0.15f},{0,0.15f},wcol);
+                };
+                if (dry(i, kk-1)) pstep(gx, gz, gx+CELL, gz, 0, 1);
+                if (dry(i, kk+1)) pstep(gx, gz+CELL, gx+CELL, gz+CELL, 0, -1);
+                if (dry(i-1, kk)) pstep(gx, gz, gx, gz+CELL, 1, 0);
+                if (dry(i+1, kk)) pstep(gx+CELL, gz, gx+CELL, gz+CELL, -1, 0);
                 wt.quad({gx,-0.12f,gz},{gx+CELL,-0.12f,gz},{gx+CELL,-0.12f,gz+CELL},{gx,-0.12f,gz+CELL},{0,1,0},
                         {0,0},{1,0},{1,1},{0,1}, water);
             }
         } else {
-            fl.quad({wx,0,wz},{wx+CHUNK,0,wz},{wx+CHUNK,0,wz+CHUNK},{wx,0,wz+CHUNK},{0,1,0},
-                    {wx/2,wz/2},{(wx+CHUNK)/2,wz/2},{(wx+CHUNK)/2,(wz+CHUNK)/2},{wx/2,(wz+CHUNK)/2},wcol);
+            // per-cell floor: sunken lounges (L0) and loading docks (L1) change height, with real steps
+            auto stepEdge = [&](float bx0, float bz0, float bx1, float bz1, float hi, float lo, float nx, float nz) {
+                fl.quad({bx0,hi,bz0},{bx1,hi,bz1},{bx1,lo,bz1},{bx0,lo,bz0},{nx,0,nz},
+                        {(bx0+bz0)/2,0},{(bx1+bz1)/2,0},{(bx1+bz1)/2,(hi-lo)/2},{(bx0+bz0)/2,(hi-lo)/2},wcol);
+                float mid = (hi + lo) * 0.5f, ox = nx * 0.35f, oz = nz * 0.35f;
+                fl.quad({bx0,mid,bz0},{bx1,mid,bz1},{bx1+ox,mid,bz1+oz},{bx0+ox,mid,bz0+oz},{0,1,0},
+                        {0,0},{1,0},{1,0.18f},{0,0.18f},wcol);
+                fl.quad({bx0+ox,mid,bz0+oz},{bx1+ox,mid,bz1+oz},{bx1+ox,lo,bz1+oz},{bx0+ox,lo,bz0+oz},{nx,0,nz},
+                        {0,0},{1,0},{1,(mid-lo)/2},{0,(mid-lo)/2},wcol);
+                fl.quad({bx0,mid,bz0},{bx0+ox,mid,bz0+oz},{bx0+ox,lo,bz0+oz},{bx0,lo,bz0},{bz1-bz0,0,bx0-bx1},
+                        {0,0},{0.18f,0},{0.18f,(mid-lo)/2},{0,(mid-lo)/2},wcol);   // end caps
+                fl.quad({bx1,mid,bz1},{bx1+ox,mid,bz1+oz},{bx1+ox,lo,bz1+oz},{bx1,lo,bz1},{bz0-bz1,0,bx1-bx0},
+                        {0,0},{0.18f,0},{0.18f,(mid-lo)/2},{0,(mid-lo)/2},wcol);
+            };
+            for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
+                float gx = wx + i * CELL, gz = wz + kk * CELL;
+                float fy = d.elev[i][kk] * 0.1f;
+                fl.quad({gx,fy,gz},{gx+CELL,fy,gz},{gx+CELL,fy,gz+CELL},{gx,fy,gz+CELL},{0,1,0},
+                        {gx/2,gz/2},{(gx+CELL)/2,gz/2},{(gx+CELL)/2,(gz+CELL)/2},{gx/2,(gz+CELL)/2},wcol);
+                if (d.elev[i][kk] == 0) continue;
+                auto hgt = [&](int a, int b) {
+                    return (a < 0 || a >= CCELLS || b < 0 || b >= CCELLS) ? 0.0f : d.elev[a][b] * 0.1f;
+                };
+                float hN = hgt(i, kk - 1), hS = hgt(i, kk + 1), hW = hgt(i - 1, kk), hE = hgt(i + 1, kk);
+                // dock: steps drop into the lower neighbour; lounge: steps climb out into this cell
+                if (hN < fy) stepEdge(gx, gz, gx + CELL, gz, fy, hN, 0, -1);
+                else if (hN > fy) stepEdge(gx, gz, gx + CELL, gz, hN, fy, 0, 1);
+                if (hS < fy) stepEdge(gx, gz + CELL, gx + CELL, gz + CELL, fy, hS, 0, 1);
+                else if (hS > fy) stepEdge(gx, gz + CELL, gx + CELL, gz + CELL, hS, fy, 0, -1);
+                if (hW < fy) stepEdge(gx, gz, gx, gz + CELL, fy, hW, -1, 0);
+                else if (hW > fy) stepEdge(gx, gz, gx, gz + CELL, hW, fy, 1, 0);
+                if (hE < fy) stepEdge(gx + CELL, gz, gx + CELL, gz + CELL, fy, hE, 1, 0);
+                else if (hE > fy) stepEdge(gx + CELL, gz, gx + CELL, gz + CELL, hE, fy, -1, 0);
+            }
         }
         ce.quad({wx,wallH,wz},{wx,wallH,wz+CHUNK},{wx+CHUNK,wallH,wz+CHUNK},{wx+CHUNK,wallH,wz},{0,-1,0},
                 {wx/2,wz/2},{wx/2,(wz+CHUNK)/2},{(wx+CHUNK)/2,(wz+CHUNK)/2},{(wx+CHUNK)/2,wz/2},wcol);
@@ -920,6 +1035,17 @@ struct World {
             float gx = wx + i * CELL, gz = wz + kk * CELL;
             uint8_t nv = dd.wallN[i][kk];
             if (nv == 1) addBoxSides(wa, gx - WT, 0, gz - WT, gx + CELL + WT, wallH, gz + WT);
+            else if (nv == 3) {   // window on x-running wall; behind the glass, nothing
+                addBoxSides(wa, gx - WT, 0, gz - WT, gx + CELL + WT, 1.0f, gz + WT);
+                addBoxSides(wa, gx - WT, 2.1f, gz - WT, gx + CELL + WT, wallH, gz + WT, true);
+                addBoxSides(wa, gx - WT, 1.0f, gz - WT, gx + 0.45f, 2.1f, gz + WT);
+                addBoxSides(wa, gx + 1.55f, 1.0f, gz - WT, gx + CELL + WT, 2.1f, gz + WT);
+                wa.quad({gx-WT,1.0f,gz-WT},{gx+CELL+WT,1.0f,gz-WT},{gx+CELL+WT,1.0f,gz+WT},{gx-WT,1.0f,gz+WT},
+                        {0,1,0},{0,0},{1,0},{1,0.1f},{0,0.1f}, WHITE);   // sill top
+                Color glass = { 5, 6, 9, 60 };   // emissive void — no light touches it
+                wa.quad({gx+0.45f,1.0f,gz},{gx+1.55f,1.0f,gz},{gx+1.55f,2.1f,gz},{gx+0.45f,2.1f,gz},
+                        {0,0,-1},{0,1},{1,1},{1,0},{0,0}, glass);
+            }
             else if (nv == 2) {   // exit doorway on x-running wall
                 addBoxSides(wa, gx - WT, 0, gz - WT, gx + 0.35f, wallH, gz + WT);
                 addBoxSides(wa, gx + 1.65f, 0, gz - WT, gx + CELL + WT, wallH, gz + WT);
@@ -930,6 +1056,17 @@ struct World {
             }
             uint8_t wv = dd.wallW[i][kk];
             if (wv == 1) addBoxSides(wa, gx - WT, 0, gz - WT, gx + WT, wallH, gz + CELL + WT);
+            else if (wv == 3) {   // window on z-running wall
+                addBoxSides(wa, gx - WT, 0, gz - WT, gx + WT, 1.0f, gz + CELL + WT);
+                addBoxSides(wa, gx - WT, 2.1f, gz - WT, gx + WT, wallH, gz + CELL + WT, true);
+                addBoxSides(wa, gx - WT, 1.0f, gz - WT, gx + WT, 2.1f, gz + 0.45f);
+                addBoxSides(wa, gx - WT, 1.0f, gz + 1.55f, gx + WT, 2.1f, gz + CELL + WT);
+                wa.quad({gx-WT,1.0f,gz-WT},{gx+WT,1.0f,gz-WT},{gx+WT,1.0f,gz+CELL+WT},{gx-WT,1.0f,gz+CELL+WT},
+                        {0,1,0},{0,0},{1,0},{1,0.1f},{0,0.1f}, WHITE);   // sill top
+                Color glass = { 5, 6, 9, 60 };
+                wa.quad({gx,1.0f,gz+0.45f},{gx,1.0f,gz+1.55f},{gx,2.1f,gz+1.55f},{gx,2.1f,gz+0.45f},
+                        {1,0,0},{0,1},{1,1},{1,0},{0,0}, glass);
+            }
             else if (wv == 2) {   // exit doorway on z-running wall
                 addBoxSides(wa, gx - WT, 0, gz - WT, gx + WT, wallH, gz + 0.35f);
                 addBoxSides(wa, gx - WT, 0, gz + 1.65f, gx + WT, wallH, gz + CELL + WT);
@@ -943,39 +1080,47 @@ struct World {
             if (dd.prop[i][kk]) {
                 float pcx = gx + 1.0f, pcz = gz + 1.0f;
                 float rot = dd.propRot[i][kk] * 1.5708f;
+                float ey = dd.elev[i][kk] * 0.1f;   // furniture sits on the local floor
                 uint32_t h = ih(cx * CCELLS + i, cz * CCELLS + kk, seed ^ 0xB0B5u);
                 float r1 = (h & 0xFF) / 255.0f, r2 = ((h >> 8) & 0xFF) / 255.0f, r3 = ((h >> 16) & 0xFF) / 255.0f;
                 // UV regions of the prop atlas
                 const float CU0=0.02f, CV0=0.02f, CU1=0.48f, CV1=0.98f;       // cardboard
                 const float FU0=0.52f, FV0=0.02f, FU1=0.98f, FV1=0.48f;       // cabinet front
                 const float MU0=0.52f, MV0=0.52f, MU1=0.98f, MV1=0.98f;       // plain metal
+                float ca = cosf(rot), sa = sinf(rot);
+                // rotated sub-box placed relative to the prop centre
+                auto part = [&](float ox, float oz, float hx2, float hz2, float y0, float y1,
+                                bool wood, Color tint) {
+                    addPropBox(pr, pcx + ox * ca - oz * sa, pcz + ox * sa + oz * ca, rot, hx2, hz2, y0, y1,
+                               wood ? CU0 : MU0, wood ? CV0 : MV0, wood ? CU1 : MU1, wood ? CV1 : MV1,
+                               wood ? CU0 : MU0, wood ? CV0 : MV0, wood ? CU1 : MU1, wood ? CV1 : MV1, tint);
+                };
                 switch (dd.prop[i][kk]) {
                 case 1: {   // box stack
                     float bh = 0.55f + r1 * 0.2f, bhx = 0.34f + r2 * 0.08f;
                     addPropBox(pr, pcx + (r3 - 0.5f) * 0.5f, pcz + (r1 - 0.5f) * 0.5f, rot + r2,
-                               bhx, bhx, 0, bh, CU0, CV0, CU1, CV1, CU0, CV0, CU1, CV1);
+                               bhx, bhx, ey, ey + bh, CU0, CV0, CU1, CV1, CU0, CV0, CU1, CV1);
                     if (r2 > 0.35f)   // second box on top, skewed
                         addPropBox(pr, pcx + (r3 - 0.5f) * 0.5f + 0.06f, pcz + (r1 - 0.5f) * 0.5f - 0.05f,
-                                   rot + r2 + 0.5f, bhx * 0.8f, bhx * 0.8f, bh, bh + 0.5f,
+                                   rot + r2 + 0.5f, bhx * 0.8f, bhx * 0.8f, ey + bh, ey + bh + 0.5f,
                                    CU0, CV0, CU1, CV1, CU0, CV0, CU1, CV1);
                     if (r1 > 0.6f)    // third box beside
-                        addPropBox(pr, pcx + 0.62f, pcz + 0.3f, rot + r3 * 2, 0.27f, 0.27f, 0, 0.5f,
+                        addPropBox(pr, pcx + 0.62f, pcz + 0.3f, rot + r3 * 2, 0.27f, 0.27f, ey, ey + 0.5f,
                                    CU0, CV0, CU1, CV1, CU0, CV0, CU1, CV1);
                     break;
                 }
                 case 2:     // filing cabinet
-                    addPropBox(pr, pcx, pcz, rot, 0.26f, 0.34f, 0, 1.32f,
+                    addPropBox(pr, pcx, pcz, rot, 0.26f, 0.34f, ey, ey + 1.32f,
                                FU0, FV0, FU1, FV1, MU0, MV0, MU1, MV1);
                     break;
                 case 3: {   // folding table
                     float ty = 0.72f;
-                    addPropBox(pr, pcx, pcz, rot, 0.62f, 0.40f, ty - 0.04f, ty,
+                    addPropBox(pr, pcx, pcz, rot, 0.62f, 0.40f, ey + ty - 0.04f, ey + ty,
                                MU0, MV0, MU1, MV1, MU0, MV0, MU1, MV1);
-                    float ca = cosf(rot), sa = sinf(rot);
                     for (int lx = -1; lx <= 1; lx += 2) for (int lz = -1; lz <= 1; lz += 2) {
                         float ox = lx * 0.54f, oz = lz * 0.32f;
                         addPropBox(pr, pcx + ox * ca - oz * sa, pcz + ox * sa + oz * ca, rot,
-                                   0.03f, 0.03f, 0, ty - 0.04f, MU0, MV0, MU1, MV1, MU0, MV0, MU1, MV1);
+                                   0.03f, 0.03f, ey, ey + ty - 0.04f, MU0, MV0, MU1, MV1, MU0, MV0, MU1, MV1);
                     }
                     break;
                 }
@@ -984,22 +1129,52 @@ struct World {
                     ce.quad({pcx-0.85f,2.994f,pcz-0.85f},{pcx-0.85f,2.994f,pcz+0.85f},
                             {pcx+0.85f,2.994f,pcz+0.85f},{pcx+0.85f,2.994f,pcz-0.85f},{0,-1,0},
                             {0,0},{0,1},{1,1},{1,0}, hole);
-                    float ca = cosf(rot), sa = sinf(rot);
                     float bx0 = pcx - 0.58f * ca, bz0 = pcz - 0.58f * sa;   // base edge on floor
                     float tx = pcx + 0.35f * ca, tz = pcz + 0.35f * sa;     // top edge, lifted
-                    Vector3 a = { bx0 - 0.58f * sa, 0.02f, bz0 + 0.58f * ca };
-                    Vector3 b = { bx0 + 0.58f * sa, 0.02f, bz0 - 0.58f * ca };
-                    Vector3 c2 = { tx + 0.58f * sa, 0.42f, tz - 0.58f * ca };
-                    Vector3 dq = { tx - 0.58f * sa, 0.42f, tz + 0.58f * ca };
+                    Vector3 a = { bx0 - 0.58f * sa, ey + 0.02f, bz0 + 0.58f * ca };
+                    Vector3 b = { bx0 + 0.58f * sa, ey + 0.02f, bz0 - 0.58f * ca };
+                    Vector3 c2 = { tx + 0.58f * sa, ey + 0.42f, tz - 0.58f * ca };
+                    Vector3 dq = { tx - 0.58f * sa, ey + 0.42f, tz + 0.58f * ca };
                     ce.quad(a, b, c2, dq, { -ca * 0.5f, 0.87f, -sa * 0.5f },
                             {0.05f,0.45f},{0.45f,0.45f},{0.45f,0.05f},{0.05f,0.05f}, WHITE);
                     Color deb = { 110, 105, 95, 255 };
-                    ce.quad({pcx+0.4f,0.012f,pcz+0.5f},{pcx+0.75f,0.012f,pcz+0.55f},
-                            {pcx+0.7f,0.012f,pcz+0.85f},{pcx+0.38f,0.012f,pcz+0.8f},{0,1,0},
+                    ce.quad({pcx+0.4f,ey+0.012f,pcz+0.5f},{pcx+0.75f,ey+0.012f,pcz+0.55f},
+                            {pcx+0.7f,ey+0.012f,pcz+0.85f},{pcx+0.38f,ey+0.012f,pcz+0.8f},{0,1,0},
                             {0.1f,0.1f},{0.3f,0.1f},{0.3f,0.3f},{0.1f,0.3f}, deb);
-                    ce.quad({pcx-0.7f,0.012f,pcz-0.35f},{pcx-0.45f,0.012f,pcz-0.42f},
-                            {pcx-0.4f,0.012f,pcz-0.2f},{pcx-0.68f,0.012f,pcz-0.15f},{0,1,0},
+                    ce.quad({pcx-0.7f,ey+0.012f,pcz-0.35f},{pcx-0.45f,ey+0.012f,pcz-0.42f},
+                            {pcx-0.4f,ey+0.012f,pcz-0.2f},{pcx-0.68f,ey+0.012f,pcz-0.15f},{0,1,0},
                             {0.3f,0.3f},{0.45f,0.3f},{0.45f,0.45f},{0.3f,0.45f}, deb);
+                    break;
+                }
+                case 5: {   // couch: mustard upholstery gone grey, facing nothing in particular
+                    Color uph = { 172, 152, 96, 255 };
+                    part(0, 0.10f, 0.78f, 0.42f, ey + 0.16f, ey + 0.44f, false, uph);   // seat
+                    part(0, -0.36f, 0.78f, 0.14f, ey + 0.16f, ey + 0.92f, false, uph);  // backrest
+                    part(-0.64f, 0.06f, 0.14f, 0.46f, ey, ey + 0.62f, false, uph);      // arms
+                    part( 0.64f, 0.06f, 0.14f, 0.46f, ey, ey + 0.62f, false, uph);
+                    part(0, 0.10f, 0.74f, 0.38f, ey, ey + 0.16f, false, Color{ 120, 106, 70, 255 });
+                    break;
+                }
+                case 6:     // armoire: a wardrobe looming where no bedroom is
+                    part(0, 0, 0.44f, 0.36f, ey, ey + 1.78f, true, Color{ 118, 82, 58, 255 });
+                    part(0, 0, 0.48f, 0.40f, ey + 1.78f, ey + 1.90f, true, Color{ 92, 63, 44, 255 });  // cornice
+                    part(0, 0.37f, 0.015f, 0.015f, ey + 0.85f, ey + 1.0f, false, Color{ 190, 170, 110, 255 }); // handles
+                    break;
+                case 7:     // floor lamp, shade askew, never lit
+                    part(0, 0, 0.14f, 0.14f, ey, ey + 0.05f, false, Color{ 66, 62, 60, 255 });
+                    part(0, 0, 0.025f, 0.025f, ey, ey + 1.34f, false, Color{ 66, 62, 60, 255 });
+                    addPropBox(pr, pcx + 0.05f, pcz, rot + 0.3f, 0.17f, 0.17f, ey + 1.30f, ey + 1.60f,
+                               CU0, CV0, CU1, CV1, CU0, CV0, CU1, CV1, Color{ 214, 190, 142, 255 });
+                    break;
+                case 8:     // nightstand, nowhere near a bed. usually.
+                    part(0, 0, 0.26f, 0.26f, ey, ey + 0.55f, true, Color{ 126, 90, 62, 255 });
+                    part(0, 0, 0.30f, 0.30f, ey + 0.55f, ey + 0.60f, true, Color{ 104, 74, 50, 255 });
+                    break;
+                case 9: {   // bed: bare stained mattress, headboard against nothing
+                    Color wd = { 110, 78, 54, 255 };
+                    part(0, 0, 0.52f, 0.92f, ey + 0.12f, ey + 0.26f, true, wd);          // frame
+                    part(0, 0.04f, 0.48f, 0.86f, ey + 0.26f, ey + 0.46f, true, Color{ 216, 208, 188, 255 }); // mattress
+                    part(0, -0.97f, 0.52f, 0.05f, ey, ey + 0.95f, true, wd);             // headboard
                     break;
                 }
                 }
@@ -1015,20 +1190,37 @@ struct World {
 
     int gatherCellAABBs(int ci, int ck, AABB *out, int cap, int cnt, bool includeProps = true) {
         float x0 = ci * CELL, z0 = ck * CELL;
-        if (cnt < cap && wallNVal(ci, ck) == 1) out[cnt++] = { x0 - WT, z0 - WT, x0 + CELL + WT, z0 + WT };
-        if (cnt < cap && wallWVal(ci, ck) == 1) out[cnt++] = { x0 - WT, z0 - WT, x0 + WT, z0 + CELL + WT };
-        if (cnt < cap && pillarAt(ci, ck)) out[cnt++] = { x0 + 0.42f, z0 + 0.42f, x0 + 1.58f, z0 + 1.58f };
+        uint8_t nv = wallNVal(ci, ck), wv = wallWVal(ci, ck);
+        if (cnt < cap && (nv == 1 || nv == 3)) out[cnt++] = { x0 - WT, z0 - WT, x0 + CELL + WT, z0 + WT, wallH };
+        if (cnt < cap && (wv == 1 || wv == 3)) out[cnt++] = { x0 - WT, z0 - WT, x0 + WT, z0 + CELL + WT, wallH };
+        if (cnt < cap && pillarAt(ci, ck)) out[cnt++] = { x0 + 0.42f, z0 + 0.42f, x0 + 1.58f, z0 + 1.58f, wallH };
         if (includeProps && cnt < cap) {
-            switch (propAt(ci, ck)) {
-            case 1: out[cnt++] = { x0 + 0.35f, z0 + 0.35f, x0 + 1.65f, z0 + 1.65f }; break;  // boxes
-            case 2: out[cnt++] = { x0 + 0.60f, z0 + 0.60f, x0 + 1.40f, z0 + 1.40f }; break;  // cabinet
-            case 3: out[cnt++] = { x0 + 0.32f, z0 + 0.32f, x0 + 1.68f, z0 + 1.68f }; break;  // table
+            uint8_t pv = propAt(ci, ck);
+            if (pv) {
+                float ey = floorY(ci, ck);
+                uint32_t h = ih(ci, ck, seed ^ 0xB0B5u);   // same hash the mesher uses
+                float r1 = (h & 0xFF) / 255.0f, r2 = ((h >> 8) & 0xFF) / 255.0f;
+                switch (pv) {
+                case 1: {   // boxes: top of the tallest stacked one
+                    float t = 0.55f + r1 * 0.2f;
+                    if (r2 > 0.35f) t += 0.5f;
+                    out[cnt++] = { x0 + 0.35f, z0 + 0.35f, x0 + 1.65f, z0 + 1.65f, ey + t }; break;
+                }
+                case 2: out[cnt++] = { x0 + 0.60f, z0 + 0.60f, x0 + 1.40f, z0 + 1.40f, ey + 1.32f }; break;  // cabinet
+                case 3: out[cnt++] = { x0 + 0.32f, z0 + 0.32f, x0 + 1.68f, z0 + 1.68f, ey + 0.72f }; break;  // table
+                case 5: out[cnt++] = { x0 + 0.20f, z0 + 0.38f, x0 + 1.80f, z0 + 1.62f, ey + 0.44f }; break;  // couch
+                case 6: out[cnt++] = { x0 + 0.55f, z0 + 0.62f, x0 + 1.45f, z0 + 1.38f, ey + 1.90f }; break;  // armoire
+                case 7: out[cnt++] = { x0 + 0.82f, z0 + 0.82f, x0 + 1.18f, z0 + 1.18f, ey + 1.62f }; break;  // lamp
+                case 8: out[cnt++] = { x0 + 0.66f, z0 + 0.66f, x0 + 1.34f, z0 + 1.34f, ey + 0.60f }; break;  // nightstand
+                case 9: out[cnt++] = { x0 + 0.30f, z0 + 0.15f, x0 + 1.70f, z0 + 1.85f, ey + 0.46f }; break;  // bed
+                }
             }
         }
         return cnt;
     }
 
-    void collideCircle(float &px, float &pz, float r) {
+    // feetY: obstacles whose top is at or below your feet are walkable, not solid
+    void collideCircle(float &px, float &pz, float r, float feetY = 0.0f) {
         AABB boxes[48];
         int cnt = 0;
         int ci = cellOf(px), ck = cellOf(pz);
@@ -1038,6 +1230,7 @@ struct World {
         for (int pass = 0; pass < 3; pass++)
             for (int i = 0; i < cnt; i++) {
                 const AABB &b = boxes[i];
+                if (feetY >= b.top - 0.02f) continue;
                 float cx = clampf(px, b.minx, b.maxx), cz = clampf(pz, b.minz, b.maxz);
                 float dx = px - cx, dz = pz - cz, d2 = dx * dx + dz * dz;
                 if (d2 >= r * r) continue;
@@ -1051,6 +1244,21 @@ struct World {
                     px += dx * push; pz += dz * push;
                 }
             }
+    }
+
+    // floor height here, counting prop tops at or below your feet (so you can stand on furniture)
+    float groundAt(float x, float z, float feetY) {
+        float g = floorY(cellOf(x), cellOf(z));
+        AABB boxes[48];
+        int cnt = 0;
+        int ci = cellOf(x), ck = cellOf(z);
+        for (int dx = -1; dx <= 1; dx++)
+            for (int dz = -1; dz <= 1; dz++)
+                cnt = gatherCellAABBs(ci + dx, ck + dz, boxes, 48, cnt);
+        for (int i = 0; i < cnt; i++)
+            if (x > boxes[i].minx && x < boxes[i].maxx && z > boxes[i].minz && z < boxes[i].maxz &&
+                boxes[i].top <= feetY + 0.05f && boxes[i].top > g) g = boxes[i].top;
+        return g;
     }
 
     bool lineOfSight(float ax, float az, float bx, float bz) {
@@ -1134,17 +1342,19 @@ static const int NLEVELS = 4;
 static const LevelCfg LEVELS[NLEVELS] = {
     { 3.0f,  8.0f, 0.06f, 1.00f, 0.055f, {1.00f,0.94f,0.74f}, {0.045f,0.042f,0.030f}, {0.140f,0.125f,0.070f}, "LEVEL 0" },
     { 4.2f, 12.0f, 0.30f, 0.85f, 0.075f, {0.72f,0.80f,0.95f}, {0.016f,0.017f,0.022f}, {0.018f,0.020f,0.026f}, "LEVEL 1" },
-    { 3.6f,  8.0f, 0.02f, 0.90f, 0.038f, {1.00f,1.00f,0.97f}, {0.30f,0.33f,0.36f},    {0.36f,0.42f,0.47f},    "THE POOLROOMS" },
+    { 3.6f,  8.0f, 0.06f, 0.72f, 0.045f, {1.00f,1.00f,0.97f}, {0.16f,0.18f,0.20f},    {0.19f,0.23f,0.27f},    "THE POOLROOMS" },
     { 3.0f,  8.0f, 0.45f, 0.80f, 0.095f, {1.00f,0.22f,0.15f}, {0.030f,0.008f,0.006f}, {0.055f,0.010f,0.008f}, "THE RED HALLS" },
 };
 
 // ---------------------------------------------------------------- entity
-enum class EState { Hidden, Stalk, Chase, Flee };
+enum class EState { Hidden, Stalk, Chase, Flee, Die };
 struct Entity {
     EState st = EState::Hidden;
     float x = 0, z = 0;
     double nextSpawn = 12.0;
     float gaze = 0, life = 0, unseen = 0;
+    float dispY = 0;   // smoothed floor height under him, so he doesn't pop on stairs
+    int hp = 3;
 };
 
 // ---------------------------------------------------------------- main
@@ -1202,6 +1412,9 @@ int main() {
     Sound sndScare = makeJumpscare();
     Sound sndWin = makeWinChime();
     Sound sndFlare = makeFlareStrike();
+    Sound sndShot = makeGunshot();
+    Sound sndHit = makeJumpscare();  SetSoundPitch(sndHit, 1.7f);  SetSoundVolume(sndHit, 0.40f);
+    Sound sndKill = makeJumpscare(); SetSoundPitch(sndKill, 0.55f); SetSoundVolume(sndKill, 0.80f);
 
     AudioSynth synth;
     synth.init();
@@ -1238,6 +1451,12 @@ int main() {
     double nextFlareRegen = GetTime() + 75;
     struct { bool active = false, flying = false; float x = 0, y = 0, z = 0, vx = 0, vy = 0, vz = 0, burn = 0; } flare;
 
+    // revolver: hitscan, six rounds, three hits put Clark down
+    const int MAXAMMO = 6;
+    int weapon = 0;   // 0 flare, 1 revolver — keys 1/2 or mouse wheel
+    int ammo = MAXAMMO;
+    float reloadT = 0, gunCd = 0, muzzleT = 0, recoil = 0, wheelCd = 0;
+
     // state
     int level = 0;
     Entity ent;
@@ -1245,8 +1464,8 @@ int main() {
     double blackoutEnd = -1;
     float blackoutCur = 1.0f;
     float fear = 0.0f;
-    float caughtT = 0, escapeT = 0;
-    int caughtCount = 0, escapeCount = 0;
+    float caughtT = 0, escapeT = 0, killT = 0;
+    int caughtCount = 0, escapeCount = 0, killCount = 0;
     float distWalked = 0;
     double runStart = GetTime();
     bool debugHud = false;
@@ -1325,31 +1544,34 @@ int main() {
         if (moving) { ix /= il; iz /= il; }
         bool sprinting = moving && IsKeyDown(KEY_LEFT_SHIFT) && stamina > 0.02f;
         stamina = clampf(stamina + (sprinting ? -dt / 10.0f : dt / 6.0f), 0, 1);
-        float groundY = world.poolAt(cellOf(px), cellOf(pz)) ? -0.6f : 0.0f;
-        bool inWater = grounded && py < -0.1f;
+        float groundY = world.groundAt(px, pz, py);
+        bool inWater = grounded && py < -0.1f && world.poolAt(cellOf(px), cellOf(pz));
         float speed = (sprinting ? 6.8f : 3.6f) * (inWater ? 0.55f : 1.0f);
         float tvx = ix * speed, tvz = iz * speed;
         float accel = moving ? 12.0f : 9.0f;
         velx += (tvx - velx) * fminf(1, accel * dt);
         velz += (tvz - velz) * fminf(1, accel * dt);
         px += velx * dt; pz += velz * dt;
-        world.collideCircle(px, pz, PR);
+        world.collideCircle(px, pz, PR, py);
         float spd = sqrtf(velx * velx + velz * velz);
         distWalked += spd * dt;
 
-        // jump + pools (groundY recomputed after collision)
-        groundY = world.poolAt(cellOf(px), cellOf(pz)) ? -0.6f : 0.0f;
+        // jump + floor height (groundY recomputed after collision; furniture tops count)
+        groundY = world.groundAt(px, pz, py);
         if (IsKeyPressed(KEY_SPACE) && grounded) { vy = inWater ? 4.3f : 5.6f; grounded = false; }
         if (grounded) {
-            if (py > groundY + 0.001f) { grounded = false; vy = 0; }      // walked off a pool edge
-            else if (py < groundY - 0.001f) py = groundY;                 // wade up out of the pool
+            if (py > groundY + 0.05f && world.poolAt(cellOf(px), cellOf(pz))) { grounded = false; vy = 0; }  // pool edge: drop in
+            else {   // stairs, steps, furniture edges: glide to the new floor height
+                py += (groundY - py) * fminf(1, 14 * dt);
+                if (fabsf(py - groundY) < 0.004f) py = groundY;
+            }
         }
         if (!grounded) {
             vy -= 20.0f * dt;
             py += vy * dt;
             if (py <= groundY) {
                 py = groundY; grounded = true;
-                if (groundY < -0.1f) { SetSoundVolume(sndBigSplash, 0.7f); PlaySound(sndBigSplash); }
+                if (groundY < -0.1f && world.poolAt(cellOf(px), cellOf(pz))) { SetSoundVolume(sndBigSplash, 0.7f); PlaySound(sndBigSplash); }
                 else {
                     Sound &s = steps[grng.ri(0, 3)];    // landing thud
                     SetSoundPitch(s, 0.62f + grng.f01() * 0.1f);
@@ -1385,19 +1607,20 @@ int main() {
             if (IsKeyPressed(KEY_E)) {   // (re)spawn Clark stalking ~12m ahead
                 Vector2 spot = world.findOpenSpot(px + f2x * 12, pz + f2z * 12);
                 ent.x = spot.x; ent.z = spot.y;
-                ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.unseen = 0;
+                ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.hp = 3;
             }
             if (IsKeyPressed(KEY_C)) {   // force chase (spawns him first if hidden)
                 if (ent.st == EState::Hidden) {
                     Vector2 spot = world.findOpenSpot(px + f2x * 14, pz + f2z * 14);
                     ent.x = spot.x; ent.z = spot.y;
+                    ent.hp = 3;
                 }
                 ent.st = EState::Chase; ent.gaze = 0; ent.life = 0; ent.unseen = 0;
             }
             if (IsKeyPressed(KEY_H)) {   // banish him
                 ent.st = EState::Hidden; ent.nextSpawn = now + 20 + grng.f01() * 20;
             }
-            if (IsKeyPressed(KEY_G)) flares = MAXFLARES;   // refill flares
+            if (IsKeyPressed(KEY_G)) { flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; }   // refill weapons
             if (IsKeyPressed(KEY_N)) {   // jump to next level (incl. Red Halls)
                 applyLevel((level + 1) % NLEVELS);
                 Vector2 spot = world.findOpenSpot(px, pz);
@@ -1406,9 +1629,53 @@ int main() {
             }
         }
 
+        // ---- weapons: 1 flare, 2 revolver; wheel cycles; left click uses the selected one
+        if (IsKeyPressed(KEY_ONE)) weapon = 0;
+        if (IsKeyPressed(KEY_TWO)) weapon = 1;
+        wheelCd = fmaxf(0, wheelCd - dt);
+        if (wheelCd <= 0 && fabsf(GetMouseWheelMove()) > 0.5f) { weapon ^= 1; wheelCd = 0.25f; }
+        gunCd = fmaxf(0, gunCd - dt);
+        muzzleT = fmaxf(0, muzzleT - dt);
+        recoil += (0 - recoil) * fminf(1, 10 * dt);
+        if (reloadT > 0) {
+            reloadT -= dt;
+            if (reloadT <= 0) { ammo = MAXAMMO; SetSoundPitch(sndClick, 1.15f); PlaySound(sndClick); }
+        }
+        if (weapon == 1 && IsCursorHidden() && caughtT <= 0 && reloadT <= 0 && gunCd <= 0 &&
+            IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            if (ammo <= 0) { SetSoundPitch(sndClick, 0.7f); PlaySound(sndClick); gunCd = 0.25f; }  // dry fire
+            else {
+                ammo--; gunCd = 0.42f; muzzleT = 0.09f; recoil = 1.0f;
+                PlaySound(sndShot);
+                if (ent.st == EState::Stalk || ent.st == EState::Chase || ent.st == EState::Flee) {
+                    float ex = ent.x - px, ez = ent.z - pz;
+                    float along = ex * f2x + ez * f2z;          // in front of the muzzle
+                    float perp = fabsf(ex * r2x + ez * r2z);    // off the aim line
+                    if (along > 0 && perp < 0.55f && world.lineOfSight(px, pz, ent.x, ent.z)) {
+                        ent.hp--;
+                        if (ent.hp <= 0) {   // put down
+                            PlaySound(sndKill);
+                            killT = 3.0f; killCount++;
+                            ent.st = EState::Die; ent.life = 0;
+                        } else {             // staggered: knocked back, bolts
+                            PlaySound(sndHit);
+                            float dd = sqrtf(ex * ex + ez * ez);
+                            if (dd > 0.01f) { ent.x += ex / dd * 2.0f; ent.z += ez / dd * 2.0f; }
+                            world.collideCircle(ent.x, ent.z, 0.38f);
+                            ent.st = EState::Flee; ent.life = 1.4f;
+                        }
+                    }
+                }
+            }
+        }
+        if (IsKeyPressed(KEY_R) && weapon == 1 && ammo < MAXAMMO && reloadT <= 0) {
+            reloadT = 1.8f;
+            SetSoundPitch(sndClick, 0.95f); PlaySound(sndClick);
+        }
+
         // ---- flare weapon
         if (IsCursorHidden() && caughtT <= 0 && flares > 0 &&
-            (IsKeyPressed(KEY_Q) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT))) {
+            (IsKeyPressed(KEY_Q) || (weapon == 0 && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)))) {
             flares--;
             flare.active = true; flare.flying = true; flare.burn = FLAREBURN;
             flare.x = px + fwd.x * 0.4f; flare.y = eyeY - 0.15f; flare.z = pz + fwd.z * 0.4f;
@@ -1420,16 +1687,16 @@ int main() {
                 flare.vy -= 18.0f * dt;
                 flare.x += flare.vx * dt; flare.y += flare.vy * dt; flare.z += flare.vz * dt;
                 float ox = flare.x, oz = flare.z;
-                world.collideCircle(flare.x, flare.z, 0.07f);
+                world.collideCircle(flare.x, flare.z, 0.07f, flare.y);
                 if (fabsf(ox - flare.x) > 1e-5f) flare.vx *= -0.35f;   // clatter off walls
                 if (fabsf(oz - flare.z) > 1e-5f) flare.vz *= -0.35f;
-                float fg = world.poolAt(cellOf(flare.x), cellOf(flare.z)) ? -0.6f : 0.0f;
+                float fg = world.groundAt(flare.x, flare.z, flare.y);
                 if (flare.y < fg + 0.04f && flare.vy < 0) {
                     flare.y = fg + 0.04f;
                     if (flare.vy < -2.0f) { flare.vy *= -0.30f; flare.vx *= 0.55f; flare.vz *= 0.55f; }
                     else { flare.flying = false; flare.vx = flare.vy = flare.vz = 0; }
                 }
-                if (fg < -0.1f && flare.y < -0.10f) {   // landed in pool water: fizzles out
+                if (world.poolAt(cellOf(flare.x), cellOf(flare.z)) && flare.y < -0.10f) {   // hit pool water: fizzles out
                     Sound &s = splashes[grng.ri(0, 1)];
                     SetSoundPitch(s, 1.1f); SetSoundVolume(s, 0.8f);
                     PlaySound(s);
@@ -1462,7 +1729,7 @@ int main() {
         if (shotPath && frame == 300 && ent.st == EState::Hidden) {   // autotest: force a visible spawn
             Vector2 spot = world.findOpenSpot(px + fwd.x * 8, pz + fwd.z * 8);
             ent.x = spot.x; ent.z = spot.y;
-            ent.st = EState::Stalk; ent.gaze = -100; ent.life = 0; ent.unseen = 0;
+            ent.st = EState::Stalk; ent.gaze = -100; ent.life = 0; ent.unseen = 0; ent.hp = 3;
         }
         float fearT = 0.06f;
         float entDist = 1e9f;
@@ -1473,7 +1740,8 @@ int main() {
                 float d = 20 + grng.f01() * 10;
                 Vector2 spot = world.findOpenSpot(px + cosf(a) * d, pz + sinf(a) * d);
                 ent.x = spot.x; ent.z = spot.y;
-                ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.unseen = 0;
+                ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.hp = 3;
+                ent.dispY = world.floorY(cellOf(ent.x), cellOf(ent.z));
             }
         } else {
             float ex = ent.x - px, ez = ent.z - pz;
@@ -1522,6 +1790,15 @@ int main() {
                 world.collideCircle(ent.x, ent.z, 0.38f);
                 if (ent.life > 3.0f) { ent.st = EState::Hidden; ent.nextSpawn = now + 25 + grng.f01() * 35; }
             }
+            if (ent.st == EState::Die) {   // shot down: crumples, gone a long while
+                fearT = 0.10f;
+                ent.life += dt;
+                if (ent.life > 1.2f) { ent.st = EState::Hidden; ent.nextSpawn = now + 90 + grng.f01() * 60; }
+            }
+        }
+        if (ent.st != EState::Hidden) {   // he takes the stairs too, smoothly
+            float egt = world.floorY(cellOf(ent.x), cellOf(ent.z));
+            ent.dispY += (egt - ent.dispY) * fminf(1, 10 * dt);
         }
         fear += (fearT - fear) * fminf(1, 2.2f * dt);
         synth.growlTarget = (ent.st == EState::Chase) ? 0.75f * clampf(1 - entDist / 35.0f, 0.1f, 1.0f)
@@ -1550,6 +1827,7 @@ int main() {
         }
         caughtT = fmaxf(0, caughtT - dt);
         escapeT = fmaxf(0, escapeT - dt);
+        killT = fmaxf(0, killT - dt);
 
         // ---- chunk streaming
         int pcx = fdiv(cellOf(px), CCELLS), pcz = fdiv(cellOf(pz), CCELLS);
@@ -1583,6 +1861,10 @@ int main() {
             ? clampf((FLAREBURN - flare.burn) * 6.0f, 0, 1) * clampf(flare.burn / 1.5f, 0, 1) * flick
             : 0.0f;
         Vector3 flarePos = { flare.x, flare.y + 0.06f, flare.z };
+        if (!flare.active && muzzleT > 0) {   // muzzle flash borrows the flare point light
+            flareInt = muzzleT / 0.09f * 1.3f;
+            flarePos = { px + f2x * 0.6f, eyeY - 0.05f, pz + f2z * 0.6f };
+        }
         SetShaderValue(worldShader, locFlarePos, &flarePos, SHADER_UNIFORM_VEC3);
         SetShaderValue(worldShader, locFlareInt, &flareInt, SHADER_UNIFORM_FLOAT);
 
@@ -1615,7 +1897,7 @@ int main() {
         if (ent.st != EState::Hidden && entDist < 45) {
             const LevelCfg &c = LEVELS[level];
             float ambLum = (c.amb.x + c.amb.y + c.amb.z) / 3.0f;
-            float eg = world.poolAt(cellOf(ent.x), cellOf(ent.z)) ? -0.6f : 0.0f;
+            float eg = ent.dispY;
             float lum = lightAtCPU(ent.x, eg + 0.95f, ent.z, blackoutCur,
                                    c.ls, c.wallH - 0.12f, c.dead, c.lightMul, ambLum);
             if (flashCur > 0.05f) {   // flashlight picks him out of the dark
@@ -1624,15 +1906,20 @@ int main() {
                 float cone = powf(fmaxf((vx2 * fwd.x + vz2 * fwd.z) / dl, 0.0f), 26.0f);
                 lum = clampf(lum + flashCur * cone * 7.5f / (1.0f + 0.10f * d2), 0.0f, 1.0f);
             }
-            if (flareInt > 0.01f) {   // flare glow reaches him too
-                float fvx = ent.x - flare.x, fvz = ent.z - flare.z;
+            if (flareInt > 0.01f) {   // flare glow (or muzzle flash) reaches him too
+                float fvx = ent.x - flarePos.x, fvz = ent.z - flarePos.z;
                 lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fvx * fvx + fvz * fvz)), 0.0f, 1.0f);
+            }
+            float sink = 0, dieA = 1;
+            if (ent.st == EState::Die) {   // crumples into the carpet
+                float t = clampf(ent.life / 1.2f, 0, 1);
+                sink = 1.1f * t * t; dieA = 1.0f - t;
             }
             float fogf = expf(-entDist * c.fogDen);
             unsigned char lum8 = cl8(40 + 215 * lum);
-            unsigned char al = cl8(255 * clampf(fogf * 1.6f, 0, 1));
+            unsigned char al = cl8(255 * clampf(fogf * 1.6f, 0, 1) * dieA);
             DrawBillboardRec(cam, texEntity, { 0, 0, 128, 256 },
-                             { ent.x, eg + 0.98f, ent.z }, { 0.98f, 1.96f }, { lum8, lum8, lum8, al });
+                             { ent.x, eg + 0.98f - sink, ent.z }, { 0.98f, 1.96f }, { lum8, lum8, lum8, al });
         }
         EndMode3D();
         EndTextureMode();
@@ -1649,6 +1936,27 @@ int main() {
         int sw = GetScreenWidth(), sh = GetScreenHeight();
         double elapsed = now - runStart;
 
+        if (weapon == 1) {   // revolver viewmodel, bottom-right, kicks with recoil
+            float deg = 210.0f + recoil * 16.0f;
+            float rad = deg * DEG2RAD;
+            float dirx = cosf(rad), diry = sinf(rad);
+            float bobX = sinf(bobPhase * 3.14159f) * 3.0f * bobAmt;
+            Vector2 piv = { sw - 120.0f + bobX - dirx * recoil * 18.0f,
+                            sh + 24.0f + fabsf(bobX) * 0.6f - diry * recoil * 18.0f };
+            Color steel = { 40, 38, 44, 255 }, steel2 = { 57, 54, 62, 255 }, wood = { 76, 51, 34, 255 };
+            DrawRectanglePro({ piv.x, piv.y, 34, 84 }, { 17, -2 }, deg + 68, wood);       // grip
+            DrawRectanglePro({ piv.x, piv.y, 236, 20 }, { 26, 10 }, deg, steel);          // barrel + frame
+            DrawCircleV({ piv.x + dirx * 58, piv.y + diry * 58 }, 19, steel2);            // cylinder
+            DrawCircleV({ piv.x + dirx * 58, piv.y + diry * 58 }, 7, { 21, 20, 24, 255 });
+            if (muzzleT > 0) {
+                float mt = muzzleT / 0.09f;
+                Vector2 tip = { piv.x + dirx * 214, piv.y + diry * 214 };
+                DrawCircleV(tip, 46 * mt, { 255, 150, 60, (unsigned char)(90 * mt) });
+                DrawCircleV(tip, 24 * mt, { 255, 225, 140, (unsigned char)(210 * mt) });
+            }
+            DrawCircle(sw / 2, sh / 2, 2.0f, { 230, 220, 190, 110 });                     // crosshair
+        }
+
         if (elapsed < 9.0) {   // intro
             float a = 1.0f - clampf((float)elapsed / 3.0f, 0, 1);
             DrawRectangle(0, 0, sw, sh, Fade(BLACK, a));
@@ -1657,7 +1965,7 @@ int main() {
             DrawText(t1, sw / 2 - MeasureText(t1, 52) / 2, sh / 3, 52, Fade({ 220, 205, 150, 255 }, ta));
             const char *t2 = "if you're reading this, you've already noclipped";
             DrawText(t2, sw / 2 - MeasureText(t2, 18) / 2, sh / 3 + 66, 18, Fade({ 160, 150, 110, 255 }, ta * 0.9f));
-            const char *t3 = "WASD walk   SHIFT run   SPACE jump   F flashlight   Q flare   F11 fullscreen   ESC mouse";
+            const char *t3 = "WASD walk   SHIFT run   SPACE jump   F flashlight   1/2 weapon   Q flare   R reload   F11 fullscreen";
             DrawText(t3, sw / 2 - MeasureText(t3, 16) / 2, sh - 60, 16, Fade({ 140, 132, 100, 255 }, ta * 0.8f));
         }
         if (caughtT > 0) {
@@ -1680,6 +1988,13 @@ int main() {
                                         TextFormat("%02d:%02d", (int)elapsed / 60, (int)elapsed % 60));
             DrawText(t2, sw / 2 - MeasureText(t2, 18) / 2, sh / 2 + 4, 18, Fade({ 180, 170, 140, 255 }, a));
         }
+        if (killT > 0) {
+            float a = clampf(killT / 3.0f, 0, 1);
+            const char *t = "PIRATE CLARK IS DOWN";
+            DrawText(t, sw / 2 - MeasureText(t, 44) / 2, sh / 2 - 96, 44, Fade({ 205, 60, 40, 255 }, a));
+            const char *t2 = TextFormat("...but nothing stays down, down here   ·   %d put down", killCount);
+            DrawText(t2, sw / 2 - MeasureText(t2, 18) / 2, sh / 2 - 44, 18, Fade({ 150, 122, 100, 255 }, a * 0.9f));
+        }
         if (!IsCursorHidden() && !shotPath) {
             const char *t = "click to capture mouse";
             DrawText(t, sw / 2 - MeasureText(t, 20) / 2, sh / 2 + 80, 20, { 200, 190, 150, 200 });
@@ -1692,16 +2007,20 @@ int main() {
             DrawText("F — flashlight", sw - MeasureText("F — flashlight", 16) - 16, sh - 28, 16, { 190, 180, 140, 160 });
         else if (flashOn)
             DrawText("[ flashlight ]", sw - MeasureText("[ flashlight ]", 14) - 16, sh - 26, 14, { 235, 225, 180, 120 });
-        {   // flare count, bottom-left
-            const char *ft = TextFormat("Q — flare  ×%d", flares);
-            Color fc = flares > 0 ? Color{ 235, 160, 110, 150 } : Color{ 140, 110, 95, 120 };
-            DrawText(ft, 16, sh - 28, 16, fc);
+        {   // weapons, bottom-left; the selected one is lit
+            const char *w0 = TextFormat("1  flare  ×%d", flares);
+            const char *w1 = reloadT > 0 ? "2  revolver  [reloading]"
+                                         : TextFormat("2  revolver  %d/%d%s", ammo, MAXAMMO, ammo == 0 ? "  — R" : "");
+            Color selc = { 235, 200, 130, 210 }, dimc = { 150, 138, 112, 110 };
+            DrawText(w0, 16, sh - 50, 16, weapon == 0 ? selc : dimc);
+            DrawText(w1, 16, sh - 28, 16, weapon == 1 ? selc : dimc);
         }
         if (debugHud) {
             DrawText(TextFormat("%d fps  pos(%.0f, %.0f)  chunks %d  entity %s  d=%.0fm",
                                 GetFPS(), px, pz, (int)world.chunks.size(),
                                 ent.st == EState::Hidden ? "hidden" : ent.st == EState::Stalk ? "STALKING"
-                                    : ent.st == EState::Chase ? "CHASING" : "FLEEING",
+                                    : ent.st == EState::Chase ? "CHASING"
+                                    : ent.st == EState::Flee ? "FLEEING" : "DYING",
                                 entDist > 1e8 ? 0.0f : entDist),
                      12, 12, 18, { 230, 220, 160, 220 });
             DrawText("dev: B blackout   E spawn   C chase   H hide   G flares   N next level",
