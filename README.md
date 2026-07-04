@@ -35,6 +35,11 @@ make run
   glowing eye, a hook, a peg leg. Line-of-sight is ray-marched against real
   wall geometry. Stare too long and he chases. He is slightly slower than your
   sprint. Your sprint is finite.
+- **Flares** — your only defence. Throw one (Q or left click) and it arcs,
+  clatters off walls, and burns orange for nine seconds — a real point light
+  in the shader, with a synthesized strike-and-hiss. Clark won't come near
+  fire: catch him in the glow and he bolts. You carry three; you find another
+  in your coat every so often. Water puts them out.
 - **Exits** — vanishingly rare glowing doorways carved into wall runs. Finding
   one "ends" the run. Sort of.
 - **Post** — film grain, vignette, chromatic aberration, and a mains-frequency
@@ -48,6 +53,7 @@ make run
 | mouse | look |
 | SHIFT | sprint (stamina) |
 | SPACE | jump |
+| Q / left click | throw flare |
 | F | borderless fullscreen |
 | ESC / click | release / capture mouse |
 | F3 | debug HUD |

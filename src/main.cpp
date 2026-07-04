@@ -577,7 +577,6 @@ static Sound makeClick() {
     Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
 }
 
-<<<<<<< HEAD
 static Sound makeFlareStrike() {
     int n = (int)(0.8f * 44100);
     Wave w = makeWaveBuf(n);
@@ -596,8 +595,6 @@ static Sound makeFlareStrike() {
     Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
 }
 
-=======
->>>>>>> bb7a9663312e01303ae6307b867d48e9e7b1333d
 Sound makeWinChime() {
     int n = (int)(1.8f * 44100);
     Wave w = makeWaveBuf(n);
@@ -621,10 +618,7 @@ Sound makeWinChime() {
 struct AudioSynth {
     AudioStream stream;
     float humTarget = 1, hum = 1, growlTarget = 0, growl = 0;   // humTarget ducks all ambience
-<<<<<<< HEAD
     float hissTarget = 0, hiss = 0;                             // burning flare hiss
-=======
->>>>>>> bb7a9663312e01303ae6307b867d48e9e7b1333d
     float tHum = 1, tDrone = 0, tWater = 0;                     // per-level ambience mix targets
     float wHum = 1, wDrone = 0, wWater = 0;
     double ph[16] = {};
@@ -647,10 +641,7 @@ struct AudioSynth {
             for (int i = 0; i < 2048; i++) {
                 hum += (humTarget - hum) * 2e-5f;
                 growl += (growlTarget - growl) * 4e-5f;
-<<<<<<< HEAD
                 hiss += (hissTarget - hiss) * 6e-5f;
-=======
->>>>>>> bb7a9663312e01303ae6307b867d48e9e7b1333d
                 wHum += (tHum - wHum) * 1.5e-5f;
                 wDrone += (tDrone - wDrone) * 1.5e-5f;
                 wWater += (tWater - wWater) * 1.5e-5f;
@@ -673,13 +664,9 @@ struct AudioSynth {
                 float trem = 0.55f + 0.45f * osc(7, 2.1f);
                 lp2 += 0.02f * (wn - lp2);
                 float growlOut = (g * trem + lp2 * 2.2f) * growl * 0.5f;
-<<<<<<< HEAD
                 float hissOut = (wn - lp1) * 0.16f * hiss;      // flare burn: bright noise
                 if (hiss > 0.01f) { float c = frand(); if (c > 0.998f) hissOut += c * 0.7f * hiss; }  // crackle
                 short v = (short)(tanhf((amb + growlOut + hissOut) * 1.3f) * 30000);
-=======
-                short v = (short)(tanhf((amb + growlOut) * 1.3f) * 30000);
->>>>>>> bb7a9663312e01303ae6307b867d48e9e7b1333d
                 buf[i * 2] = v; buf[i * 2 + 1] = v;
             }
             UpdateAudioStream(stream, buf, 2048);
@@ -1152,7 +1139,7 @@ static const LevelCfg LEVELS[NLEVELS] = {
 };
 
 // ---------------------------------------------------------------- entity
-enum class EState { Hidden, Stalk, Chase };
+enum class EState { Hidden, Stalk, Chase, Flee };
 struct Entity {
     EState st = EState::Hidden;
     float x = 0, z = 0;
@@ -1194,6 +1181,8 @@ int main() {
     int locLY = GetShaderLocation(worldShader, "uLY");
     int locDead = GetShaderLocation(worldShader, "uDead");
     int locLightMul = GetShaderLocation(worldShader, "uLightMul");
+    int locFlarePos = GetShaderLocation(worldShader, "uFlarePos");
+    int locFlareInt = GetShaderLocation(worldShader, "uFlareInt");
     Shader postShader = LoadShaderFromMemory(NULL, POST_FS);
     int locPTime = GetShaderLocation(postShader, "uTime");
     int locPFear = GetShaderLocation(postShader, "uFear");
@@ -1212,6 +1201,7 @@ int main() {
     Sound sndClick = makeClick();
     Sound sndScare = makeJumpscare();
     Sound sndWin = makeWinChime();
+    Sound sndFlare = makeFlareStrike();
 
     AudioSynth synth;
     synth.init();
@@ -1240,6 +1230,13 @@ int main() {
     bool flashOn = false;
     float flashCur = 0;
     const float PR = 0.34f;   // player radius
+
+    // flare weapon: thrown, burns orange, Pirate Clark won't go near one
+    const int   MAXFLARES = 3;
+    const float FLAREBURN = 9.0f;    // seconds
+    int flares = MAXFLARES;
+    double nextFlareRegen = GetTime() + 75;
+    struct { bool active = false, flying = false; float x = 0, y = 0, z = 0, vx = 0, vy = 0, vz = 0, burn = 0; } flare;
 
     // state
     int level = 0;
@@ -1379,6 +1376,46 @@ int main() {
         float fovT = sprinting ? 79.0f : 70.0f;
         fov += (fovT - fov) * fminf(1, 6 * dt);
 
+        // ---- flare weapon
+        if (IsCursorHidden() && caughtT <= 0 && flares > 0 &&
+            (IsKeyPressed(KEY_Q) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT))) {
+            flares--;
+            flare.active = true; flare.flying = true; flare.burn = FLAREBURN;
+            flare.x = px + fwd.x * 0.4f; flare.y = eyeY - 0.15f; flare.z = pz + fwd.z * 0.4f;
+            flare.vx = fwd.x * 10.5f; flare.vz = fwd.z * 10.5f; flare.vy = fwd.y * 10.5f + 2.4f;
+            PlaySound(sndFlare);
+        }
+        if (flare.active) {
+            if (flare.flying) {
+                flare.vy -= 18.0f * dt;
+                flare.x += flare.vx * dt; flare.y += flare.vy * dt; flare.z += flare.vz * dt;
+                float ox = flare.x, oz = flare.z;
+                world.collideCircle(flare.x, flare.z, 0.07f);
+                if (fabsf(ox - flare.x) > 1e-5f) flare.vx *= -0.35f;   // clatter off walls
+                if (fabsf(oz - flare.z) > 1e-5f) flare.vz *= -0.35f;
+                float fg = world.poolAt(cellOf(flare.x), cellOf(flare.z)) ? -0.6f : 0.0f;
+                if (flare.y < fg + 0.04f && flare.vy < 0) {
+                    flare.y = fg + 0.04f;
+                    if (flare.vy < -2.0f) { flare.vy *= -0.30f; flare.vx *= 0.55f; flare.vz *= 0.55f; }
+                    else { flare.flying = false; flare.vx = flare.vy = flare.vz = 0; }
+                }
+                if (fg < -0.1f && flare.y < -0.10f) {   // landed in pool water: fizzles out
+                    Sound &s = splashes[grng.ri(0, 1)];
+                    SetSoundPitch(s, 1.1f); SetSoundVolume(s, 0.8f);
+                    PlaySound(s);
+                    flare.active = false;
+                }
+            }
+            flare.burn -= dt;
+            if (flare.burn <= 0) flare.active = false;
+        }
+        if (flares >= MAXFLARES) nextFlareRegen = now + 75;   // scavenge a fresh flare over time
+        else if (now > nextFlareRegen) { flares++; nextFlareRegen = now + 75; }
+        if (flare.active) {
+            float fdx = flare.x - px, fdz = flare.z - pz;
+            synth.hissTarget = clampf(flare.burn / 1.5f, 0, 1) / (1.0f + 0.05f * (fdx * fdx + fdz * fdz));
+        } else synth.hissTarget = 0;
+
         // ---- blackout events
         bool blackout = now < blackoutEnd;
         if (!blackout && now > nextBlackout) {
@@ -1413,6 +1450,12 @@ int main() {
             entDist = sqrtf(ex * ex + ez * ez);
             float dirDot = (entDist > 0.01f) ? (fwd.x * ex + fwd.z * ez) / entDist : 1;
             entVisible = entDist < 36 && dirDot > 0.86f && world.lineOfSight(px, pz, ent.x, ent.z);
+            if (flare.active && (ent.st == EState::Stalk || ent.st == EState::Chase)) {
+                float fx = ent.x - flare.x, fz = ent.z - flare.z;
+                if (fx * fx + fz * fz < 6.0f * 6.0f) {   // fire is the one thing he remembers
+                    ent.st = EState::Flee; ent.life = 0; ent.gaze = 0;
+                }
+            }
             if (ent.st == EState::Stalk) {
                 ent.life += dt;
                 fearT = entVisible ? 0.45f : 0.15f;
@@ -1439,6 +1482,15 @@ int main() {
                     ent.st = EState::Hidden; ent.nextSpawn = now + 30 + grng.f01() * 30;
                     entDist = 1e9f;
                 }
+            }
+            if (ent.st == EState::Flee) {   // bolts away from the burning flare
+                fearT = 0.18f;
+                ent.life += dt;
+                float rx = ent.x - (flare.active ? flare.x : px), rz = ent.z - (flare.active ? flare.z : pz);
+                float rl = sqrtf(rx * rx + rz * rz);
+                if (rl > 0.01f) { ent.x += rx / rl * 6.5f * dt; ent.z += rz / rl * 6.5f * dt; }
+                world.collideCircle(ent.x, ent.z, 0.38f);
+                if (ent.life > 3.0f) { ent.st = EState::Hidden; ent.nextSpawn = now + 25 + grng.f01() * 35; }
             }
         }
         fear += (fearT - fear) * fminf(1, 2.2f * dt);
@@ -1496,6 +1548,13 @@ int main() {
         SetShaderValue(worldShader, locViewPos, &viewPos, SHADER_UNIFORM_VEC3);
         SetShaderValue(worldShader, locFlash, &flashCur, SHADER_UNIFORM_FLOAT);
         SetShaderValue(worldShader, locFlashDir, &fwd, SHADER_UNIFORM_VEC3);
+        float flick = 0.82f + 0.18f * sinf(timeF * 31.0f) * sinf(timeF * 47.3f + 1.3f);
+        float flareInt = flare.active
+            ? clampf((FLAREBURN - flare.burn) * 6.0f, 0, 1) * clampf(flare.burn / 1.5f, 0, 1) * flick
+            : 0.0f;
+        Vector3 flarePos = { flare.x, flare.y + 0.06f, flare.z };
+        SetShaderValue(worldShader, locFlarePos, &flarePos, SHADER_UNIFORM_VEC3);
+        SetShaderValue(worldShader, locFlareInt, &flareInt, SHADER_UNIFORM_FLOAT);
 
         BeginTextureMode(rt);
         ClearBackground(BLACK);
@@ -1516,6 +1575,13 @@ int main() {
             if (it != world.chunks.end() && it->second.built && it->second.meshes[4].vertexCount > 0)
                 DrawMesh(it->second.meshes[4], mats[0], ident);
         }
+        if (flare.active) {   // the flare itself: hot core, orange halo, stub of a body
+            Vector3 fp = { flare.x, flare.y + 0.05f, flare.z };
+            DrawCylinder({ flare.x, flare.y - 0.03f, flare.z }, 0.018f, 0.022f, 0.09f, 8, { 130, 30, 22, 255 });
+            DrawSphere(fp, 0.035f + 0.012f * flick, { 255, 240, 208, 255 });
+            DrawSphere(fp, 0.13f, { 255, 120, 40, (unsigned char)(90 * flareInt) });
+            DrawSphere(fp, 0.30f, { 255, 70, 20, (unsigned char)(28 * flareInt) });
+        }
         if (ent.st != EState::Hidden && entDist < 45) {
             const LevelCfg &c = LEVELS[level];
             float ambLum = (c.amb.x + c.amb.y + c.amb.z) / 3.0f;
@@ -1527,6 +1593,10 @@ int main() {
                 float d2 = vx2 * vx2 + vz2 * vz2 + 1e-4f, dl = sqrtf(d2);
                 float cone = powf(fmaxf((vx2 * fwd.x + vz2 * fwd.z) / dl, 0.0f), 26.0f);
                 lum = clampf(lum + flashCur * cone * 7.5f / (1.0f + 0.10f * d2), 0.0f, 1.0f);
+            }
+            if (flareInt > 0.01f) {   // flare glow reaches him too
+                float fvx = ent.x - flare.x, fvz = ent.z - flare.z;
+                lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fvx * fvx + fvz * fvz)), 0.0f, 1.0f);
             }
             float fogf = expf(-entDist * c.fogDen);
             unsigned char lum8 = cl8(40 + 215 * lum);
@@ -1557,7 +1627,7 @@ int main() {
             DrawText(t1, sw / 2 - MeasureText(t1, 52) / 2, sh / 3, 52, Fade({ 220, 205, 150, 255 }, ta));
             const char *t2 = "if you're reading this, you've already noclipped";
             DrawText(t2, sw / 2 - MeasureText(t2, 18) / 2, sh / 3 + 66, 18, Fade({ 160, 150, 110, 255 }, ta * 0.9f));
-            const char *t3 = "WASD walk   SHIFT run   SPACE jump   F flashlight   F11 fullscreen   ESC mouse";
+            const char *t3 = "WASD walk   SHIFT run   SPACE jump   F flashlight   Q flare   F11 fullscreen   ESC mouse";
             DrawText(t3, sw / 2 - MeasureText(t3, 16) / 2, sh - 60, 16, Fade({ 140, 132, 100, 255 }, ta * 0.8f));
         }
         if (caughtT > 0) {
@@ -1592,10 +1662,16 @@ int main() {
             DrawText("F — flashlight", sw - MeasureText("F — flashlight", 16) - 16, sh - 28, 16, { 190, 180, 140, 160 });
         else if (flashOn)
             DrawText("[ flashlight ]", sw - MeasureText("[ flashlight ]", 14) - 16, sh - 26, 14, { 235, 225, 180, 120 });
+        {   // flare count, bottom-left
+            const char *ft = TextFormat("Q — flare  ×%d", flares);
+            Color fc = flares > 0 ? Color{ 235, 160, 110, 150 } : Color{ 140, 110, 95, 120 };
+            DrawText(ft, 16, sh - 28, 16, fc);
+        }
         if (debugHud) {
             DrawText(TextFormat("%d fps  pos(%.0f, %.0f)  chunks %d  entity %s  d=%.0fm",
                                 GetFPS(), px, pz, (int)world.chunks.size(),
-                                ent.st == EState::Hidden ? "hidden" : ent.st == EState::Stalk ? "STALKING" : "CHASING",
+                                ent.st == EState::Hidden ? "hidden" : ent.st == EState::Stalk ? "STALKING"
+                                    : ent.st == EState::Chase ? "CHASING" : "FLEEING",
                                 entDist > 1e8 ? 0.0f : entDist),
                      12, 12, 18, { 230, 220, 160, 220 });
         }
