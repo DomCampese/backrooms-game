@@ -60,6 +60,10 @@ make run
 
 ## Dev/testing knobs
 
+With the F3 debug HUD open, dev hotkeys are live: `B` force blackout,
+`E` spawn Clark stalking ahead, `C` force a chase, `H` despawn him,
+`G` refill flares, `N` jump to the next level (including the Red Halls).
+
 - `BACKROOMS_SHOT=out.png` — run 600 frames headlessly, save a screenshot, exit.
 - `BACKROOMS_EXITS=1` — exit doors everywhere (visual testing).
 - `BACKROOMS_POS="x,z,yaw"` — start at a specific spot (visual testing).

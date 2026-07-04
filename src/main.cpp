@@ -1376,6 +1376,36 @@ int main() {
         float fovT = sprinting ? 79.0f : 70.0f;
         fov += (fovT - fov) * fminf(1, 6 * dt);
 
+        // ---- dev tools (only while the F3 debug HUD is up)
+        if (debugHud) {
+            if (IsKeyPressed(KEY_B)) {   // force a blackout right now
+                blackoutEnd = now + 3.0 + grng.f01() * 3.0;
+                nextBlackout = level == 2 ? 1e18 : blackoutEnd + 45 + grng.f01() * 75;
+            }
+            if (IsKeyPressed(KEY_E)) {   // (re)spawn Clark stalking ~12m ahead
+                Vector2 spot = world.findOpenSpot(px + f2x * 12, pz + f2z * 12);
+                ent.x = spot.x; ent.z = spot.y;
+                ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.unseen = 0;
+            }
+            if (IsKeyPressed(KEY_C)) {   // force chase (spawns him first if hidden)
+                if (ent.st == EState::Hidden) {
+                    Vector2 spot = world.findOpenSpot(px + f2x * 14, pz + f2z * 14);
+                    ent.x = spot.x; ent.z = spot.y;
+                }
+                ent.st = EState::Chase; ent.gaze = 0; ent.life = 0; ent.unseen = 0;
+            }
+            if (IsKeyPressed(KEY_H)) {   // banish him
+                ent.st = EState::Hidden; ent.nextSpawn = now + 20 + grng.f01() * 20;
+            }
+            if (IsKeyPressed(KEY_G)) flares = MAXFLARES;   // refill flares
+            if (IsKeyPressed(KEY_N)) {   // jump to next level (incl. Red Halls)
+                applyLevel((level + 1) % NLEVELS);
+                Vector2 spot = world.findOpenSpot(px, pz);
+                px = spot.x; pz = spot.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
+                ent.st = EState::Hidden; ent.nextSpawn = now + 30;
+            }
+        }
+
         // ---- flare weapon
         if (IsCursorHidden() && caughtT <= 0 && flares > 0 &&
             (IsKeyPressed(KEY_Q) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT))) {
@@ -1674,6 +1704,8 @@ int main() {
                                     : ent.st == EState::Chase ? "CHASING" : "FLEEING",
                                 entDist > 1e8 ? 0.0f : entDist),
                      12, 12, 18, { 230, 220, 160, 220 });
+            DrawText("dev: B blackout   E spawn   C chase   H hide   G flares   N next level",
+                     12, 34, 16, { 200, 190, 140, 180 });
         }
         EndDrawing();
 
