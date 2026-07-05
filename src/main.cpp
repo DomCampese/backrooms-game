@@ -2136,18 +2136,45 @@ int main() {
         if (weapon == 1) {   // revolver viewmodel, bottom-right, kicks with recoil
             float deg = 210.0f + recoil * 16.0f;
             float rad = deg * DEG2RAD;
-            float dirx = cosf(rad), diry = sinf(rad);
+            float dirx = cosf(rad), diry = sinf(rad);   // along the barrel
+            float nx = -diry, ny = dirx;                // toward the top of the gun
             float bobX = sinf(bobPhase * 3.14159f) * 3.0f * bobAmt;
-            Vector2 piv = { sw - 120.0f + bobX - dirx * recoil * 18.0f,
-                            sh + 24.0f + fabsf(bobX) * 0.6f - diry * recoil * 18.0f };
-            Color steel = { 40, 38, 44, 255 }, steel2 = { 57, 54, 62, 255 }, wood = { 76, 51, 34, 255 };
-            DrawRectanglePro({ piv.x, piv.y, 34, 84 }, { 17, -2 }, deg + 68, wood);       // grip
-            DrawRectanglePro({ piv.x, piv.y, 236, 20 }, { 26, 10 }, deg, steel);          // barrel + frame
-            DrawCircleV({ piv.x + dirx * 58, piv.y + diry * 58 }, 19, steel2);            // cylinder
-            DrawCircleV({ piv.x + dirx * 58, piv.y + diry * 58 }, 7, { 21, 20, 24, 255 });
+            Vector2 piv = { sw - 165.0f + bobX - dirx * recoil * 22.0f,
+                            sh - 30.0f + fabsf(bobX) * 0.6f - diry * recoil * 22.0f };
+            // gun-local frame: t along the barrel, s toward the sights
+            const float k = 1.25f;   // overall viewmodel scale
+            auto pt = [&](float t, float s) {
+                return Vector2{ piv.x + (dirx * t + nx * s) * k, piv.y + (diry * t + ny * s) * k };
+            };
+            auto quad = [&](Vector2 a, Vector2 b, Vector2 c2, Vector2 d2, Color col) {
+                DrawTriangle(a, b, c2, col); DrawTriangle(a, c2, d2, col);
+            };
+            auto box = [&](float t0, float t1, float s0, float s1, Color col) {
+                quad(pt(t0, s1), pt(t0, s0), pt(t1, s0), pt(t1, s1), col);
+            };
+            Color steel = { 40, 38, 44, 255 }, steel2 = { 57, 54, 62, 255 };
+            Color dark = { 21, 20, 24, 255 }, wood = { 88, 58, 38, 255 };
+            // grip rakes back and down off the bottom of the screen
+            Vector2 gv = { (-dirx * 0.42f - nx * 0.91f) * 70.0f * k, (-diry * 0.42f - ny * 0.91f) * 70.0f * k };
+            Vector2 g0 = pt(-14, -8), g1 = pt(12, -8);
+            quad(g0, g1, { g1.x + gv.x, g1.y + gv.y },
+                 { g0.x + gv.x - dirx * 8 * k, g0.y + gv.y - diry * 8 * k }, wood);
+            box(-16, 34, -10, 8, steel);                    // frame rear + recoil shield
+            box(-6, 90, 8, 13, steel);                      // top strap over the cylinder
+            box(30, 76, -14, 13, steel2);                   // cylinder bulge
+            box(43, 46, -12, 11, dark);                     // cylinder flutes
+            box(59, 62, -12, 11, dark);
+            box(82, 168, -3, 11, steel);                    // barrel
+            box(88, 138, -8, -3, steel2);                   // ejector rod shroud under it
+            box(163, 168, -3, 11, dark);                    // muzzle band
+            box(-26, -14, 9, 19, steel2);                   // hammer spur
+            box(-10, -2, 13, 17, steel);                    // rear sight
+            box(156, 163, 11, 17, steel);                   // front sight
+            DrawRing(pt(24, -15), 7.5f * k, 10.5f * k, 0, 360, 24, steel);   // trigger guard
+            box(20, 24, -16, -9, dark);                     // trigger
             if (muzzleT > 0) {
                 float mt = muzzleT / 0.09f;
-                Vector2 tip = { piv.x + dirx * 214, piv.y + diry * 214 };
+                Vector2 tip = pt(180, 4);
                 DrawCircleV(tip, 46 * mt, { 255, 150, 60, (unsigned char)(90 * mt) });
                 DrawCircleV(tip, 24 * mt, { 255, 225, 140, (unsigned char)(210 * mt) });
             }
