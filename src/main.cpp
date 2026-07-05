@@ -54,6 +54,12 @@ static float fbm2(float x, float y, uint32_t s, int oct) {
 static unsigned char cl8(float v) { return (unsigned char)(v < 0 ? 0 : (v > 255 ? 255 : v)); }
 static float clampf(float v, float a, float b) { return v < a ? a : (v > b ? b : v); }
 
+// LEVEL FUN =) — the party decorations share one faded palette
+static const Color PARTY[5] = {
+    { 206, 64, 58, 255 }, { 222, 172, 62, 255 }, { 84, 142, 198, 255 },
+    { 106, 178, 92, 255 }, { 182, 96, 178, 255 },
+};
+
 // ---------------------------------------------------------------- shaders
 static const char *WORLD_VS = R"GLSL(
 #version 330
@@ -502,6 +508,85 @@ static Texture2D makeTileTex() {
     return finishTexture(img, true);
 }
 
+// LEVEL FUN =): children's-party wallpaper — bunting up top, confetti,
+// crayon smiley faces, and the same grime as everywhere else down here
+static Texture2D makePartyWallTex() {
+    const int W = 512, H = 512;
+    Image img = GenImageColor(W, H, BLANK);
+    Color *p = (Color *)img.data;
+    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
+        float vy = (float)y / H;
+        float grime = fbm2(x * 0.013f, y * 0.013f, 207u, 4);
+        float stain = fbm2(x * 0.006f + 17.0f, y * 0.006f, 212u, 4);
+        float base = (0.985f + 0.015f * sinf(x * 0.9f)) * (1.0f - 0.14f * grime) * (1.0f - 0.08f * vy);
+        if (stain > 0.64f) base *= 1.0f - (stain - 0.64f) * 0.8f;
+        float r = 226 * base, g = 206 * base, b = 168 * base;
+        // confetti print, gone dingy
+        uint32_t ch = ih(x >> 3, y >> 3, 209u);
+        if (ch % 11 == 0) {
+            int lx = x & 7, ly2 = y & 7;
+            if ((lx - 4) * (lx - 4) + (ly2 - 4) * (ly2 - 4) < 7) {
+                Color c = PARTY[(ch >> 6) % 5];
+                r = c.r * base; g = c.g * base; b = c.b * base;
+            }
+        }
+        // crayon smileys, one per 128px cell or so, mid-wall
+        if (y > 96 && y < H - 96) {
+            uint32_t sh2 = ih(x >> 7, y >> 7, 214u);
+            if (sh2 % 3 == 0) {
+                float cx2 = (float)((x >> 7) << 7) + 40 + (sh2 % 48), cy2 = (float)(((y >> 7) << 7) + 44 + ((sh2 >> 8) % 40));
+                float dx2 = x - cx2, dy2 = y - cy2, d = sqrtf(dx2 * dx2 + dy2 * dy2);
+                bool ring = fabsf(d - 14.0f) < 1.7f;
+                bool eye = (fabsf(dx2 + 5) < 1.6f || fabsf(dx2 - 5) < 1.6f) && fabsf(dy2 + 4) < 1.8f;
+                bool smile = fabsf(d - 8.0f) < 1.6f && dy2 > 3.0f;
+                if (ring || eye || smile) { r = 168 * base; g = 62 * base; b = 54 * base; }
+            }
+        }
+        if (y >= 10 && y < 62) {   // bunting strung along the top of the wall
+            if (y < 14) { r = 70; g = 58; b = 48; }   // the string
+            else {
+                int seg = x / 64;
+                float lx = (float)(x % 64), halfw = 24.0f * (1.0f - (y - 14) / 48.0f);
+                if (fabsf(lx - 32) < halfw) {
+                    Color c = PARTY[seg % 5];
+                    float pv = base * (0.92f + 0.08f * sinf(x * 0.7f));
+                    r = c.r * pv; g = c.g * pv; b = c.b * pv;
+                }
+            }
+        }
+        if (y > H - 46) {   // baseboard
+            float t = fbm2(x * 0.02f, y * 0.1f, 216u, 3);
+            r = 92 - 22 * t; g = 74 - 18 * t; b = 42 - 11 * t;
+            if (y < H - 40) { r *= 0.45f; g *= 0.45f; b *= 0.45f; }
+        }
+        p[y * W + x] = { cl8(r), cl8(g), cl8(b), 255 };
+    }
+    return finishTexture(img, true);
+}
+
+// LEVEL FUN =): the same sad carpet, but someone spilled confetti into it forever
+static Texture2D makePartyCarpetTex() {
+    const int W = 512, H = 512;
+    Image img = GenImageColor(W, H, BLANK);
+    Color *p = (Color *)img.data;
+    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
+        float n = lat(x, y, 205u) * 0.16f - 0.08f;
+        float fiber = (fbm2(x * 0.18f, y * 0.18f, 233u, 2) - 0.5f) * 0.14f;
+        float blotch = fbm2(x * 0.008f, y * 0.008f, 221u, 4);
+        float v = 1.0f + n + fiber;
+        if (blotch > 0.56f) v *= 1.0f - (blotch - 0.56f) * 0.9f;
+        float r = 152 * v, g = 128 * v, b = 78 * v;
+        uint32_t fh = ih(x >> 2, y >> 2, 231u);
+        if (fh % 29 == 0) {   // trodden-in confetti
+            Color c = PARTY[(fh >> 7) % 5];
+            float cv = v * 0.85f;
+            r = c.r * cv; g = c.g * cv; b = c.b * cv;
+        }
+        p[y * W + x] = { cl8(r), cl8(g), cl8(b), 255 };
+    }
+    return finishTexture(img, true);
+}
+
 // ---------------------------------------------------------------- sounds
 static Wave makeWaveBuf(int frames) {
     Wave w = {};
@@ -683,8 +768,9 @@ struct AudioSynth {
     float humTarget = 1, hum = 1, growlTarget = 0, growl = 0;   // humTarget ducks all ambience
     float hissTarget = 0, hiss = 0;                             // burning flare hiss
     float whisperTarget = 0, whisper = 0;                       // something in the walls
-    float tHum = 1, tDrone = 0, tWater = 0;                     // per-level ambience mix targets
-    float wHum = 1, wDrone = 0, wWater = 0;
+    float tHum = 1, tDrone = 0, tWater = 0, tParty = 0;         // per-level ambience mix targets
+    float wHum = 1, wDrone = 0, wWater = 0, wParty = 0;
+    double musT = 0; int musI = 0;                              // LEVEL FUN music box position
     double ph[16] = {};
     float lp1 = 0, lp2 = 0, lp3 = 0;
     uint32_t xr = 0x12345u;
@@ -710,6 +796,7 @@ struct AudioSynth {
                 wHum += (tHum - wHum) * 1.5e-5f;
                 wDrone += (tDrone - wDrone) * 1.5e-5f;
                 wWater += (tWater - wWater) * 1.5e-5f;
+                wParty += (tParty - wParty) * 1.5e-5f;
                 float wn = frand();
                 lp1 += 0.035f * (wn - lp1);
                 // L0: fluorescent hum
@@ -724,7 +811,20 @@ struct AudioSynth {
                 float waterS = (lp3 * 3.2f * (0.55f + 0.45f * osc(11, 0.16f))
                               + lp1 * 0.55f * (0.5f + 0.5f * osc(12, 0.071f))) * 0.30f * wWater;
                 float room = lp1 * 0.08f;
-                float amb = (humS + droneS + waterS + room) * hum;   // hum var = blackout duck
+                // LEVEL FUN: a music box grinding through the birthday song, slightly flat, forever
+                float partyS = 0;
+                if (wParty > 0.001f) {
+                    static const float MEL[25] = { 392, 392, 440, 392, 523, 494,
+                                                   392, 392, 440, 392, 587, 523,
+                                                   392, 392, 784, 659, 523, 494, 440,
+                                                   698, 698, 659, 523, 587, 523 };
+                    musT += 1.0 / 44100.0;
+                    if (musT > 0.42) { musT -= 0.42; musI = (musI + 1) % 25; }
+                    float env = expf(-(float)musT * 4.0f);
+                    float note = osc(15, MEL[musI] * 0.972f);   // half a semitone flat
+                    partyS = (note * 0.75f + sinf(3.0f * (float)ph[15]) * 0.22f) * env * 0.085f * wParty;
+                }
+                float amb = (humS + droneS + waterS + partyS + room) * hum;   // hum var = blackout duck
                 float g = osc(5, 46.0f) * 0.7f + osc(6, 33.5f) * 0.35f;
                 float trem = 0.55f + 0.45f * osc(7, 2.1f);
                 lp2 += 0.02f * (wn - lp2);
@@ -784,7 +884,8 @@ struct MB {
 // walls: wallN[i][k] = north edge of cell (i,k) at z=k*CELL; wallW = west edge at x=i*CELL
 // values: 0 open, 1 wall, 2 exit doorway, 3 window into the dark
 // prop types: 0 none, 1 box stack, 2 filing cabinet, 3 folding table, 4 fallen ceiling tile,
-//             5 couch, 6 armoire, 7 floor lamp, 8 nightstand, 9 bed, 10 vending machine
+//             5 couch, 6 armoire, 7 floor lamp, 8 nightstand, 9 bed, 10 vending machine,
+//             11 party table (cake nobody cut)
 struct ChunkData {
     uint8_t wallN[CCELLS][CCELLS];
     uint8_t wallW[CCELLS][CCELLS];
@@ -804,7 +905,7 @@ static int cellOf(float x) { return (int)floorf(x / CELL); }
 
 struct World {
     unsigned seed = 1337;
-    int level = 0;           // 0 = Level 0, 1 = Level 1 (garage), 2 = Poolrooms
+    int level = 0;           // 0 = Level 0, 1 = Level 1 (garage), 2 = Poolrooms, 3 = Red Halls, 4 = LEVEL FUN
     float wallH = 3.0f;
     bool exitTest = false;   // BACKROOMS_EXITS env: exits everywhere, for visual testing
     std::unordered_map<uint64_t, ChunkData> chunks;
@@ -829,7 +930,8 @@ struct World {
         uint64_t k = key(cx, cz);
         Rng rng(hash64(k ^ ((uint64_t)seed + (uint64_t)level * 0x51ED270Bu) * 0x9E3779B97F4A7C15ULL));
         bool openChunk = (hash64(k ^ 0xA11CEULL ^ (uint64_t)seed) & 7) == 0;   // occasional open plaza
-        int nseg = level == 0 ? 12 + rng.ri(0, 5) : level == 1 ? 7 + rng.ri(0, 4) : 5 + rng.ri(0, 3);
+        int nseg = level == 0 ? 12 + rng.ri(0, 5) : level == 1 ? 7 + rng.ri(0, 4)
+                 : level == 4 ? 9 + rng.ri(0, 4) : 5 + rng.ri(0, 3);
         if (openChunk) nseg = 2 + rng.ri(0, 2);
         int lenBase = level == 0 ? 5 : 6;
         for (int s = 0; s < nseg; s++) {
@@ -850,7 +952,7 @@ struct World {
         memset(d.prop, 0, sizeof(d.prop));
         memset(d.propRot, 0, sizeof(d.propRot));
         int npr = level == 0 ? 7 + rng.ri(0, 7) : level == 1 ? 8 + rng.ri(0, 8)
-                : level == 3 ? 5 + rng.ri(0, 6) : 0;
+                : level == 3 ? 5 + rng.ri(0, 6) : level == 4 ? 6 + rng.ri(0, 6) : 0;
         for (int i = 0; i < npr; i++) {
             int a = rng.ri(0, CCELLS - 1), b = rng.ri(0, CCELLS - 1);
             if (d.pillar[a][b] || d.prop[a][b]) continue;
@@ -858,6 +960,8 @@ struct World {
             if (level == 1) d.prop[a][b] = f < 0.55f ? 1 : f < 0.78f ? 2 : f < 0.96f ? 3 : 10;  // warehouse
             else if (level == 3)                                               // red halls: someone's bedroom
                 d.prop[a][b] = f < 0.30f ? 9 : f < 0.55f ? 6 : f < 0.80f ? 8 : 7;
+            else if (level == 4)                                               // level fun: the party never ended
+                d.prop[a][b] = f < 0.40f ? 11 : f < 0.62f ? 1 : f < 0.76f ? 5 : f < 0.90f ? 3 : 10;
             else   // L0: office clutter, plus furniture that has no business here
                 d.prop[a][b] = f < 0.26f ? 1 : f < 0.40f ? 2 : f < 0.50f ? 3 : f < 0.62f ? 4 :
                                f < 0.74f ? 5 : f < 0.84f ? 6 : f < 0.90f ? 7 : f < 0.95f ? 8 :
@@ -1222,6 +1326,19 @@ struct World {
                     part(0, -0.97f, 0.52f, 0.05f, ey, ey + 0.95f, true, wd);             // headboard
                     break;
                 }
+                case 11: {  // party table: paper cloth, a cake nobody ever cut
+                    blob(0.62f, 0.62f);
+                    float ty = 0.74f;
+                    Color cloth = PARTY[ih(cx * CCELLS + i, cz * CCELLS + kk, 0xCAFEu) % 5];
+                    part(0, 0, 0.55f, 0.55f, ey + ty - 0.05f, ey + ty, false, cloth);
+                    for (int lx = -1; lx <= 1; lx += 2) for (int lz = -1; lz <= 1; lz += 2)
+                        part(lx * 0.44f, lz * 0.44f, 0.035f, 0.035f, ey, ey + ty - 0.05f,
+                             false, Color{ 120, 118, 112, 255 });
+                    part(0, 0, 0.17f, 0.17f, ey + ty, ey + ty + 0.16f, false, Color{ 238, 232, 220, 255 });   // cake
+                    part(0, 0, 0.11f, 0.11f, ey + ty + 0.16f, ey + ty + 0.26f, false, Color{ 232, 152, 172, 255 });
+                    part(0, 0, 0.013f, 0.013f, ey + ty + 0.26f, ey + ty + 0.37f, false, Color{ 240, 226, 172, 255 }); // candle
+                    break;
+                }
                 case 10: {  // vending machine: still stocked, still humming, takes doubloons
                     blob(0.52f, 0.44f);
                     part(0, 0, 0.44f, 0.36f, ey, ey + 1.85f, false, Color{ 148, 152, 158, 255 });
@@ -1235,6 +1352,24 @@ struct World {
                     break;
                 }
                 }
+            }
+        }
+        if (level == 4) {   // crepe streamers sag from the ceiling, in pairs of quads
+            Rng srng(hash64(key(cx, cz) ^ 0xFE57AULL ^ (uint64_t)seed));
+            int ns = 3 + srng.ri(0, 3);
+            for (int s = 0; s < ns; s++) {
+                float ax = wx + srng.f01() * CHUNK, az = wz + srng.f01() * CHUNK;
+                float bx2 = ax + (srng.f01() - 0.5f) * 9, bz2 = az + (srng.f01() - 0.5f) * 9;
+                float mx2 = (ax + bx2) * 0.5f, mz2 = (az + bz2) * 0.5f;
+                float ytop = wallH - 0.03f, ymid = wallH - 0.55f - srng.f01() * 0.35f;
+                Color sc = PARTY[srng.ri(0, 4)];
+                float dx2 = bx2 - ax, dz2 = bz2 - az, dl = sqrtf(dx2 * dx2 + dz2 * dz2) + 1e-4f;
+                Vector3 nrm = { dz2 / dl, 0, -dx2 / dl };
+                Vector2 uvp = { 0.75f, 0.75f };   // plain-metal corner of the prop atlas: flat colour
+                pr.quad({ ax, ytop, az }, { mx2, ymid + 0.06f, mz2 }, { mx2, ymid, mz2 }, { ax, ytop - 0.06f, az },
+                        nrm, uvp, uvp, uvp, uvp, sc);
+                pr.quad({ mx2, ymid + 0.06f, mz2 }, { bx2, ytop, bz2 }, { bx2, ytop - 0.06f, bz2 }, { mx2, ymid, mz2 },
+                        nrm, uvp, uvp, uvp, uvp, sc);
             }
         }
         d.meshes[0] = fl.bake();
@@ -1271,6 +1406,7 @@ struct World {
                 case 8: out[cnt++] = { x0 + 0.66f, z0 + 0.66f, x0 + 1.34f, z0 + 1.34f, ey + 0.60f }; break;  // nightstand
                 case 9: out[cnt++] = { x0 + 0.30f, z0 + 0.15f, x0 + 1.70f, z0 + 1.85f, ey + 0.46f }; break;  // bed
                 case 10: out[cnt++] = { x0 + 0.50f, z0 + 0.58f, x0 + 1.50f, z0 + 1.42f, ey + 1.85f }; break; // vending
+                case 11: out[cnt++] = { x0 + 0.40f, z0 + 0.40f, x0 + 1.60f, z0 + 1.60f, ey + 0.74f }; break; // party table
                 }
             }
         }
@@ -1396,13 +1532,16 @@ struct LevelCfg {
     Vector3 lightCol, amb, fogCol;
     const char *name;
 };
-static const int NLEVELS = 4;
+static const int NLEVELS = 5;
 static const LevelCfg LEVELS[NLEVELS] = {
     { 3.0f,  8.0f, 0.06f, 1.00f, 0.055f, 0.06f, {1.00f,0.94f,0.74f}, {0.045f,0.042f,0.030f}, {0.140f,0.125f,0.070f}, "LEVEL 0" },
     { 4.2f, 12.0f, 0.30f, 0.85f, 0.075f, 0.22f, {0.72f,0.80f,0.95f}, {0.016f,0.017f,0.022f}, {0.018f,0.020f,0.026f}, "LEVEL 1" },
     { 3.6f,  8.0f, 0.06f, 0.72f, 0.045f, 0.55f, {1.00f,1.00f,0.97f}, {0.16f,0.18f,0.20f},    {0.19f,0.23f,0.27f},    "THE POOLROOMS" },
     { 3.0f,  8.0f, 0.45f, 0.80f, 0.095f, 0.10f, {1.00f,0.22f,0.15f}, {0.030f,0.008f,0.006f}, {0.055f,0.010f,0.008f}, "THE RED HALLS" },
+    { 3.0f,  8.0f, 0.10f, 1.05f, 0.055f, 0.06f, {1.00f,0.82f,0.76f}, {0.050f,0.040f,0.036f}, {0.150f,0.100f,0.085f}, "LEVEL FUN =)" },
 };
+// where each level's exit door leads; the Red Halls and the party both dump you back at the start
+static const int EXIT_NEXT[NLEVELS] = { 1, 2, 4, 0, 0 };
 
 // ---------------------------------------------------------------- entity
 enum class EState { Hidden, Stalk, Chase, Flee, Die };
@@ -1430,11 +1569,12 @@ int main() {
     Texture2D texEntity = makeEntityTex();
     Texture2D texProps = makePropsTex();
     // per-level surface sets: [floor, ceiling, walls]
-    Texture2D floorTexs[NLEVELS] = { makeCarpetTex(), makeConcreteFloorTex(), makeTileTex(), Texture2D{} };
-    Texture2D ceilTexs[NLEVELS]  = { makeCeilingTex(), makeConcreteCeilTex(), floorTexs[2], Texture2D{} };
-    Texture2D wallTexs[NLEVELS]  = { makeWallpaperTex(), makeConcreteWallTex(), floorTexs[2], makeRedBrickTex() };
+    Texture2D floorTexs[NLEVELS] = { makeCarpetTex(), makeConcreteFloorTex(), makeTileTex(), Texture2D{}, makePartyCarpetTex() };
+    Texture2D ceilTexs[NLEVELS]  = { makeCeilingTex(), makeConcreteCeilTex(), floorTexs[2], Texture2D{}, Texture2D{} };
+    Texture2D wallTexs[NLEVELS]  = { makeWallpaperTex(), makeConcreteWallTex(), floorTexs[2], makeRedBrickTex(), makePartyWallTex() };
     floorTexs[3] = floorTexs[1];   // red halls reuse the concrete floor/ceiling in red light
     ceilTexs[3] = ceilTexs[1];
+    ceilTexs[4] = ceilTexs[0];     // the party is under the same office tiles as Level 0
 
     Shader worldShader = LoadShaderFromMemory(WORLD_VS, WORLD_FS);
     int locTime = GetShaderLocation(worldShader, "uTime");
@@ -1574,16 +1714,17 @@ int main() {
         SetShaderValue(worldShader, locDead, &c.dead, SHADER_UNIFORM_FLOAT);
         SetShaderValue(worldShader, locLightMul, &c.lightMul, SHADER_UNIFORM_FLOAT);
         SetShaderValue(worldShader, locGloss, &c.gloss, SHADER_UNIFORM_FLOAT);
-        synth.tHum = lv == 0 ? 1.0f : 0.15f;
+        synth.tHum = lv == 0 ? 1.0f : lv == 4 ? 0.5f : 0.15f;
         synth.tDrone = lv == 1 ? 1.0f : 0.0f;
         synth.tWater = lv == 2 ? 1.0f : 0.0f;
+        synth.tParty = lv == 4 ? 1.0f : 0.0f;
         nextBlackout = lv == 2 ? 1e18 : GetTime() + 30 + grng.f01() * 60;   // no blackouts in the poolrooms
         blackoutEnd = -1;
         taken.clear(); coinsWorld.clear(); chalk.clear();   // it's a different maze down here
         SetWindowTitle(TextFormat("THE BACKROOMS — %s", c.name));
     };
     applyLevel(0);
-    if (const char *lvEnv = getenv("BACKROOMS_LEVEL")) applyLevel(atoi(lvEnv) % 3);   // testing
+    if (const char *lvEnv = getenv("BACKROOMS_LEVEL")) applyLevel(atoi(lvEnv) % NLEVELS);   // testing
 
     if (!shotPath) DisableCursor();
 
@@ -1987,7 +2128,7 @@ int main() {
                     PlaySound(sndWin);
                     escapeT = 6.0f; escapeCount++;
                     saveBest();
-                    applyLevel((level + 1) % 3);      // the exit leads deeper
+                    applyLevel(EXIT_NEXT[level]);     // the exit leads deeper
                     Vector2 spot = world.findOpenSpot(px, pz);
                     px = spot.x; pz = spot.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
                     ent.st = EState::Hidden; ent.nextSpawn = now + 30;
@@ -2076,6 +2217,23 @@ int main() {
             float gy = world.floorY(cellOf(cw.x), cellOf(cw.z));
             float bob = sinf((float)now * 2.4f + cw.x) * 0.03f;
             DrawCylinder({ cw.x, gy + 0.06f + bob, cw.z }, 0.085f, 0.085f, 0.024f, 12, { 214, 172, 66, 255 });
+        }
+        if (level == 4) {   // balloons nose against the ceiling, strings hanging down
+            for (int dx = -7; dx <= 7; dx++) for (int dz = -7; dz <= 7; dz++) {
+                int a = pci + dx, b = pck + dz;
+                uint32_t h = ih(a, b, (uint32_t)world.seed ^ 0xBA11u);
+                if (h % 17 != 0 || world.pillarAt(a, b)) continue;
+                float bxx = a * CELL + 1.0f + (((h >> 4) & 7) / 7.0f - 0.5f) * 0.9f;
+                float bzz = b * CELL + 1.0f + (((h >> 7) & 7) / 7.0f - 0.5f) * 0.9f;
+                float bob = sinf((float)now * 0.8f + a * 1.3f + b * 2.1f) * 0.05f;
+                float by = world.wallH - 0.21f + bob;
+                Color bc = PARTY[(h >> 10) % 5];
+                bc.r = (unsigned char)(bc.r * 0.72f); bc.g = (unsigned char)(bc.g * 0.72f);
+                bc.b = (unsigned char)(bc.b * 0.72f);   // dim: no light of their own down here
+                DrawSphere({ bxx, by, bzz }, 0.17f, bc);
+                DrawCylinderEx({ bxx, by - 0.15f, bzz }, { bxx + 0.04f, by - 0.95f, bzz + 0.02f },
+                               0.005f, 0.005f, 4, { 190, 185, 175, 150 });
+            }
         }
         for (auto &cm : chalk)
             if (fabsf(cm.x - px) < 30 && fabsf(cm.z - pz) < 30) {

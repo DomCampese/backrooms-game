@@ -54,6 +54,11 @@ make run
   no one.
 - **Exits** — vanishingly rare glowing doorways carved into wall runs. Finding
   one "ends" the run. Sort of.
+- **LEVEL FUN =)** — the poolrooms exit doesn't lead home. Bunting on every
+  wall, confetti trodden into the carpet, crayon smileys, balloons nosing
+  against the ceiling tiles, crepe streamers, and party tables set with a
+  cake nobody ever cut — while a music box grinds through the birthday song
+  half a semitone flat, forever.
 - **Post** — film grain, vignette, chromatic aberration, and a mains-frequency
   luma shimmer, all scaling with fear.
 
@@ -82,3 +87,4 @@ With the F3 debug HUD open, dev hotkeys are live: `B` force blackout,
 - `BACKROOMS_SHOT=out.png` — run 600 frames headlessly, save a screenshot, exit.
 - `BACKROOMS_EXITS=1` — exit doors everywhere (visual testing).
 - `BACKROOMS_POS="x,z,yaw"` — start at a specific spot (visual testing).
+- `BACKROOMS_LEVEL=n` — start on level n (visual testing).
