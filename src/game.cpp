@@ -181,7 +181,11 @@ bool Game::tick() {
     flashCur += ((flashOn ? 1.0f : 0.0f) - flashCur) * fminf(1, 25 * dt);
     if (IsKeyPressed(KEY_F3)) debugHud = !debugHud;
     if (IsKeyPressed(KEY_ESCAPE) && IsCursorHidden()) EnableCursor();
-    if (!IsCursorHidden() && !shotPath && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) DisableCursor();
+    captureClick = false;
+    if (!IsCursorHidden() && !shotPath && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        DisableCursor();
+        captureClick = true;   // this click is spoken for — no accidental discharge
+    }
 
     updateLook();
     updateMovement(dt);
@@ -337,7 +341,7 @@ void Game::updateWeapons(float dt, double now) {
         reloadT -= dt;
         if (reloadT <= 0) { ammo = MAXAMMO; SetSoundPitch(sndClick, 1.15f); PlaySound(sndClick); }
     }
-    if (weapon == 1 && IsCursorHidden() && caughtT <= 0 && reloadT <= 0 && gunCd <= 0 &&
+    if (weapon == 1 && IsCursorHidden() && !captureClick && caughtT <= 0 && reloadT <= 0 && gunCd <= 0 &&
         IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         if (ammo <= 0) { SetSoundPitch(sndClick, 0.7f); PlaySound(sndClick); gunCd = 0.25f; }  // dry fire
         else {
@@ -381,7 +385,7 @@ void Game::updateWeapons(float dt, double now) {
 void Game::updateFlare(float dt, double now) {
     // ---- flare weapon
     if (IsCursorHidden() && caughtT <= 0 && flares > 0 &&
-        (IsKeyPressed(KEY_Q) || (weapon == 0 && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)))) {
+        (IsKeyPressed(KEY_Q) || (weapon == 0 && !captureClick && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)))) {
         flares--;
         flare.active = true; flare.flying = true; flare.burn = FLAREBURN;
         flare.x = px + fwd.x * 0.4f; flare.y = eyeY - 0.15f; flare.z = pz + fwd.z * 0.4f;

@@ -56,10 +56,12 @@ make run
   in the shader, with a synthesized strike-and-hiss. Clark won't come near
   fire: catch him in the glow and he bolts. You carry three; you find another
   in your coat every so often. Water puts them out.
-- **Revolver** — select with 2 (or the mouse wheel). Six rounds, R to reload,
-  synthesized gunshot, muzzle flash that lights the hall. Hits stagger Clark;
-  three put him down — the halls stay quiet for a couple of minutes, then
-  something out in the fog stands back up.
+- **Revolver** — select with 2 (or the mouse wheel). Six rounds, R to reload
+  (the gun dips while the cylinder's out), synthesized gunshot, muzzle flash
+  that lights the hall. Hits stagger Clark; three put him down — the halls
+  stay quiet for a couple of minutes, then something out in the fog stands
+  back up. With the flare selected you carry it in hand, cap out, ready to
+  strike.
 - **Terrain** — Level 0 sinks into carpeted conversation pits, Level 1 raises
   concrete loading docks, and the pools get proper steps down into the water.
   Real stair geometry, smooth step physics — and you can jump onto most of
@@ -72,9 +74,10 @@ make run
   one "ends" the run. Sort of.
 - **LEVEL FUN =)** — the poolrooms exit doesn't lead home. Bunting on every
   wall, confetti trodden into the carpet, crayon smileys, balloons nosing
-  against the ceiling tiles, crepe streamers, and party tables set with a
-  cake nobody ever cut — while a music box grinds through the birthday song
-  half a semitone flat, forever.
+  against the ceiling tiles, crepe streamers, presents wrapped in party
+  colours, and party tables set with a cake nobody ever cut — the candles
+  are still lit, and they stay lit through the blackouts — while a music
+  box grinds through the birthday song half a semitone flat, forever.
 - **Post** — film grain, vignette, chromatic aberration, and a mains-frequency
   luma shimmer, all scaling with fear.
 

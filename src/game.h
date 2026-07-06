@@ -58,6 +58,7 @@ struct Game {
     float f2x = 1, f2z = 0, r2x = 0, r2z = 1;
     bool sprinting = false;
     float bobAmt = 0, eyeY = 1.62f;
+    bool captureClick = false;                // this click grabbed the mouse; don't also fire
 
     // flare weapon: thrown, burns orange, Pirate Clark won't go near one
     int flares = MAXFLARES;

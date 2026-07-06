@@ -52,6 +52,22 @@ void Game::renderScene(double now) {
         if (it != world.chunks.end() && it->second.built && it->second.meshes[4].vertexCount > 0)
             DrawMesh(it->second.meshes[4], mats[0], ident);
     }
+    // small props draw with raylib's unlit default shader, so estimate the room
+    // light at each one (plus flare/muzzle glow) — no more balloons shining
+    // through a blackout
+    const LevelCfg &lc = LEVELS[level];
+    float ambLumP = (lc.amb.x + lc.amb.y + lc.amb.z) / 3.0f;
+    auto propLum = [&](float x, float y, float z) {
+        float lum = lightAtCPU(x, y, z, blackoutCur, lc.ls, lc.wallH - 0.12f, lc.dead, lc.lightMul, ambLumP);
+        if (flareInt > 0.01f) {
+            float fx = x - flarePos.x, fy = y - flarePos.y, fz = z - flarePos.z;
+            lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fx * fx + fy * fy + fz * fz)), 0.0f, 1.0f);
+        }
+        return 0.18f + 0.82f * lum;   // a hint of form survives the dark
+    };
+    auto lit = [](Color c, float f) {
+        return Color{ cl8(c.r * f), cl8(c.g * f), cl8(c.b * f), c.a };
+    };
     for (int dx = -7; dx <= 7; dx++) for (int dz = -7; dz <= 7; dz++) {   // world pickups nearby
         int a = pci + dx, b = pck + dz;
         if (taken.count(cellKey2(a, b))) continue;
@@ -59,18 +75,20 @@ void Game::renderScene(double now) {
         if (!isB && !isC) continue;
         float bxx = a * CELL + 1.0f, bzz = b * CELL + 1.0f;
         float gy = world.floorY(a, b);
+        float pl = propLum(bxx, gy + 0.15f, bzz);
         if (isB) {   // almond water: chubby bottle, faint glow
-            DrawCylinder({ bxx, gy, bzz }, 0.055f, 0.065f, 0.19f, 8, { 88, 122, 176, 255 });
-            DrawCylinder({ bxx, gy + 0.19f, bzz }, 0.02f, 0.05f, 0.07f, 8, { 120, 150, 195, 255 });
+            DrawCylinder({ bxx, gy, bzz }, 0.055f, 0.065f, 0.19f, 8, lit({ 108, 142, 196, 255 }, pl));
+            DrawCylinder({ bxx, gy + 0.19f, bzz }, 0.02f, 0.05f, 0.07f, 8, lit({ 140, 170, 215, 255 }, pl));
         } else {
             float bob = sinf((float)now * 2.0f + a * 1.7f + b) * 0.03f;
-            DrawCylinder({ bxx, gy + 0.06f + bob, bzz }, 0.085f, 0.085f, 0.024f, 12, { 214, 172, 66, 255 });
+            DrawCylinder({ bxx, gy + 0.06f + bob, bzz }, 0.085f, 0.085f, 0.024f, 12, lit({ 234, 188, 74, 255 }, pl));
         }
     }
     for (auto &cw : coinsWorld) {
         float gy = world.floorY(cellOf(cw.x), cellOf(cw.z));
         float bob = sinf((float)now * 2.4f + cw.x) * 0.03f;
-        DrawCylinder({ cw.x, gy + 0.06f + bob, cw.z }, 0.085f, 0.085f, 0.024f, 12, { 214, 172, 66, 255 });
+        DrawCylinder({ cw.x, gy + 0.06f + bob, cw.z }, 0.085f, 0.085f, 0.024f, 12,
+                     lit({ 234, 188, 74, 255 }, propLum(cw.x, gy + 0.1f, cw.z)));
     }
     if (level == 4) {   // balloons nose against the ceiling, strings hanging down
         for (int dx = -7; dx <= 7; dx++) for (int dz = -7; dz <= 7; dz++) {
@@ -81,20 +99,19 @@ void Game::renderScene(double now) {
             float bzz = b * CELL + 1.0f + (((h >> 7) & 7) / 7.0f - 0.5f) * 0.9f;
             float bob = sinf((float)now * 0.8f + a * 1.3f + b * 2.1f) * 0.05f;
             float by = world.wallH - 0.21f + bob;
-            Color bc = PARTY[(h >> 10) % 5];
-            bc.r = (unsigned char)(bc.r * 0.72f); bc.g = (unsigned char)(bc.g * 0.72f);
-            bc.b = (unsigned char)(bc.b * 0.72f);   // dim: no light of their own down here
-            DrawSphere({ bxx, by, bzz }, 0.17f, bc);
+            float pl = propLum(bxx, by, bzz) * 0.85f;
+            DrawSphere({ bxx, by, bzz }, 0.17f, lit(PARTY[(h >> 10) % 5], pl));
             DrawCylinderEx({ bxx, by - 0.15f, bzz }, { bxx + 0.04f, by - 0.95f, bzz + 0.02f },
-                           0.005f, 0.005f, 4, { 190, 185, 175, 150 });
+                           0.005f, 0.005f, 4, lit({ 190, 185, 175, 150 }, pl));
         }
     }
     for (auto &cm : chalk)
         if (fabsf(cm.x - px) < 30 && fabsf(cm.z - pz) < 30) {
+            Color cc = lit({ 228, 228, 218, 200 }, propLum(cm.x, cm.y + 0.1f, cm.z));
             DrawCylinderEx({ cm.x - 0.18f, cm.y, cm.z - 0.18f }, { cm.x + 0.18f, cm.y, cm.z + 0.18f },
-                           0.014f, 0.014f, 5, { 228, 228, 218, 200 });
+                           0.014f, 0.014f, 5, cc);
             DrawCylinderEx({ cm.x - 0.18f, cm.y, cm.z + 0.18f }, { cm.x + 0.18f, cm.y, cm.z - 0.18f },
-                           0.014f, 0.014f, 5, { 228, 228, 218, 200 });
+                           0.014f, 0.014f, 5, cc);
         }
     if (flare.active) {   // the flare itself: hot core, orange halo, stub of a body
         Vector3 fp = { flare.x, flare.y + 0.05f, flare.z };
@@ -148,14 +165,19 @@ void Game::renderUI(double now) {
 
     int sw = GetScreenWidth(), sh = GetScreenHeight();
 
-    if (weapon == 1) {   // revolver viewmodel, bottom-right, kicks with recoil
-        float deg = 210.0f + recoil * 16.0f;
+    if (weapon == 1 || (weapon == 0 && flares > 0)) {   // viewmodel, bottom-right
+        // reload: the muzzle dips while the cylinder is out, then comes back up
+        float dip = (weapon == 1 && reloadT > 0)
+                  ? sinf(clampf(1.0f - reloadT / 1.8f, 0.0f, 1.0f) * 3.14159f) : 0.0f;
+        float deg = (weapon == 1 ? 210.0f + recoil * 16.0f - dip * 26.0f : 236.0f);
         float rad = deg * DEG2RAD;
         float dirx = cosf(rad), diry = sinf(rad);   // along the barrel
         float nx = -diry, ny = dirx;                // toward the top of the gun
         float bobX = sinf(bobPhase * 3.14159f) * 3.0f * bobAmt;
-        Vector2 piv = { sw - 165.0f + bobX - dirx * recoil * 22.0f,
-                        sh - 30.0f + fabsf(bobX) * 0.6f - diry * recoil * 22.0f };
+        Vector2 piv = weapon == 1
+            ? Vector2{ sw - 165.0f + bobX - dirx * recoil * 22.0f,
+                       sh - 30.0f + fabsf(bobX) * 0.6f - diry * recoil * 22.0f + dip * 16.0f }
+            : Vector2{ sw - 130.0f + bobX, sh - 12.0f + fabsf(bobX) * 0.6f };
         // gun-local frame: t along the barrel, s toward the sights
         const float k = 1.25f;   // overall viewmodel scale
         auto pt = [&](float t, float s) {
@@ -167,40 +189,60 @@ void Game::renderUI(double now) {
         auto box = [&](float t0, float t1, float s0, float s1, Color col) {
             quad(pt(t0, s1), pt(t0, s0), pt(t1, s0), pt(t1, s1), col);
         };
-        Color steel = { 40, 38, 44, 255 }, steel2 = { 57, 54, 62, 255 };
-        Color dark = { 21, 20, 24, 255 }, wood = { 88, 58, 38, 255 };
-        // grip rakes back and down off the bottom of the screen
-        Vector2 gv = { (-dirx * 0.42f - nx * 0.91f) * 70.0f * k, (-diry * 0.42f - ny * 0.91f) * 70.0f * k };
-        Vector2 g0 = pt(-14, -8), g1 = pt(12, -8);
-        quad(g0, g1, { g1.x + gv.x, g1.y + gv.y },
-             { g0.x + gv.x - dirx * 8 * k, g0.y + gv.y - diry * 8 * k }, wood);
-        box(-16, 34, -10, 8, steel);                    // frame rear + recoil shield
-        box(-6, 90, 8, 13, steel);                      // top strap over the cylinder
-        box(30, 76, -14, 13, steel2);                   // cylinder bulge
-        box(43, 46, -12, 11, dark);                     // cylinder flutes
-        box(59, 62, -12, 11, dark);
-        box(82, 168, -3, 11, steel);                    // barrel
-        box(88, 138, -8, -3, steel2);                   // ejector rod shroud under it
-        box(163, 168, -3, 11, dark);                    // muzzle band
-        box(-26, -14, 9, 19, steel2);                   // hammer spur
-        box(-10, -2, 13, 17, steel);                    // rear sight
-        box(156, 163, 11, 17, steel);                   // front sight
-        DrawRing(pt(24, -15), 7.5f * k, 10.5f * k, 0, 360, 24, steel);   // trigger guard
-        box(20, 24, -16, -9, dark);                     // trigger
-        if (muzzleT > 0) {
-            float mt = muzzleT / 0.09f;
-            Vector2 tip = pt(180, 4);
-            DrawCircleV(tip, 46 * mt, { 255, 150, 60, (unsigned char)(90 * mt) });
-            DrawCircleV(tip, 24 * mt, { 255, 225, 140, (unsigned char)(210 * mt) });
+        if (weapon == 1) {   // revolver, kicks with recoil
+            Color steel = { 40, 38, 44, 255 }, steel2 = { 57, 54, 62, 255 };
+            Color dark = { 21, 20, 24, 255 }, wood = { 88, 58, 38, 255 };
+            Color glint = { 86, 84, 96, 255 };
+            // grip rakes back and down off the bottom of the screen
+            Vector2 gv = { (-dirx * 0.42f - nx * 0.91f) * 70.0f * k, (-diry * 0.42f - ny * 0.91f) * 70.0f * k };
+            Vector2 g0 = pt(-14, -8), g1 = pt(12, -8);
+            quad(g0, g1, { g1.x + gv.x, g1.y + gv.y },
+                 { g0.x + gv.x - dirx * 8 * k, g0.y + gv.y - diry * 8 * k }, wood);
+            box(-16, 34, -10, 8, steel);                    // frame rear + recoil shield
+            box(-6, 90, 8, 13, steel);                      // top strap over the cylinder
+            box(30, 76, -14, 13, steel2);                   // cylinder bulge
+            box(43, 46, -12, 11, dark);                     // cylinder flutes
+            box(59, 62, -12, 11, dark);
+            box(82, 168, -3, 11, steel);                    // barrel
+            box(88, 138, -8, -3, steel2);                   // ejector rod shroud under it
+            box(163, 168, -3, 11, dark);                    // muzzle band
+            box(-26, -14, 9, 19, steel2);                   // hammer spur
+            box(-10, -2, 13, 17, steel);                    // rear sight
+            box(156, 163, 11, 17, steel);                   // front sight
+            box(82, 163, 9, 11, glint);                     // ceiling light rides the barrel
+            box(30, 76, 11, 13, glint);                     // and the cylinder
+            DrawRing(pt(24, -15), 7.5f * k, 10.5f * k, 0, 360, 24, steel);   // trigger guard
+            box(20, 24, -16, -9, dark);                     // trigger
+            if (muzzleT > 0) {
+                float mt = muzzleT / 0.09f;
+                Vector2 tip = pt(180, 4);
+                DrawCircleV(tip, 46 * mt, { 255, 150, 60, (unsigned char)(90 * mt) });
+                DrawCircleV(tip, 24 * mt, { 255, 225, 140, (unsigned char)(210 * mt) });
+            }
+        } else {   // road flare in hand, cap out, ready to strike and throw
+            Color body = { 168, 42, 32, 255 }, edge = { 206, 74, 56, 255 };
+            Color capc = { 56, 26, 22, 255 }, band = { 216, 204, 184, 255 };
+            box(0, 96, -11, 11, body);                      // red tube
+            box(0, 90, 7, 11, edge);                        // light along the top
+            box(-4, 2, -9, 9, capc);                        // butt end
+            box(78, 90, -12, 12, band);                     // striker band
+            box(90, 100, -9, 9, capc);                      // cap
         }
-        DrawCircle(sw / 2, sh / 2, 2.0f, { 230, 220, 190, 110 });                     // crosshair
+        DrawCircle(sw / 2, sh / 2, 2.0f, { 230, 220, 190, 110 });   // aiming dot
     }
 
     if (elapsed < 9.0) {   // intro
         float a = 1.0f - clampf((float)elapsed / 3.0f, 0, 1);
         DrawRectangle(0, 0, sw, sh, Fade(BLACK, a));
         float ta = clampf((float)elapsed / 1.5f, 0, 1) * (1.0f - clampf(((float)elapsed - 6.0f) / 3.0f, 0, 1));
-        const char *t1 = "L E V E L   0";
+        char t1[64];   // the level's name, letter-spaced
+        int ti = 0;
+        for (const char *p = LEVELS[level].name; *p && ti < 60; p++) {
+            t1[ti++] = *p;
+            t1[ti++] = ' ';
+            if (*p == ' ') t1[ti++] = ' ';
+        }
+        t1[ti ? ti - 1 : 0] = 0;
         DrawText(t1, sw / 2 - MeasureText(t1, 52) / 2, sh / 3, 52, Fade({ 220, 205, 150, 255 }, ta));
         const char *t2 = "if you're reading this, you've already noclipped";
         DrawText(t2, sw / 2 - MeasureText(t2, 18) / 2, sh / 3 + 66, 18, Fade({ 160, 150, 110, 255 }, ta * 0.9f));

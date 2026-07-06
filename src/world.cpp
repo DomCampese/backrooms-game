@@ -369,18 +369,24 @@ void World::ensureMesh(int cx, int cz) {
                         {0.75f,0.75f},{0.75f,0.75f},{0.75f,0.75f},{0.75f,0.75f}, Color{ 12, 12, 12, 160 });
             };
             switch (dd.prop[i][kk]) {
-            case 1: {   // box stack
+            case 1: {   // box stack — on LEVEL FUN they're wrapped like presents,
+                        // and the packing tape reads as ribbon
                 blob(0.58f, 0.58f);
                 float bh = 0.55f + r1 * 0.2f, bhx = 0.34f + r2 * 0.08f;
+                auto wrap = [&](int rot2) {
+                    if (level != 4) return WHITE;
+                    Color c = PARTY[(h >> rot2) % 5];
+                    return Color{ cl8(c.r * 0.9f + 46), cl8(c.g * 0.9f + 46), cl8(c.b * 0.9f + 46), 255 };
+                };
                 addPropBox(pr, pcx + (r3 - 0.5f) * 0.5f, pcz + (r1 - 0.5f) * 0.5f, rot + r2,
-                           bhx, bhx, ey, ey + bh, CU0, CV0, CU1, CV1, CU0, CV0, CU1, CV1);
+                           bhx, bhx, ey, ey + bh, CU0, CV0, CU1, CV1, CU0, CV0, CU1, CV1, wrap(5));
                 if (r2 > 0.35f)   // second box on top, skewed
                     addPropBox(pr, pcx + (r3 - 0.5f) * 0.5f + 0.06f, pcz + (r1 - 0.5f) * 0.5f - 0.05f,
                                rot + r2 + 0.5f, bhx * 0.8f, bhx * 0.8f, ey + bh, ey + bh + 0.5f,
-                               CU0, CV0, CU1, CV1, CU0, CV0, CU1, CV1);
+                               CU0, CV0, CU1, CV1, CU0, CV0, CU1, CV1, wrap(9));
                 if (r1 > 0.6f)    // third box beside
                     addPropBox(pr, pcx + 0.62f, pcz + 0.3f, rot + r3 * 2, 0.27f, 0.27f, ey, ey + 0.5f,
-                               CU0, CV0, CU1, CV1, CU0, CV0, CU1, CV1);
+                               CU0, CV0, CU1, CV1, CU0, CV0, CU1, CV1, wrap(13));
                 break;
             }
             case 2:     // filing cabinet
@@ -469,6 +475,18 @@ void World::ensureMesh(int cx, int cz) {
                 part(0, 0, 0.17f, 0.17f, ey + ty, ey + ty + 0.16f, false, Color{ 238, 232, 220, 255 });   // cake
                 part(0, 0, 0.11f, 0.11f, ey + ty + 0.16f, ey + ty + 0.26f, false, Color{ 232, 152, 172, 255 });
                 part(0, 0, 0.013f, 0.013f, ey + ty + 0.26f, ey + ty + 0.37f, false, Color{ 240, 226, 172, 255 }); // candle
+                {   // ...and the candle is still lit. nobody lit it. two crossed
+                    // emissive fins make a little flame that survives blackouts
+                    auto fpt = [&](float lx, float ly2, float lz) {
+                        return Vector3{ pcx + lx * ca - lz * sa, ly2, pcz + lx * sa + lz * ca };
+                    };
+                    Color flame = { 255, 196, 110, 70 };   // alpha <0.4: raw emissive in the shader
+                    float fy0 = ey + ty + 0.37f, fy1 = fy0 + 0.055f;
+                    pr.quad(fpt(-0.022f, fy0, 0), fpt(0.022f, fy0, 0), fpt(0.013f, fy1, 0), fpt(-0.013f, fy1, 0),
+                            { sa, 0, -ca }, {0,1},{1,1},{1,0},{0,0}, flame);
+                    pr.quad(fpt(0, fy0, -0.022f), fpt(0, fy0, 0.022f), fpt(0, fy1, 0.013f), fpt(0, fy1, -0.013f),
+                            { ca, 0, sa }, {0,1},{1,1},{1,0},{0,0}, flame);
+                }
                 break;
             }
             case 10: {  // vending machine: still stocked, still humming, takes doubloons
