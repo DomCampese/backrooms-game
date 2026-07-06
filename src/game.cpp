@@ -73,6 +73,7 @@ void Game::init() {
     synth.init();
 
     world.seed = shotPath ? 1337u : (unsigned)time(nullptr);
+    if (const char *seedEnv = getenv("BACKROOMS_SEED")) world.seed = (unsigned)strtoul(seedEnv, nullptr, 10);
     world.exitTest = getenv("BACKROOMS_EXITS") != nullptr;
 
     grng = Rng(hash64(world.seed ^ 0xABCDEF));

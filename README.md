@@ -104,3 +104,4 @@ With the F3 debug HUD open, dev hotkeys are live: `B` force blackout,
 - `BACKROOMS_EXITS=1` — exit doors everywhere (visual testing).
 - `BACKROOMS_POS="x,z,yaw"` — start at a specific spot (visual testing).
 - `BACKROOMS_LEVEL=n` — start on level n (visual testing).
+- `BACKROOMS_SEED=n` — fix the world seed (repeatable maze).
