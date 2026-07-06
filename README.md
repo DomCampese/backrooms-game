@@ -2,7 +2,7 @@
 
 Disclaimer: Just for fun, initial shell generated with Claude Fable
 
-A native, procedurally-infinite backrooms horror game in a single C++ file.
+A native, procedurally-infinite backrooms horror game in a small C++ codebase.
 No assets — every texture and every sound is synthesized at startup.
 
 ![screenshot](docs/screenshot.png)
@@ -15,6 +15,22 @@ any distro package or pkg-config install works on Linux).
 ```sh
 make run
 ```
+
+## Code layout
+
+| module | what lives there |
+|---|---|
+| `src/main.cpp` | entry point: init, frame loop, shutdown |
+| `src/game.*` | run state (`Game` struct) + per-frame update logic, in frame order |
+| `src/render.cpp` | 3D scene pass, weapon viewmodel, HUD, overlays |
+| `src/world.*` | infinite maze: chunk generation, mesh baking, collision, line of sight |
+| `src/levels.*` | per-level look/feel tables (fog, lights, palette) + exit rotation |
+| `src/entity.h` | PIRATE CLARK's state (the state machine runs in `Game::updateEntity`) |
+| `src/textures.*` | every surface, synthesized at startup |
+| `src/sfx.*` | one-shot sounds (footsteps, gunshot, splash, ...) |
+| `src/audio.*` | streaming ambience synth (hum, drone, water, the music box) |
+| `src/shaders.*` | world + post-process GLSL |
+| `src/util.*` | hashes, RNG, value noise, shared palette |
 
 ## How it works
 

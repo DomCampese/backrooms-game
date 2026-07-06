@@ -1,0 +1,284 @@
+#include "game.h"
+#include "raymath.h"
+#include <cmath>
+
+void Game::renderScene(double now) {
+    // ---- render 3D scene into rt
+    int pcx = fdiv(cellOf(px), CCELLS), pcz = fdiv(cellOf(pz), CCELLS);
+    int pci = cellOf(px), pck = cellOf(pz);
+    Camera3D cam = {};
+    cam.position = { px, eyeY, pz };
+    cam.target = Vector3Add(cam.position, fwd);
+    cam.up = { 0, 1, 0 };
+    cam.fovy = fov;
+    cam.projection = CAMERA_PERSPECTIVE;
+
+    float timeF = (float)now;
+    Vector3 viewPos = cam.position;
+    SetShaderValue(worldShader, locTime, &timeF, SHADER_UNIFORM_FLOAT);
+    float boSend = blackoutCur * (whisperT > 0 ? 0.86f : 1.0f);   // lights sag while it whispers
+    SetShaderValue(worldShader, locBlackout, &boSend, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(worldShader, locViewPos, &viewPos, SHADER_UNIFORM_VEC3);
+    SetShaderValue(worldShader, locFlash, &flashCur, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(worldShader, locFlashDir, &fwd, SHADER_UNIFORM_VEC3);
+    float flick = 0.91f + 0.09f * sinf(timeF * 31.0f) * sinf(timeF * 47.3f + 1.3f);
+    float flareInt = flare.active
+        ? clampf((FLAREBURN - flare.burn) * 6.0f, 0, 1) * clampf(flare.burn / 1.5f, 0, 1) * flick
+        : 0.0f;
+    Vector3 flarePos = { flare.x, flare.y + 0.06f, flare.z };
+    if (!flare.active && muzzleT > 0) {   // muzzle flash borrows the flare point light
+        flareInt = muzzleT / 0.09f * 1.3f;
+        flarePos = { px + f2x * 0.6f, eyeY - 0.05f, pz + f2z * 0.6f };
+    }
+    SetShaderValue(worldShader, locFlarePos, &flarePos, SHADER_UNIFORM_VEC3);
+    SetShaderValue(worldShader, locFlareInt, &flareInt, SHADER_UNIFORM_FLOAT);
+
+    BeginTextureMode(rt);
+    ClearBackground(BLACK);
+    BeginMode3D(cam);
+    Matrix ident = MatrixIdentity();
+    for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) {
+        int cx = pcx + dx, cz = pcz + dz;
+        auto it = world.chunks.find(World::key(cx, cz));
+        if (it == world.chunks.end() || !it->second.built) continue;
+        float ccx = cx * CHUNK + CHUNK / 2 - px, ccz = cz * CHUNK + CHUNK / 2 - pz;
+        if (ccx * f2x + ccz * f2z < -24.0f && (ccx * ccx + ccz * ccz) > 24 * 24) continue;
+        for (int m = 0; m < 4; m++)
+            if (it->second.meshes[m].vertexCount > 0)
+                DrawMesh(it->second.meshes[m], mats[m], ident);
+    }
+    for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) {   // water last (blended)
+        auto it = world.chunks.find(World::key(pcx + dx, pcz + dz));
+        if (it != world.chunks.end() && it->second.built && it->second.meshes[4].vertexCount > 0)
+            DrawMesh(it->second.meshes[4], mats[0], ident);
+    }
+    for (int dx = -7; dx <= 7; dx++) for (int dz = -7; dz <= 7; dz++) {   // world pickups nearby
+        int a = pci + dx, b = pck + dz;
+        if (taken.count(cellKey2(a, b))) continue;
+        bool isB = bottleAt(a, b), isC = !isB && coinAt(a, b);
+        if (!isB && !isC) continue;
+        float bxx = a * CELL + 1.0f, bzz = b * CELL + 1.0f;
+        float gy = world.floorY(a, b);
+        if (isB) {   // almond water: chubby bottle, faint glow
+            DrawCylinder({ bxx, gy, bzz }, 0.055f, 0.065f, 0.19f, 8, { 88, 122, 176, 255 });
+            DrawCylinder({ bxx, gy + 0.19f, bzz }, 0.02f, 0.05f, 0.07f, 8, { 120, 150, 195, 255 });
+        } else {
+            float bob = sinf((float)now * 2.0f + a * 1.7f + b) * 0.03f;
+            DrawCylinder({ bxx, gy + 0.06f + bob, bzz }, 0.085f, 0.085f, 0.024f, 12, { 214, 172, 66, 255 });
+        }
+    }
+    for (auto &cw : coinsWorld) {
+        float gy = world.floorY(cellOf(cw.x), cellOf(cw.z));
+        float bob = sinf((float)now * 2.4f + cw.x) * 0.03f;
+        DrawCylinder({ cw.x, gy + 0.06f + bob, cw.z }, 0.085f, 0.085f, 0.024f, 12, { 214, 172, 66, 255 });
+    }
+    if (level == 4) {   // balloons nose against the ceiling, strings hanging down
+        for (int dx = -7; dx <= 7; dx++) for (int dz = -7; dz <= 7; dz++) {
+            int a = pci + dx, b = pck + dz;
+            uint32_t h = ih(a, b, (uint32_t)world.seed ^ 0xBA11u);
+            if (h % 17 != 0 || world.pillarAt(a, b)) continue;
+            float bxx = a * CELL + 1.0f + (((h >> 4) & 7) / 7.0f - 0.5f) * 0.9f;
+            float bzz = b * CELL + 1.0f + (((h >> 7) & 7) / 7.0f - 0.5f) * 0.9f;
+            float bob = sinf((float)now * 0.8f + a * 1.3f + b * 2.1f) * 0.05f;
+            float by = world.wallH - 0.21f + bob;
+            Color bc = PARTY[(h >> 10) % 5];
+            bc.r = (unsigned char)(bc.r * 0.72f); bc.g = (unsigned char)(bc.g * 0.72f);
+            bc.b = (unsigned char)(bc.b * 0.72f);   // dim: no light of their own down here
+            DrawSphere({ bxx, by, bzz }, 0.17f, bc);
+            DrawCylinderEx({ bxx, by - 0.15f, bzz }, { bxx + 0.04f, by - 0.95f, bzz + 0.02f },
+                           0.005f, 0.005f, 4, { 190, 185, 175, 150 });
+        }
+    }
+    for (auto &cm : chalk)
+        if (fabsf(cm.x - px) < 30 && fabsf(cm.z - pz) < 30) {
+            DrawCylinderEx({ cm.x - 0.18f, cm.y, cm.z - 0.18f }, { cm.x + 0.18f, cm.y, cm.z + 0.18f },
+                           0.014f, 0.014f, 5, { 228, 228, 218, 200 });
+            DrawCylinderEx({ cm.x - 0.18f, cm.y, cm.z + 0.18f }, { cm.x + 0.18f, cm.y, cm.z - 0.18f },
+                           0.014f, 0.014f, 5, { 228, 228, 218, 200 });
+        }
+    if (flare.active) {   // the flare itself: hot core, orange halo, stub of a body
+        Vector3 fp = { flare.x, flare.y + 0.05f, flare.z };
+        DrawCylinder({ flare.x, flare.y - 0.03f, flare.z }, 0.018f, 0.022f, 0.09f, 8, { 130, 30, 22, 255 });
+        DrawSphere(fp, 0.035f + 0.012f * flick, { 255, 240, 208, 255 });
+        DrawSphere(fp, 0.13f, { 255, 120, 40, (unsigned char)(90 * flareInt) });
+        DrawSphere(fp, 0.30f, { 255, 70, 20, (unsigned char)(28 * flareInt) });
+    }
+    if (ent.st != EState::Hidden && entDist < 45) {
+        const LevelCfg &c = LEVELS[level];
+        float ambLum = (c.amb.x + c.amb.y + c.amb.z) / 3.0f;
+        float eg = ent.dispY;
+        float lum = lightAtCPU(ent.x, eg + 0.95f, ent.z, blackoutCur,
+                               c.ls, c.wallH - 0.12f, c.dead, c.lightMul, ambLum);
+        if (flashCur > 0.05f) {   // flashlight picks him out of the dark
+            float vx2 = ent.x - px, vz2 = ent.z - pz;
+            float d2 = vx2 * vx2 + vz2 * vz2 + 1e-4f, dl = sqrtf(d2);
+            float cone = powf(fmaxf((vx2 * fwd.x + vz2 * fwd.z) / dl, 0.0f), 26.0f);
+            lum = clampf(lum + flashCur * cone * 7.5f / (1.0f + 0.10f * d2), 0.0f, 1.0f);
+        }
+        if (flareInt > 0.01f) {   // flare glow (or muzzle flash) reaches him too
+            float fvx = ent.x - flarePos.x, fvz = ent.z - flarePos.z;
+            lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fvx * fvx + fvz * fvz)), 0.0f, 1.0f);
+        }
+        float sink = 0, dieA = 1;
+        if (ent.st == EState::Die) {   // crumples into the carpet
+            float t = clampf(ent.life / 1.2f, 0, 1);
+            sink = 1.1f * t * t; dieA = 1.0f - t;
+        }
+        float fogf = expf(-entDist * c.fogDen);
+        unsigned char lum8 = cl8(40 + 215 * lum);
+        unsigned char al = cl8(255 * clampf(fogf * 1.6f, 0, 1) * dieA);
+        DrawBillboardRec(cam, texEntity, { 0, 0, 128, 256 },
+                         { ent.x, eg + 0.98f - sink, ent.z }, { 0.98f, 1.96f }, { lum8, lum8, lum8, al });
+    }
+    EndMode3D();
+    EndTextureMode();
+}
+
+void Game::renderUI(double now) {
+    // ---- post + UI
+    float timeF = (float)now;
+    double elapsed = now - runStart;
+    BeginDrawing();
+    ClearBackground(BLACK);
+    SetShaderValue(postShader, locPTime, &timeF, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(postShader, locPFear, &fear, SHADER_UNIFORM_FLOAT);
+    BeginShaderMode(postShader);
+    DrawTextureRec(rt.texture, { 0, 0, (float)rt.texture.width, -(float)rt.texture.height }, { 0, 0 }, WHITE);
+    EndShaderMode();
+
+    int sw = GetScreenWidth(), sh = GetScreenHeight();
+
+    if (weapon == 1) {   // revolver viewmodel, bottom-right, kicks with recoil
+        float deg = 210.0f + recoil * 16.0f;
+        float rad = deg * DEG2RAD;
+        float dirx = cosf(rad), diry = sinf(rad);   // along the barrel
+        float nx = -diry, ny = dirx;                // toward the top of the gun
+        float bobX = sinf(bobPhase * 3.14159f) * 3.0f * bobAmt;
+        Vector2 piv = { sw - 165.0f + bobX - dirx * recoil * 22.0f,
+                        sh - 30.0f + fabsf(bobX) * 0.6f - diry * recoil * 22.0f };
+        // gun-local frame: t along the barrel, s toward the sights
+        const float k = 1.25f;   // overall viewmodel scale
+        auto pt = [&](float t, float s) {
+            return Vector2{ piv.x + (dirx * t + nx * s) * k, piv.y + (diry * t + ny * s) * k };
+        };
+        auto quad = [&](Vector2 a, Vector2 b, Vector2 c2, Vector2 d2, Color col) {
+            DrawTriangle(a, b, c2, col); DrawTriangle(a, c2, d2, col);
+        };
+        auto box = [&](float t0, float t1, float s0, float s1, Color col) {
+            quad(pt(t0, s1), pt(t0, s0), pt(t1, s0), pt(t1, s1), col);
+        };
+        Color steel = { 40, 38, 44, 255 }, steel2 = { 57, 54, 62, 255 };
+        Color dark = { 21, 20, 24, 255 }, wood = { 88, 58, 38, 255 };
+        // grip rakes back and down off the bottom of the screen
+        Vector2 gv = { (-dirx * 0.42f - nx * 0.91f) * 70.0f * k, (-diry * 0.42f - ny * 0.91f) * 70.0f * k };
+        Vector2 g0 = pt(-14, -8), g1 = pt(12, -8);
+        quad(g0, g1, { g1.x + gv.x, g1.y + gv.y },
+             { g0.x + gv.x - dirx * 8 * k, g0.y + gv.y - diry * 8 * k }, wood);
+        box(-16, 34, -10, 8, steel);                    // frame rear + recoil shield
+        box(-6, 90, 8, 13, steel);                      // top strap over the cylinder
+        box(30, 76, -14, 13, steel2);                   // cylinder bulge
+        box(43, 46, -12, 11, dark);                     // cylinder flutes
+        box(59, 62, -12, 11, dark);
+        box(82, 168, -3, 11, steel);                    // barrel
+        box(88, 138, -8, -3, steel2);                   // ejector rod shroud under it
+        box(163, 168, -3, 11, dark);                    // muzzle band
+        box(-26, -14, 9, 19, steel2);                   // hammer spur
+        box(-10, -2, 13, 17, steel);                    // rear sight
+        box(156, 163, 11, 17, steel);                   // front sight
+        DrawRing(pt(24, -15), 7.5f * k, 10.5f * k, 0, 360, 24, steel);   // trigger guard
+        box(20, 24, -16, -9, dark);                     // trigger
+        if (muzzleT > 0) {
+            float mt = muzzleT / 0.09f;
+            Vector2 tip = pt(180, 4);
+            DrawCircleV(tip, 46 * mt, { 255, 150, 60, (unsigned char)(90 * mt) });
+            DrawCircleV(tip, 24 * mt, { 255, 225, 140, (unsigned char)(210 * mt) });
+        }
+        DrawCircle(sw / 2, sh / 2, 2.0f, { 230, 220, 190, 110 });                     // crosshair
+    }
+
+    if (elapsed < 9.0) {   // intro
+        float a = 1.0f - clampf((float)elapsed / 3.0f, 0, 1);
+        DrawRectangle(0, 0, sw, sh, Fade(BLACK, a));
+        float ta = clampf((float)elapsed / 1.5f, 0, 1) * (1.0f - clampf(((float)elapsed - 6.0f) / 3.0f, 0, 1));
+        const char *t1 = "L E V E L   0";
+        DrawText(t1, sw / 2 - MeasureText(t1, 52) / 2, sh / 3, 52, Fade({ 220, 205, 150, 255 }, ta));
+        const char *t2 = "if you're reading this, you've already noclipped";
+        DrawText(t2, sw / 2 - MeasureText(t2, 18) / 2, sh / 3 + 66, 18, Fade({ 160, 150, 110, 255 }, ta * 0.9f));
+        const char *t3 = "WASD walk   SHIFT run   CTRL crouch   SPACE jump   F flashlight   1/2 weapon   3 drink   M chalk   E vend";
+        DrawText(t3, sw / 2 - MeasureText(t3, 16) / 2, sh - 60, 16, Fade({ 140, 132, 100, 255 }, ta * 0.8f));
+        if (bestEsc || bestKill || bestM) {
+            const char *tb = TextFormat("best: %d escape%s  ·  %d clark%s put down  ·  %d m wandered",
+                                        bestEsc, bestEsc == 1 ? "" : "s", bestKill, bestKill == 1 ? "" : "s", bestM);
+            DrawText(tb, sw / 2 - MeasureText(tb, 16) / 2, sh / 3 + 98, 16, Fade({ 150, 140, 105, 255 }, ta * 0.8f));
+        }
+    }
+    if (caughtT > 0) {
+        DrawRectangle(0, 0, sw, sh, Fade(BLACK, clampf(caughtT / 2.4f * 1.8f, 0, 1)));
+        if (caughtT > 0.5f) {
+            const char *t = "PIRATE CLARK FOUND YOU";
+            DrawText(t, sw / 2 - MeasureText(t, 60) / 2, sh / 2 - 30, 60, { 170, 20, 12, 255 });
+            const char *t2 = TextFormat("you wake up somewhere else   ·   %d m wandered   ·   taken %d time%s",
+                                        (int)distWalked, caughtCount, caughtCount == 1 ? "" : "s");
+            DrawText(t2, sw / 2 - MeasureText(t2, 18) / 2, sh / 2 + 46, 18, { 120, 90, 80, 255 });
+        }
+    }
+    if (escapeT > 0) {
+        float a = clampf(escapeT > 5.4f ? (6.0f - escapeT) / 0.6f : escapeT / 5.4f, 0, 1);
+        DrawRectangle(0, 0, sw, sh, Fade(WHITE, a * (escapeT > 5.4f ? 0.9f : 0.12f)));
+        const char *t = "YOU FOUND AN EXIT";
+        DrawText(t, sw / 2 - MeasureText(t, 48) / 2, sh / 2 - 60, 48, Fade({ 235, 228, 200, 255 }, a));
+        const char *t2 = TextFormat("...it leads to %s.  %d m wandered  ·  %d escape%s  ·  %s",
+                                    LEVELS[level].name, (int)distWalked, escapeCount, escapeCount == 1 ? "" : "s",
+                                    TextFormat("%02d:%02d", (int)elapsed / 60, (int)elapsed % 60));
+        DrawText(t2, sw / 2 - MeasureText(t2, 18) / 2, sh / 2 + 4, 18, Fade({ 180, 170, 140, 255 }, a));
+    }
+    if (killT > 0) {
+        float a = clampf(killT / 3.0f, 0, 1);
+        const char *t = "PIRATE CLARK IS DOWN";
+        DrawText(t, sw / 2 - MeasureText(t, 44) / 2, sh / 2 - 96, 44, Fade({ 205, 60, 40, 255 }, a));
+        const char *t2 = TextFormat("...but nothing stays down, down here   ·   %d put down", killCount);
+        DrawText(t2, sw / 2 - MeasureText(t2, 18) / 2, sh / 2 - 44, 18, Fade({ 150, 122, 100, 255 }, a * 0.9f));
+    }
+    if (!IsCursorHidden() && !shotPath) {
+        const char *t = "click to capture mouse";
+        DrawText(t, sw / 2 - MeasureText(t, 20) / 2, sh / 2 + 80, 20, { 200, 190, 150, 200 });
+    }
+    DrawText(TextFormat("%d", GetFPS()), sw - MeasureText(TextFormat("%d", GetFPS()), 16) - 14, 12, 16, { 190, 180, 140, 150 });
+    // persistent flashlight reminder until first use; small state dot after
+    if (flashOn) everFlashed = true;
+    if (!everFlashed && elapsed > 9.0)
+        DrawText("F — flashlight", sw - MeasureText("F — flashlight", 16) - 16, sh - 28, 16, { 190, 180, 140, 160 });
+    else if (flashOn)
+        DrawText("[ flashlight ]", sw - MeasureText("[ flashlight ]", 14) - 16, sh - 26, 14, { 235, 225, 180, 120 });
+    {   // inventory, bottom-left; the selected weapon is lit
+        const char *w0 = TextFormat("1  flare  ×%d", flares);
+        const char *w1 = reloadT > 0 ? "2  revolver  [reloading]"
+                                     : TextFormat("2  revolver  %d/%d%s", ammo, MAXAMMO, ammo == 0 ? "  — R" : "");
+        Color selc = { 235, 200, 130, 210 }, dimc = { 150, 138, 112, 110 };
+        if (coins > 0)
+            DrawText(TextFormat("doubloons  ×%d", coins), 16, sh - 94, 16, { 214, 178, 92, 170 });
+        DrawText(TextFormat("3  almond water  ×%d", almond), 16, sh - 72, 16,
+                 almond > 0 ? Color{ 150, 190, 235, 170 } : dimc);
+        DrawText(w0, 16, sh - 50, 16, weapon == 0 ? selc : dimc);
+        DrawText(w1, 16, sh - 28, 16, weapon == 1 ? selc : dimc);
+    }
+    if (stamina < 0.98f) {   // sprint bar, bottom centre
+        int bw = 220, bx2 = sw / 2 - bw / 2, by2 = sh - 42;
+        DrawRectangle(bx2 - 1, by2 - 1, bw + 2, 8, { 0, 0, 0, 120 });
+        DrawRectangle(bx2, by2, (int)(bw * stamina), 6, { 200, 180, 120, 160 });
+    }
+    if (crouchCur > 0.5f)
+        DrawText("[ crouched ]", sw / 2 - MeasureText("[ crouched ]", 14) / 2, sh - 62, 14, { 180, 170, 140, 120 });
+    if (debugHud) {
+        DrawText(TextFormat("%d fps  pos(%.0f, %.0f)  chunks %d  entity %s  d=%.0fm",
+                            GetFPS(), px, pz, (int)world.chunks.size(),
+                            ent.st == EState::Hidden ? "hidden" : ent.st == EState::Stalk ? "STALKING"
+                                : ent.st == EState::Chase ? "CHASING"
+                                : ent.st == EState::Flee ? "FLEEING" : "DYING",
+                            entDist > 1e8 ? 0.0f : entDist),
+                 12, 12, 18, { 230, 220, 160, 220 });
+        DrawText("dev: B blackout   E spawn   C chase   H hide   G flares   N next level",
+                 12, 34, 16, { 200, 190, 140, 180 });
+    }
+    EndDrawing();
+}
