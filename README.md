@@ -2,7 +2,7 @@
 
 Disclaimer: Just for fun, initial shell generated with Claude Fable
 
-A native, procedurally-infinite backrooms horror game in a single C++ file.
+A native, procedurally-infinite backrooms horror game in a small C++ codebase.
 No assets — every texture and every sound is synthesized at startup.
 
 ![screenshot](docs/screenshot.png)
@@ -15,6 +15,22 @@ any distro package or pkg-config install works on Linux).
 ```sh
 make run
 ```
+
+## Code layout
+
+| module | what lives there |
+|---|---|
+| `src/main.cpp` | entry point: init, frame loop, shutdown |
+| `src/game.*` | run state (`Game` struct) + per-frame update logic, in frame order |
+| `src/render.cpp` | 3D scene pass, weapon viewmodel, HUD, overlays |
+| `src/world.*` | infinite maze: chunk generation, mesh baking, collision, line of sight |
+| `src/levels.*` | per-level look/feel tables (fog, lights, palette) + exit rotation |
+| `src/entity.h` | PIRATE CLARK's state (the state machine runs in `Game::updateEntity`) |
+| `src/textures.*` | every surface, synthesized at startup |
+| `src/sfx.*` | one-shot sounds (footsteps, gunshot, splash, ...) |
+| `src/audio.*` | streaming ambience synth (hum, drone, water, the music box) |
+| `src/shaders.*` | world + post-process GLSL |
+| `src/util.*` | hashes, RNG, value noise, shared palette |
 
 ## How it works
 
@@ -54,6 +70,11 @@ make run
   no one.
 - **Exits** — vanishingly rare glowing doorways carved into wall runs. Finding
   one "ends" the run. Sort of.
+- **LEVEL FUN =)** — the poolrooms exit doesn't lead home. Bunting on every
+  wall, confetti trodden into the carpet, crayon smileys, balloons nosing
+  against the ceiling tiles, crepe streamers, and party tables set with a
+  cake nobody ever cut — while a music box grinds through the birthday song
+  half a semitone flat, forever.
 - **Post** — film grain, vignette, chromatic aberration, and a mains-frequency
   luma shimmer, all scaling with fear.
 
@@ -82,3 +103,4 @@ With the F3 debug HUD open, dev hotkeys are live: `B` force blackout,
 - `BACKROOMS_SHOT=out.png` — run 600 frames headlessly, save a screenshot, exit.
 - `BACKROOMS_EXITS=1` — exit doors everywhere (visual testing).
 - `BACKROOMS_POS="x,z,yaw"` — start at a specific spot (visual testing).
+- `BACKROOMS_LEVEL=n` — start on level n (visual testing).
