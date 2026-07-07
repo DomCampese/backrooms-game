@@ -6,6 +6,8 @@ Texture2D makeWallpaperTex();      // Level 0: yellowed stripes, stains, baseboa
 Texture2D makeCarpetTex();         // Level 0: moist mustard carpet
 Texture2D makeCeilingTex();        // office ceiling tiles (Level 0 + LEVEL FUN)
 Texture2D makeEntityTex();         // PIRATE CLARK billboard sprite
+Texture2D makePartygoerTex();      // the thing that lives at the party
+Texture2D makeScrawlTex();         // graffiti atlas: what earlier wanderers wrote
 Texture2D makePropsTex();          // prop atlas: cardboard / cabinet / metal
 Texture2D makeConcreteWallTex();   // Level 1
 Texture2D makeConcreteFloorTex();  // Level 1 (+ Red Halls)

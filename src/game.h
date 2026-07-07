@@ -28,16 +28,17 @@ struct Game {
     const char *shotPath = nullptr;
 
     // resources
-    Texture2D texEntity{}, texProps{};
+    Texture2D texEntity{}, texPartygoer{}, texProps{}, texScrawl{};
     Texture2D floorTexs[NLEVELS]{}, ceilTexs[NLEVELS]{}, wallTexs[NLEVELS]{};   // per-level surface sets
     Shader worldShader{}, postShader{};
     int locTime = -1, locBlackout = -1, locViewPos = -1, locFlash = -1, locFlashDir = -1,
         locAmb = -1, locFogCol = -1, locFogDen = -1, locLightCol = -1, locLS = -1, locLY = -1,
         locDead = -1, locLightMul = -1, locFlarePos = -1, locFlareInt = -1, locGloss = -1;
     int locPTime = -1, locPFear = -1;
-    Material mats[4]{};                       // 0 floor, 1 ceiling, 2 walls, 3 props
+    Material mats[5]{};                        // 0 floor, 1 ceiling, 2 walls, 3 props, 4 scrawl
     Sound steps[4]{}, splashes[2]{}, sndBigSplash{}, sndClick{}, sndScare{}, sndWin{},
-          sndFlare{}, sndShot{}, sndHit{}, sndKill{};
+          sndFlare{}, sndShot{}, sndHit{}, sndKill{}, sndPop{};
+    Sound entSteps[4]{};                        // the thing's own footfalls, panned + attenuated
     AudioSynth synth;
     World world;
     Rng grng{1};
@@ -59,6 +60,10 @@ struct Game {
     bool sprinting = false;
     float bobAmt = 0, eyeY = 1.62f;
     bool captureClick = false;                // this click grabbed the mouse; don't also fire
+    float leanCur = 0, landDip = 0;           // camera feel: strafe lean + landing dip
+    float strafeInput = 0;                    // -1..1, set by movement, read by render lean
+    double entStepAcc = 0;                    // spacing of the thing's audible footfalls
+    float muzzleSmoke = 0;                    // powder haze lingering after a shot
 
     // flare weapon: thrown, burns orange, Pirate Clark won't go near one
     int flares = MAXFLARES;
@@ -76,7 +81,8 @@ struct Game {
     float entDist = 1e9f;                     // distance to Clark this frame
     double nextBlackout = 0, blackoutEnd = -1;
     float blackoutCur = 1.0f, fear = 0.0f;
-    float caughtT = 0, escapeT = 0, killT = 0;
+    float caughtT = 0, escapeT = 0, killT = 0, fellT = 0;
+    float softTimer = 0;                      // how long you've stood on a soft patch
     int caughtCount = 0, escapeCount = 0, killCount = 0;
     float distWalked = 0;
     double runStart = 0;
@@ -87,6 +93,9 @@ struct Game {
     std::unordered_set<uint64_t> taken;       // world pickups already grabbed (reset per level)
     std::vector<Vector3> coinsWorld;          // doubloons Clark spills when he goes down
     std::vector<Vector3> chalk;               // navigation marks
+    std::unordered_set<uint64_t> poppedBalloons;   // LEVEL FUN balloons already shot
+    struct Confetti { Vector3 pos, vel; float life; Color col; };
+    std::vector<Confetti> confetti;           // bursts from popped balloons
     int almond = 0, coins = 0;
     float boostT = 0, crouchCur = 0, whisperT = 0;
     double nextWhisper = 0;
@@ -105,6 +114,8 @@ struct Game {
     static uint64_t cellKey2(int a, int b) { return ((uint64_t)(uint32_t)a << 32) | (uint32_t)b; }
     bool bottleAt(int a, int b);              // almond water, left out for whoever needs it
     bool coinAt(int a, int b);                // a doubloon he dropped on his rounds
+    bool balloonAt(int a, int b, Vector3 &out);   // LEVEL FUN balloon centre, if one floats here
+    void popBalloonsAlongAim();               // revolver vs. balloons, when you fire in LEVEL FUN
 
     // update, in frame order (game.cpp)
     void updateLook();

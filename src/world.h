@@ -25,7 +25,7 @@ struct ChunkData {
     uint8_t pool[CCELLS][CCELLS];
     int8_t elev[CCELLS][CCELLS];   // floor height in decimetres: -5 sunken lounge (L0), +6 loading dock (L1)
     bool built = false;
-    Mesh meshes[5] = {};   // 0 floor, 1 ceiling, 2 walls, 3 props, 4 water
+    Mesh meshes[6] = {};   // 0 floor, 1 ceiling, 2 walls, 3 props, 4 water, 5 wall scrawl
 };
 struct AABB { float minx, minz, maxx, maxz, top; };   // top: height you can stand on
 
@@ -58,6 +58,10 @@ struct World {
     // floor height here, counting prop tops at or below your feet (so you can stand on furniture)
     float groundAt(float x, float z, float feetY);
     bool lineOfSight(float ax, float az, float bx, float bz);
+    // Level 0 only: a rare patch of carpet that has stopped being a floor
+    bool softAt(int ci, int ck);
+    // some exit doors glow red and were never going anywhere good
+    bool cursedExit(int ci, int ck);
     Vector2 findOpenSpot(float x, float z);
     void unloadFar(int pcx, int pcz, int radius);
     void unloadAll();

@@ -9,7 +9,9 @@ void Game::renderScene(double now) {
     Camera3D cam = {};
     cam.position = { px, eyeY, pz };
     cam.target = Vector3Add(cam.position, fwd);
-    cam.up = { 0, 1, 0 };
+    // roll the up-vector a touch when strafing, so the camera leans into it
+    float roll = leanCur * -0.035f;
+    cam.up = { r2x * sinf(roll), cosf(roll), r2z * sinf(roll) };
     cam.fovy = fov;
     cam.projection = CAMERA_PERSPECTIVE;
 
@@ -46,6 +48,8 @@ void Game::renderScene(double now) {
         for (int m = 0; m < 4; m++)
             if (it->second.meshes[m].vertexCount > 0)
                 DrawMesh(it->second.meshes[m], mats[m], ident);
+        if (it->second.meshes[5].vertexCount > 0)   // wall scrawl decals over the walls
+            DrawMesh(it->second.meshes[5], mats[4], ident);
     }
     for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) {   // water last (blended)
         auto it = world.chunks.find(World::key(pcx + dx, pcz + dz));
@@ -93,6 +97,7 @@ void Game::renderScene(double now) {
     if (level == 4) {   // balloons nose against the ceiling, strings hanging down
         for (int dx = -7; dx <= 7; dx++) for (int dz = -7; dz <= 7; dz++) {
             int a = pci + dx, b = pck + dz;
+            if (poppedBalloons.count(cellKey2(a, b))) continue;   // this one's been shot
             uint32_t h = ih(a, b, (uint32_t)world.seed ^ 0xBA11u);
             if (h % 17 != 0 || world.pillarAt(a, b)) continue;
             float bxx = a * CELL + 1.0f + (((h >> 4) & 7) / 7.0f - 0.5f) * 0.9f;
@@ -103,6 +108,12 @@ void Game::renderScene(double now) {
             DrawSphere({ bxx, by, bzz }, 0.17f, lit(PARTY[(h >> 10) % 5], pl));
             DrawCylinderEx({ bxx, by - 0.15f, bzz }, { bxx + 0.04f, by - 0.95f, bzz + 0.02f },
                            0.005f, 0.005f, 4, lit({ 190, 185, 175, 150 }, pl));
+        }
+        for (auto &c : confetti) {   // bursts still tumbling to the carpet
+            float pl = propLum(c.pos.x, c.pos.y, c.pos.z);
+            float fade = clampf(c.life * 1.6f, 0, 1);
+            Color cc = lit({ c.col.r, c.col.g, c.col.b, (unsigned char)(255 * fade) }, pl);
+            DrawCube(c.pos, 0.05f, 0.05f, 0.05f, cc);
         }
     }
     for (auto &cm : chalk)
@@ -144,7 +155,9 @@ void Game::renderScene(double now) {
         float fogf = expf(-entDist * c.fogDen);
         unsigned char lum8 = cl8(40 + 215 * lum);
         unsigned char al = cl8(255 * clampf(fogf * 1.6f, 0, 1) * dieA);
-        DrawBillboardRec(cam, texEntity, { 0, 0, 128, 256 },
+        // LEVEL FUN has its own resident; everywhere else it's Pirate Clark
+        Texture2D &spr = (level == 4) ? texPartygoer : texEntity;
+        DrawBillboardRec(cam, spr, { 0, 0, 128, 256 },
                          { ent.x, eg + 0.98f - sink, ent.z }, { 0.98f, 1.96f }, { lum8, lum8, lum8, al });
     }
     EndMode3D();
@@ -213,6 +226,18 @@ void Game::renderUI(double now) {
             box(30, 76, 11, 13, glint);                     // and the cylinder
             DrawRing(pt(24, -15), 7.5f * k, 10.5f * k, 0, 360, 24, steel);   // trigger guard
             box(20, 24, -16, -9, dark);                     // trigger
+            if (muzzleSmoke > 0.02f) {   // powder haze curling off the muzzle, drifting up
+                Vector2 tip = pt(178, 4);
+                float s = muzzleSmoke;
+                for (int i = 0; i < 4; i++) {
+                    float t = (float)now * 1.4f + i * 1.9f;
+                    float rise = (1.0f - s) * 26.0f + i * 7.0f;
+                    Vector2 pv = { tip.x + sinf(t) * (5 + i * 3) + dirx * i * 5,
+                                   tip.y - rise + diry * i * 5 };
+                    unsigned char al = (unsigned char)(clampf(s * 0.5f - i * 0.06f, 0, 1) * 90);
+                    DrawCircleV(pv, (11 + i * 6) * (1.4f - s * 0.4f), { 150, 148, 150, al });
+                }
+            }
             if (muzzleT > 0) {
                 float mt = muzzleT / 0.09f;
                 Vector2 tip = pt(180, 4);
@@ -257,12 +282,20 @@ void Game::renderUI(double now) {
     if (caughtT > 0) {
         DrawRectangle(0, 0, sw, sh, Fade(BLACK, clampf(caughtT / 2.4f * 1.8f, 0, 1)));
         if (caughtT > 0.5f) {
-            const char *t = "PIRATE CLARK FOUND YOU";
+            const char *t = (level == 4) ? "THE PARTYGOER FOUND YOU" : "PIRATE CLARK FOUND YOU";
             DrawText(t, sw / 2 - MeasureText(t, 60) / 2, sh / 2 - 30, 60, { 170, 20, 12, 255 });
             const char *t2 = TextFormat("you wake up somewhere else   ·   %d m wandered   ·   taken %d time%s",
                                         (int)distWalked, caughtCount, caughtCount == 1 ? "" : "s");
             DrawText(t2, sw / 2 - MeasureText(t2, 18) / 2, sh / 2 + 46, 18, { 120, 90, 80, 255 });
         }
+    }
+    if (fellT > 0) {   // the carpet gave way
+        float a = clampf(fellT / 4.0f, 0, 1);
+        DrawRectangle(0, 0, sw, sh, Fade(BLACK, a * 0.5f * clampf((fellT - 3.4f) / 0.6f, 0, 1)));
+        const char *t = "THE FLOOR GIVES WAY";
+        DrawText(t, sw / 2 - MeasureText(t, 46) / 2, sh / 2 - 30, 46, Fade({ 200, 180, 120, 255 }, a));
+        const char *t2 = "...there was another floor under this one";
+        DrawText(t2, sw / 2 - MeasureText(t2, 18) / 2, sh / 2 + 30, 18, Fade({ 150, 138, 110, 255 }, a * 0.9f));
     }
     if (escapeT > 0) {
         float a = clampf(escapeT > 5.4f ? (6.0f - escapeT) / 0.6f : escapeT / 5.4f, 0, 1);
@@ -276,7 +309,7 @@ void Game::renderUI(double now) {
     }
     if (killT > 0) {
         float a = clampf(killT / 3.0f, 0, 1);
-        const char *t = "PIRATE CLARK IS DOWN";
+        const char *t = (level == 4) ? "THE PARTYGOER IS DOWN" : "PIRATE CLARK IS DOWN";
         DrawText(t, sw / 2 - MeasureText(t, 44) / 2, sh / 2 - 96, 44, Fade({ 205, 60, 40, 255 }, a));
         const char *t2 = TextFormat("...but nothing stays down, down here   ·   %d put down", killCount);
         DrawText(t2, sw / 2 - MeasureText(t2, 18) / 2, sh / 2 - 44, 18, Fade({ 150, 122, 100, 255 }, a * 0.9f));

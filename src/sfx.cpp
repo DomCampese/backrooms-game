@@ -119,6 +119,25 @@ Sound makeClick() {
     Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
 }
 
+// a balloon giving up: sharp latex burst, then the rubbery flap of the skin
+Sound makeBalloonPop() {
+    int n = (int)(0.16f * 44100);
+    Wave w = makeWaveBuf(n);
+    short *d = (short *)w.data;
+    Rng r(0xBA11ULL);
+    float lp = 0;
+    for (int i = 0; i < n; i++) {
+        float t = i / 44100.0f;
+        float wn = r.f01() * 2 - 1;
+        lp += 0.5f * (wn - lp);
+        float burst = (wn * 0.7f + lp) * expf(-t * 150.0f) * 2.4f;             // the crack
+        float flap = sinf(6.2831853f * (150.0f - 320.0f * t) * t) * expf(-t * 26.0f) * 0.5f; // skin snap
+        float s = tanhf((burst + flap) * 1.6f);
+        d[i] = (short)(clampf1(s) * 30000);
+    }
+    Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
+}
+
 Sound makeFlareStrike() {
     int n = (int)(0.8f * 44100);
     Wave w = makeWaveBuf(n);

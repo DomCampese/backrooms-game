@@ -180,6 +180,101 @@ Texture2D makeEntityTex() {
     return finishTexture(img, false);
 }
 
+// THE PARTYGOER =): pale yellow, painted-on smile, striped party hat. It was
+// here before the bunting went up. It will be here after.
+Texture2D makePartygoerTex() {
+    const int W = 128, H = 256;
+    Image img = GenImageColor(W, H, BLANK);
+    Color *p = (Color *)img.data;
+    auto put = [&](int x, int y, Color c) { if (x >= 0 && x < W && y >= 0 && y < H) p[y * W + x] = c; };
+    auto hspan = [&](int y, float cx, float halfw, Color c) {
+        for (int x = (int)(cx - halfw); x <= (int)(cx + halfw); x++) put(x, y, c);
+    };
+    Color skin = { 208, 182, 84, 255 };
+    Color skin2 = { 176, 150, 62, 255 };
+    for (int y = 24; y < 252; y++) {
+        float wob = (vnoise2(0.05f * y, 8.2f, 177u) - 0.5f) * 6.0f;
+        float rag = (vnoise2(0.35f * y, 4.4f, 188u) - 0.5f) * 2.2f;
+        float cx = 64 + wob * 0.3f;
+        if (y >= 24 && y <= 62) {   // round head
+            float dy = (y - 43) / 20.0f;
+            if (dy * dy < 1.0f) hspan(y, cx, 19.0f * sqrtf(1 - dy * dy) + rag * 0.5f, skin);
+        }
+        if (y > 58 && y <= 68) hspan(y, cx, 6 + rag, skin2);              // neck
+        if (y > 64 && y <= 200) {   // soft drippy body, widening as it goes
+            float t = (y - 64) / 136.0f;
+            float halfw = 11 + 15 * t;
+            float hem = (y > 190) ? (vnoise2(0.6f * y, 2.5f, 171u) - 0.5f) * 5 : 0;
+            hspan(y, cx, halfw + rag + hem, skin);
+        }
+        if (y > 78 && y <= 178) {   // arms, hanging a little too still
+            float t = (y - 78) / 100.0f;
+            float off = 21 + 8 * t;
+            hspan(y, cx - off, 3.4f + rag * 0.4f, skin2);
+            hspan(y, cx + off, 3.4f + rag * 0.4f, skin2);
+        }
+        if (y > 200 && y < 252) {   // legs
+            hspan(y, cx - 9 + wob * 0.2f, 5.2f + rag * 0.4f, skin2);
+            hspan(y, cx + 9 + wob * 0.2f, 5.2f + rag * 0.4f, skin2);
+            if (y > 246) { hspan(y, cx - 9, 7, skin2); hspan(y, cx + 9, 7, skin2); }
+        }
+    }
+    // something sweet dripped down it once and never dried
+    for (int x = 0; x < W; x++) {
+        if (lat(x, 7, 191u) < 0.82f) continue;
+        int len = 30 + (int)(lat(x, 9, 192u) * 90);
+        for (int y = 70; y < 70 + len && y < 250; y++)
+            if (p[y * W + x].a) {
+                Color &c = p[y * W + x];
+                c.r = cl8(c.r * 0.82f); c.g = cl8(c.g * 0.80f); c.b = cl8(c.b * 0.72f);
+            }
+    }
+    // the face: two dot eyes and a smile that was painted on, not grown
+    auto putIf = [&](int x, int y, Color c) {
+        if (x >= 0 && x < W && y >= 0 && y < H && p[y * W + x].a) p[y * W + x] = c;
+    };
+    Color ink = { 34, 26, 20, 255 };
+    for (int dy = -12; dy <= 12; dy++) for (int dx = -14; dx <= 14; dx++) {
+        float d = sqrtf((float)(dx * dx + dy * dy));
+        if (fabsf(d - 11.0f) < 1.8f && dy > 3) putIf(64 + dx, 42 + dy, ink);   // wide smile
+    }
+    for (int s = -1; s <= 1; s += 2)
+        for (int dy = -3; dy <= 3; dy++) for (int dx = -3; dx <= 3; dx++)
+            if (dx * dx + dy * dy < 7) putIf(64 + s * 7 + dx, 36 + dy, ink);   // eyes
+    {   // striped cone hat, slightly askew; nobody remembers putting it on
+        Color ha = { 196, 60, 54, 255 }, hb = { 84, 138, 192, 255 };
+        for (int y = 2; y <= 26; y++) {
+            float t = (y - 2) / 24.0f;
+            hspan(y, 60 + t * 4, 1.0f + 11.0f * t, ((y / 5) & 1) ? ha : hb);
+        }
+        for (int dy = -2; dy <= 2; dy++) for (int dx = -2; dx <= 2; dx++)
+            if (dx * dx + dy * dy < 5) put(60 + dx, 2 + dy, { 226, 218, 200, 255 });   // pompom
+    }
+    return finishTexture(img, false);
+}
+
+// wall scrawl atlas: eight phrases in a shaky triple-struck hand, 2 x 4 cells
+Texture2D makeScrawlTex() {
+    const int W = 512, H = 512;
+    Image img = GenImageColor(W, H, BLANK);
+    const char *lines[8] = { "NO CLIP", "dont stare", "day 407", "the exit lies",
+                             "he hears the flares", "keep walking", "it hums at night", "wrong door =)" };
+    Rng r(0x5C12ULL);
+    for (int i = 0; i < 8; i++) {
+        int cx = (i % 2) * 256, cy = (i / 2) * 128;
+        Color ink = (i % 3 == 0) ? Color{ 104, 32, 26, 215 } : Color{ 54, 46, 40, 205 };
+        int fs = 36, tw = MeasureText(lines[i], fs);
+        while (tw > 228 && fs > 18) { fs -= 2; tw = MeasureText(lines[i], fs); }
+        int x0 = cx + 128 - tw / 2, y0 = cy + 64 - fs / 2;
+        ImageDrawText(&img, lines[i], x0, y0, fs, ink);
+        ImageDrawText(&img, lines[i], x0 + r.ri(-2, 2), y0 + r.ri(-2, 2), fs,
+                      { ink.r, ink.g, ink.b, 80 });
+        ImageDrawText(&img, lines[i], x0 + r.ri(-2, 2), y0 + r.ri(-2, 2), fs,
+                      { ink.r, ink.g, ink.b, 60 });
+    }
+    return finishTexture(img, false);
+}
+
 // prop atlas: left half cardboard, right-top cabinet front (drawers), right-bottom plain metal
 Texture2D makePropsTex() {
     const int W = 512, H = 512;
