@@ -20,7 +20,9 @@ void Game::init() {
     rlDisableBackfaceCulling();
 
     texEntity = makeEntityTex();
+    texPartygoer = makePartygoerTex();
     texProps = makePropsTex();
+    texScrawl = makeScrawlTex();
     // per-level surface sets: [floor, ceiling, walls]
     floorTexs[0] = makeCarpetTex(); floorTexs[1] = makeConcreteFloorTex();
     floorTexs[2] = makeTileTex();   floorTexs[4] = makePartyCarpetTex();
@@ -53,13 +55,15 @@ void Game::init() {
     locPTime = GetShaderLocation(postShader, "uTime");
     locPFear = GetShaderLocation(postShader, "uFear");
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 5; i++) {
         mats[i] = LoadMaterialDefault();
         mats[i].shader = worldShader;
     }
     mats[3].maps[MATERIAL_MAP_DIFFUSE].texture = texProps;
+    mats[4].maps[MATERIAL_MAP_DIFFUSE].texture = texScrawl;   // wall scrawl decals
 
     for (int i = 0; i < 4; i++) steps[i] = makeFootstep(100 + i * 17);
+    for (int i = 0; i < 4; i++) entSteps[i] = makeFootstep(300 + i * 23);   // heavier, its own gait
     splashes[0] = makeSplash(1, false); splashes[1] = makeSplash(2, false);
     sndBigSplash = makeSplash(3, true);
     sndClick = makeClick();
@@ -67,6 +71,7 @@ void Game::init() {
     sndWin = makeWinChime();
     sndFlare = makeFlareStrike();
     sndShot = makeGunshot();
+    sndPop = makeBalloonPop();
     sndHit = makeJumpscare();  SetSoundPitch(sndHit, 1.7f);  SetSoundVolume(sndHit, 0.40f);
     sndKill = makeJumpscare(); SetSoundPitch(sndKill, 0.55f); SetSoundVolume(sndKill, 0.80f);
 
@@ -148,6 +153,7 @@ void Game::applyLevel(int lv) {
     nextBlackout = lv == 2 ? 1e18 : GetTime() + 30 + grng.f01() * 60;   // no blackouts in the poolrooms
     blackoutEnd = -1;
     taken.clear(); coinsWorld.clear(); chalk.clear();   // it's a different maze down here
+    poppedBalloons.clear(); confetti.clear();
     SetWindowTitle(TextFormat("THE BACKROOMS — %s", c.name));
 }
 
@@ -159,6 +165,47 @@ bool Game::bottleAt(int a, int b) {
 bool Game::coinAt(int a, int b) {
     if (world.pillarAt(a, b) || world.propAt(a, b) || world.poolAt(a, b)) return false;
     return ih(a, b, (uint32_t)world.seed ^ 0xC01Du) % 449 == 0;
+}
+
+// A balloon floats in this cell on LEVEL FUN — mirrors the placement in render.
+bool Game::balloonAt(int a, int b, Vector3 &out) {
+    if (level != 4) return false;
+    if (poppedBalloons.count(cellKey2(a, b))) return false;
+    uint32_t h = ih(a, b, (uint32_t)world.seed ^ 0xBA11u);
+    if (h % 17 != 0 || world.pillarAt(a, b)) return false;
+    out = { a * CELL + 1.0f + (((h >> 4) & 7) / 7.0f - 0.5f) * 0.9f,
+            world.wallH - 0.21f,
+            b * CELL + 1.0f + (((h >> 7) & 7) / 7.0f - 0.5f) * 0.9f };
+    return true;
+}
+
+// Fire the revolver in LEVEL FUN and any balloon on the aim line bursts into
+// confetti. Ray-marches the view direction a short way and pops the first hit.
+void Game::popBalloonsAlongAim() {
+    if (level != 4) return;
+    for (float d = 0.6f; d < 22.0f; d += 0.35f) {
+        float wx = px + fwd.x * d, wy = eyeY + fwd.y * d, wz = pz + fwd.z * d;
+        int a = cellOf(wx), b = cellOf(wz);
+        for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+            Vector3 bp;
+            if (!balloonAt(a + dx, b + dz, bp)) continue;
+            float ex = bp.x - wx, ey = bp.y - wy, ez = bp.z - wz;
+            if (ex * ex + ey * ey + ez * ez > 0.24f * 0.24f) continue;   // ~balloon radius
+            poppedBalloons.insert(cellKey2(a + dx, b + dz));
+            SetSoundPitch(sndPop, 0.9f + grng.f01() * 0.3f);
+            SetSoundPan(sndPop, 0.5f);
+            PlaySound(sndPop);
+            uint32_t hh = ih(a + dx, b + dz, (uint32_t)world.seed ^ 0xBA11u);
+            Color base = PARTY[(hh >> 10) % 5];
+            for (int c2 = 0; c2 < 16; c2++) {   // scatter confetti
+                float aa = grng.f01() * 6.2831853f, sp = 1.2f + grng.f01() * 2.2f;
+                confetti.push_back({ bp, { cosf(aa) * sp, 0.6f + grng.f01() * 1.6f, sinf(aa) * sp },
+                                     1.3f + grng.f01() * 0.9f,
+                                     grng.f01() < 0.5f ? base : PARTY[c2 % 5] });
+            }
+            return;   // one balloon per shot
+        }
+    }
 }
 
 // One frame: advance the simulation in a fixed order, then draw it.
@@ -199,6 +246,7 @@ bool Game::tick() {
     caughtT = fmaxf(0, caughtT - dt);
     escapeT = fmaxf(0, escapeT - dt);
     killT = fmaxf(0, killT - dt);
+    fellT = fmaxf(0, fellT - dt);
     streamChunks();
 
     renderScene(now);
@@ -252,6 +300,25 @@ void Game::updateMovement(float dt) {
     float spd = sqrtf(velx * velx + velz * velz);
     distWalked += spd * dt;
 
+    // camera feel: lean into the direction you strafe, ease back when you don't
+    strafeInput = clampf((velx * r2x + velz * r2z) / 6.0f, -1.0f, 1.0f);
+    leanCur += (strafeInput - leanCur) * fminf(1, 6 * dt);
+    landDip = fmaxf(0.0f, landDip - dt * 2.4f);   // the knees straightening after a landing
+
+    // the floor is a lie: linger on a soft patch and it gives way to Level 1
+    if (level == 0 && grounded && py > -0.05f && world.softAt(cellOf(px), cellOf(pz))) {
+        softTimer += dt;
+        if (softTimer > 0.9f && fellT <= 0 && escapeT <= 0 && caughtT <= 0) {
+            fellT = 4.0f;
+            SetSoundVolume(sndBigSplash, 0.5f); SetSoundPitch(sndBigSplash, 0.5f);
+            PlaySound(sndBigSplash);
+            applyLevel(1);
+            Vector2 spot = world.findOpenSpot(px, pz);
+            px = spot.x; pz = spot.y; velx = velz = 0; py = 0.6f; vy = 0; grounded = false;
+            ent.st = EState::Hidden; ent.nextSpawn = GetTime() + 20;
+        }
+    } else softTimer = fmaxf(0.0f, softTimer - dt * 2.0f);
+
     // jump + floor height (groundY recomputed after collision; furniture tops count)
     groundY = world.groundAt(px, pz, py);
     if (IsKeyPressed(KEY_SPACE) && grounded) { vy = inWater ? 4.3f : 5.6f; grounded = false; }
@@ -274,6 +341,7 @@ void Game::updateMovement(float dt) {
                 SetSoundVolume(s, clampf(-vy * 0.14f, 0.3f, 0.85f));
                 PlaySound(s);
             }
+            landDip = clampf(-vy * 0.028f, 0.0f, 0.22f);   // knees absorb the drop
             vy = 0;
         }
     }
@@ -282,7 +350,7 @@ void Game::updateMovement(float dt) {
     bobAmt = clampf(spd / 5.3f, 0, 1) * (grounded ? 1.0f : 0.0f);
     stepAcc += spd * dt * (grounded ? 1.0f : 0.0f);
     bobPhase += spd * dt * 1.65f;
-    eyeY = 1.62f - 0.55f * crouchCur + py + sinf(bobPhase * 3.14159f) * 0.045f * bobAmt;
+    eyeY = 1.62f - 0.55f * crouchCur - landDip + py + sinf(bobPhase * 3.14159f) * 0.045f * bobAmt;
     float stepLen = 1.85f + speed * 0.13f;
     if (stepAcc > stepLen) {
         stepAcc -= stepLen;
@@ -336,6 +404,7 @@ void Game::updateWeapons(float dt, double now) {
     if (wheelCd <= 0 && fabsf(GetMouseWheelMove()) > 0.5f) { weapon ^= 1; wheelCd = 0.25f; }
     gunCd = fmaxf(0, gunCd - dt);
     muzzleT = fmaxf(0, muzzleT - dt);
+    muzzleSmoke = fmaxf(0, muzzleSmoke - dt * 0.7f);   // powder haze drifts and thins
     recoil += (0 - recoil) * fminf(1, 10 * dt);
     if (reloadT > 0) {
         reloadT -= dt;
@@ -345,8 +414,9 @@ void Game::updateWeapons(float dt, double now) {
         IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         if (ammo <= 0) { SetSoundPitch(sndClick, 0.7f); PlaySound(sndClick); gunCd = 0.25f; }  // dry fire
         else {
-            ammo--; gunCd = 0.42f; muzzleT = 0.09f; recoil = 1.0f;
+            ammo--; gunCd = 0.42f; muzzleT = 0.09f; recoil = 1.0f; muzzleSmoke = 1.0f;
             PlaySound(sndShot);
+            popBalloonsAlongAim();   // in LEVEL FUN, the party takes hits too
             // the report carries down every hallway
             if (ent.st == EState::Hidden) ent.nextSpawn = fmin(ent.nextSpawn, now + 5 + grng.f01() * 6);
             else if (ent.st == EState::Stalk) ent.gaze += 0.8f;
@@ -494,6 +564,19 @@ void Game::updateAmbience(float dt, double now) {
     }
     blackoutCur += ((blackout ? 0.02f : 1.0f) - blackoutCur) * fminf(1, 18 * dt);
     synth.humTarget = blackout ? 0.12f : 1.0f;
+
+    // confetti from popped balloons: drift down, tumble, fade out
+    for (size_t i = 0; i < confetti.size();) {
+        Confetti &c = confetti[i];
+        c.vel.y -= 3.4f * dt;
+        c.vel.x *= 0.96f; c.vel.z *= 0.96f;
+        c.pos.x += c.vel.x * dt; c.pos.y += c.vel.y * dt; c.pos.z += c.vel.z * dt;
+        c.life -= dt;
+        float fy = world.floorY(cellOf(c.pos.x), cellOf(c.pos.z));
+        if (c.pos.y < fy + 0.02f) { c.pos.y = fy + 0.02f; c.vel = { 0, 0, 0 }; c.life -= dt * 3.0f; }
+        if (c.life <= 0) confetti[i] = confetti.back(), confetti.pop_back();
+        else ++i;
+    }
 }
 
 void Game::updateEntity(float dt, double now) {
@@ -546,6 +629,18 @@ void Game::updateEntity(float dt, double now) {
                 ent.z -= ez / entDist * chaseSpd * dt;
             }
             world.collideCircle(ent.x, ent.z, 0.38f);
+            // you hear him coming: footfalls panned to his bearing, fading with range
+            entStepAcc += chaseSpd * dt;
+            if (entStepAcc > 1.05f && entDist < 22.0f && caughtT <= 0) {
+                entStepAcc -= 1.05f;
+                float inv = entDist > 0.01f ? 1.0f / entDist : 0.0f;
+                float sd = clampf((ex * inv) * r2x + (ez * inv) * r2z, -1.0f, 1.0f);   // + = to your right
+                Sound &s = entSteps[grng.ri(0, 3)];
+                SetSoundPan(s, 0.5f - sd * 0.5f);   // raylib pan: 0 right .. 1 left, 0.5 centre
+                SetSoundPitch(s, 0.66f + grng.f01() * 0.08f);   // heavy, unhurried
+                SetSoundVolume(s, clampf(1.4f / (1.0f + 0.07f * entDist * entDist), 0.0f, 0.9f));
+                PlaySound(s);
+            }
             ent.unseen = entVisible ? 0 : ent.unseen + dt * (crouchCur > 0.7f ? 1.7f : 1.0f);
             if (ent.unseen > 6 && entDist > 14) ent.st = EState::Hidden, ent.nextSpawn = now + 25 + grng.f01() * 40;
             if (entDist < 1.25f) {   // caught
@@ -597,10 +692,12 @@ void Game::updateExits(double now) {
             else continue;
             float ddx = px - doorX, ddz = pz - doorZ;
             if (ddx * ddx + ddz * ddz < 0.72f * 0.72f) {
+                // a cursed exit glows red and drops you into the Red Halls instead
+                bool cursed = world.cursedExit(i, k);
                 PlaySound(sndWin);
                 escapeT = 6.0f; escapeCount++;
                 saveBest();
-                applyLevel(EXIT_NEXT[level]);     // the exit leads deeper
+                applyLevel(cursed ? 3 : EXIT_NEXT[level]);
                 Vector2 spot = world.findOpenSpot(px, pz);
                 px = spot.x; pz = spot.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
                 ent.st = EState::Hidden; ent.nextSpawn = now + 30;

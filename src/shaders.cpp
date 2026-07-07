@@ -97,9 +97,9 @@ void main(){
             aOut = 0.62;
         }
     } else {
-        vec3 albedo = texture(texture0, fragUV).rgb * fragC.rgb;
-        col = albedo * roomLight(fragPos, normalize(fragN));
-        aOut = fragC.a;                              // lets contact shadows stay translucent
+        vec4 texel = texture(texture0, fragUV);
+        col = texel.rgb * fragC.rgb * roomLight(fragPos, normalize(fragN));
+        aOut = fragC.a * texel.a;                    // translucent contact shadows + scrawl decals
     }
     float dist = distance(fragPos, uViewPos);
     float f = clamp(exp(-dist*uFogDen), 0.0, 1.0);

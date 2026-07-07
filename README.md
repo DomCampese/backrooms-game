@@ -7,6 +7,22 @@ No assets — every texture and every sound is synthesized at startup.
 
 ![screenshot](docs/screenshot.png)
 
+## The levels
+
+Five procedurally-generated levels, each with its own palette, lighting,
+soundscape, and things that live there. Exits lead deeper — usually.
+
+| | |
+|---|---|
+| ![Level 0](docs/levels/level_0.png) **LEVEL 0** — yellowed office maze, humming fluorescents, mustard carpet. Home of Pirate Clark. | ![Level 1](docs/levels/level_1.png) **LEVEL 1** — cavernous concrete warehouse, sparse lights, loading docks. |
+| ![The Poolrooms](docs/levels/level_2.png) **THE POOLROOMS** — endless white tile and still water. No blackouts, no exit in a hurry. | ![The Red Halls](docs/levels/level_3.png) **THE RED HALLS** — oppressive dark-red brick, someone's abandoned bedroom furniture. |
+| ![Level Fun](docs/levels/level_4.png) **LEVEL FUN =)** — the party that never ended: bunting, balloons, confetti, and a resident who is very glad you came. | |
+
+The wandering entity — **Pirate Clark** in most halls, **the Partygoer =)**
+in LEVEL FUN — stalks out of the fog, and gives chase if you stare too long.
+
+<p align="center"><img src="docs/partygoer.png" width="300" alt="The Partygoer"></p>
+
 ## Build & run
 
 Requires [raylib](https://www.raylib.com) 5.x (`brew install raylib` on macOS;
@@ -81,6 +97,32 @@ make run
 - **Post** — film grain, vignette, chromatic aberration, and a mains-frequency
   luma shimmer, all scaling with fear.
 
+## The little things
+
+Details that reward paying attention:
+
+- **The Partygoer =)** — LEVEL FUN has its own resident: pale yellow, a
+  painted-on smile, a striped party hat. It stalks and chases like Clark,
+  and the danger banners change to match.
+- **Balloons pop** — shoot a balloon in LEVEL FUN and it bursts with a
+  synthesized pop and a scatter of confetti cubes that tumble to the carpet.
+
+  <p align="center"><img src="docs/confetti.png" width="440" alt="A popped balloon and its confetti"></p>
+- **Footsteps in the dark** — when the entity chases, you *hear* it: heavy
+  footfalls, panned to its bearing and fading with distance, even around
+  corners you can't see past.
+- **The floor is a lie** — Level 0 has rare soft, dark patches of carpet.
+  Linger on one and it gives way — you drop through into Level 1.
+- **Cursed exits** — roughly one exit door in six glows red instead of warm.
+  Those don't lead deeper. They lead to the Red Halls.
+- **Wall scrawl** — earlier wanderers left messages. *NO CLIP.* *day 407.*
+  *the exit lies.* *he hears the flares.* Drawn procedurally, pressed into
+  the walls, rare enough to unsettle.
+- **Muzzle smoke** — powder haze curls off the revolver and drifts up after
+  each shot.
+- **Camera feel** — the view leans into your strafes and the knees absorb a
+  landing.
+
 ## Controls
 
 | key | action |
@@ -88,12 +130,17 @@ make run
 | WASD | walk |
 | mouse | look |
 | SHIFT | sprint (stamina) |
+| CTRL | crouch |
 | SPACE | jump |
+| F / right click | flashlight |
 | 1 / 2 / wheel | select weapon (flare / revolver) |
 | left click | use selected weapon |
 | Q | throw flare (always) |
 | R | reload revolver |
-| F | borderless fullscreen |
+| 3 | drink almond water |
+| M | chalk a floor mark |
+| E | vending machine |
+| F11 | borderless fullscreen |
 | ESC / click | release / capture mouse |
 | F3 | debug HUD |
 

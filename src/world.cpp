@@ -171,6 +171,17 @@ float World::floorY(int ci, int ck) {
     return data(cx, cz).elev[ci - cx * CCELLS][ck - cz * CCELLS] * 0.1f;
 }
 
+bool World::softAt(int ci, int ck) {
+    if (level != 0) return false;
+    if (abs(ci) <= 10 && abs(ck) <= 10) return false;   // never near where you wake up
+    if (ih(ci, ck, (uint32_t)seed ^ 0x50F7u) % 523 != 0) return false;
+    return !pillarAt(ci, ck) && propAt(ci, ck) == 0 && floorY(ci, ck) == 0.0f;
+}
+
+bool World::cursedExit(int ci, int ck) {
+    return ih(ci, ck, (uint32_t)seed ^ 0xC0DEu) % 6 == 0;
+}
+
 // rotated prop box: 4 sides + top, one UV region for sides, another for the top
 static void addPropBox(MB &mb, float cx, float cz, float yaw, float hx, float hz, float y0, float y1,
                        float u0, float v0, float u1, float v1,
@@ -207,7 +218,7 @@ static void addBoxSides(MB &mb, float x0, float y0, float z0, float x1, float y1
 void World::ensureMesh(int cx, int cz) {
     ChunkData &d = data(cx, cz);
     if (d.built) return;
-    MB fl, ce, wa, pr, wt;
+    MB fl, ce, wa, pr, wt, scr;
     float wx = cx * CHUNK, wz = cz * CHUNK;
     Color wcol = WHITE;
     if (level == 2) {   // per-cell floor: pool basins sit 0.6m down, with tiled skirts
@@ -262,6 +273,16 @@ void World::ensureMesh(int cx, int cz) {
             float fy = d.elev[i][kk] * 0.1f;
             fl.quad({gx,fy,gz},{gx+CELL,fy,gz},{gx+CELL,fy,gz+CELL},{gx,fy,gz+CELL},{0,1,0},
                     {gx/2,gz/2},{(gx+CELL)/2,gz/2},{(gx+CELL)/2,(gz+CELL)/2},{gx/2,(gz+CELL)/2},wcol);
+            if (level == 0 && softAt(cx * CCELLS + i, cz * CCELLS + kk)) {
+                // the carpet has gone dark and soft here. don't linger.
+                float mx3 = gx + 1.0f, mz3 = gz + 1.0f;
+                fl.quad({mx3-0.85f,0.006f,mz3-0.85f},{mx3+0.85f,0.006f,mz3-0.85f},
+                        {mx3+0.85f,0.006f,mz3+0.85f},{mx3-0.85f,0.006f,mz3+0.85f},{0,1,0},
+                        {0.75f,0.75f},{0.75f,0.75f},{0.75f,0.75f},{0.75f,0.75f}, Color{ 16, 13, 10, 165 });
+                fl.quad({mx3-0.5f,0.008f,mz3-0.5f},{mx3+0.5f,0.008f,mz3-0.5f},
+                        {mx3+0.5f,0.008f,mz3+0.5f},{mx3-0.5f,0.008f,mz3+0.5f},{0,1,0},
+                        {0.75f,0.75f},{0.75f,0.75f},{0.75f,0.75f},{0.75f,0.75f}, Color{ 10, 8, 6, 205 });
+            }
             if (d.elev[i][kk] == 0) continue;
             auto hgt = [&](int a, int b) {
                 return (a < 0 || a >= CCELLS || b < 0 || b >= CCELLS) ? 0.0f : d.elev[a][b] * 0.1f;
@@ -312,7 +333,9 @@ void World::ensureMesh(int cx, int cz) {
             addBoxSides(wa, gx - WT, 0, gz - WT, gx + 0.35f, wallH, gz + WT);
             addBoxSides(wa, gx + 1.65f, 0, gz - WT, gx + CELL + WT, wallH, gz + WT);
             addBoxSides(wa, gx + 0.35f, 2.3f, gz - WT, gx + 1.65f, wallH, gz + WT, true);
-            Color glow = {255, 248, 225, 70};
+            // cursed exits glow red — they don't lead deeper, they lead to the Red Halls
+            bool crs = cursedExit(cx * CCELLS + i, cz * CCELLS + kk);
+            Color glow = crs ? Color{ 255, 60, 40, 70 } : Color{ 255, 248, 225, 70 };
             wa.quad({gx+0.35f,0,gz},{gx+1.65f,0,gz},{gx+1.65f,2.3f,gz},{gx+0.35f,2.3f,gz},{0,0,-1},
                     {0,1},{1,1},{1,0},{0,0},glow);
         }
@@ -333,9 +356,45 @@ void World::ensureMesh(int cx, int cz) {
             addBoxSides(wa, gx - WT, 0, gz - WT, gx + WT, wallH, gz + 0.35f);
             addBoxSides(wa, gx - WT, 0, gz + 1.65f, gx + WT, wallH, gz + CELL + WT);
             addBoxSides(wa, gx - WT, 2.3f, gz + 0.35f, gx + WT, wallH, gz + 1.65f, true);
-            Color glow = {255, 248, 225, 70};
+            bool crs = cursedExit(cx * CCELLS + i, cz * CCELLS + kk);
+            Color glow = crs ? Color{ 255, 60, 40, 70 } : Color{ 255, 248, 225, 70 };
             wa.quad({gx,0,gz+0.35f},{gx,0,gz+1.65f},{gx,2.3f,gz+1.65f},{gx,2.3f,gz+0.35f},{1,0,0},
                     {0,1},{1,1},{1,0},{0,0},glow);
+        }
+        // wall scrawl: rarely, a solid wall carries a phrase left by an earlier
+        // wanderer. one of eight, from the 2x4 scrawl atlas, drawn as a decal
+        // pressed just off the wall face (level 2 is pristine tile — no scrawl)
+        if (level != 2) {
+            uint32_t gi = cx * CCELLS + i, gk = cz * CCELLS + kk;
+            auto uvOf = [](int ph, float &u0, float &v0, float &u1, float &v1) {
+                u0 = (ph & 1) * 0.5f; v0 = (ph >> 1) * 0.25f; u1 = u0 + 0.5f; v1 = v0 + 0.25f;
+            };
+            if (nv == 1) {
+                uint32_t hs = ih(gi, gk, seed ^ 0x5C1Bu);
+                if (hs % 7 == 0) {
+                    float u0, v0, u1, v1; uvOf((hs >> 5) % 8, u0, v0, u1, v1);
+                    float y0 = 0.95f + ((hs >> 9) & 3) * 0.12f, y1 = y0 + 0.66f;
+                    float x0 = gx + 0.28f, x1 = gx + 1.72f;
+                    float zf = (hs & 8) ? gz + WT + 0.006f : gz - WT - 0.006f;
+                    if (hs & 8) scr.quad({x0,y0,zf},{x1,y0,zf},{x1,y1,zf},{x0,y1,zf},{0,0,1},
+                                        {u0,v1},{u1,v1},{u1,v0},{u0,v0}, WHITE);
+                    else        scr.quad({x1,y0,zf},{x0,y0,zf},{x0,y1,zf},{x1,y1,zf},{0,0,-1},
+                                        {u0,v1},{u1,v1},{u1,v0},{u0,v0}, WHITE);
+                }
+            }
+            if (wv == 1) {
+                uint32_t hs = ih(gi, gk, seed ^ 0x5C2Du);
+                if (hs % 7 == 0) {
+                    float u0, v0, u1, v1; uvOf((hs >> 5) % 8, u0, v0, u1, v1);
+                    float y0 = 0.95f + ((hs >> 9) & 3) * 0.12f, y1 = y0 + 0.66f;
+                    float z0 = gz + 0.28f, z1 = gz + 1.72f;
+                    float xf = (hs & 8) ? gx + WT + 0.006f : gx - WT - 0.006f;
+                    if (hs & 8) scr.quad({xf,y0,z1},{xf,y0,z0},{xf,y1,z0},{xf,y1,z1},{1,0,0},
+                                        {u0,v1},{u1,v1},{u1,v0},{u0,v0}, WHITE);
+                    else        scr.quad({xf,y0,z0},{xf,y0,z1},{xf,y1,z1},{xf,y1,z0},{-1,0,0},
+                                        {u0,v1},{u1,v1},{u1,v0},{u0,v0}, WHITE);
+                }
+            }
         }
         if (dd.pillar[i][kk]) {
             addBoxSides(wa, gx + 0.42f, 0, gz + 0.42f, gx + 1.58f, wallH, gz + 1.58f);
@@ -527,6 +586,7 @@ void World::ensureMesh(int cx, int cz) {
     d.meshes[2] = wa.bake();
     d.meshes[3] = pr.bake();
     d.meshes[4] = wt.bake();
+    d.meshes[5] = scr.bake();
     d.built = true;
 }
 
@@ -639,7 +699,7 @@ void World::unloadFar(int pcx, int pcz, int radius) {
         int cx = (int)(int32_t)(it->first >> 32), cz = (int)(int32_t)(it->first & 0xFFFFFFFF);
         if (abs(cx - pcx) > radius || abs(cz - pcz) > radius) {
             if (it->second.built)
-                for (int i = 0; i < 5; i++)
+                for (int i = 0; i < 6; i++)
                     if (it->second.meshes[i].vertexCount > 0) UnloadMesh(it->second.meshes[i]);
             it = chunks.erase(it);
         } else ++it;
@@ -649,7 +709,7 @@ void World::unloadFar(int pcx, int pcz, int radius) {
 void World::unloadAll() {
     for (auto &kv : chunks)
         if (kv.second.built)
-            for (int i = 0; i < 5; i++)
+            for (int i = 0; i < 6; i++)
                 if (kv.second.meshes[i].vertexCount > 0) UnloadMesh(kv.second.meshes[i]);
     chunks.clear();
 }

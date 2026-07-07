@@ -7,6 +7,7 @@ Sound makeFootstep(uint32_t seed);
 Sound makeJumpscare();
 Sound makeSplash(uint32_t seed, bool big);
 Sound makeClick();
+Sound makeBalloonPop();
 Sound makeFlareStrike();
 Sound makeGunshot();
 Sound makeWinChime();
