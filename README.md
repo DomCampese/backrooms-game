@@ -1,6 +1,6 @@
 # THE BACKROOMS — Level 0
 
-Disclaimer: Just for fun, initial shell generated with Claude Fable
+Disclaimer: just for fun, mostly generated with Claude models
 
 A native, procedurally-infinite backrooms horror game in a small C++ codebase.
 No assets — every texture and every sound is synthesized at startup.
