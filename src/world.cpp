@@ -218,7 +218,7 @@ static void addBoxSides(MB &mb, float x0, float y0, float z0, float x1, float y1
 void World::ensureMesh(int cx, int cz) {
     ChunkData &d = data(cx, cz);
     if (d.built) return;
-    MB fl, ce, wa, pr, wt, scr;
+    MB fl, ce, wa, pr, wt, scr, gl;
     float wx = cx * CHUNK, wz = cz * CHUNK;
     Color wcol = WHITE;
     if (level == 2) {   // per-cell floor: pool basins sit 0.6m down, with tiled skirts
@@ -325,8 +325,9 @@ void World::ensureMesh(int cx, int cz) {
             addBoxSides(wa, gx + 1.55f, 1.0f, gz - WT, gx + CELL + WT, 2.1f, gz + WT);
             wa.quad({gx-WT,1.0f,gz-WT},{gx+CELL+WT,1.0f,gz-WT},{gx+CELL+WT,1.0f,gz+WT},{gx-WT,1.0f,gz+WT},
                     {0,1,0},{0,0},{1,0},{1,0.1f},{0,0.1f}, WHITE);   // sill top
-            Color glass = { 5, 6, 9, 60 };   // emissive void — no light touches it
-            wa.quad({gx+0.45f,1.0f,gz},{gx+1.55f,1.0f,gz},{gx+1.55f,2.1f,gz},{gx+0.45f,2.1f,gz},
+            // real glass now: translucent pane (alpha 100 -> glass branch), see the room beyond
+            Color glass = { 20, 26, 32, 100 };
+            gl.quad({gx+0.45f,1.0f,gz},{gx+1.55f,1.0f,gz},{gx+1.55f,2.1f,gz},{gx+0.45f,2.1f,gz},
                     {0,0,-1},{0,1},{1,1},{1,0},{0,0}, glass);
         }
         else if (nv == 2) {   // exit doorway on x-running wall
@@ -348,8 +349,8 @@ void World::ensureMesh(int cx, int cz) {
             addBoxSides(wa, gx - WT, 1.0f, gz + 1.55f, gx + WT, 2.1f, gz + CELL + WT);
             wa.quad({gx-WT,1.0f,gz-WT},{gx+WT,1.0f,gz-WT},{gx+WT,1.0f,gz+CELL+WT},{gx-WT,1.0f,gz+CELL+WT},
                     {0,1,0},{0,0},{1,0},{1,0.1f},{0,0.1f}, WHITE);   // sill top
-            Color glass = { 5, 6, 9, 60 };
-            wa.quad({gx,1.0f,gz+0.45f},{gx,1.0f,gz+1.55f},{gx,2.1f,gz+1.55f},{gx,2.1f,gz+0.45f},
+            Color glass = { 20, 26, 32, 100 };
+            gl.quad({gx,1.0f,gz+0.45f},{gx,1.0f,gz+1.55f},{gx,2.1f,gz+1.55f},{gx,2.1f,gz+0.45f},
                     {1,0,0},{0,1},{1,1},{1,0},{0,0}, glass);
         }
         else if (wv == 2) {   // exit doorway on z-running wall
@@ -598,6 +599,7 @@ void World::ensureMesh(int cx, int cz) {
     d.meshes[3] = pr.bake();
     d.meshes[4] = wt.bake();
     d.meshes[5] = scr.bake();
+    d.meshes[6] = gl.bake();
     d.built = true;
 }
 
@@ -710,7 +712,7 @@ void World::unloadFar(int pcx, int pcz, int radius) {
         int cx = (int)(int32_t)(it->first >> 32), cz = (int)(int32_t)(it->first & 0xFFFFFFFF);
         if (abs(cx - pcx) > radius || abs(cz - pcz) > radius) {
             if (it->second.built)
-                for (int i = 0; i < 6; i++)
+                for (int i = 0; i < 7; i++)
                     if (it->second.meshes[i].vertexCount > 0) UnloadMesh(it->second.meshes[i]);
             it = chunks.erase(it);
         } else ++it;
@@ -720,7 +722,7 @@ void World::unloadFar(int pcx, int pcz, int radius) {
 void World::unloadAll() {
     for (auto &kv : chunks)
         if (kv.second.built)
-            for (int i = 0; i < 6; i++)
+            for (int i = 0; i < 7; i++)
                 if (kv.second.meshes[i].vertexCount > 0) UnloadMesh(kv.second.meshes[i]);
     chunks.clear();
 }

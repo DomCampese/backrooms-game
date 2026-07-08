@@ -82,7 +82,11 @@ make run
   concrete loading docks, and the pools get proper steps down into the water.
   Real stair geometry, smooth step physics — and you can jump onto most of
   the furniture and walk across it.
-- **Windows** — rarely, a wall has one. There is nothing on the other side.
+- **Windows** — rarely, a wall has one, and now you can see through it: a
+  translucent glass pane, clear in the middle and catching the light at
+  grazing angles, with the next room laid out on the far side.
+
+  <p align="center"><img src="docs/window.png" width="440" alt="A see-through window"></p>
 - **Furniture** — beyond the office clutter: couches, armoires, floor lamps,
   nightstands, and the occasional bare mattress, arranged by no one, for
   no one.
