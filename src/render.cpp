@@ -109,6 +109,27 @@ void Game::renderScene(double now) {
             DrawCylinderEx({ bxx, by - 0.15f, bzz }, { bxx + 0.04f, by - 0.95f, bzz + 0.02f },
                            0.005f, 0.005f, 4, lit({ 190, 185, 175, 150 }, pl));
         }
+        for (int dx = -6; dx <= 6; dx++) for (int dz = -6; dz <= 6; dz++) {   // balloon bunches tied to party tables
+            int a = pci + dx, b = pck + dz;
+            if (world.propAt(a, b) != 11) continue;
+            uint32_t h = ih(a, b, (uint32_t)world.seed ^ 0x8A11u);
+            if (h % 3 != 0) continue;                       // most tables, not all
+            float tx = a * CELL + 1.0f, tz = b * CELL + 1.0f;
+            float ty = world.floorY(a, b) + 0.74f;          // knotted at the tabletop
+            int nb = 2 + (h % 3);
+            for (int k = 0; k < nb; k++) {
+                uint32_t bh = h * 2246822519u + (uint32_t)k * 2654435761u;
+                float ox = (((bh >> 3) & 7) / 7.0f - 0.5f) * 0.42f;
+                float oz = (((bh >> 7) & 7) / 7.0f - 0.5f) * 0.42f;
+                float sway = sinf((float)now * 0.9f + a * 1.7f + k * 2.3f) * 0.04f;
+                float bxx = tx + ox + sway, bzz = tz + oz;
+                float by = ty + 1.15f + (((bh >> 11) & 3) * 0.06f);
+                float pl = propLum(bxx, by, bzz) * 0.9f;
+                DrawSphere({ bxx, by, bzz }, 0.15f, lit(PARTY[(bh >> 13) % 5], pl));
+                DrawCylinderEx({ bxx, by - 0.13f, bzz }, { tx + 0.02f, ty + 0.02f, tz },
+                               0.004f, 0.004f, 4, lit({ 200, 195, 185, 150 }, pl));
+            }
+        }
         for (auto &c : confetti) {   // bursts still tumbling to the carpet
             float pl = propLum(c.pos.x, c.pos.y, c.pos.z);
             float fade = clampf(c.life * 1.6f, 0, 1);

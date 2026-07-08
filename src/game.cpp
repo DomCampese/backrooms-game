@@ -32,7 +32,7 @@ void Game::init() {
     wallTexs[4] = makePartyWallTex();
     floorTexs[3] = floorTexs[1];   // red halls reuse the concrete floor/ceiling in red light
     ceilTexs[3] = ceilTexs[1];
-    ceilTexs[4] = ceilTexs[0];     // the party is under the same office tiles as Level 0
+    ceilTexs[4] = makePartyCeilTex();   // the party hall's ceiling has gone dark
 
     worldShader = LoadShaderFromMemory(WORLD_VS, WORLD_FS);
     locTime = GetShaderLocation(worldShader, "uTime");

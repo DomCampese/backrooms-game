@@ -15,4 +15,5 @@ Texture2D makeConcreteCeilTex();   // Level 1 (+ Red Halls)
 Texture2D makeRedBrickTex();       // Red Halls
 Texture2D makeTileTex();           // Poolrooms: white ceramic everywhere
 Texture2D makePartyWallTex();      // LEVEL FUN =): bunting, confetti, smileys
-Texture2D makePartyCarpetTex();    // LEVEL FUN =): confetti trodden into carpet
+Texture2D makePartyCarpetTex();    // LEVEL FUN =): deep red party carpet
+Texture2D makePartyCeilTex();      // LEVEL FUN =): near-black party-hall ceiling
