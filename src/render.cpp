@@ -111,22 +111,15 @@ void Game::renderScene(double now) {
         }
         for (int dx = -6; dx <= 6; dx++) for (int dz = -6; dz <= 6; dz++) {   // balloon bunches tied to party tables
             int a = pci + dx, b = pck + dz;
-            if (world.propAt(a, b) != 11) continue;
-            uint32_t h = ih(a, b, (uint32_t)world.seed ^ 0x8A11u);
-            if (h % 3 != 0) continue;                       // most tables, not all
-            float tx = a * CELL + 1.0f, tz = b * CELL + 1.0f;
-            float ty = world.floorY(a, b) + 0.74f;          // knotted at the tabletop
-            int nb = 2 + (h % 3);
+            if (poppedTableBunches.count(cellKey2(a, b))) continue;   // this bunch has been shot
+            Vector3 bpos[4], tie; Color bcol[4];
+            int nb = tableBalloonBunch(a, b, bpos, bcol, tie);        // same positions the aim uses
             for (int k = 0; k < nb; k++) {
-                uint32_t bh = h * 2246822519u + (uint32_t)k * 2654435761u;
-                float ox = (((bh >> 3) & 7) / 7.0f - 0.5f) * 0.42f;
-                float oz = (((bh >> 7) & 7) / 7.0f - 0.5f) * 0.42f;
                 float sway = sinf((float)now * 0.9f + a * 1.7f + k * 2.3f) * 0.04f;
-                float bxx = tx + ox + sway, bzz = tz + oz;
-                float by = ty + 1.15f + (((bh >> 11) & 3) * 0.06f);
+                float bxx = bpos[k].x + sway, by = bpos[k].y, bzz = bpos[k].z;
                 float pl = propLum(bxx, by, bzz) * 0.9f;
-                DrawSphere({ bxx, by, bzz }, 0.15f, lit(PARTY[(bh >> 13) % 5], pl));
-                DrawCylinderEx({ bxx, by - 0.13f, bzz }, { tx + 0.02f, ty + 0.02f, tz },
+                DrawSphere({ bxx, by, bzz }, 0.15f, lit(bcol[k], pl));
+                DrawCylinderEx({ bxx, by - 0.13f, bzz }, { tie.x + 0.02f, tie.y + 0.02f, tie.z },
                                0.004f, 0.004f, 4, lit({ 200, 195, 185, 150 }, pl));
             }
         }

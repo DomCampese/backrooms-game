@@ -153,7 +153,7 @@ void Game::applyLevel(int lv) {
     nextBlackout = lv == 2 ? 1e18 : GetTime() + 30 + grng.f01() * 60;   // no blackouts in the poolrooms
     blackoutEnd = -1;
     taken.clear(); coinsWorld.clear(); chalk.clear();   // it's a different maze down here
-    poppedBalloons.clear(); confetti.clear();
+    poppedBalloons.clear(); poppedTableBunches.clear(); confetti.clear();
     SetWindowTitle(TextFormat("THE BACKROOMS — %s", c.name));
 }
 
@@ -179,31 +179,66 @@ bool Game::balloonAt(int a, int b, Vector3 &out) {
     return true;
 }
 
-// Fire the revolver in LEVEL FUN and any balloon on the aim line bursts into
-// confetti. Ray-marches the view direction a short way and pops the first hit.
+// Balloon bunch knotted to the party table in this cell (the sway the renderer
+// adds is left off — it's tiny next to the hit radius, so aim stays honest).
+int Game::tableBalloonBunch(int a, int b, Vector3 *pos, Color *cols, Vector3 &tie) {
+    if (level != 4 || world.propAt(a, b) != 11) return 0;
+    uint32_t h = ih(a, b, (uint32_t)world.seed ^ 0x8A11u);
+    if (h % 3 != 0) return 0;                       // most tables, not all
+    float tx = a * CELL + 1.0f, tz = b * CELL + 1.0f;
+    float ty = world.floorY(a, b) + 0.74f;          // knotted at the tabletop
+    tie = { tx, ty, tz };
+    int nb = 2 + (int)(h % 3);
+    for (int k = 0; k < nb; k++) {
+        uint32_t bh = h * 2246822519u + (uint32_t)k * 2654435761u;
+        float ox = (((bh >> 3) & 7) / 7.0f - 0.5f) * 0.42f;
+        float oz = (((bh >> 7) & 7) / 7.0f - 0.5f) * 0.42f;
+        float by = ty + 1.15f + (((bh >> 11) & 3) * 0.06f);
+        pos[k] = { tx + ox, by, tz + oz };
+        if (cols) cols[k] = PARTY[(bh >> 13) % 5];
+    }
+    return nb;
+}
+
+// Fire the revolver in LEVEL FUN and the first balloon on the aim line bursts
+// into confetti — a ceiling balloon on its own, or a whole table bunch at once.
 void Game::popBalloonsAlongAim() {
     if (level != 4) return;
+    auto burst = [&](Vector3 at, Color base, int n) {
+        for (int c2 = 0; c2 < n; c2++) {
+            float aa = grng.f01() * 6.2831853f, sp = 1.2f + grng.f01() * 2.2f;
+            confetti.push_back({ at, { cosf(aa) * sp, 0.6f + grng.f01() * 1.6f, sinf(aa) * sp },
+                                 1.3f + grng.f01() * 0.9f,
+                                 grng.f01() < 0.5f ? base : PARTY[c2 % 5] });
+        }
+    };
     for (float d = 0.6f; d < 22.0f; d += 0.35f) {
         float wx = px + fwd.x * d, wy = eyeY + fwd.y * d, wz = pz + fwd.z * d;
         int a = cellOf(wx), b = cellOf(wz);
         for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+            int ca = a + dx, cb = b + dz;
             Vector3 bp;
-            if (!balloonAt(a + dx, b + dz, bp)) continue;
-            float ex = bp.x - wx, ey = bp.y - wy, ez = bp.z - wz;
-            if (ex * ex + ey * ey + ez * ez > 0.24f * 0.24f) continue;   // ~balloon radius
-            poppedBalloons.insert(cellKey2(a + dx, b + dz));
-            SetSoundPitch(sndPop, 0.9f + grng.f01() * 0.3f);
-            SetSoundPan(sndPop, 0.5f);
-            PlaySound(sndPop);
-            uint32_t hh = ih(a + dx, b + dz, (uint32_t)world.seed ^ 0xBA11u);
-            Color base = PARTY[(hh >> 10) % 5];
-            for (int c2 = 0; c2 < 16; c2++) {   // scatter confetti
-                float aa = grng.f01() * 6.2831853f, sp = 1.2f + grng.f01() * 2.2f;
-                confetti.push_back({ bp, { cosf(aa) * sp, 0.6f + grng.f01() * 1.6f, sinf(aa) * sp },
-                                     1.3f + grng.f01() * 0.9f,
-                                     grng.f01() < 0.5f ? base : PARTY[c2 % 5] });
+            if (balloonAt(ca, cb, bp)) {   // a lone ceiling balloon
+                float ex = bp.x - wx, ey = bp.y - wy, ez = bp.z - wz;
+                if (ex * ex + ey * ey + ez * ez <= 0.24f * 0.24f) {
+                    poppedBalloons.insert(cellKey2(ca, cb));
+                    SetSoundPitch(sndPop, 0.9f + grng.f01() * 0.3f); SetSoundPan(sndPop, 0.5f); PlaySound(sndPop);
+                    burst(bp, PARTY[(ih(ca, cb, (uint32_t)world.seed ^ 0xBA11u) >> 10) % 5], 16);
+                    return;
+                }
             }
-            return;   // one balloon per shot
+            if (!poppedTableBunches.count(cellKey2(ca, cb))) {   // a table bunch: all of it goes
+                Vector3 bpos[4], tie; Color bcol[4];
+                int nb = tableBalloonBunch(ca, cb, bpos, bcol, tie);
+                for (int k = 0; k < nb; k++) {
+                    float ex = bpos[k].x - wx, ey = bpos[k].y - wy, ez = bpos[k].z - wz;
+                    if (ex * ex + ey * ey + ez * ez > 0.26f * 0.26f) continue;
+                    poppedTableBunches.insert(cellKey2(ca, cb));
+                    SetSoundPitch(sndPop, 0.95f + grng.f01() * 0.3f); SetSoundPan(sndPop, 0.5f); PlaySound(sndPop);
+                    for (int j = 0; j < nb; j++) burst(bpos[j], bcol[j], 11);
+                    return;
+                }
+            }
         }
     }
 }

@@ -110,6 +110,8 @@ Details that reward paying attention:
   and the danger banners change to match.
 - **Balloons pop** — shoot a balloon in LEVEL FUN and it bursts with a
   synthesized pop and a scatter of confetti cubes that tumble to the carpet.
+  The bunches knotted to party tables pop too — clip any one and the whole
+  bunch goes at once.
 
   <p align="center"><img src="docs/confetti.png" width="440" alt="A popped balloon and its confetti"></p>
 - **Footsteps in the dark** — when the entity chases, you *hear* it: heavy
