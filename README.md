@@ -102,8 +102,14 @@ make run
   the birthday song half a semitone flat, forever.
 
   <p align="center"><img src="docs/party_table.png" width="440" alt="A LEVEL FUN party table"></p>
-- **Post** — film grain, vignette, chromatic aberration, and a mains-frequency
-  luma shimmer, all scaling with fear.
+- **Surface relief** — walls, carpet, and concrete get a procedural bump in the
+  shader, so flat planes catch the room light with a little texture instead of
+  reading as dead polygons. Scaled down on the glossy poolroom tile, which
+  stays clean.
+- **Post** — threshold bloom that makes the fluorescents actually glow, a gentle
+  filmic contrast + saturation lift, dust motes drifting through the light, plus
+  film grain, vignette, chromatic aberration, and a mains-frequency luma
+  shimmer — the fear-driven ones scale as the fear does.
 
 ## The little things
 
