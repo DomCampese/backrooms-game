@@ -87,8 +87,15 @@ void main(){
             float st = lightState(g);
             col = vec3(0.50,0.48,0.44) * roomLight(fragPos, vec3(0.0,-1.0,0.0)) + uLightCol*1.9*st;
             col *= 0.93 + 0.07*sin(fragUV.x*33.0)*sin(fragUV.y*33.0);   // prismatic lens ribs
-        } else if (fragC.a < 0.4){                   // raw emissive (exit glow)
+        } else if (fragC.a < 0.3){                   // raw emissive (exit glow)
             col = fragC.rgb * 2.4;
+        } else if (fragC.a < 0.45){                  // window glass: clear in the middle, sheen at grazing angles
+            vec3 N = normalize(fragN);
+            vec3 V = normalize(uViewPos - fragPos);
+            float fres = pow(1.0 - abs(dot(V, N)), 3.0);
+            col = fragC.rgb * 3.0 + roomLight(fragPos, N) * 0.15;   // faint cool tint + a little room light
+            col += vec3(0.55,0.62,0.72) * fres;                    // edge highlight where light skims the pane
+            aOut = 0.10 + fres * 0.55;                             // see-through face, denser at the edges
         } else {                                     // water surface
             vec3 light = roomLight(fragPos, vec3(0.0,1.0,0.0));
             float sh = 0.75 + 0.25*sin(fragPos.x*2.3 + uTime*1.4)*sin(fragPos.z*1.9 - uTime*1.1)

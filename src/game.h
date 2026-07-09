@@ -93,7 +93,8 @@ struct Game {
     std::unordered_set<uint64_t> taken;       // world pickups already grabbed (reset per level)
     std::vector<Vector3> coinsWorld;          // doubloons Clark spills when he goes down
     std::vector<Vector3> chalk;               // navigation marks
-    std::unordered_set<uint64_t> poppedBalloons;   // LEVEL FUN balloons already shot
+    std::unordered_set<uint64_t> poppedBalloons;     // LEVEL FUN ceiling balloons already shot
+    std::unordered_set<uint64_t> poppedTableBunches; // and party-table balloon bunches
     struct Confetti { Vector3 pos, vel; float life; Color col; };
     std::vector<Confetti> confetti;           // bursts from popped balloons
     int almond = 0, coins = 0;
@@ -114,7 +115,10 @@ struct Game {
     static uint64_t cellKey2(int a, int b) { return ((uint64_t)(uint32_t)a << 32) | (uint32_t)b; }
     bool bottleAt(int a, int b);              // almond water, left out for whoever needs it
     bool coinAt(int a, int b);                // a doubloon he dropped on his rounds
-    bool balloonAt(int a, int b, Vector3 &out);   // LEVEL FUN balloon centre, if one floats here
+    bool balloonAt(int a, int b, Vector3 &out);   // LEVEL FUN ceiling balloon centre, if one floats here
+    // party-table balloon bunch in this cell: fills pos[]/cols[] (up to 4), the
+    // knot point, and returns the count (0 = no bunch). Shared by render + aim.
+    int tableBalloonBunch(int a, int b, Vector3 *pos, Color *cols, Vector3 &tie);
     void popBalloonsAlongAim();               // revolver vs. balloons, when you fire in LEVEL FUN
 
     // update, in frame order (game.cpp)

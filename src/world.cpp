@@ -84,7 +84,7 @@ void World::generate(ChunkData &d, int cx, int cz) {
     memset(d.prop, 0, sizeof(d.prop));
     memset(d.propRot, 0, sizeof(d.propRot));
     int npr = level == 0 ? 7 + rng.ri(0, 7) : level == 1 ? 8 + rng.ri(0, 8)
-            : level == 3 ? 5 + rng.ri(0, 6) : level == 4 ? 6 + rng.ri(0, 6) : 0;
+            : level == 3 ? 5 + rng.ri(0, 6) : level == 4 ? 9 + rng.ri(0, 7) : 0;
     for (int i = 0; i < npr; i++) {
         int a = rng.ri(0, CCELLS - 1), b = rng.ri(0, CCELLS - 1);
         if (d.pillar[a][b] || d.prop[a][b]) continue;
@@ -93,7 +93,7 @@ void World::generate(ChunkData &d, int cx, int cz) {
         else if (level == 3)                                               // red halls: someone's bedroom
             d.prop[a][b] = f < 0.30f ? 9 : f < 0.55f ? 6 : f < 0.80f ? 8 : 7;
         else if (level == 4)                                               // level fun: the party never ended
-            d.prop[a][b] = f < 0.40f ? 11 : f < 0.62f ? 1 : f < 0.76f ? 5 : f < 0.90f ? 3 : 10;
+            d.prop[a][b] = f < 0.52f ? 11 : f < 0.70f ? 1 : f < 0.82f ? 5 : f < 0.93f ? 3 : 10;
         else   // L0: office clutter, plus furniture that has no business here
             d.prop[a][b] = f < 0.26f ? 1 : f < 0.40f ? 2 : f < 0.50f ? 3 : f < 0.62f ? 4 :
                            f < 0.74f ? 5 : f < 0.84f ? 6 : f < 0.90f ? 7 : f < 0.95f ? 8 :
@@ -218,7 +218,7 @@ static void addBoxSides(MB &mb, float x0, float y0, float z0, float x1, float y1
 void World::ensureMesh(int cx, int cz) {
     ChunkData &d = data(cx, cz);
     if (d.built) return;
-    MB fl, ce, wa, pr, wt, scr;
+    MB fl, ce, wa, pr, wt, scr, gl;
     float wx = cx * CHUNK, wz = cz * CHUNK;
     Color wcol = WHITE;
     if (level == 2) {   // per-cell floor: pool basins sit 0.6m down, with tiled skirts
@@ -325,8 +325,9 @@ void World::ensureMesh(int cx, int cz) {
             addBoxSides(wa, gx + 1.55f, 1.0f, gz - WT, gx + CELL + WT, 2.1f, gz + WT);
             wa.quad({gx-WT,1.0f,gz-WT},{gx+CELL+WT,1.0f,gz-WT},{gx+CELL+WT,1.0f,gz+WT},{gx-WT,1.0f,gz+WT},
                     {0,1,0},{0,0},{1,0},{1,0.1f},{0,0.1f}, WHITE);   // sill top
-            Color glass = { 5, 6, 9, 60 };   // emissive void — no light touches it
-            wa.quad({gx+0.45f,1.0f,gz},{gx+1.55f,1.0f,gz},{gx+1.55f,2.1f,gz},{gx+0.45f,2.1f,gz},
+            // real glass now: translucent pane (alpha 100 -> glass branch), see the room beyond
+            Color glass = { 20, 26, 32, 100 };
+            gl.quad({gx+0.45f,1.0f,gz},{gx+1.55f,1.0f,gz},{gx+1.55f,2.1f,gz},{gx+0.45f,2.1f,gz},
                     {0,0,-1},{0,1},{1,1},{1,0},{0,0}, glass);
         }
         else if (nv == 2) {   // exit doorway on x-running wall
@@ -348,8 +349,8 @@ void World::ensureMesh(int cx, int cz) {
             addBoxSides(wa, gx - WT, 1.0f, gz + 1.55f, gx + WT, 2.1f, gz + CELL + WT);
             wa.quad({gx-WT,1.0f,gz-WT},{gx+WT,1.0f,gz-WT},{gx+WT,1.0f,gz+CELL+WT},{gx-WT,1.0f,gz+CELL+WT},
                     {0,1,0},{0,0},{1,0},{1,0.1f},{0,0.1f}, WHITE);   // sill top
-            Color glass = { 5, 6, 9, 60 };
-            wa.quad({gx,1.0f,gz+0.45f},{gx,1.0f,gz+1.55f},{gx,2.1f,gz+1.55f},{gx,2.1f,gz+0.45f},
+            Color glass = { 20, 26, 32, 100 };
+            gl.quad({gx,1.0f,gz+0.45f},{gx,1.0f,gz+1.55f},{gx,2.1f,gz+1.55f},{gx,2.1f,gz+0.45f},
                     {1,0,0},{0,1},{1,1},{1,0},{0,0}, glass);
         }
         else if (wv == 2) {   // exit doorway on z-running wall
@@ -523,10 +524,11 @@ void World::ensureMesh(int cx, int cz) {
                 part(0, -0.97f, 0.52f, 0.05f, ey, ey + 0.95f, true, wd);             // headboard
                 break;
             }
-            case 11: {  // party table: paper cloth, a cake nobody ever cut
+            case 11: {  // party table: paper cloth, a cake nobody cut, cups nobody drank
                 blob(0.62f, 0.62f);
                 float ty = 0.74f;
-                Color cloth = PARTY[ih(cx * CCELLS + i, cz * CCELLS + kk, 0xCAFEu) % 5];
+                uint32_t th = ih(cx * CCELLS + i, cz * CCELLS + kk, seed ^ 0xCAFEu);
+                Color cloth = PARTY[th % 5];
                 part(0, 0, 0.55f, 0.55f, ey + ty - 0.05f, ey + ty, false, cloth);
                 for (int lx = -1; lx <= 1; lx += 2) for (int lz = -1; lz <= 1; lz += 2)
                     part(lx * 0.44f, lz * 0.44f, 0.035f, 0.035f, ey, ey + ty - 0.05f,
@@ -534,6 +536,16 @@ void World::ensureMesh(int cx, int cz) {
                 part(0, 0, 0.17f, 0.17f, ey + ty, ey + ty + 0.16f, false, Color{ 238, 232, 220, 255 });   // cake
                 part(0, 0, 0.11f, 0.11f, ey + ty + 0.16f, ey + ty + 0.26f, false, Color{ 232, 152, 172, 255 });
                 part(0, 0, 0.013f, 0.013f, ey + ty + 0.26f, ey + ty + 0.37f, false, Color{ 240, 226, 172, 255 }); // candle
+                {   // paper cups set out around the cake, in party colours
+                    int ncup = 3 + (th % 4);
+                    for (int c = 0; c < ncup; c++) {
+                        uint32_t ch = th * 2654435761u + (uint32_t)c * 40503u;
+                        float ang = (ch & 0xFFFF) / 65535.0f * 6.2831853f;
+                        float rad = 0.30f + ((ch >> 16) & 0xFF) / 255.0f * 0.15f;
+                        part(cosf(ang) * rad, sinf(ang) * rad, 0.04f, 0.04f,
+                             ey + ty, ey + ty + 0.09f, false, PARTY[(ch >> 5) % 5]);
+                    }
+                }
                 {   // ...and the candle is still lit. nobody lit it. two crossed
                     // emissive fins make a little flame that survives blackouts
                     auto fpt = [&](float lx, float ly2, float lz) {
@@ -587,6 +599,7 @@ void World::ensureMesh(int cx, int cz) {
     d.meshes[3] = pr.bake();
     d.meshes[4] = wt.bake();
     d.meshes[5] = scr.bake();
+    d.meshes[6] = gl.bake();
     d.built = true;
 }
 
@@ -699,7 +712,7 @@ void World::unloadFar(int pcx, int pcz, int radius) {
         int cx = (int)(int32_t)(it->first >> 32), cz = (int)(int32_t)(it->first & 0xFFFFFFFF);
         if (abs(cx - pcx) > radius || abs(cz - pcz) > radius) {
             if (it->second.built)
-                for (int i = 0; i < 6; i++)
+                for (int i = 0; i < 7; i++)
                     if (it->second.meshes[i].vertexCount > 0) UnloadMesh(it->second.meshes[i]);
             it = chunks.erase(it);
         } else ++it;
@@ -709,7 +722,7 @@ void World::unloadFar(int pcx, int pcz, int radius) {
 void World::unloadAll() {
     for (auto &kv : chunks)
         if (kv.second.built)
-            for (int i = 0; i < 6; i++)
+            for (int i = 0; i < 7; i++)
                 if (kv.second.meshes[i].vertexCount > 0) UnloadMesh(kv.second.meshes[i]);
     chunks.clear();
 }

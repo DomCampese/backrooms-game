@@ -16,7 +16,7 @@ soundscape, and things that live there. Exits lead deeper — usually.
 |---|---|
 | ![Level 0](docs/levels/level_0.png) **LEVEL 0** — yellowed office maze, humming fluorescents, mustard carpet. Home of Pirate Clark. | ![Level 1](docs/levels/level_1.png) **LEVEL 1** — cavernous concrete warehouse, sparse lights, loading docks. |
 | ![The Poolrooms](docs/levels/level_2.png) **THE POOLROOMS** — endless white tile and still water. No blackouts, no exit in a hurry. | ![The Red Halls](docs/levels/level_3.png) **THE RED HALLS** — oppressive dark-red brick, someone's abandoned bedroom furniture. |
-| ![Level Fun](docs/levels/level_4.png) **LEVEL FUN =)** — the party that never ended: bunting, balloons, confetti, and a resident who is very glad you came. | |
+| ![Level Fun](docs/levels/level_4.png) **LEVEL FUN =)** — the party that never ended: deep red carpet, a ceiling gone black so the lights hang like a party hall's, bunting, balloons, party tables, and a resident who is very glad you came. | |
 
 The wandering entity — **Pirate Clark** in most halls, **the Partygoer =)**
 in LEVEL FUN — stalks out of the fog, and gives chase if you stare too long.
@@ -82,18 +82,26 @@ make run
   concrete loading docks, and the pools get proper steps down into the water.
   Real stair geometry, smooth step physics — and you can jump onto most of
   the furniture and walk across it.
-- **Windows** — rarely, a wall has one. There is nothing on the other side.
+- **Windows** — rarely, a wall has one, and now you can see through it: a
+  translucent glass pane, clear in the middle and catching the light at
+  grazing angles, with the next room laid out on the far side.
+
+  <p align="center"><img src="docs/window.png" width="440" alt="A see-through window"></p>
 - **Furniture** — beyond the office clutter: couches, armoires, floor lamps,
   nightstands, and the occasional bare mattress, arranged by no one, for
   no one.
 - **Exits** — vanishingly rare glowing doorways carved into wall runs. Finding
   one "ends" the run. Sort of.
-- **LEVEL FUN =)** — the poolrooms exit doesn't lead home. Bunting on every
-  wall, confetti trodden into the carpet, crayon smileys, balloons nosing
-  against the ceiling tiles, crepe streamers, presents wrapped in party
-  colours, and party tables set with a cake nobody ever cut — the candles
-  are still lit, and they stay lit through the blackouts — while a music
-  box grinds through the birthday song half a semitone flat, forever.
+- **LEVEL FUN =)** — the poolrooms exit doesn't lead home. Deep red banquet
+  carpet with confetti ground into it, a ceiling gone black so the fluorescent
+  panels hang like a darkened party hall's, bunting on every wall, crayon
+  smileys, balloons nosing the ceiling, crepe streamers, presents wrapped in
+  party colours, and party tables laid with paper cups, a cake nobody ever
+  cut, and balloon bunches knotted to the cloth — the candles are still lit,
+  and they stay lit through the blackouts — while a music box grinds through
+  the birthday song half a semitone flat, forever.
+
+  <p align="center"><img src="docs/party_table.png" width="440" alt="A LEVEL FUN party table"></p>
 - **Post** — film grain, vignette, chromatic aberration, and a mains-frequency
   luma shimmer, all scaling with fear.
 
@@ -106,6 +114,8 @@ Details that reward paying attention:
   and the danger banners change to match.
 - **Balloons pop** — shoot a balloon in LEVEL FUN and it bursts with a
   synthesized pop and a scatter of confetti cubes that tumble to the carpet.
+  The bunches knotted to party tables pop too — clip any one and the whole
+  bunch goes at once.
 
   <p align="center"><img src="docs/confetti.png" width="440" alt="A popped balloon and its confetti"></p>
 - **Footsteps in the dark** — when the entity chases, you *hear* it: heavy

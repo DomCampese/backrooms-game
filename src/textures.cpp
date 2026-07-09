@@ -460,6 +460,7 @@ Texture2D makePartyWallTex() {
 
 // LEVEL FUN =): the same sad carpet, but someone spilled confetti into it forever
 Texture2D makePartyCarpetTex() {
+    // deep banquet-hall red, worn dark in the walked lanes, confetti ground in
     const int W = 512, H = 512;
     Image img = GenImageColor(W, H, BLANK);
     Color *p = (Color *)img.data;
@@ -468,14 +469,30 @@ Texture2D makePartyCarpetTex() {
         float fiber = (fbm2(x * 0.18f, y * 0.18f, 233u, 2) - 0.5f) * 0.14f;
         float blotch = fbm2(x * 0.008f, y * 0.008f, 221u, 4);
         float v = 1.0f + n + fiber;
-        if (blotch > 0.56f) v *= 1.0f - (blotch - 0.56f) * 0.9f;
-        float r = 152 * v, g = 128 * v, b = 78 * v;
+        if (blotch > 0.54f) v *= 1.0f - (blotch - 0.54f) * 1.0f;   // trodden-dark patches
+        float r = 156 * v, g = 34 * v, b = 42 * v;
         uint32_t fh = ih(x >> 2, y >> 2, 231u);
-        if (fh % 29 == 0) {   // trodden-in confetti
+        if (fh % 24 == 0) {   // trodden-in confetti, brighter than the carpet
             Color c = PARTY[(fh >> 7) % 5];
-            float cv = v * 0.85f;
+            float cv = v * 0.9f;
             r = c.r * cv; g = c.g * cv; b = c.b * cv;
         }
+        p[y * W + x] = { cl8(r), cl8(g), cl8(b), 255 };
+    }
+    return finishTexture(img, true);
+}
+
+// LEVEL FUN =): the ceiling has gone dark, so the light panels read like a
+// party hall's — hot rectangles floating in near-black
+Texture2D makePartyCeilTex() {
+    const int W = 512, H = 512;
+    Image img = GenImageColor(W, H, BLANK);
+    Color *p = (Color *)img.data;
+    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
+        float v = 1.0f + (fbm2(x * 0.03f, y * 0.03f, 244u, 3) - 0.5f) * 0.5f;
+        float r = 20 * v, g = 18 * v, b = 22 * v;   // near-black with a faint cool tint
+        int bx = x % 128, by = y % 128;             // suggestion of big tiles
+        if (bx < 3 || bx > 124 || by < 3 || by > 124) { r *= 1.8f; g *= 1.8f; b *= 1.9f; }
         p[y * W + x] = { cl8(r), cl8(g), cl8(b), 255 };
     }
     return finishTexture(img, true);

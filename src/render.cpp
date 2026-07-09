@@ -51,10 +51,11 @@ void Game::renderScene(double now) {
         if (it->second.meshes[5].vertexCount > 0)   // wall scrawl decals over the walls
             DrawMesh(it->second.meshes[5], mats[4], ident);
     }
-    for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) {   // water last (blended)
+    for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) {   // water + glass last (blended over the room behind)
         auto it = world.chunks.find(World::key(pcx + dx, pcz + dz));
-        if (it != world.chunks.end() && it->second.built && it->second.meshes[4].vertexCount > 0)
-            DrawMesh(it->second.meshes[4], mats[0], ident);
+        if (it == world.chunks.end() || !it->second.built) continue;
+        if (it->second.meshes[4].vertexCount > 0) DrawMesh(it->second.meshes[4], mats[0], ident);
+        if (it->second.meshes[6].vertexCount > 0) DrawMesh(it->second.meshes[6], mats[0], ident);
     }
     // small props draw with raylib's unlit default shader, so estimate the room
     // light at each one (plus flare/muzzle glow) — no more balloons shining
@@ -108,6 +109,20 @@ void Game::renderScene(double now) {
             DrawSphere({ bxx, by, bzz }, 0.17f, lit(PARTY[(h >> 10) % 5], pl));
             DrawCylinderEx({ bxx, by - 0.15f, bzz }, { bxx + 0.04f, by - 0.95f, bzz + 0.02f },
                            0.005f, 0.005f, 4, lit({ 190, 185, 175, 150 }, pl));
+        }
+        for (int dx = -6; dx <= 6; dx++) for (int dz = -6; dz <= 6; dz++) {   // balloon bunches tied to party tables
+            int a = pci + dx, b = pck + dz;
+            if (poppedTableBunches.count(cellKey2(a, b))) continue;   // this bunch has been shot
+            Vector3 bpos[4], tie; Color bcol[4];
+            int nb = tableBalloonBunch(a, b, bpos, bcol, tie);        // same positions the aim uses
+            for (int k = 0; k < nb; k++) {
+                float sway = sinf((float)now * 0.9f + a * 1.7f + k * 2.3f) * 0.04f;
+                float bxx = bpos[k].x + sway, by = bpos[k].y, bzz = bpos[k].z;
+                float pl = propLum(bxx, by, bzz) * 0.9f;
+                DrawSphere({ bxx, by, bzz }, 0.15f, lit(bcol[k], pl));
+                DrawCylinderEx({ bxx, by - 0.13f, bzz }, { tie.x + 0.02f, tie.y + 0.02f, tie.z },
+                               0.004f, 0.004f, 4, lit({ 200, 195, 185, 150 }, pl));
+            }
         }
         for (auto &c : confetti) {   // bursts still tumbling to the carpet
             float pl = propLum(c.pos.x, c.pos.y, c.pos.z);
