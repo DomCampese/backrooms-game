@@ -67,6 +67,14 @@ make run
   glowing eye, a hook, a peg leg. Line-of-sight is ray-marched against real
   wall geometry. Stare too long and he chases. He is slightly slower than your
   sprint. Your sprint is finite.
+- **It brings the dark** — the fluorescents die in a pool around the hunter and
+  the shadow travels with it, so the corridor ahead goes black as it closes in
+  and it stands in its own darkness. Your flashlight and your flares cut
+  straight through that pool — they're how you find it. The dread deepens with
+  the hunt: a hint of gathering dark while it stalks, full black-out as it
+  chases.
+
+  <p align="center"><img src="docs/entity_dark_flashlight.png" width="480" alt="The hunter in its pool of dead light, found by the flashlight"></p>
 - **Flares** — throw one (Q, or left click when selected) and it arcs,
   clatters off walls, and burns orange for nine seconds — a real point light
   in the shader, with a synthesized strike-and-hiss. Clark won't come near

@@ -33,7 +33,8 @@ struct Game {
     Shader worldShader{}, postShader{};
     int locTime = -1, locBlackout = -1, locViewPos = -1, locFlash = -1, locFlashDir = -1,
         locAmb = -1, locFogCol = -1, locFogDen = -1, locLightCol = -1, locLS = -1, locLY = -1,
-        locDead = -1, locLightMul = -1, locFlarePos = -1, locFlareInt = -1, locGloss = -1;
+        locDead = -1, locLightMul = -1, locFlarePos = -1, locFlareInt = -1, locGloss = -1,
+        locEntPos = -1, locEntDark = -1;
     int locPTime = -1, locPFear = -1;
     Material mats[5]{};                        // 0 floor, 1 ceiling, 2 walls, 3 props, 4 scrawl
     Sound steps[4]{}, splashes[2]{}, sndBigSplash{}, sndClick{}, sndScare{}, sndWin{},
@@ -79,6 +80,7 @@ struct Game {
     int level = 0;
     Entity ent;
     float entDist = 1e9f;                     // distance to Clark this frame
+    float entDarkCur = 0;                     // how hard it's smothering the lights (ramps with the hunt)
     double nextBlackout = 0, blackoutEnd = -1;
     float blackoutCur = 1.0f, fear = 0.0f;
     float caughtT = 0, escapeT = 0, killT = 0, fellT = 0;

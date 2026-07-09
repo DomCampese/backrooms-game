@@ -34,6 +34,11 @@ void Game::renderScene(double now) {
     }
     SetShaderValue(worldShader, locFlarePos, &flarePos, SHADER_UNIFORM_VEC3);
     SetShaderValue(worldShader, locFlareInt, &flareInt, SHADER_UNIFORM_FLOAT);
+    // the hunter's pool of dead light travels with it
+    Vector3 entPos = { ent.x, ent.dispY + 1.0f, ent.z };
+    float entDarkSend = (ent.st == EState::Hidden) ? 0.0f : entDarkCur;
+    SetShaderValue(worldShader, locEntPos, &entPos, SHADER_UNIFORM_VEC3);
+    SetShaderValue(worldShader, locEntDark, &entDarkSend, SHADER_UNIFORM_FLOAT);
 
     BeginTextureMode(rt);
     ClearBackground(BLACK);
@@ -62,8 +67,10 @@ void Game::renderScene(double now) {
     // through a blackout
     const LevelCfg &lc = LEVELS[level];
     float ambLumP = (lc.amb.x + lc.amb.y + lc.amb.z) / 3.0f;
+    float edSend = (ent.st == EState::Hidden) ? 0.0f : entDarkCur;
     auto propLum = [&](float x, float y, float z) {
-        float lum = lightAtCPU(x, y, z, blackoutCur, lc.ls, lc.wallH - 0.12f, lc.dead, lc.lightMul, ambLumP);
+        float lum = lightAtCPU(x, y, z, blackoutCur, lc.ls, lc.wallH - 0.12f, lc.dead, lc.lightMul, ambLumP,
+                               ent.x, ent.z, edSend);
         if (flareInt > 0.01f) {
             float fx = x - flarePos.x, fy = y - flarePos.y, fz = z - flarePos.z;
             lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fx * fx + fy * fy + fz * fz)), 0.0f, 1.0f);
@@ -151,7 +158,8 @@ void Game::renderScene(double now) {
         float ambLum = (c.amb.x + c.amb.y + c.amb.z) / 3.0f;
         float eg = ent.dispY;
         float lum = lightAtCPU(ent.x, eg + 0.95f, ent.z, blackoutCur,
-                               c.ls, c.wallH - 0.12f, c.dead, c.lightMul, ambLum);
+                               c.ls, c.wallH - 0.12f, c.dead, c.lightMul, ambLum,
+                               ent.x, ent.z, entDarkCur);   // it stands in its own pool of dead light
         if (flashCur > 0.05f) {   // flashlight picks him out of the dark
             float vx2 = ent.x - px, vz2 = ent.z - pz;
             float d2 = vx2 * vx2 + vz2 * vz2 + 1e-4f, dl = sqrtf(d2);
