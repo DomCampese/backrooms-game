@@ -24,6 +24,25 @@ uniform vec3 uLightCol; uniform float uLS; uniform float uLY; uniform float uDea
 uniform float uGloss;
 out vec4 finalColor;
 float lhash(vec2 g){ return fract(sin(dot(g, vec2(127.1,311.7)))*43758.5453123); }
+float vnoise(vec2 p){
+    vec2 i = floor(p), f = fract(p);
+    f = f*f*(3.0-2.0*f);
+    float a = lhash(i), b = lhash(i+vec2(1,0)), c = lhash(i+vec2(0,1)), d = lhash(i+vec2(1,1));
+    return mix(mix(a,b,f.x), mix(c,d,f.x), f.y);
+}
+// perturb an axis-aligned face normal with a little procedural surface relief,
+// so flat walls/floors catch the room light instead of reading as dead planes
+vec3 bumpNormal(vec3 P, vec3 N, float scale, float strength){
+    vec3 up = abs(N.y) < 0.9 ? vec3(0.0,1.0,0.0) : vec3(1.0,0.0,0.0);
+    vec3 T = normalize(cross(up, N));
+    vec3 B = cross(N, T);
+    vec2 uvp = vec2(dot(P,T), dot(P,B)) * scale;
+    float e = 0.4;
+    float h0 = vnoise(uvp)        + 0.5*vnoise(uvp*2.7);
+    float hx = vnoise(uvp+vec2(e,0.0)) + 0.5*vnoise(uvp*2.7+vec2(e,0.0));
+    float hy = vnoise(uvp+vec2(0.0,e)) + 0.5*vnoise(uvp*2.7+vec2(0.0,e));
+    return normalize(N - (T*(hx-h0) + B*(hy-h0)) * strength);
+}
 float lightState(vec2 g){
     float h = lhash(g);
     if (h < uDead) return 0.0;                      // dead tube
@@ -105,7 +124,11 @@ void main(){
         }
     } else {
         vec4 texel = texture(texture0, fragUV);
-        col = texel.rgb * fragC.rgb * roomLight(fragPos, normalize(fragN));
+        // relief on matte surfaces (grimy walls, carpet, concrete); glossy tile
+        // stays smooth, flat decals / contact-shadows don't bump at all
+        float relief = (fragC.a > 0.98 ? 0.5 : 0.0) * clamp(1.0 - uGloss*1.6, 0.0, 1.0);
+        vec3 Nb = bumpNormal(fragPos, normalize(fragN), 3.3, relief);
+        col = texel.rgb * fragC.rgb * roomLight(fragPos, Nb);
         aOut = fragC.a * texel.a;                    // translucent contact shadows + scrawl decals
     }
     float dist = distance(fragPos, uViewPos);
@@ -132,16 +155,28 @@ void main(){
     c.r = texture(texture0, uv + dir*ca).r;
     c.g = texture(texture0, uv).g;
     c.b = texture(texture0, uv - dir*ca).b;
-    vec2 pxs = 1.0/vec2(textureSize(texture0, 0));   // soft bloom off the fluorescents
-    vec3 bl = texture(texture0, uv + pxs*vec2( 3.0, 0.0)).rgb
-            + texture(texture0, uv + pxs*vec2(-3.0, 0.0)).rgb
-            + texture(texture0, uv + pxs*vec2( 0.0, 3.0)).rgb
-            + texture(texture0, uv + pxs*vec2( 0.0,-3.0)).rgb
-            + texture(texture0, uv + pxs*vec2( 2.2, 2.2)).rgb
-            + texture(texture0, uv + pxs*vec2(-2.2, 2.2)).rgb
-            + texture(texture0, uv + pxs*vec2( 2.2,-2.2)).rgb
-            + texture(texture0, uv + pxs*vec2(-2.2,-2.2)).rgb;
-    c += max(bl*0.125 - 0.60, 0.0)*0.6;
+    // two-ring threshold bloom off the fluorescents and bright surfaces, warm-tinted
+    vec2 pxs = 1.0/vec2(textureSize(texture0, 0));
+    vec3 bl = vec3(0.0);
+    for (int i = 0; i < 8; i++){
+        float a = float(i)*0.7853982;
+        vec2 o = vec2(cos(a), sin(a));
+        bl += texture(texture0, uv + o*pxs*3.5).rgb;
+        bl += texture(texture0, uv + o*pxs*8.5).rgb * 0.55;
+    }
+    bl /= 12.4;
+    vec3 bloom = max(bl - 0.68, 0.0) * vec3(1.08, 1.02, 0.9);   // only the true highlights, faint warm glow
+    c += bloom * 0.7;
+    // gentle filmic contrast + a touch of saturation, so it's less flat
+    vec3 s = c*c*(3.0 - 2.0*c);
+    c = mix(c, s, 0.18);
+    float lum0 = dot(c, vec3(0.299,0.587,0.114));
+    c = mix(vec3(lum0), c, 1.06);
+    // dust motes drifting through the light, brighter where the scene is lit
+    vec2 gp = uv*vec2(48.0, 27.0) + vec2(uTime*0.5, uTime*0.22);
+    vec2 ci = floor(gp), cf = fract(gp) - vec2(hh(ci+0.13), hh(ci+0.27));
+    float mote = smoothstep(0.08, 0.0, length(cf)) * step(0.972, hh(ci));
+    c += vec3(0.95,0.92,0.82) * mote * (0.08 + 0.3*lum0) * (0.7 + 0.3*sin(uTime*3.0 + hh(ci)*40.0));
     float g = hh(uv*vec2(1287.0,721.0) + vec2(fract(uTime*13.71)*61.0, fract(uTime*7.31)*83.0)) - 0.5;
     c += g * (0.032 + 0.08*uFear);                   // film grain
     float d = length(dir);
