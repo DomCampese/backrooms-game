@@ -13,6 +13,8 @@ extern const LevelCfg LEVELS[NLEVELS];
 // where each level's exit door leads; the Red Halls and the party both dump you back at the start
 extern const int EXIT_NEXT[NLEVELS];
 
-// CPU-side estimate of the shader's room lighting, for tinting billboards
+// CPU-side estimate of the shader's room lighting, for tinting billboards.
+// entX/entZ/entDark reproduce the hunter's pool of dead light (0 = no effect).
 float lightAtCPU(float x, float y, float z, float blackout,
-                 float ls, float ly, float dead, float mul, float ambLum);
+                 float ls, float ly, float dead, float mul, float ambLum,
+                 float entX = 0, float entZ = 0, float entDark = 0);

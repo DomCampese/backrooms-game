@@ -19,6 +19,7 @@ uniform sampler2D texture0; uniform vec4 colDiffuse;
 uniform float uTime; uniform float uBlackout; uniform vec3 uViewPos;
 uniform float uFlash; uniform vec3 uFlashDir;
 uniform vec3 uFlarePos; uniform float uFlareInt;
+uniform vec3 uEntPos; uniform float uEntDark;      // the hunter kills the lights around it
 uniform vec3 uAmb; uniform vec3 uFogCol; uniform float uFogDen;
 uniform vec3 uLightCol; uniform float uLS; uniform float uLY; uniform float uDead; uniform float uLightMul;
 uniform float uGloss;
@@ -67,6 +68,10 @@ vec3 roomLight(vec3 P, vec3 N){
         float st = lightState(g);
         if (st <= 0.001) continue;
         vec3 lp = vec3(g.x*uLS + uLS*0.5, uLY, g.y*uLS + uLS*0.5);
+        if (uEntDark > 0.01){                        // fluorescents die in a pool around the hunter
+            float ed = distance(lp.xz, uEntPos.xz);
+            st *= mix(1.0, smoothstep(2.0, 9.0, ed), uEntDark);
+        }
         vec3 ld = lp - P;
         float d2 = dot(ld,ld);
         float atten = 1.0/(1.0 + 0.075*d2);
@@ -78,7 +83,13 @@ vec3 roomLight(vec3 P, vec3 N){
             light += uLightCol*(sp*uGloss*st*atten*3.0);
         }
     }
-    // handheld flashlight: cone from the camera along the view direction
+    light += uAmb*(0.35+0.65*uBlackout);
+    // a pool of shadow drapes the room lighting around the hunter (lamps + ambient)
+    if (uEntDark > 0.01){
+        float fd = distance(P.xz, uEntPos.xz);
+        light *= mix(1.0, smoothstep(0.8, 6.5, fd), uEntDark);
+    }
+    // the flashlight and the flare cut through that dark — they are how you find it
     if (uFlash > 0.01){
         vec3 fv = P - uViewPos;
         float fd2 = dot(fv,fv);
@@ -94,7 +105,6 @@ vec3 roomLight(vec3 P, vec3 N){
         float ndl = clamp(dot(N, normalize(lv2))*0.6 + 0.4, 0.0, 1.0);
         light += vec3(1.0,0.42,0.15) * (uFlareInt * ndl * 5.0/(1.0 + 0.30*d2));
     }
-    light += uAmb*(0.35+0.65*uBlackout);
     return light;
 }
 void main(){

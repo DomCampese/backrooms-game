@@ -19,7 +19,8 @@ static float lhashCPU(float gx, float gz) {
     return v - floorf(v);
 }
 float lightAtCPU(float x, float y, float z, float blackout,
-                        float ls, float ly, float dead, float mul, float ambLum) {
+                        float ls, float ly, float dead, float mul, float ambLum,
+                        float entX, float entZ, float entDark) {
     float bx = floorf((x - ls * 0.5f) / ls + 0.5f), bz = floorf((z - ls * 0.5f) / ls + 0.5f);
     float sum = 0;
     for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
@@ -28,7 +29,19 @@ float lightAtCPU(float x, float y, float z, float blackout,
         if (h < dead) continue;
         float lx = gx * ls + ls * 0.5f, lz = gz * ls + ls * 0.5f;
         float d2 = (lx - x) * (lx - x) + (ly - y) * (ly - y) + (lz - z) * (lz - z);
-        sum += 1.0f / (1.0f + 0.055f * d2) * 1.8f * mul;
+        float st = 1.0f;
+        if (entDark > 0.01f) {   // mirror the shader: the fluorescents near it die
+            float ed = sqrtf((lx - entX) * (lx - entX) + (lz - entZ) * (lz - entZ));
+            float t = clampf((ed - 2.0f) / 7.0f, 0.0f, 1.0f); t = t * t * (3 - 2 * t);
+            st = (1.0f - entDark) + entDark * t;
+        }
+        sum += st / (1.0f + 0.055f * d2) * 1.8f * mul;
     }
-    return clampf(sum * blackout + ambLum * 2.2f, 0.0f, 1.0f);
+    float lit = sum * blackout + ambLum * 2.2f;
+    if (entDark > 0.01f) {   // and the surface pool of shadow around it
+        float fd = sqrtf((x - entX) * (x - entX) + (z - entZ) * (z - entZ));
+        float t = clampf((fd - 0.8f) / 5.7f, 0.0f, 1.0f); t = t * t * (3 - 2 * t);
+        lit *= (1.0f - entDark) + entDark * t;
+    }
+    return clampf(lit, 0.0f, 1.0f);
 }

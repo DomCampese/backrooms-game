@@ -50,6 +50,8 @@ void Game::init() {
     locLightMul = GetShaderLocation(worldShader, "uLightMul");
     locFlarePos = GetShaderLocation(worldShader, "uFlarePos");
     locFlareInt = GetShaderLocation(worldShader, "uFlareInt");
+    locEntPos = GetShaderLocation(worldShader, "uEntPos");
+    locEntDark = GetShaderLocation(worldShader, "uEntDark");
     locGloss = GetShaderLocation(worldShader, "uGloss");
     postShader = LoadShaderFromMemory(NULL, POST_FS);
     locPTime = GetShaderLocation(postShader, "uTime");
@@ -710,6 +712,12 @@ void Game::updateEntity(float dt, double now) {
     }
     fear += (fearT - fear) * fminf(1, 2.2f * dt);
     if (whisperT > 0) fear = fmaxf(fear, 0.22f);
+    // it brings the dark: lights die in a pool around it, worse the closer the hunt
+    float darkT = (ent.st == EState::Chase) ? 1.0f
+                : (ent.st == EState::Stalk)  ? 0.45f
+                : (ent.st == EState::Flee)   ? 0.2f : 0.0f;
+    if (level == 2) darkT *= 0.5f;   // the poolrooms never fully go out
+    entDarkCur += (darkT - entDarkCur) * fminf(1, 1.6f * dt);
     synth.growlTarget = (ent.st == EState::Chase) ? 0.75f * clampf(1 - entDist / 35.0f, 0.1f, 1.0f)
                       : (ent.st == EState::Stalk && entVisible) ? 0.22f * clampf(1 - entDist / 35.0f, 0, 1) : 0.0f;
     synth.update();
