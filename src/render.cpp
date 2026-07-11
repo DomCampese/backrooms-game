@@ -146,6 +146,21 @@ void Game::renderScene(double now) {
             DrawCylinderEx({ cm.x - 0.18f, cm.y, cm.z + 0.18f }, { cm.x + 0.18f, cm.y, cm.z - 0.18f },
                            0.014f, 0.014f, 5, cc);
         }
+    if (wayOpen()) {   // enough doubloons: real exits burn green — the way out
+        float pulse = 0.7f + 0.3f * sinf((float)now * 3.0f);
+        for (int dx = -6; dx <= 6; dx++) for (int dz = -6; dz <= 6; dz++) {
+            int i = pci + dx, k = pck + dz;
+            float gx3 = -1, gz3 = -1;
+            if (world.wallNVal(i, k) == 2) { gx3 = i * CELL + 1.0f; gz3 = k * CELL; }
+            else if (world.wallWVal(i, k) == 2) { gx3 = i * CELL; gz3 = k * CELL + 1.0f; }
+            else continue;
+            if (world.cursedExit(i, k)) continue;   // cursed doors stay a trap, never green
+            Vector3 gp = { gx3, 1.15f, gz3 };
+            DrawSphere(gp, 0.34f, { 150, 255, 170, (unsigned char)(150 * pulse) });   // bright core
+            DrawSphere(gp, 0.62f, { 90, 255, 120, (unsigned char)(95 * pulse) });
+            DrawSphere(gp, 1.35f, { 60, 235, 110, (unsigned char)(40 * pulse) });     // wide halo
+        }
+    }
     if (flare.active) {   // the flare itself: hot core, orange halo, stub of a body
         Vector3 fp = { flare.x, flare.y + 0.05f, flare.z };
         DrawCylinder({ flare.x, flare.y - 0.03f, flare.z }, 0.018f, 0.022f, 0.09f, 8, { 130, 30, 22, 255 });
@@ -279,7 +294,7 @@ void Game::renderUI(double now) {
         DrawCircle(sw / 2, sh / 2, 2.0f, { 230, 220, 190, 110 });   // aiming dot
     }
 
-    if (elapsed < 9.0) {   // intro
+    if (elapsed < 9.0 && winT <= 0) {   // intro (suppressed while the escape screen is up)
         float a = 1.0f - clampf((float)elapsed / 3.0f, 0, 1);
         DrawRectangle(0, 0, sw, sh, Fade(BLACK, a));
         float ta = clampf((float)elapsed / 1.5f, 0, 1) * (1.0f - clampf(((float)elapsed - 6.0f) / 3.0f, 0, 1));
@@ -296,11 +311,26 @@ void Game::renderUI(double now) {
         DrawText(t2, sw / 2 - MeasureText(t2, 18) / 2, sh / 3 + 66, 18, Fade({ 160, 150, 110, 255 }, ta * 0.9f));
         const char *t3 = "WASD walk   SHIFT run   CTRL crouch   SPACE jump   F flashlight   1/2 weapon   3 drink   M chalk   E vend";
         DrawText(t3, sw / 2 - MeasureText(t3, 16) / 2, sh - 60, 16, Fade({ 140, 132, 100, 255 }, ta * 0.8f));
-        if (bestEsc || bestKill || bestM) {
-            const char *tb = TextFormat("best: %d escape%s  ·  %d clark%s put down  ·  %d m wandered",
-                                        bestEsc, bestEsc == 1 ? "" : "s", bestKill, bestKill == 1 ? "" : "s", bestM);
+        if (bestEsc || bestKill || bestM || bestWins) {
+            const char *tb = TextFormat("best: %d got out  ·  %d clark%s put down  ·  %d m wandered",
+                                        bestWins, bestKill, bestKill == 1 ? "" : "s", bestM);
             DrawText(tb, sw / 2 - MeasureText(tb, 16) / 2, sh / 3 + 98, 16, Fade({ 150, 140, 105, 255 }, ta * 0.8f));
         }
+        const char *tg = TextFormat("bank %d doubloons — fight Clark for them — then take a door out", ESCAPE_COST);
+        DrawText(tg, sw / 2 - MeasureText(tg, 16) / 2, sh / 3 + 128, 16, Fade({ 120, 200, 140, 255 }, ta * 0.75f));
+    }
+    if (winT > 0) {   // you bought your way out and found a true door
+        float a = clampf(winT > 7.2f ? (8.0f - winT) / 0.8f : winT / 7.2f, 0, 1);
+        DrawRectangle(0, 0, sw, sh, Fade(Color{ 6, 12, 8, 255 }, a * 0.93f));
+        const char *t = "YOU ESCAPED THE BACKROOMS";
+        DrawText(t, sw / 2 - MeasureText(t, 54) / 2, sh / 3, 54, Fade({ 120, 235, 145, 255 }, a));
+        const char *t2 = TextFormat("out the true door   ·   %02d:%02d   ·   %d m wandered   ·   %d clark%s put down",
+                                    (int)winTime / 60, (int)winTime % 60, winM, winKills, winKills == 1 ? "" : "s");
+        DrawText(t2, sw / 2 - MeasureText(t2, 20) / 2, sh / 3 + 74, 20, Fade({ 150, 200, 160, 255 }, a * 0.95f));
+        const char *t3 = TextFormat("escape #%d   ·   best %d", winCount, bestWins);
+        DrawText(t3, sw / 2 - MeasureText(t3, 18) / 2, sh / 3 + 106, 18, Fade({ 130, 175, 140, 255 }, a * 0.9f));
+        const char *t4 = "...but the backrooms are patient. a new descent begins.";
+        DrawText(t4, sw / 2 - MeasureText(t4, 16) / 2, sh - 78, 16, Fade({ 120, 150, 125, 255 }, a * 0.8f));
     }
     if (caughtT > 0) {
         DrawRectangle(0, 0, sw, sh, Fade(BLACK, clampf(caughtT / 2.4f * 1.8f, 0, 1)));
@@ -353,12 +383,18 @@ void Game::renderUI(double now) {
         const char *w1 = reloadT > 0 ? "2  revolver  [reloading]"
                                      : TextFormat("2  revolver  %d/%d%s", ammo, MAXAMMO, ammo == 0 ? "  — R" : "");
         Color selc = { 235, 200, 130, 210 }, dimc = { 150, 138, 112, 110 };
-        if (coins > 0)
-            DrawText(TextFormat("doubloons  ×%d", coins), 16, sh - 94, 16, { 214, 178, 92, 170 });
+        if (coins > 0 || wayOpen())   // doubloons double as your ticket out (ESCAPE_COST to leave)
+            DrawText(TextFormat("doubloons  ×%d / %d", coins, ESCAPE_COST), 16, sh - 94, 16,
+                     wayOpen() ? Color{ 120, 230, 140, 210 } : Color{ 214, 178, 92, 170 });
         DrawText(TextFormat("3  almond water  ×%d", almond), 16, sh - 72, 16,
                  almond > 0 ? Color{ 150, 190, 235, 170 } : dimc);
         DrawText(w0, 16, sh - 50, 16, weapon == 0 ? selc : dimc);
         DrawText(w1, 16, sh - 28, 16, weapon == 1 ? selc : dimc);
+    }
+    if (wayOpen() && winT <= 0 && caughtT <= 0 && escapeT <= 0) {   // you can leave now — go find a door
+        const char *t = "the doors know you now  —  find one that isn't cursed";
+        float pl = 0.55f + 0.45f * sinf((float)now * 2.5f);
+        DrawText(t, sw / 2 - MeasureText(t, 20) / 2, 70, 20, Fade({ 120, 235, 145, 255 }, pl));
     }
     if (stamina < 0.98f) {   // sprint bar, bottom centre
         int bw = 220, bx2 = sw / 2 - bw / 2, by2 = sh - 42;

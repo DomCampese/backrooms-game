@@ -105,6 +105,7 @@ void Game::init() {
     snprintf(bestPath, sizeof(bestPath), "%s/.backrooms_best", getenv("HOME") ? getenv("HOME") : ".");
     if (FILE *bf = fopen(bestPath, "r")) {
         if (fscanf(bf, "%d %d %d", &bestEsc, &bestKill, &bestM) != 3) bestEsc = bestKill = bestM = 0;
+        if (fscanf(bf, "%d", &bestWins) != 1) bestWins = 0;   // 4th field added later; old files lack it
         fclose(bf);
     }
 
@@ -125,7 +126,31 @@ void Game::saveBest() {
     if (escapeCount > bestEsc) { bestEsc = escapeCount; up = true; }
     if (killCount > bestKill) { bestKill = killCount; up = true; }
     if ((int)distWalked > bestM) { bestM = (int)distWalked; up = true; }
-    if (up) if (FILE *bf = fopen(bestPath, "w")) { fprintf(bf, "%d %d %d\n", bestEsc, bestKill, bestM); fclose(bf); }
+    if (winCount > bestWins) { bestWins = winCount; up = true; }
+    if (up) if (FILE *bf = fopen(bestPath, "w"))
+        { fprintf(bf, "%d %d %d %d\n", bestEsc, bestKill, bestM, bestWins); fclose(bf); }
+}
+
+// You've banked enough doubloons and found a real door: escape the backrooms.
+// Freeze the run's numbers for the win screen, then start a fresh descent.
+void Game::winRun(double now) {
+    winTime = (float)(now - runStart);
+    winM = (int)distWalked; winKills = killCount;
+    winCount++; winT = 8.0f;
+    PlaySound(sndWin);
+    saveBest();
+    // a clean new maze, from the top, gear and tallies reset — records persist
+    world.seed = shotPath ? 1337u : (unsigned)time(nullptr) ^ (unsigned)(now * 977.0);
+    grng = Rng(hash64(world.seed ^ 0xABCDEF));
+    applyLevel(0);
+    Vector2 sp = world.findOpenSpot(15, 15);
+    px = sp.x; pz = sp.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
+    yaw = 0.8f; pitch = 0.0f;
+    coins = 0; almond = 0; flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0;
+    caughtCount = 0; escapeCount = 0; killCount = 0; distWalked = 0;
+    fear = 0; boostT = 0;
+    ent.st = EState::Hidden; ent.nextSpawn = now + 30;
+    runStart = now;
 }
 
 void Game::applyLevel(int lv) {
@@ -284,6 +309,7 @@ bool Game::tick() {
     escapeT = fmaxf(0, escapeT - dt);
     killT = fmaxf(0, killT - dt);
     fellT = fmaxf(0, fellT - dt);
+    winT = fmaxf(0, winT - dt);
     streamChunks();
 
     renderScene(now);
@@ -735,8 +761,9 @@ void Game::updateExits(double now) {
             else continue;
             float ddx = px - doorX, ddz = pz - doorZ;
             if (ddx * ddx + ddz * ddz < 0.72f * 0.72f) {
-                // a cursed exit glows red and drops you into the Red Halls instead
                 bool cursed = world.cursedExit(i, k);
+                if (wayOpen() && !cursed) { winRun(now); return; }   // the true way out
+                // otherwise a normal door: cursed ones drop you into the Red Halls
                 PlaySound(sndWin);
                 escapeT = 6.0f; escapeCount++;
                 saveBest();

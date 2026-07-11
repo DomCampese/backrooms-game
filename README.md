@@ -98,8 +98,17 @@ make run
 - **Furniture** — beyond the office clutter: couches, armoires, floor lamps,
   nightstands, and the occasional bare mattress, arranged by no one, for
   no one.
-- **Exits** — vanishingly rare glowing doorways carved into wall runs. Finding
-  one "ends" the run. Sort of.
+- **Exits** — glowing doorways carved into wall runs. A normal one takes you
+  one level deeper (and ~1 in 6 is cursed: it glows red and drops you into the
+  Red Halls instead).
+- **Getting out for good** — the doubloons Pirate Clark drops when you put him
+  down are your ticket. Bank enough of them and the honest doors start to burn
+  green: step through one and you *escape the backrooms* — a real win, timed and
+  recorded. But doubloons also buy almond water from the vending machines, so
+  every coin is a choice between surviving now and leaving later, and you have
+  to fight Clark to earn your way out at all.
+
+  <p align="center"><img src="docs/escape_door.png" width="420" alt="A door burning green — the way out"> <img src="docs/escape_win.png" width="420" alt="The escape screen"></p>
 - **LEVEL FUN =)** — the poolrooms exit doesn't lead home. Deep red banquet
   carpet with confetti ground into it, a ceiling gone black so the fluorescent
   panels hang like a darkened party hall's, bunting on every wall, crayon
