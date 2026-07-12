@@ -67,6 +67,10 @@ make run
   glowing eye, a hook, a peg leg. Line-of-sight is ray-marched against real
   wall geometry. Stare too long and he chases. He is slightly slower than your
   sprint. Your sprint is finite.
+- **He hunts you around corners** — in a chase he beelines while he can see you,
+  but the moment a wall breaks his line of sight he routes around it: a breadth-
+  first search over the cell grid picks the next turn toward you, so he comes
+  through the doorway instead of grinding against the wall you ducked behind.
 - **It brings the dark** — the fluorescents die in a pool around the hunter and
   the shadow travels with it, so the corridor ahead goes black as it closes in
   and it stands in its own darkness. Your flashlight and your flares cut

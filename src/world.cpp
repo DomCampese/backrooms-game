@@ -695,6 +695,45 @@ bool World::lineOfSight(float ax, float az, float bx, float bz) {
     return true;
 }
 
+bool World::canStep(int ci, int ck, int ni, int nk) {
+    if (pillarAt(ni, nk) || propAt(ni, nk) != 0) return false;   // furniture and pillars are solid
+    // a wall (1) or window (3) on the shared edge blocks it; a doorway (2) is open
+    if (nk == ck - 1)      { uint8_t v = wallNVal(ci, ck);     if (v == 1 || v == 3) return false; }
+    else if (nk == ck + 1) { uint8_t v = wallNVal(ci, ck + 1); if (v == 1 || v == 3) return false; }
+    else if (ni == ci - 1) { uint8_t v = wallWVal(ci, ck);     if (v == 1 || v == 3) return false; }
+    else if (ni == ci + 1) { uint8_t v = wallWVal(ci + 1, ck); if (v == 1 || v == 3) return false; }
+    return true;
+}
+
+bool World::pathStep(int si, int sk, int ti, int tk, int &outI, int &outK) {
+    const int R = 16, W = 2 * R + 1;
+    auto idx = [&](int ci, int ck) -> int {
+        int lx = ci - si + R, lz = ck - sk + R;
+        return (lx < 0 || lx >= W || lz < 0 || lz >= W) ? -1 : lz * W + lx;
+    };
+    std::vector<int> prev(W * W, -2);   // -2 unvisited, -1 = start, else predecessor local index
+    std::vector<int> q; q.reserve(256);
+    int s = idx(si, sk);
+    prev[s] = -1; q.push_back(s);
+    int found = -1;
+    const int dirs[4][2] = { {0,-1}, {0,1}, {-1,0}, {1,0} };
+    for (size_t head = 0; head < q.size(); head++) {
+        int cur = q[head], clx = cur % W, clz = cur / W;
+        int ci = si + clx - R, ck = sk + clz - R;
+        if (ci == ti && ck == tk) { found = cur; break; }
+        for (auto &d : dirs) {
+            int ni = ci + d[0], nk = ck + d[1], nl = idx(ni, nk);
+            if (nl < 0 || prev[nl] != -2 || !canStep(ci, ck, ni, nk)) continue;
+            prev[nl] = cur; q.push_back(nl);
+        }
+    }
+    if (found < 0) return false;
+    int cur = found;                          // walk back to the first cell after the start
+    while (prev[cur] != s && prev[cur] != -1) cur = prev[cur];
+    outI = si + (cur % W) - R; outK = sk + (cur / W) - R;
+    return true;
+}
+
 Vector2 World::findOpenSpot(float x, float z) {
     int ci0 = cellOf(x), ck0 = cellOf(z);
     for (int r = 0; r < 14; r++)
