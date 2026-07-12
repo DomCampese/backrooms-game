@@ -105,6 +105,7 @@ void Game::init() {
     snprintf(bestPath, sizeof(bestPath), "%s/.backrooms_best", getenv("HOME") ? getenv("HOME") : ".");
     if (FILE *bf = fopen(bestPath, "r")) {
         if (fscanf(bf, "%d %d %d", &bestEsc, &bestKill, &bestM) != 3) bestEsc = bestKill = bestM = 0;
+        if (fscanf(bf, "%d", &bestWins) != 1) bestWins = 0;   // 4th field added later; old files lack it
         fclose(bf);
     }
 
@@ -125,7 +126,31 @@ void Game::saveBest() {
     if (escapeCount > bestEsc) { bestEsc = escapeCount; up = true; }
     if (killCount > bestKill) { bestKill = killCount; up = true; }
     if ((int)distWalked > bestM) { bestM = (int)distWalked; up = true; }
-    if (up) if (FILE *bf = fopen(bestPath, "w")) { fprintf(bf, "%d %d %d\n", bestEsc, bestKill, bestM); fclose(bf); }
+    if (winCount > bestWins) { bestWins = winCount; up = true; }
+    if (up) if (FILE *bf = fopen(bestPath, "w"))
+        { fprintf(bf, "%d %d %d %d\n", bestEsc, bestKill, bestM, bestWins); fclose(bf); }
+}
+
+// You've banked enough doubloons and found a real door: escape the backrooms.
+// Freeze the run's numbers for the win screen, then start a fresh descent.
+void Game::winRun(double now) {
+    winTime = (float)(now - runStart);
+    winM = (int)distWalked; winKills = killCount;
+    winCount++; winT = 8.0f;
+    PlaySound(sndWin);
+    saveBest();
+    // a clean new maze, from the top, gear and tallies reset — records persist
+    world.seed = shotPath ? 1337u : (unsigned)time(nullptr) ^ (unsigned)(now * 977.0);
+    grng = Rng(hash64(world.seed ^ 0xABCDEF));
+    applyLevel(0);
+    Vector2 sp = world.findOpenSpot(15, 15);
+    px = sp.x; pz = sp.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
+    yaw = 0.8f; pitch = 0.0f;
+    coins = 0; almond = 0; flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0;
+    caughtCount = 0; escapeCount = 0; killCount = 0; distWalked = 0;
+    fear = 0; boostT = 0;
+    ent.st = EState::Hidden; ent.nextSpawn = now + 30;
+    runStart = now;
 }
 
 void Game::applyLevel(int lv) {
@@ -284,6 +309,7 @@ bool Game::tick() {
     escapeT = fmaxf(0, escapeT - dt);
     killT = fmaxf(0, killT - dt);
     fellT = fmaxf(0, fellT - dt);
+    winT = fmaxf(0, winT - dt);
     streamChunks();
 
     renderScene(now);
@@ -418,7 +444,7 @@ void Game::updateDevKeys(double now) {
                 ent.x = spot.x; ent.z = spot.y;
                 ent.hp = 3;
             }
-            ent.st = EState::Chase; ent.gaze = 0; ent.life = 0; ent.unseen = 0;
+            ent.st = EState::Chase; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.repathT = 0;
         }
         if (IsKeyPressed(KEY_H)) {   // banish him
             ent.st = EState::Hidden; ent.nextSpawn = now + 20 + grng.f01() * 20;
@@ -652,7 +678,7 @@ void Game::updateEntity(float dt, double now) {
             ent.life += dt;
             fearT = entVisible ? 0.45f : 0.15f;
             if (entVisible) ent.gaze += dt;
-            if (ent.gaze > 1.6f || (entVisible && entDist < 8) || entDist < 3.0f) ent.st = EState::Chase;
+            if (ent.gaze > 1.6f || (entVisible && entDist < 8) || entDist < 3.0f) { ent.st = EState::Chase; ent.repathT = 0; }
             else if (ent.life > 24 && !entVisible) ent.st = EState::Hidden, ent.nextSpawn = now + 18 + grng.f01() * 35;
         }
         if (ent.st == EState::Chase) {
@@ -661,10 +687,23 @@ void Game::updateEntity(float dt, double now) {
             if (entDist < 5.5f && entDist > 1.6f && ent.lunge <= 0 && grng.f01() < dt * 0.5f)
                 ent.lunge = 0.55f;   // sudden burst — don't let him get close
             float chaseSpd = 3.3f + 1.0f * clampf(1 - entDist / 25.0f, 0, 1) + (ent.lunge > 0 ? 3.2f : 0.0f);
-            if (entDist > 0.01f) {
-                ent.x -= ex / entDist * chaseSpd * dt;
-                ent.z -= ez / entDist * chaseSpd * dt;
+            // beeline when it can see you; otherwise route around walls on the cell grid
+            ent.repathT -= dt;
+            float wdx = ent.wpx - ent.x, wdz = ent.wpz - ent.z;
+            if (ent.repathT <= 0 || wdx * wdx + wdz * wdz < 0.20f) {
+                ent.repathT = 0.25;
+                int eci = cellOf(ent.x), eck = cellOf(ent.z);
+                int oi, ok;
+                if (entDist > 2.5f && !world.lineOfSight(ent.x, ent.z, px, pz) &&
+                    world.pathStep(eci, eck, cellOf(px), cellOf(pz), oi, ok) && !(oi == eci && ok == eck)) {
+                    ent.wpx = oi * CELL + 1.0f; ent.wpz = ok * CELL + 1.0f;   // head to the next cell on the route
+                } else {
+                    ent.wpx = px; ent.wpz = pz;   // in sight (or right on top of you): come straight
+                }
             }
+            float sx = ent.wpx - ent.x, sz = ent.wpz - ent.z, sl = sqrtf(sx * sx + sz * sz) + 1e-4f;
+            ent.x += sx / sl * chaseSpd * dt;
+            ent.z += sz / sl * chaseSpd * dt;
             world.collideCircle(ent.x, ent.z, 0.38f);
             // you hear him coming: footfalls panned to his bearing, fading with range
             entStepAcc += chaseSpd * dt;
@@ -735,8 +774,9 @@ void Game::updateExits(double now) {
             else continue;
             float ddx = px - doorX, ddz = pz - doorZ;
             if (ddx * ddx + ddz * ddz < 0.72f * 0.72f) {
-                // a cursed exit glows red and drops you into the Red Halls instead
                 bool cursed = world.cursedExit(i, k);
+                if (wayOpen() && !cursed) { winRun(now); return; }   // the true way out
+                // otherwise a normal door: cursed ones drop you into the Red Halls
                 PlaySound(sndWin);
                 escapeT = 6.0f; escapeCount++;
                 saveBest();

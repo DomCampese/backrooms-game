@@ -58,6 +58,11 @@ struct World {
     // floor height here, counting prop tops at or below your feet (so you can stand on furniture)
     float groundAt(float x, float z, float feetY);
     bool lineOfSight(float ax, float az, float bx, float bz);
+    // can the hunter walk from cell (ci,ck) into the adjacent cell (ni,nk)?
+    bool canStep(int ci, int ck, int ni, int nk);
+    // BFS the cell grid from (si,sk) toward (ti,tk); fills the next cell to move
+    // to in (outI,outK). false if no route within budget (fall back to a beeline).
+    bool pathStep(int si, int sk, int ti, int tk, int &outI, int &outK);
     // Level 0 only: a rare patch of carpet that has stopped being a floor
     bool softAt(int ci, int ck);
     // some exit doors glow red and were never going anywhere good

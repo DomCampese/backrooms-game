@@ -23,6 +23,7 @@ struct Game {
     static constexpr int   MAXFLARES = 3;
     static constexpr float FLAREBURN = 9.0f;  // seconds
     static constexpr int   MAXAMMO = 6;
+    static constexpr int   ESCAPE_COST = 12;  // doubloons that buy your way out for good
 
     // env/test knobs (BACKROOMS_* — see README)
     const char *shotPath = nullptr;
@@ -83,11 +84,13 @@ struct Game {
     float entDarkCur = 0;                     // how hard it's smothering the lights (ramps with the hunt)
     double nextBlackout = 0, blackoutEnd = -1;
     float blackoutCur = 1.0f, fear = 0.0f;
-    float caughtT = 0, escapeT = 0, killT = 0, fellT = 0;
+    float caughtT = 0, escapeT = 0, killT = 0, fellT = 0, winT = 0;
     float softTimer = 0;                      // how long you've stood on a soft patch
-    int caughtCount = 0, escapeCount = 0, killCount = 0;
+    int caughtCount = 0, escapeCount = 0, killCount = 0, winCount = 0;
+    float winTime = 0; int winM = 0, winKills = 0;   // stats frozen for the escape screen
     float distWalked = 0;
     double runStart = 0;
+    bool wayOpen() const { return coins >= ESCAPE_COST; }   // enough doubloons to leave for good
     bool debugHud = false;
     int frame = 0;
 
@@ -103,8 +106,10 @@ struct Game {
     float boostT = 0, crouchCur = 0, whisperT = 0;
     double nextWhisper = 0;
     char bestPath[512] = {};
-    int bestEsc = 0, bestKill = 0, bestM = 0;
+    int bestEsc = 0, bestKill = 0, bestM = 0, bestWins = 0;
     bool everFlashed = false;                 // HUD: flashlight reminder until first use
+
+    void winRun(double now);                  // stepped through the true way out — reset the descent
 
     void init();
     bool tick();                              // one frame; false = run ended (headless shot taken)
