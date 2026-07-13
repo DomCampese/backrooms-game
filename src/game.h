@@ -108,8 +108,11 @@ struct Game {
     char bestPath[512] = {};
     int bestEsc = 0, bestKill = 0, bestM = 0, bestWins = 0;
     bool everFlashed = false;                 // HUD: flashlight reminder until first use
+    bool inMenu = false;                      // title screen up, world drifting behind it
 
     void winRun(double now);                  // stepped through the true way out — reset the descent
+    void updateMenu(double now);              // drift the title-screen camera; any key begins
+    void startRun(double now);                // leave the menu and start a fresh descent
 
     void init();
     bool tick();                              // one frame; false = run ended (headless shot taken)

@@ -127,10 +127,15 @@ make run
   shader, so flat planes catch the room light with a little texture instead of
   reading as dead polygons. Scaled down on the glossy poolroom tile, which
   stays clean.
-- **Post** — threshold bloom that makes the fluorescents actually glow, a gentle
-  filmic contrast + saturation lift, dust motes drifting through the light, plus
-  film grain, vignette, chromatic aberration, and a mains-frequency luma
-  shimmer — the fear-driven ones scale as the fear does.
+- **Post** — threshold bloom that makes the fluorescents actually glow, dusty
+  crepuscular light-shafts that bleed down off the bright ceiling panels toward
+  the vanishing point, a gentle filmic contrast + saturation lift, dust motes
+  drifting through the light, plus film grain, vignette, chromatic aberration,
+  and a mains-frequency luma shimmer — the fear-driven ones scale as the fear
+  does.
+- **Title screen** — a drifting camera pans across a fresh hall behind the card:
+  *THE BACKROOMS*, a pulsing *press any key to descend*, your best run so far,
+  and the controls. Any key or click drops you in from the top.
 
 ## The little things
 
@@ -188,6 +193,7 @@ With the F3 debug HUD open, dev hotkeys are live: `B` force blackout,
 `G` refill flares + ammo, `N` jump to the next level (including the Red Halls).
 
 - `BACKROOMS_SHOT=out.png` — run 600 frames headlessly, save a screenshot, exit.
+- `BACKROOMS_MENU=1` — hold on the title screen (skips the auto-start; visual testing).
 - `BACKROOMS_EXITS=1` — exit doors everywhere (visual testing).
 - `BACKROOMS_POS="x,z,yaw"` — start at a specific spot (visual testing).
 - `BACKROOMS_LEVEL=n` — start on level n (visual testing).

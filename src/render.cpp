@@ -216,6 +216,35 @@ void Game::renderUI(double now) {
 
     int sw = GetScreenWidth(), sh = GetScreenHeight();
 
+    if (inMenu) {   // title card over the drifting world
+        // darken the top and bottom so the type reads over any hall
+        DrawRectangleGradientV(0, 0, sw, sh / 2, Fade(BLACK, 0.62f), Fade(BLACK, 0.12f));
+        DrawRectangleGradientV(0, sh / 2, sw, sh / 2, Fade(BLACK, 0.12f), Fade(BLACK, 0.72f));
+        const char *t1 = "T H E   B A C K R O O M S";
+        // faint flicker on the title, like a tired fluorescent
+        float fl = 0.86f + 0.14f * sinf(timeF * 27.0f) * sinf(timeF * 41.3f + 0.7f);
+        int ts = sh > 720 ? 66 : 48;
+        int tw = MeasureText(t1, ts);
+        DrawText(t1, sw / 2 - tw / 2 + 2, sh / 3 + 2, ts, Fade(BLACK, 0.55f));   // drop shadow
+        DrawText(t1, sw / 2 - tw / 2, sh / 3, ts, Fade({ 228, 214, 158, 255 }, fl));
+        const char *sub = "Level 0 — and everything under it";
+        DrawText(sub, sw / 2 - MeasureText(sub, 20) / 2, sh / 3 + ts + 16, 20, { 150, 142, 108, 220 });
+        // pulsing prompt
+        float pl = 0.45f + 0.55f * (0.5f + 0.5f * sinf(timeF * 3.0f));
+        const char *pr = "press any key to descend";
+        DrawText(pr, sw / 2 - MeasureText(pr, 24) / 2, sh * 2 / 3, 24, Fade({ 210, 198, 150, 255 }, pl));
+        if (bestEsc || bestKill || bestM || bestWins) {
+            const char *tb = TextFormat("best:  %d got out   ·   %d clark%s put down   ·   %d m wandered",
+                                        bestWins, bestKill, bestKill == 1 ? "" : "s", bestM);
+            DrawText(tb, sw / 2 - MeasureText(tb, 16) / 2, sh * 2 / 3 + 40, 16, { 140, 132, 100, 200 });
+        }
+        const char *tc = TextFormat("WASD move    SHIFT run    F flashlight    1/2 weapon    bank %d doubloons to leave",
+                                    ESCAPE_COST);
+        DrawText(tc, sw / 2 - MeasureText(tc, 15) / 2, sh - 42, 15, { 128, 122, 96, 170 });
+        EndDrawing();
+        return;
+    }
+
     if (weapon == 1 || (weapon == 0 && flares > 0)) {   // viewmodel, bottom-right
         // reload: the muzzle dips while the cylinder is out, then comes back up
         float dip = (weapon == 1 && reloadT > 0)
