@@ -127,12 +127,10 @@ make run
   shader, so flat planes catch the room light with a little texture instead of
   reading as dead polygons. Scaled down on the glossy poolroom tile, which
   stays clean.
-- **Post** — threshold bloom that makes the fluorescents actually glow, dusty
-  crepuscular light-shafts that bleed down off the bright ceiling panels toward
-  the vanishing point, a gentle filmic contrast + saturation lift, dust motes
-  drifting through the light, plus film grain, vignette, chromatic aberration,
-  and a mains-frequency luma shimmer — the fear-driven ones scale as the fear
-  does.
+- **Post** — threshold bloom that makes the fluorescents actually glow, a gentle
+  filmic contrast + saturation lift, dust motes drifting through the light, plus
+  film grain, vignette, chromatic aberration, and a mains-frequency luma
+  shimmer — the fear-driven ones scale as the fear does.
 - **Title screen** — a drifting camera pans across a fresh hall behind the card:
   *THE BACKROOMS*, a pulsing *press any key to descend*, your best run so far,
   and the controls. Any key or click drops you in from the top.
