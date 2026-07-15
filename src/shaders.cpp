@@ -177,6 +177,20 @@ void main(){
     bl /= 12.4;
     vec3 bloom = max(bl - 0.68, 0.0) * vec3(1.08, 1.02, 0.9);   // only the true highlights, faint warm glow
     c += bloom * 0.7;
+    // crepuscular shafts: bright ceiling light bleeds toward the vanishing point as dusty beams
+    {
+        vec2 lp = vec2(0.5, -0.06);
+        vec2 delta = (uv - lp) * (0.9 / 22.0);
+        vec2 sp = uv;
+        float w = 1.0, shaft = 0.0;
+        for (int i = 0; i < 22; i++){
+            sp -= delta;
+            vec3 t = texture(texture0, sp).rgb;
+            shaft += max(dot(t, vec3(0.333)) - 0.55, 0.0) * w;   // only the bright bits scatter
+            w *= 0.94;
+        }
+        c += vec3(1.0, 0.96, 0.86) * shaft * 0.2;
+    }
     // gentle filmic contrast + a touch of saturation, so it's less flat
     vec3 s = c*c*(3.0 - 2.0*c);
     c = mix(c, s, 0.18);

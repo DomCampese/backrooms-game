@@ -112,7 +112,8 @@ void Game::init() {
     applyLevel(0);
     if (const char *lvEnv = getenv("BACKROOMS_LEVEL")) applyLevel(atoi(lvEnv) % NLEVELS);   // testing
 
-    if (!shotPath) DisableCursor();
+    inMenu = (shotPath == nullptr) || getenv("BACKROOMS_MENU") != nullptr;   // headless shots skip straight into the run
+    if (!shotPath && !inMenu) DisableCursor();
 }
 
 void Game::shutdown() {
@@ -150,6 +151,43 @@ void Game::winRun(double now) {
     caughtCount = 0; escapeCount = 0; killCount = 0; distWalked = 0;
     fear = 0; boostT = 0;
     ent.st = EState::Hidden; ent.nextSpawn = now + 30;
+    runStart = now;
+}
+
+// Title screen: the world drifts by behind the card until any key drops you in.
+void Game::updateMenu(double now) {
+    float dt = fminf(GetFrameTime(), 0.05f);
+    yaw += dt * 0.085f;                         // slow pan across the hall
+    pitch = sinf((float)now * 0.22f) * 0.045f;  // faint breathing tilt
+    fwd = { cosf(pitch) * cosf(yaw), sinf(pitch), cosf(pitch) * sinf(yaw) };
+    f2x = cosf(yaw); f2z = sinf(yaw);
+    r2x = -sinf(yaw); r2z = cosf(yaw);
+    eyeY = 1.62f; bobAmt = 0; leanCur = 0; landDip = 0;
+    flashOn = false; flashCur = 0;
+    ent.st = EState::Hidden; entDist = 1e9f; entDarkCur = 0;
+    fear = 0.0f; blackoutCur = 1.0f;
+    streamChunks();
+    int k = GetKeyPressed();                    // F11 (fullscreen) shouldn't count as "begin"
+    if ((k != 0 && k != KEY_F11) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) startRun(now);
+}
+
+// Leave the title screen and drop into a fresh descent from the top.
+void Game::startRun(double now) {
+    inMenu = false;
+    if (!shotPath) DisableCursor();
+    world.seed = shotPath ? 1337u : (unsigned)time(nullptr) ^ (unsigned)(now * 977.0);
+    grng = Rng(hash64(world.seed ^ 0xABCDEF));
+    applyLevel(0);
+    Vector2 sp = world.findOpenSpot(15, 15);
+    px = sp.x; pz = sp.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
+    yaw = 0.8f; pitch = 0.0f;
+    coins = 0; almond = 0; flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0;
+    caughtCount = 0; escapeCount = 0; killCount = 0; distWalked = 0;
+    fear = 0; boostT = 0; blackoutCur = 1.0f; blackoutEnd = -1;
+    ent.st = EState::Hidden; ent.nextSpawn = now + 30;
+    nextBlackout = now + 40 + grng.f01() * 60;
+    nextWhisper = now + 45 + grng.f01() * 60;
+    nextFlareRegen = now + 75;
     runStart = now;
 }
 
@@ -282,6 +320,15 @@ bool Game::tick() {
         rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
     }
     if (IsKeyPressed(KEY_F11)) ToggleBorderlessWindowed();
+
+    if (inMenu) {                              // title screen: world drifts, any key begins
+        updateMenu(now);
+        renderScene(now);
+        renderUI(now);
+        if (shotPath && frame == 600) { TakeScreenshot(shotPath); return false; }   // testing
+        return true;
+    }
+
     if (IsKeyPressed(KEY_F) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || IsKeyPressed(KEY_L)) {
         flashOn = !flashOn;
         SetSoundPitch(sndClick, flashOn ? 1.0f : 0.85f);
