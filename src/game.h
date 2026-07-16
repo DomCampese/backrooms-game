@@ -29,7 +29,7 @@ struct Game {
     const char *shotPath = nullptr;
 
     // resources
-    Texture2D texEntity{}, texPartygoer{}, texProps{}, texScrawl{};
+    Texture2D texEntity{}, texPartygoer{}, texProps{}, texScrawl{}, texAO{};
     Texture2D floorTexs[NLEVELS]{}, ceilTexs[NLEVELS]{}, wallTexs[NLEVELS]{};   // per-level surface sets
     Shader worldShader{}, postShader{};
     int locTime = -1, locBlackout = -1, locViewPos = -1, locFlash = -1, locFlashDir = -1,
@@ -37,7 +37,7 @@ struct Game {
         locDead = -1, locLightMul = -1, locFlarePos = -1, locFlareInt = -1, locGloss = -1,
         locEntPos = -1, locEntDark = -1;
     int locPTime = -1, locPFear = -1;
-    Material mats[5]{};                        // 0 floor, 1 ceiling, 2 walls, 3 props, 4 scrawl
+    Material mats[6]{};                        // 0 floor, 1 ceiling, 2 walls, 3 props, 4 scrawl, 5 baked AO
     Sound steps[4]{}, splashes[2]{}, sndBigSplash{}, sndClick{}, sndScare{}, sndWin{},
           sndFlare{}, sndShot{}, sndHit{}, sndKill{}, sndPop{};
     Sound entSteps[4]{};                        // the thing's own footfalls, panned + attenuated

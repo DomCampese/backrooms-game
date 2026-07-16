@@ -56,11 +56,12 @@ void Game::renderScene(double now) {
         if (it->second.meshes[5].vertexCount > 0)   // wall scrawl decals over the walls
             DrawMesh(it->second.meshes[5], mats[4], ident);
     }
-    for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) {   // water + glass last (blended over the room behind)
+    for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) {   // blended passes last, over the opaque room
         auto it = world.chunks.find(World::key(pcx + dx, pcz + dz));
         if (it == world.chunks.end() || !it->second.built) continue;
-        if (it->second.meshes[4].vertexCount > 0) DrawMesh(it->second.meshes[4], mats[0], ident);
-        if (it->second.meshes[6].vertexCount > 0) DrawMesh(it->second.meshes[6], mats[0], ident);
+        if (it->second.meshes[7].vertexCount > 0) DrawMesh(it->second.meshes[7], mats[5], ident);   // baked AO creases
+        if (it->second.meshes[4].vertexCount > 0) DrawMesh(it->second.meshes[4], mats[0], ident);   // water
+        if (it->second.meshes[6].vertexCount > 0) DrawMesh(it->second.meshes[6], mats[0], ident);   // window glass
     }
     // small props draw with raylib's unlit default shader, so estimate the room
     // light at each one (plus flare/muzzle glow) — no more balloons shining

@@ -17,3 +17,4 @@ Texture2D makeTileTex();           // Poolrooms: white ceramic everywhere
 Texture2D makePartyWallTex();      // LEVEL FUN =): bunting, confetti, smileys
 Texture2D makePartyCarpetTex();    // LEVEL FUN =): deep red party carpet
 Texture2D makePartyCeilTex();      // LEVEL FUN =): near-black party-hall ceiling
+Texture2D makeAOStripTex();        // gradient strip for baked contact-shadow decals

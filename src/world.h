@@ -25,7 +25,7 @@ struct ChunkData {
     uint8_t pool[CCELLS][CCELLS];
     int8_t elev[CCELLS][CCELLS];   // floor height in decimetres: -5 sunken lounge (L0), +6 loading dock (L1)
     bool built = false;
-    Mesh meshes[7] = {};   // 0 floor, 1 ceiling, 2 walls, 3 props, 4 water, 5 wall scrawl, 6 window glass
+    Mesh meshes[8] = {};   // 0 floor, 1 ceiling, 2 walls, 3 props, 4 water, 5 wall scrawl, 6 window glass, 7 baked AO
 };
 struct AABB { float minx, minz, maxx, maxz, top; };   // top: height you can stand on
 
