@@ -57,12 +57,14 @@ void Game::init() {
     locPTime = GetShaderLocation(postShader, "uTime");
     locPFear = GetShaderLocation(postShader, "uFear");
 
-    for (int i = 0; i < 5; i++) {
+    texAO = makeAOStripTex();
+    for (int i = 0; i < 6; i++) {
         mats[i] = LoadMaterialDefault();
         mats[i].shader = worldShader;
     }
     mats[3].maps[MATERIAL_MAP_DIFFUSE].texture = texProps;
     mats[4].maps[MATERIAL_MAP_DIFFUSE].texture = texScrawl;   // wall scrawl decals
+    mats[5].maps[MATERIAL_MAP_DIFFUSE].texture = texAO;       // baked contact-shadow gradients
 
     for (int i = 0; i < 4; i++) steps[i] = makeFootstep(100 + i * 17);
     for (int i = 0; i < 4; i++) entSteps[i] = makeFootstep(300 + i * 23);   // heavier, its own gait
@@ -100,6 +102,7 @@ void Game::init() {
     nextBlackout = 40 + grng.f01() * 60;
     runStart = GetTime();
     rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
+    SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);   // post CA/bloom sample past the edges: clamp, don't wrap
 
     nextWhisper = runStart + 45 + grng.f01() * 60;
     snprintf(bestPath, sizeof(bestPath), "%s/.backrooms_best", getenv("HOME") ? getenv("HOME") : ".");
@@ -318,6 +321,7 @@ bool Game::tick() {
     if (IsWindowResized()) {
         UnloadRenderTexture(rt);
         rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
+        SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);   // post CA/bloom sample past the edges: clamp, don't wrap
     }
     if (IsKeyPressed(KEY_F11)) ToggleBorderlessWindowed();
 

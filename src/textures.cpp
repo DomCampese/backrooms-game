@@ -497,3 +497,23 @@ Texture2D makePartyCeilTex() {
     }
     return finishTexture(img, true);
 }
+
+// Baked-AO gradient: a strip that fades from solid shadow (v=0) to nothing
+// (v=1). Every contact-shadow decal in the world samples this — the smooth
+// alpha falloff is what makes the creases read soft instead of painted on.
+Texture2D makeAOStripTex() {
+    const int W = 8, H = 64;
+    Image img = GenImageColor(W, H, BLANK);
+    Color *p = (Color *)img.data;
+    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
+        float v = y / (float)(H - 1);
+        float s = 1.0f - v;
+        float a = 200.0f * s * s * (0.4f + 0.6f * s);   // steep near the crease, long soft tail
+        p[y * W + x] = { 255, 255, 255, cl8(a) };
+    }
+    Texture2D t = LoadTextureFromImage(img);
+    UnloadImage(img);
+    SetTextureFilter(t, TEXTURE_FILTER_BILINEAR);
+    SetTextureWrap(t, TEXTURE_WRAP_CLAMP);   // v past 1 stays fully clear
+    return t;
+}

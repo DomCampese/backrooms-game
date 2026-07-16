@@ -218,9 +218,21 @@ static void addBoxSides(MB &mb, float x0, float y0, float z0, float x1, float y1
 void World::ensureMesh(int cx, int cz) {
     ChunkData &d = data(cx, cz);
     if (d.built) return;
-    MB fl, ce, wa, pr, wt, scr, gl;
+    MB fl, ce, wa, pr, wt, scr, gl, ao;
     float wx = cx * CHUNK, wz = cz * CHUNK;
     Color wcol = WHITE;
+    // ---- baked ambient occlusion: gradient decals hugging every crease where
+    // geometry meets. The strip texture fades alpha from the crease (v=0)
+    // outward (v=1), so walls sit *in* the room instead of on top of it.
+    Color aoc = { 10, 9, 9, 255 };
+    auto aoStrip = [&](Vector3 e0, Vector3 e1, Vector3 off, Vector3 nn, float v0) {
+        ao.quad(e0, e1, { e1.x + off.x, e1.y + off.y, e1.z + off.z },
+                { e0.x + off.x, e0.y + off.y, e0.z + off.z }, nn,
+                { 0, v0 }, { 1, v0 }, { 1, 1 }, { 0, 1 }, aoc);
+    };
+    const float AOW = 0.55f;   // reach across the floor / ceiling
+    const float AOH = 0.48f;   // creep up / down the wall face
+    const float AOC = 0.30f;   // ceiling creases start partway down the gradient (softer)
     if (level == 2) {   // per-cell floor: pool basins sit 0.6m down, with tiled skirts
         Color water = { 115, 190, 217, 128 };
         for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
@@ -362,6 +374,35 @@ void World::ensureMesh(int cx, int cz) {
             wa.quad({gx,0,gz+0.35f},{gx,0,gz+1.65f},{gx,2.3f,gz+1.65f},{gx,2.3f,gz+0.35f},{1,0,0},
                     {0,1},{1,1},{1,0},{0,0},glow);
         }
+        // baked AO around this cell's walls: floor strip, ceiling strip, and a
+        // wall-face strip on both sides (solid walls and windows; doorways stay clean)
+        if (nv == 1 || nv == 3) {
+            int gi = cx * CCELLS + i, gk = cz * CCELLS + kk;
+            float fyS = floorY(gi, gk - 1) + 0.005f, fyN = floorY(gi, gk) + 0.005f;
+            // span exactly one cell — neighbours butt up seamlessly, no double-blend overlap
+            float x0 = gx, x1 = gx + CELL, cy = wallH - 0.005f;
+            aoStrip({ x0, fyS, gz - WT }, { x1, fyS, gz - WT }, { 0, 0, -AOW }, { 0, 1, 0 }, 0);          // floor, -z side
+            aoStrip({ x0, fyN, gz + WT }, { x1, fyN, gz + WT }, { 0, 0, AOW }, { 0, 1, 0 }, 0);           // floor, +z side
+            aoStrip({ x0, cy, gz - WT }, { x1, cy, gz - WT }, { 0, 0, -AOW }, { 0, -1, 0 }, AOC);         // ceiling creases
+            aoStrip({ x0, cy, gz + WT }, { x1, cy, gz + WT }, { 0, 0, AOW }, { 0, -1, 0 }, AOC);
+            aoStrip({ x0, fyS, gz - WT - 0.006f }, { x1, fyS, gz - WT - 0.006f }, { 0, AOH, 0 }, { 0, 0, -1 }, 0);   // skirting shadow up the faces
+            aoStrip({ x0, fyN, gz + WT + 0.006f }, { x1, fyN, gz + WT + 0.006f }, { 0, AOH, 0 }, { 0, 0, 1 }, 0);
+            aoStrip({ x0, wallH, gz - WT - 0.006f }, { x1, wallH, gz - WT - 0.006f }, { 0, -AOH, 0 }, { 0, 0, -1 }, AOC);   // and down from the ceiling
+            aoStrip({ x0, wallH, gz + WT + 0.006f }, { x1, wallH, gz + WT + 0.006f }, { 0, -AOH, 0 }, { 0, 0, 1 }, AOC);
+        }
+        if (wv == 1 || wv == 3) {
+            int gi = cx * CCELLS + i, gk = cz * CCELLS + kk;
+            float fyW = floorY(gi - 1, gk) + 0.005f, fyE = floorY(gi, gk) + 0.005f;
+            float z0 = gz, z1 = gz + CELL, cy = wallH - 0.005f;
+            aoStrip({ gx - WT, fyW, z0 }, { gx - WT, fyW, z1 }, { -AOW, 0, 0 }, { 0, 1, 0 }, 0);
+            aoStrip({ gx + WT, fyE, z0 }, { gx + WT, fyE, z1 }, { AOW, 0, 0 }, { 0, 1, 0 }, 0);
+            aoStrip({ gx - WT, cy, z0 }, { gx - WT, cy, z1 }, { -AOW, 0, 0 }, { 0, -1, 0 }, AOC);
+            aoStrip({ gx + WT, cy, z0 }, { gx + WT, cy, z1 }, { AOW, 0, 0 }, { 0, -1, 0 }, AOC);
+            aoStrip({ gx - WT - 0.006f, fyW, z0 }, { gx - WT - 0.006f, fyW, z1 }, { 0, AOH, 0 }, { -1, 0, 0 }, 0);
+            aoStrip({ gx + WT + 0.006f, fyE, z0 }, { gx + WT + 0.006f, fyE, z1 }, { 0, AOH, 0 }, { 1, 0, 0 }, 0);
+            aoStrip({ gx - WT - 0.006f, wallH, z0 }, { gx - WT - 0.006f, wallH, z1 }, { 0, -AOH, 0 }, { -1, 0, 0 }, AOC);
+            aoStrip({ gx + WT + 0.006f, wallH, z1 }, { gx + WT + 0.006f, wallH, z0 }, { 0, -AOH, 0 }, { 1, 0, 0 }, AOC);
+        }
         // wall scrawl: rarely, a solid wall carries a phrase left by an earlier
         // wanderer. one of eight, from the 2x4 scrawl atlas, drawn as a decal
         // pressed just off the wall face (level 2 is pristine tile — no scrawl)
@@ -402,6 +443,17 @@ void World::ensureMesh(int cx, int cz) {
             wa.quad({gx+0.30f,0.004f,gz+0.30f},{gx+1.70f,0.004f,gz+0.30f},   // contact shadow
                     {gx+1.70f,0.004f,gz+1.70f},{gx+0.30f,0.004f,gz+1.70f},
                     {0,1,0},{0,0},{0.04f,0},{0.04f,0.04f},{0,0.04f}, Color{ 12, 12, 12, 160 });
+            // AO up the pillar's feet and a ceiling crease around its head
+            float pfy = floorY(cx * CCELLS + i, cz * CCELLS + kk) + 0.005f;
+            float px0 = gx + 0.42f, px1 = gx + 1.58f, pz0 = gz + 0.42f, pz1 = gz + 1.58f, cy = wallH - 0.005f;
+            aoStrip({ px0, pfy, pz0 - 0.006f }, { px1, pfy, pz0 - 0.006f }, { 0, AOH, 0 }, { 0, 0, -1 }, 0);
+            aoStrip({ px0, pfy, pz1 + 0.006f }, { px1, pfy, pz1 + 0.006f }, { 0, AOH, 0 }, { 0, 0, 1 }, 0);
+            aoStrip({ px0 - 0.006f, pfy, pz0 }, { px0 - 0.006f, pfy, pz1 }, { 0, AOH, 0 }, { -1, 0, 0 }, 0);
+            aoStrip({ px1 + 0.006f, pfy, pz0 }, { px1 + 0.006f, pfy, pz1 }, { 0, AOH, 0 }, { 1, 0, 0 }, 0);
+            aoStrip({ px0, cy, pz0 }, { px1, cy, pz0 }, { 0, 0, -AOW }, { 0, -1, 0 }, AOC);
+            aoStrip({ px0, cy, pz1 }, { px1, cy, pz1 }, { 0, 0, AOW }, { 0, -1, 0 }, AOC);
+            aoStrip({ px0, cy, pz0 }, { px0, cy, pz1 }, { -AOW, 0, 0 }, { 0, -1, 0 }, AOC);
+            aoStrip({ px1, cy, pz0 }, { px1, cy, pz1 }, { AOW, 0, 0 }, { 0, -1, 0 }, AOC);
         }
         if (dd.prop[i][kk]) {
             float pcx = gx + 1.0f, pcz = gz + 1.0f;
@@ -600,6 +652,7 @@ void World::ensureMesh(int cx, int cz) {
     d.meshes[4] = wt.bake();
     d.meshes[5] = scr.bake();
     d.meshes[6] = gl.bake();
+    d.meshes[7] = ao.bake();
     d.built = true;
 }
 
@@ -751,7 +804,7 @@ void World::unloadFar(int pcx, int pcz, int radius) {
         int cx = (int)(int32_t)(it->first >> 32), cz = (int)(int32_t)(it->first & 0xFFFFFFFF);
         if (abs(cx - pcx) > radius || abs(cz - pcz) > radius) {
             if (it->second.built)
-                for (int i = 0; i < 7; i++)
+                for (int i = 0; i < 8; i++)
                     if (it->second.meshes[i].vertexCount > 0) UnloadMesh(it->second.meshes[i]);
             it = chunks.erase(it);
         } else ++it;
@@ -761,7 +814,7 @@ void World::unloadFar(int pcx, int pcz, int radius) {
 void World::unloadAll() {
     for (auto &kv : chunks)
         if (kv.second.built)
-            for (int i = 0; i < 7; i++)
+            for (int i = 0; i < 8; i++)
                 if (kv.second.meshes[i].vertexCount > 0) UnloadMesh(kv.second.meshes[i]);
     chunks.clear();
 }

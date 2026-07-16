@@ -127,6 +127,10 @@ make run
   shader, so flat planes catch the room light with a little texture instead of
   reading as dead polygons. Scaled down on the glossy poolroom tile, which
   stays clean.
+- **Baked ambient occlusion** — soft contact shadows are baked into every
+  chunk's geometry as gradient decals: along each wall's base and ceiling
+  crease, creeping up the skirting, around every pillar's feet and head. Walls
+  sit *in* the room instead of on top of it, and it costs nothing per frame.
 - **Post** — threshold bloom that makes the fluorescents actually glow, a gentle
   filmic contrast + saturation lift, dust motes drifting through the light, plus
   film grain, vignette, chromatic aberration, and a mains-frequency luma
