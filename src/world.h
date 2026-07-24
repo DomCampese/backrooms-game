@@ -15,7 +15,8 @@ constexpr float WT = 0.11f;            // wall half-thickness
 // values: 0 open, 1 wall, 2 exit doorway, 3 window into the dark
 // prop types: 0 none, 1 box stack, 2 filing cabinet, 3 folding table, 4 fallen ceiling tile,
 //             5 couch, 6 armoire, 7 floor lamp, 8 nightstand, 9 bed, 10 vending machine,
-//             11 party table (cake nobody cut)
+//             11 party table (cake nobody cut), 12 office desk + chair, 13 steel shelving,
+//             14 water cooler, 15 potted plant
 struct ChunkData {
     uint8_t wallN[CCELLS][CCELLS];
     uint8_t wallW[CCELLS][CCELLS];
@@ -23,7 +24,8 @@ struct ChunkData {
     uint8_t prop[CCELLS][CCELLS];
     uint8_t propRot[CCELLS][CCELLS];
     uint8_t pool[CCELLS][CCELLS];
-    int8_t elev[CCELLS][CCELLS];   // floor height in decimetres: -5 sunken lounge (L0), +6 loading dock (L1)
+    int8_t elev[CCELLS][CCELLS];   // floor height in decimetres: -5 sunken lounge, down to -25 in
+                                   // an L0 atrium's terraced heart; +6 loading dock, +12 upper tier (L1)
     bool built = false;
     Mesh meshes[8] = {};   // 0 floor, 1 ceiling, 2 walls, 3 props, 4 water, 5 wall scrawl, 6 window glass, 7 baked AO
 };

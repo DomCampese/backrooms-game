@@ -83,21 +83,23 @@ void World::generate(ChunkData &d, int cx, int cz) {
     for (int i = 0; i < np; i++) d.pillar[rng.ri(0, CCELLS - 1)][rng.ri(0, CCELLS - 1)] = 1;
     memset(d.prop, 0, sizeof(d.prop));
     memset(d.propRot, 0, sizeof(d.propRot));
-    int npr = level == 0 ? 7 + rng.ri(0, 7) : level == 1 ? 8 + rng.ri(0, 8)
+    int npr = level == 0 ? 10 + rng.ri(0, 8) : level == 1 ? 9 + rng.ri(0, 8)
             : level == 3 ? 5 + rng.ri(0, 6) : level == 4 ? 9 + rng.ri(0, 7) : 0;
     for (int i = 0; i < npr; i++) {
         int a = rng.ri(0, CCELLS - 1), b = rng.ri(0, CCELLS - 1);
         if (d.pillar[a][b] || d.prop[a][b]) continue;
         float f = rng.f01();
-        if (level == 1) d.prop[a][b] = f < 0.55f ? 1 : f < 0.78f ? 2 : f < 0.96f ? 3 : 10;  // warehouse
+        if (level == 1)                                                    // warehouse
+            d.prop[a][b] = f < 0.45f ? 1 : f < 0.65f ? 2 : f < 0.80f ? 3 : f < 0.96f ? 13 : 10;
         else if (level == 3)                                               // red halls: someone's bedroom
             d.prop[a][b] = f < 0.30f ? 9 : f < 0.55f ? 6 : f < 0.80f ? 8 : 7;
         else if (level == 4)                                               // level fun: the party never ended
             d.prop[a][b] = f < 0.52f ? 11 : f < 0.70f ? 1 : f < 0.82f ? 5 : f < 0.93f ? 3 : 10;
-        else   // L0: office clutter, plus furniture that has no business here
-            d.prop[a][b] = f < 0.26f ? 1 : f < 0.40f ? 2 : f < 0.50f ? 3 : f < 0.62f ? 4 :
-                           f < 0.74f ? 5 : f < 0.84f ? 6 : f < 0.90f ? 7 : f < 0.95f ? 8 :
-                           f < 0.985f ? 9 : 10;
+        else   // L0: office clutter — desks someone worked at — plus furniture that has no business here
+            d.prop[a][b] = f < 0.20f ? 1 : f < 0.31f ? 2 : f < 0.39f ? 3 : f < 0.49f ? 4 :
+                           f < 0.58f ? 5 : f < 0.65f ? 6 : f < 0.70f ? 7 : f < 0.74f ? 8 :
+                           f < 0.77f ? 9 : f < 0.80f ? 10 : f < 0.90f ? 12 : f < 0.94f ? 13 :
+                           f < 0.97f ? 14 : 15;
         d.propRot[a][b] = (uint8_t)rng.ri(0, 3);
         // boxes like company: sometimes a neighbouring stack
         if (d.prop[a][b] == 1 && a + 1 < CCELLS && rng.f01() < 0.4f && !d.pillar[a + 1][b] && !d.prop[a + 1][b]) {
@@ -119,6 +121,23 @@ void World::generate(ChunkData &d, int cx, int cz) {
             float gxc = (float)(cx * CCELLS + i), gzc = (float)(cz * CCELLS + kk);
             if (fbm2(gxc * 0.09f, gzc * 0.09f, seed ^ (level == 0 ? 0x51ABu : 0xD0CCu), 3) > 0.60f)
                 d.elev[i][kk] = level == 0 ? -5 : 6;
+            if (level == 1 && d.elev[i][kk] == 6 &&   // some docks carry a second tier
+                fbm2(gxc * 0.09f, gzc * 0.09f, seed ^ 0xD0CCu, 3) > 0.655f) d.elev[i][kk] = 12;
+        }
+        // L0: rare grand atria — the floor falls away in broad carpeted terraces,
+        // half a metre per ring, down to a hall two and a half metres below the
+        // office. Every terrace edge gets real stairs; the walls above become
+        // balconies. Think of the movie: there was always another floor.
+        if (level == 0) {
+            for (int i = 1; i < CCELLS - 1; i++) for (int kk = 1; kk < CCELLS - 1; kk++) {
+                if (d.pillar[i][kk]) continue;
+                if (d.wallN[i][kk] || d.wallW[i][kk] || d.wallN[i][kk + 1] || d.wallW[i + 1][kk]) continue;
+                float gxc = (float)(cx * CCELLS + i), gzc = (float)(cz * CCELLS + kk);
+                float n = fbm2(gxc * 0.042f, gzc * 0.042f, seed ^ 0xA7B1u, 3);
+                if (n <= 0.615f) continue;
+                int ring = 1 + (int)((n - 0.615f) / 0.028f);   // deeper toward the middle
+                d.elev[i][kk] = (int8_t)(-5 * std::min(ring, 5));
+            }
         }
     }
     // rare exit door carved into an existing wall run
@@ -204,13 +223,22 @@ static void addPropBox(MB &mb, float cx, float cz, float yaw, float hx, float hz
             {tu0,tv0},{tu1,tv0},{tu1,tv1},{tu0,tv1}, tint);
 }
 
-static void addBoxSides(MB &mb, float x0, float y0, float z0, float x1, float y1, float z1, bool bottomFace = false) {
+// skip bits: 1 = -z face, 2 = +z face, 4 = -x face, 8 = +x face. Wall runs overlap
+// their neighbours by WT so corners close, which buries the end caps inside the
+// next box — and an end cap meeting the neighbour's front face at exactly the same
+// depth z-fights into a vertical seam. Skipping buried caps removes the seam.
+static void addBoxSides(MB &mb, float x0, float y0, float z0, float x1, float y1, float z1,
+                        bool bottomFace = false, int skip = 0) {
     Color w = WHITE;
     float va = 1 - y0 / 3, vb = 1 - y1 / 3;
-    mb.quad({x0,y0,z0},{x1,y0,z0},{x1,y1,z0},{x0,y1,z0},{0,0,-1},{x0/3,va},{x1/3,va},{x1/3,vb},{x0/3,vb},w);
-    mb.quad({x1,y0,z1},{x0,y0,z1},{x0,y1,z1},{x1,y1,z1},{0,0,1},{x1/3,va},{x0/3,va},{x0/3,vb},{x1/3,vb},w);
-    mb.quad({x0,y0,z1},{x0,y0,z0},{x0,y1,z0},{x0,y1,z1},{-1,0,0},{z1/3,va},{z0/3,va},{z0/3,vb},{z1/3,vb},w);
-    mb.quad({x1,y0,z0},{x1,y0,z1},{x1,y1,z1},{x1,y1,z0},{1,0,0},{z0/3,va},{z1/3,va},{z1/3,vb},{z0/3,vb},w);
+    if (!(skip & 1))
+        mb.quad({x0,y0,z0},{x1,y0,z0},{x1,y1,z0},{x0,y1,z0},{0,0,-1},{x0/3,va},{x1/3,va},{x1/3,vb},{x0/3,vb},w);
+    if (!(skip & 2))
+        mb.quad({x1,y0,z1},{x0,y0,z1},{x0,y1,z1},{x1,y1,z1},{0,0,1},{x1/3,va},{x0/3,va},{x0/3,vb},{x1/3,vb},w);
+    if (!(skip & 4))
+        mb.quad({x0,y0,z1},{x0,y0,z0},{x0,y1,z0},{x0,y1,z1},{-1,0,0},{z1/3,va},{z0/3,va},{z0/3,vb},{z1/3,vb},w);
+    if (!(skip & 8))
+        mb.quad({x1,y0,z0},{x1,y0,z1},{x1,y1,z1},{x1,y1,z0},{1,0,0},{z0/3,va},{z1/3,va},{z1/3,vb},{z0/3,vb},w);
     if (bottomFace)
         mb.quad({x0,y0,z0},{x1,y0,z0},{x1,y0,z1},{x0,y0,z1},{0,-1,0},{x0/3,z0/3},{x1/3,z0/3},{x1/3,z1/3},{x0/3,z1/3},w);
 }
@@ -296,18 +324,20 @@ void World::ensureMesh(int cx, int cz) {
                         {0.75f,0.75f},{0.75f,0.75f},{0.75f,0.75f},{0.75f,0.75f}, Color{ 10, 8, 6, 205 });
             }
             if (d.elev[i][kk] == 0) continue;
-            auto hgt = [&](int a, int b) {
-                return (a < 0 || a >= CCELLS || b < 0 || b >= CCELLS) ? 0.0f : d.elev[a][b] * 0.1f;
-            };
+            // true cross-chunk heights, so terraces spanning a chunk border don't
+            // grow phantom risers (the old lookup assumed 0 beyond the edge)
+            auto hgt = [&](int a, int b) { return floorY(cx * CCELLS + a, cz * CCELLS + b); };
             float hN = hgt(i, kk - 1), hS = hgt(i, kk + 1), hW = hgt(i - 1, kk), hE = hgt(i + 1, kk);
-            // dock: steps drop into the lower neighbour; lounge: steps climb out into this cell
-            if (hN < fy) stepEdge(gx, gz, gx + CELL, gz, fy, hN, 0, -1);
+            // each shared riser is drawn once: by this cell when the neighbour is
+            // flat ground (elev 0 cells skip out above), otherwise by the lower
+            // cell of the pair — terraced atria would double-draw it otherwise
+            if (hN < fy && hN == 0.0f) stepEdge(gx, gz, gx + CELL, gz, fy, hN, 0, -1);
             else if (hN > fy) stepEdge(gx, gz, gx + CELL, gz, hN, fy, 0, 1);
-            if (hS < fy) stepEdge(gx, gz + CELL, gx + CELL, gz + CELL, fy, hS, 0, 1);
+            if (hS < fy && hS == 0.0f) stepEdge(gx, gz + CELL, gx + CELL, gz + CELL, fy, hS, 0, 1);
             else if (hS > fy) stepEdge(gx, gz + CELL, gx + CELL, gz + CELL, hS, fy, 0, -1);
-            if (hW < fy) stepEdge(gx, gz, gx, gz + CELL, fy, hW, -1, 0);
+            if (hW < fy && hW == 0.0f) stepEdge(gx, gz, gx, gz + CELL, fy, hW, -1, 0);
             else if (hW > fy) stepEdge(gx, gz, gx, gz + CELL, hW, fy, 1, 0);
-            if (hE < fy) stepEdge(gx + CELL, gz, gx + CELL, gz + CELL, fy, hE, 1, 0);
+            if (hE < fy && hE == 0.0f) stepEdge(gx + CELL, gz, gx + CELL, gz + CELL, fy, hE, 1, 0);
             else if (hE > fy) stepEdge(gx + CELL, gz, gx + CELL, gz + CELL, hE, fy, -1, 0);
         }
     }
@@ -329,7 +359,12 @@ void World::ensureMesh(int cx, int cz) {
     for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
         float gx = wx + i * CELL, gz = wz + kk * CELL;
         uint8_t nv = dd.wallN[i][kk];
-        if (nv == 1) addBoxSides(wa, gx - WT, 0, gz - WT, gx + CELL + WT, wallH, gz + WT);
+        if (nv == 1) {
+            int gi0 = cx * CCELLS + i, gk0 = cz * CCELLS + kk;
+            auto runs = [&](uint8_t v) { return v == 1 || v == 3; };
+            int sk = (runs(wallNVal(gi0 - 1, gk0)) ? 4 : 0) | (runs(wallNVal(gi0 + 1, gk0)) ? 8 : 0);
+            addBoxSides(wa, gx - WT, 0, gz - WT, gx + CELL + WT, wallH, gz + WT, false, sk);
+        }
         else if (nv == 3) {   // window on x-running wall; behind the glass, nothing
             addBoxSides(wa, gx - WT, 0, gz - WT, gx + CELL + WT, 1.0f, gz + WT);
             addBoxSides(wa, gx - WT, 2.1f, gz - WT, gx + CELL + WT, wallH, gz + WT, true);
@@ -353,7 +388,12 @@ void World::ensureMesh(int cx, int cz) {
                     {0,1},{1,1},{1,0},{0,0},glow);
         }
         uint8_t wv = dd.wallW[i][kk];
-        if (wv == 1) addBoxSides(wa, gx - WT, 0, gz - WT, gx + WT, wallH, gz + CELL + WT);
+        if (wv == 1) {
+            int gi0 = cx * CCELLS + i, gk0 = cz * CCELLS + kk;
+            auto runs = [&](uint8_t v) { return v == 1 || v == 3; };
+            int sk = (runs(wallWVal(gi0, gk0 - 1)) ? 1 : 0) | (runs(wallWVal(gi0, gk0 + 1)) ? 2 : 0);
+            addBoxSides(wa, gx - WT, 0, gz - WT, gx + WT, wallH, gz + CELL + WT, false, sk);
+        }
         else if (wv == 3) {   // window on z-running wall
             addBoxSides(wa, gx - WT, 0, gz - WT, gx + WT, 1.0f, gz + CELL + WT);
             addBoxSides(wa, gx - WT, 2.1f, gz - WT, gx + WT, wallH, gz + CELL + WT, true);
@@ -624,6 +664,52 @@ void World::ensureMesh(int cx, int cz) {
                         { sa, 0, -ca }, {0,1},{1,1},{1,0},{0,0}, panel);
                 break;
             }
+            case 12: {  // office desk: chair shoved back, monitor long dead. someone worked here
+                blob(0.72f, 0.52f);
+                Color wd = { 104, 80, 56, 255 };
+                part(0, -0.12f, 0.62f, 0.34f, ey + 0.70f, ey + 0.74f, true, wd);      // desktop
+                part(-0.46f, -0.12f, 0.14f, 0.30f, ey, ey + 0.70f, true, wd);         // pedestals
+                part( 0.46f, -0.12f, 0.14f, 0.30f, ey, ey + 0.70f, true, wd);
+                part(0.08f, -0.22f, 0.19f, 0.035f, ey + 0.76f, ey + 1.08f, false, Color{ 30, 30, 34, 255 }); // monitor
+                part(0.08f, -0.14f, 0.06f, 0.06f, ey + 0.74f, ey + 0.77f, false, Color{ 38, 38, 42, 255 });  // its foot
+                part(-0.30f, -0.14f, 0.11f, 0.08f, ey + 0.74f, ey + 0.765f, false, Color{ 200, 196, 186, 255 }); // papers
+                part(0.02f + r1 * 0.1f, 0.44f, 0.20f, 0.20f, ey + 0.40f, ey + 0.46f, false, Color{ 52, 50, 54, 255 }); // chair seat
+                part(0.02f + r1 * 0.1f, 0.62f, 0.20f, 0.04f, ey + 0.46f, ey + 0.96f, false, Color{ 52, 50, 54, 255 }); // backrest
+                part(0.02f + r1 * 0.1f, 0.44f, 0.035f, 0.035f, ey, ey + 0.40f, false, Color{ 72, 72, 76, 255 });        // post
+                break;
+            }
+            case 13: {  // steel shelving, half-emptied in a hurry
+                blob(0.68f, 0.32f);
+                Color mt = { 132, 136, 142, 255 };
+                for (int s2 = 0; s2 <= 3; s2++)
+                    part(0, 0, 0.60f, 0.24f, ey + 0.08f + s2 * 0.55f, ey + 0.12f + s2 * 0.55f, false, mt);
+                // corner posts, not full-depth panels — side-on you see *through* the rack
+                for (int ux = -1; ux <= 1; ux += 2) for (int uz = -1; uz <= 1; uz += 2)
+                    part(ux * 0.575f, uz * 0.215f, 0.03f, 0.03f, ey, ey + 1.80f, false, mt);
+                part(-0.25f, 0.0f, 0.16f, 0.16f, ey + 0.12f, ey + 0.44f, true, Color{ 168, 138, 100, 255 });  // what's left
+                part( 0.30f, 0.02f, 0.14f, 0.14f, ey + 0.67f, ey + 0.94f, true, Color{ 150, 122, 88, 255 });
+                if (r2 > 0.4f)
+                    part(-0.06f, -0.02f, 0.12f, 0.12f, ey + 1.22f, ey + 1.44f, true, Color{ 174, 146, 106, 255 });
+                break;
+            }
+            case 14: {  // water cooler. the water is not almond
+                blob(0.30f, 0.30f);
+                part(0, 0, 0.19f, 0.19f, ey, ey + 0.94f, false, Color{ 204, 206, 210, 255 });   // body
+                part(0, 0, 0.125f, 0.125f, ey + 0.94f, ey + 1.28f, false, Color{ 150, 186, 214, 255 });  // bottle
+                part(0, 0.205f, 0.05f, 0.02f, ey + 0.58f, ey + 0.66f, false, Color{ 88, 90, 94, 255 });  // tap
+                break;
+            }
+            case 15: {  // potted plant. still green. nobody waters it
+                blob(0.26f, 0.26f);
+                part(0, 0, 0.17f, 0.17f, ey, ey + 0.09f, false, Color{ 120, 70, 48, 255 });    // saucer
+                part(0, 0, 0.145f, 0.145f, ey + 0.02f, ey + 0.32f, false, Color{ 146, 88, 58, 255 });  // pot
+                part(0, 0, 0.032f, 0.032f, ey + 0.32f, ey + 0.88f, false, Color{ 76, 66, 44, 255 });   // stem
+                addPropBox(pr, pcx, pcz, rot + 0.6f, 0.30f, 0.06f, ey + 0.55f, ey + 1.06f,
+                           MU0, MV0, MU1, MV1, MU0, MV0, MU1, MV1, Color{ 56, 96, 50, 255 });          // fronds
+                addPropBox(pr, pcx, pcz, rot + 2.1f, 0.06f, 0.30f, ey + 0.64f, ey + 1.14f,
+                           MU0, MV0, MU1, MV1, MU0, MV0, MU1, MV1, Color{ 64, 108, 56, 255 });
+                break;
+            }
             }
         }
     }
@@ -683,6 +769,10 @@ int World::gatherCellAABBs(int ci, int ck, AABB *out, int cap, int cnt, bool inc
             case 9: out[cnt++] = { x0 + 0.30f, z0 + 0.15f, x0 + 1.70f, z0 + 1.85f, ey + 0.46f }; break;  // bed
             case 10: out[cnt++] = { x0 + 0.50f, z0 + 0.58f, x0 + 1.50f, z0 + 1.42f, ey + 1.85f }; break; // vending
             case 11: out[cnt++] = { x0 + 0.40f, z0 + 0.40f, x0 + 1.60f, z0 + 1.60f, ey + 0.74f }; break; // party table
+            case 12: out[cnt++] = { x0 + 0.30f, z0 + 0.50f, x0 + 1.70f, z0 + 1.50f, ey + 0.74f }; break; // desk + chair
+            case 13: out[cnt++] = { x0 + 0.36f, z0 + 0.70f, x0 + 1.64f, z0 + 1.30f, ey + 1.80f }; break; // shelving
+            case 14: out[cnt++] = { x0 + 0.78f, z0 + 0.78f, x0 + 1.22f, z0 + 1.22f, ey + 0.94f }; break; // water cooler
+            case 15: out[cnt++] = { x0 + 0.80f, z0 + 0.80f, x0 + 1.20f, z0 + 1.20f, ey + 0.32f }; break; // potted plant
             }
         }
     }

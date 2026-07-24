@@ -101,7 +101,15 @@ make run
   <p align="center"><img src="docs/window.png" width="440" alt="A see-through window"></p>
 - **Furniture** — beyond the office clutter: couches, armoires, floor lamps,
   nightstands, and the occasional bare mattress, arranged by no one, for
-  no one.
+  no one. Level 0 also keeps the furniture of the job that used to happen
+  here — desks with a dead monitor, papers, and a chair shoved back; open
+  steel shelving half-emptied in a hurry; water coolers; potted plants
+  nobody waters. All of it solid, and most of it climbable.
+- **Another floor down** — Level 0 rarely opens into a grand atrium: the
+  carpet falls away in broad terraces, half a metre a ring, down to a hall
+  two and a half metres below the office, with real stairs at every edge and
+  the walls above reading as balconies. The warehouse stacks its loading
+  docks two tiers high. There was always another floor.
 - **Exits** — glowing doorways carved into wall runs. A normal one takes you
   one level deeper (and ~1 in 6 is cursed: it glows red and drops you into the
   Red Halls instead).
