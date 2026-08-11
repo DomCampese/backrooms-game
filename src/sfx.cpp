@@ -194,3 +194,43 @@ Sound makeWinChime() {
     }
     Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
 }
+
+// two low thumps, close together — held breath while it lingers right beside you
+Sound makeHeartbeat() {
+    int n = (int)(1.0f * 44100);
+    Wave w = makeWaveBuf(n);
+    short *d = (short *)w.data;
+    const float starts[2] = { 0.0f, 0.34f };
+    for (int i = 0; i < n; i++) {
+        float t = i / 44100.0f, s = 0;
+        for (int k = 0; k < 2; k++) {
+            float lt = t - starts[k];
+            if (lt < 0) continue;
+            float env = (1 - expf(-lt * 500.0f)) * expf(-lt * 14.0f);
+            s += sinf(6.2831853f * 58.0f * lt) * env * 0.85f;
+        }
+        d[i] = (short)(clampf1(tanhf(s * 1.3f)) * 30000);
+    }
+    Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
+}
+
+// a tape found: two detuned, warbling low tones through a bed of hiss — melancholy, not triumphant
+Sound makeTapeChime() {
+    int n = (int)(1.6f * 44100);
+    Wave w = makeWaveBuf(n);
+    short *d = (short *)w.data;
+    Rng r(0x7A9EULL);
+    float lp = 0;
+    for (int i = 0; i < n; i++) {
+        float t = i / 44100.0f;
+        float wn = r.f01() * 2 - 1;
+        lp += 0.02f * (wn - lp);
+        float wobble = sinf(6.2831853f * 4.2f * t) * 3.5f;   // tape-wow pitch waver
+        float env = (1 - expf(-t * 18.0f)) * expf(-t * 1.5f);
+        float tone = sinf(6.2831853f * (220.0f + wobble) * t) * 0.5f
+                   + sinf(6.2831853f * (277.2f + wobble * 1.3f) * t) * 0.32f;
+        float hiss = lp * 1.8f * expf(-t * 2.2f);
+        d[i] = (short)(clampf1((tone * env + hiss) * 0.9f) * 30000);
+    }
+    Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
+}

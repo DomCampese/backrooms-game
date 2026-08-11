@@ -11,3 +11,5 @@ Sound makeBalloonPop();
 Sound makeFlareStrike();
 Sound makeGunshot();
 Sound makeWinChime();
+Sound makeHeartbeat();
+Sound makeTapeChime();

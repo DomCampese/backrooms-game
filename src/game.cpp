@@ -9,6 +9,19 @@
 #include <ctime>
 #include <algorithm>
 
+// found cassette tapes: someone else's days down here, in fragments
+static const char *TAPE_LINES[] = {
+    "day 12. the walls hum in b-flat. i've started humming back.",
+    "if you find this, don't answer when it says your name.",
+    "the vending machines take doubloons. i don't know why i know that.",
+    "someone wrote NO CLIP on level 0. i wrote it. i don't remember writing it.",
+    "three knocks means it's not him. two knocks means run.",
+    "the almond water tastes like almonds. that's the whole warning.",
+    "i counted eleven exits today. only one was real.",
+    "he's slower than he looks. i am not fast enough anyway.",
+};
+static constexpr int TAPE_LINE_COUNT = sizeof(TAPE_LINES) / sizeof(TAPE_LINES[0]);
+
 void Game::init() {
     shotPath = getenv("BACKROOMS_SHOT");
     SetTraceLogLevel(LOG_WARNING);
@@ -78,6 +91,8 @@ void Game::init() {
     sndPop = makeBalloonPop();
     sndHit = makeJumpscare();  SetSoundPitch(sndHit, 1.7f);  SetSoundVolume(sndHit, 0.40f);
     sndKill = makeJumpscare(); SetSoundPitch(sndKill, 0.55f); SetSoundVolume(sndKill, 0.80f);
+    sndHeartbeat = makeHeartbeat(); SetSoundVolume(sndHeartbeat, 0.55f);
+    sndTape = makeTapeChime();     SetSoundVolume(sndTape, 0.6f);
 
     synth.init();
 
@@ -109,6 +124,7 @@ void Game::init() {
     if (FILE *bf = fopen(bestPath, "r")) {
         if (fscanf(bf, "%d %d %d", &bestEsc, &bestKill, &bestM) != 3) bestEsc = bestKill = bestM = 0;
         if (fscanf(bf, "%d", &bestWins) != 1) bestWins = 0;   // 4th field added later; old files lack it
+        if (fscanf(bf, "%d", &bestTapes) != 1) bestTapes = 0; // 5th field, same story
         fclose(bf);
     }
 
@@ -131,8 +147,9 @@ void Game::saveBest() {
     if (killCount > bestKill) { bestKill = killCount; up = true; }
     if ((int)distWalked > bestM) { bestM = (int)distWalked; up = true; }
     if (winCount > bestWins) { bestWins = winCount; up = true; }
+    if (tapes > bestTapes) { bestTapes = tapes; up = true; }
     if (up) if (FILE *bf = fopen(bestPath, "w"))
-        { fprintf(bf, "%d %d %d %d\n", bestEsc, bestKill, bestM, bestWins); fclose(bf); }
+        { fprintf(bf, "%d %d %d %d %d\n", bestEsc, bestKill, bestM, bestWins, bestTapes); fclose(bf); }
 }
 
 // You've banked enough doubloons and found a real door: escape the backrooms.
@@ -150,7 +167,7 @@ void Game::winRun(double now) {
     Vector2 sp = world.findOpenSpot(15, 15);
     px = sp.x; pz = sp.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
     yaw = 0.8f; pitch = 0.0f;
-    coins = 0; almond = 0; flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0;
+    coins = 0; almond = 0; tapes = 0; flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; battery = 1.0f;
     caughtCount = 0; escapeCount = 0; killCount = 0; distWalked = 0;
     fear = 0; boostT = 0;
     ent.st = EState::Hidden; ent.nextSpawn = now + 30;
@@ -184,7 +201,7 @@ void Game::startRun(double now) {
     Vector2 sp = world.findOpenSpot(15, 15);
     px = sp.x; pz = sp.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
     yaw = 0.8f; pitch = 0.0f;
-    coins = 0; almond = 0; flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0;
+    coins = 0; almond = 0; tapes = 0; flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; battery = 1.0f;
     caughtCount = 0; escapeCount = 0; killCount = 0; distWalked = 0;
     fear = 0; boostT = 0; blackoutCur = 1.0f; blackoutEnd = -1;
     ent.st = EState::Hidden; ent.nextSpawn = now + 30;
@@ -233,6 +250,25 @@ bool Game::bottleAt(int a, int b) {
 bool Game::coinAt(int a, int b) {
     if (world.pillarAt(a, b) || world.propAt(a, b) || world.poolAt(a, b)) return false;
     return ih(a, b, (uint32_t)world.seed ^ 0xC01Du) % 449 == 0;
+}
+
+bool Game::batteryAt(int a, int b) {
+    if (world.pillarAt(a, b) || world.propAt(a, b) || world.poolAt(a, b)) return false;
+    return ih(a, b, (uint32_t)world.seed ^ 0xBA77u) % 379 == 0;
+}
+
+bool Game::tapeAt(int a, int b) {
+    if (world.pillarAt(a, b) || world.propAt(a, b) || world.poolAt(a, b)) return false;
+    return ih(a, b, (uint32_t)world.seed ^ 0x7A9Eu) % 401 == 0;
+}
+
+// Furniture with enough bulk to tuck in beside: crouch within reach of one of
+// these and the hunt loses you, however close it gets.
+bool Game::hideSpotAt(int a, int b) {
+    switch (world.propAt(a, b)) {
+    case 1: case 2: case 5: case 6: case 8: case 9: case 11: case 12: case 13: return true;
+    default: return false;
+    }
 }
 
 // A balloon floats in this cell on LEVEL FUN — mirrors the placement in render.
@@ -334,11 +370,17 @@ bool Game::tick() {
     }
 
     if (IsKeyPressed(KEY_F) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || IsKeyPressed(KEY_L)) {
-        flashOn = !flashOn;
-        SetSoundPitch(sndClick, flashOn ? 1.0f : 0.85f);
-        PlaySound(sndClick);
+        if (flashOn || battery > 0.001f) {
+            flashOn = !flashOn;
+            SetSoundPitch(sndClick, flashOn ? 1.0f : 0.85f);
+            PlaySound(sndClick);
+        } else { SetSoundPitch(sndClick, 0.55f); PlaySound(sndClick); }   // dead battery: just the switch
     }
     flashCur += ((flashOn ? 1.0f : 0.0f) - flashCur) * fminf(1, 25 * dt);
+    if (flashOn) {
+        battery = fmaxf(0.0f, battery - dt / 100.0f);
+        if (battery <= 0.0f) flashOn = false;   // it just dies
+    }
     if (IsKeyPressed(KEY_F3)) debugHud = !debugHud;
     if (IsKeyPressed(KEY_ESCAPE) && IsCursorHidden()) EnableCursor();
     captureClick = false;
@@ -361,6 +403,8 @@ bool Game::tick() {
     killT = fmaxf(0, killT - dt);
     fellT = fmaxf(0, fellT - dt);
     winT = fmaxf(0, winT - dt);
+    closeCallT = fmaxf(0, closeCallT - dt);
+    tapeFoundT = fmaxf(0, tapeFoundT - dt);
     streamChunks();
 
     renderScene(now);
@@ -475,6 +519,20 @@ void Game::updateMovement(float dt) {
     }
     float fovT = sprinting ? 79.0f : 70.0f;
     fov += (fovT - fov) * fminf(1, 6 * dt);
+
+    // hiding: crouched and close enough to real cover — checked after collision
+    // settles px/pz, so this frame's position is final
+    hidden = false;
+    if (crouchCur > 0.75f) {
+        int hci = cellOf(px), hck = cellOf(pz);
+        for (int dx = -1; dx <= 1 && !hidden; dx++) for (int dz = -1; dz <= 1 && !hidden; dz++) {
+            int a = hci + dx, b = hck + dz;
+            if (!hideSpotAt(a, b)) continue;
+            float hx = a * CELL + 1.0f, hz = b * CELL + 1.0f;
+            float ddx = px - hx, ddz = pz - hz;
+            if (ddx * ddx + ddz * ddz < 1.35f * 1.35f) hidden = true;
+        }
+    }
 }
 
 void Game::updateDevKeys(double now) {
@@ -617,13 +675,25 @@ void Game::updateInteraction() {
         uint64_t ky = cellKey2(a, b);
         if (taken.count(ky)) continue;
         bool isB = bottleAt(a, b), isC = !isB && coinAt(a, b);
-        if (!isB && !isC) continue;
+        bool isBat = !isB && !isC && batteryAt(a, b);
+        bool isT = !isB && !isC && !isBat && tapeAt(a, b);
+        if (!isB && !isC && !isBat && !isT) continue;
         float bxx = a * CELL + 1.0f, bzz = b * CELL + 1.0f;
         float ddx = px - bxx, ddz = pz - bzz;
         if (ddx * ddx + ddz * ddz < 0.8f * 0.8f) {
             taken.insert(ky);
-            if (isB) almond++; else coins++;
-            SetSoundPitch(sndClick, isB ? 1.3f : 1.6f); PlaySound(sndClick);
+            if (isB) almond++;
+            else if (isC) coins++;
+            else if (isBat) {
+                battery = clampf(battery + 0.45f, 0, 1);
+                SetSoundPitch(sndClick, 0.85f); PlaySound(sndClick);
+            } else {
+                tapes++;
+                tapeFoundT = 3.2f;
+                tapeLine = TAPE_LINES[grng.ri(0, TAPE_LINE_COUNT - 1)];
+                PlaySound(sndTape);
+            }
+            if (isB || isC) { SetSoundPitch(sndClick, isB ? 1.3f : 1.6f); PlaySound(sndClick); }
         }
     }
     for (size_t c2 = 0; c2 < coinsWorld.size();) {   // spilled doubloons
@@ -719,6 +789,7 @@ void Game::updateEntity(float dt, double now) {
         float dirDot = (entDist > 0.01f) ? (fwd.x * ex + fwd.z * ez) / entDist : 1;
         entVisible = entDist < 36 && dirDot > 0.86f && world.lineOfSight(px, pz, ent.x, ent.z);
         if (crouchCur > 0.7f && entDist > 7) entVisible = false;   // low and quiet: hard to pick out
+        if (hidden) entVisible = false;                            // tucked away — it can walk right past you
         if (flare.active && (ent.st == EState::Stalk || ent.st == EState::Chase)) {
             float fx = ent.x - flare.x, fz = ent.z - flare.z;
             if (fx * fx + fz * fz < 6.0f * 6.0f) {   // fire is the one thing he remembers
@@ -729,7 +800,7 @@ void Game::updateEntity(float dt, double now) {
             ent.life += dt;
             fearT = entVisible ? 0.45f : 0.15f;
             if (entVisible) ent.gaze += dt;
-            if (ent.gaze > 1.6f || (entVisible && entDist < 8) || entDist < 3.0f) { ent.st = EState::Chase; ent.repathT = 0; }
+            if (ent.gaze > 1.6f || (entVisible && entDist < 8) || (entDist < 3.0f && !hidden)) { ent.st = EState::Chase; ent.repathT = 0; }
             else if (ent.life > 24 && !entVisible) ent.st = EState::Hidden, ent.nextSpawn = now + 18 + grng.f01() * 35;
         }
         if (ent.st == EState::Chase) {
@@ -768,9 +839,13 @@ void Game::updateEntity(float dt, double now) {
                 SetSoundVolume(s, clampf(1.4f / (1.0f + 0.07f * entDist * entDist), 0.0f, 0.9f));
                 PlaySound(s);
             }
-            ent.unseen = entVisible ? 0 : ent.unseen + dt * (crouchCur > 0.7f ? 1.7f : 1.0f);
-            if (ent.unseen > 6 && entDist > 14) ent.st = EState::Hidden, ent.nextSpawn = now + 25 + grng.f01() * 40;
-            if (entDist < 1.25f) {   // caught
+            ent.unseen = entVisible ? 0 : ent.unseen + dt * (hidden ? 2.4f : (crouchCur > 0.7f ? 1.7f : 1.0f));
+            if (ent.unseen > 6 && (entDist > 14 || hidden)) ent.st = EState::Hidden, ent.nextSpawn = now + 25 + grng.f01() * 40;
+            if (hidden && entDist < 2.2f && closeCallT <= 0) {   // it's right there and doesn't know
+                closeCallT = 3.0f;
+                PlaySound(sndHeartbeat);
+            }
+            if (entDist < 1.25f && !hidden) {   // caught
                 PlaySound(sndScare);
                 caughtT = 2.4f; caughtCount++;
                 saveBest();
