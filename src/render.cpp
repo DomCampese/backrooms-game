@@ -21,7 +21,12 @@ void Game::renderScene(double now) {
     float boSend = blackoutCur * (whisperT > 0 ? 0.86f : 1.0f);   // lights sag while it whispers
     SetShaderValue(worldShader, locBlackout, &boSend, SHADER_UNIFORM_FLOAT);
     SetShaderValue(worldShader, locViewPos, &viewPos, SHADER_UNIFORM_VEC3);
-    SetShaderValue(worldShader, locFlash, &flashCur, SHADER_UNIFORM_FLOAT);
+    float flashSend = flashCur;
+    if (flashOn && battery < 0.15f) {   // the battery's dying: a warning flicker before it goes dark
+        float lowFlick = 0.55f + 0.45f * sinf(timeF * 19.0f) * sinf(timeF * 31.0f + 1.7f);
+        flashSend *= clampf(battery / 0.15f, 0.15f, 1.0f) * (0.7f + 0.3f * lowFlick);
+    }
+    SetShaderValue(worldShader, locFlash, &flashSend, SHADER_UNIFORM_FLOAT);
     SetShaderValue(worldShader, locFlashDir, &fwd, SHADER_UNIFORM_VEC3);
     float flick = 0.91f + 0.09f * sinf(timeF * 31.0f) * sinf(timeF * 47.3f + 1.3f);
     float flareInt = flare.active
@@ -85,16 +90,27 @@ void Game::renderScene(double now) {
         int a = pci + dx, b = pck + dz;
         if (taken.count(cellKey2(a, b))) continue;
         bool isB = bottleAt(a, b), isC = !isB && coinAt(a, b);
-        if (!isB && !isC) continue;
+        bool isBat = !isB && !isC && batteryAt(a, b);
+        bool isT = !isB && !isC && !isBat && tapeAt(a, b);
+        if (!isB && !isC && !isBat && !isT) continue;
         float bxx = a * CELL + 1.0f, bzz = b * CELL + 1.0f;
         float gy = world.floorY(a, b);
         float pl = propLum(bxx, gy + 0.15f, bzz);
         if (isB) {   // almond water: chubby bottle, faint glow
             DrawCylinder({ bxx, gy, bzz }, 0.055f, 0.065f, 0.19f, 8, lit({ 108, 142, 196, 255 }, pl));
             DrawCylinder({ bxx, gy + 0.19f, bzz }, 0.02f, 0.05f, 0.07f, 8, lit({ 140, 170, 215, 255 }, pl));
-        } else {
+        } else if (isC) {
             float bob = sinf((float)now * 2.0f + a * 1.7f + b) * 0.03f;
             DrawCylinder({ bxx, gy + 0.06f + bob, bzz }, 0.085f, 0.085f, 0.024f, 12, lit({ 234, 188, 74, 255 }, pl));
+        } else if (isBat) {   // a spare battery, standing on end
+            DrawCube({ bxx, gy + 0.05f, bzz }, 0.06f, 0.10f, 0.06f, lit({ 70, 150, 90, 255 }, pl));
+            DrawCylinder({ bxx, gy + 0.10f, bzz }, 0.018f, 0.018f, 0.02f, 8, lit({ 200, 180, 90, 255 }, pl));
+        } else {   // a cassette tape, label up
+            float bob = sinf((float)now * 1.6f + a * 2.1f + b) * 0.02f;
+            DrawCube({ bxx, gy + 0.02f + bob, bzz }, 0.11f, 0.04f, 0.07f, lit({ 40, 38, 42, 255 }, pl));
+            DrawCube({ bxx, gy + 0.041f + bob, bzz }, 0.075f, 0.001f, 0.05f, lit({ 210, 202, 182, 255 }, pl));
+            DrawCylinder({ bxx - 0.028f, gy + 0.041f + bob, bzz }, 0.014f, 0.014f, 0.002f, 8, lit({ 30, 28, 30, 255 }, pl));
+            DrawCylinder({ bxx + 0.028f, gy + 0.041f + bob, bzz }, 0.014f, 0.014f, 0.002f, 8, lit({ 30, 28, 30, 255 }, pl));
         }
     }
     for (auto &cw : coinsWorld) {
@@ -235,8 +251,11 @@ void Game::renderUI(double now) {
         const char *pr = "press any key to descend";
         DrawText(pr, sw / 2 - MeasureText(pr, 24) / 2, sh * 2 / 3, 24, Fade({ 210, 198, 150, 255 }, pl));
         if (bestEsc || bestKill || bestM || bestWins) {
-            const char *tb = TextFormat("best:  %d got out   ·   %d clark%s put down   ·   %d m wandered",
-                                        bestWins, bestKill, bestKill == 1 ? "" : "s", bestM);
+            const char *tb = bestTapes > 0
+                ? TextFormat("best:  %d got out   ·   %d clark%s put down   ·   %d m wandered   ·   %d tape%s found",
+                             bestWins, bestKill, bestKill == 1 ? "" : "s", bestM, bestTapes, bestTapes == 1 ? "" : "s")
+                : TextFormat("best:  %d got out   ·   %d clark%s put down   ·   %d m wandered",
+                             bestWins, bestKill, bestKill == 1 ? "" : "s", bestM);
             DrawText(tb, sw / 2 - MeasureText(tb, 16) / 2, sh * 2 / 3 + 40, 16, { 140, 132, 100, 200 });
         }
         const char *tc = TextFormat("WASD move    SHIFT run    F flashlight    1/2 weapon    bank %d doubloons to leave",
@@ -342,8 +361,11 @@ void Game::renderUI(double now) {
         const char *t3 = "WASD walk   SHIFT run   CTRL crouch   SPACE jump   F flashlight   1/2 weapon   3 drink   M chalk   E vend";
         DrawText(t3, sw / 2 - MeasureText(t3, 16) / 2, sh - 60, 16, Fade({ 140, 132, 100, 255 }, ta * 0.8f));
         if (bestEsc || bestKill || bestM || bestWins) {
-            const char *tb = TextFormat("best: %d got out  ·  %d clark%s put down  ·  %d m wandered",
-                                        bestWins, bestKill, bestKill == 1 ? "" : "s", bestM);
+            const char *tb = bestTapes > 0
+                ? TextFormat("best: %d got out  ·  %d clark%s put down  ·  %d m wandered  ·  %d tape%s found",
+                             bestWins, bestKill, bestKill == 1 ? "" : "s", bestM, bestTapes, bestTapes == 1 ? "" : "s")
+                : TextFormat("best: %d got out  ·  %d clark%s put down  ·  %d m wandered",
+                             bestWins, bestKill, bestKill == 1 ? "" : "s", bestM);
             DrawText(tb, sw / 2 - MeasureText(tb, 16) / 2, sh / 3 + 98, 16, Fade({ 150, 140, 105, 255 }, ta * 0.8f));
         }
         const char *tg = TextFormat("bank %d doubloons — fight Clark for them — then take a door out", ESCAPE_COST);
@@ -397,22 +419,48 @@ void Game::renderUI(double now) {
         const char *t2 = TextFormat("...but nothing stays down, down here   ·   %d put down", killCount);
         DrawText(t2, sw / 2 - MeasureText(t2, 18) / 2, sh / 2 - 44, 18, Fade({ 150, 122, 100, 255 }, a * 0.9f));
     }
+    if (closeCallT > 0) {   // it stood right beside you, and never knew
+        float a = clampf(closeCallT > 2.3f ? (3.0f - closeCallT) / 0.7f : closeCallT / 1.4f, 0, 1);
+        const char *t = "IT STOOD RIGHT THERE";
+        DrawText(t, sw / 2 - MeasureText(t, 30) / 2, sh / 2 - 130, 30, Fade({ 200, 70, 60, 255 }, a));
+        const char *t2 = "...and never saw you";
+        DrawText(t2, sw / 2 - MeasureText(t2, 15) / 2, sh / 2 - 98, 15, Fade({ 160, 130, 120, 220 }, a * 0.9f));
+    }
+    if (tapeFoundT > 0) {   // a cassette recovered — someone else's fragment of the descent
+        float a = clampf(tapeFoundT > 2.6f ? (3.2f - tapeFoundT) / 0.6f : tapeFoundT / 1.6f, 0, 1);
+        const char *t = "TAPE RECOVERED";
+        DrawText(t, sw / 2 - MeasureText(t, 22) / 2, sh - 150, 22, Fade({ 190, 178, 150, 255 }, a));
+        DrawText(tapeLine, sw / 2 - MeasureText(tapeLine, 15) / 2, sh - 122, 15, Fade({ 150, 140, 118, 230 }, a * 0.9f));
+    }
     if (!IsCursorHidden() && !shotPath) {
         const char *t = "click to capture mouse";
         DrawText(t, sw / 2 - MeasureText(t, 20) / 2, sh / 2 + 80, 20, { 200, 190, 150, 200 });
     }
     DrawText(TextFormat("%d", GetFPS()), sw - MeasureText(TextFormat("%d", GetFPS()), 16) - 14, 12, 16, { 190, 180, 140, 150 });
-    // persistent flashlight reminder until first use; small state dot after
+    // persistent flashlight reminder until first use; small state dot + charge bar after
     if (flashOn) everFlashed = true;
     if (!everFlashed && elapsed > 9.0)
         DrawText("F — flashlight", sw - MeasureText("F — flashlight", 16) - 16, sh - 28, 16, { 190, 180, 140, 160 });
     else if (flashOn)
         DrawText("[ flashlight ]", sw - MeasureText("[ flashlight ]", 14) - 16, sh - 26, 14, { 235, 225, 180, 120 });
+    if (flashOn || battery < 0.99f) {   // charge bar, once it's been used or spent at all
+        int bw = 90, bx3 = sw - bw - 16, by3 = sh - 44;
+        DrawRectangle(bx3 - 1, by3 - 1, bw + 2, 7, { 0, 0, 0, 120 });
+        Color bc = battery < 0.15f ? Color{ 220, 90, 70, 190 } : Color{ 200, 190, 150, 150 };
+        DrawRectangle(bx3, by3, (int)(bw * battery), 5, bc);
+        if (flashOn && battery < 0.15f) {
+            const char *t = "battery low";
+            float pl = 0.5f + 0.5f * sinf((float)now * 5.0f);
+            DrawText(t, sw - MeasureText(t, 13) - 16, sh - 60, 13, Fade({ 220, 120, 100, 220 }, pl));
+        }
+    }
     {   // inventory, bottom-left; the selected weapon is lit
         const char *w0 = TextFormat("1  flare  ×%d", flares);
         const char *w1 = reloadT > 0 ? "2  revolver  [reloading]"
                                      : TextFormat("2  revolver  %d/%d%s", ammo, MAXAMMO, ammo == 0 ? "  — R" : "");
         Color selc = { 235, 200, 130, 210 }, dimc = { 150, 138, 112, 110 };
+        if (tapes > 0)
+            DrawText(TextFormat("tapes  ×%d", tapes), 16, sh - 116, 16, { 172, 162, 190, 170 });
         if (coins > 0 || wayOpen())   // doubloons double as your ticket out (ESCAPE_COST to leave)
             DrawText(TextFormat("doubloons  ×%d / %d", coins, ESCAPE_COST), 16, sh - 94, 16,
                      wayOpen() ? Color{ 120, 230, 140, 210 } : Color{ 214, 178, 92, 170 });
@@ -431,15 +479,18 @@ void Game::renderUI(double now) {
         DrawRectangle(bx2 - 1, by2 - 1, bw + 2, 8, { 0, 0, 0, 120 });
         DrawRectangle(bx2, by2, (int)(bw * stamina), 6, { 200, 180, 120, 160 });
     }
-    if (crouchCur > 0.5f)
+    if (hidden)
+        DrawText("[ hidden — hold still ]", sw / 2 - MeasureText("[ hidden — hold still ]", 14) / 2, sh - 62, 14,
+                 { 140, 210, 165, 160 });
+    else if (crouchCur > 0.5f)
         DrawText("[ crouched ]", sw / 2 - MeasureText("[ crouched ]", 14) / 2, sh - 62, 14, { 180, 170, 140, 120 });
     if (debugHud) {
-        DrawText(TextFormat("%d fps  pos(%.0f, %.0f)  chunks %d  entity %s  d=%.0fm",
+        DrawText(TextFormat("%d fps  pos(%.0f, %.0f)  chunks %d  entity %s  d=%.0fm  hidden=%d  batt=%.2f",
                             GetFPS(), px, pz, (int)world.chunks.size(),
                             ent.st == EState::Hidden ? "hidden" : ent.st == EState::Stalk ? "STALKING"
                                 : ent.st == EState::Chase ? "CHASING"
                                 : ent.st == EState::Flee ? "FLEEING" : "DYING",
-                            entDist > 1e8 ? 0.0f : entDist),
+                            entDist > 1e8 ? 0.0f : entDist, hidden ? 1 : 0, battery),
                  12, 12, 18, { 230, 220, 160, 220 });
         DrawText("dev: B blackout   E spawn   C chase   H hide   G flares   N next level",
                  12, 34, 16, { 200, 190, 140, 180 });

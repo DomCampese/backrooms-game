@@ -79,6 +79,11 @@ make run
   chases.
 
   <p align="center"><img src="docs/entity_dark_flashlight.png" width="480" alt="The hunter in its pool of dead light, found by the flashlight"></p>
+- **Hiding** — crouch (CTRL) in beside real cover — a couch, a filing cabinet,
+  an armoire, a desk, shelving, a party table — and the hunt loses you outright,
+  however close it gets. It can walk right up and stand there not knowing;
+  hold still and it gives up faster than it would out in the open. Get away
+  with it and you'll know: *it stood right there, and never saw you.*
 - **Flares** — throw one (Q, or left click when selected) and it arcs,
   clatters off walls, and burns orange for nine seconds — a real point light
   in the shader, with a synthesized strike-and-hiss. Clark won't come near
@@ -90,6 +95,15 @@ make run
   stay quiet for a couple of minutes, then something out in the fog stands
   back up. With the flare selected you carry it in hand, cap out, ready to
   strike.
+- **The flashlight runs on a battery** — it drains while it's on, flickers a
+  warning as it dies, and goes dark if you let it run out — you can always
+  switch it off, but a dead battery won't switch back on. Spares turn up
+  in the world like almond water and doubloons do, and top up a solid chunk
+  of charge. Choose when you actually need it.
+- **Cassette tapes** — rarer finds, scattered through the halls: someone
+  else's fragment of the descent, a line of found text and a warble of tape
+  hiss when you pick one up. They don't do anything — they're just there to
+  find.
 - **Terrain** — Level 0 sinks into carpeted conversation pits, Level 1 raises
   concrete loading docks, and the pools get proper steps down into the water.
   Real stair geometry, smooth step physics — and you can jump onto most of

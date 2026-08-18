@@ -39,7 +39,7 @@ struct Game {
     int locPTime = -1, locPFear = -1;
     Material mats[6]{};                        // 0 floor, 1 ceiling, 2 walls, 3 props, 4 scrawl, 5 baked AO
     Sound steps[4]{}, splashes[2]{}, sndBigSplash{}, sndClick{}, sndScare{}, sndWin{},
-          sndFlare{}, sndShot{}, sndHit{}, sndKill{}, sndPop{};
+          sndFlare{}, sndShot{}, sndHit{}, sndKill{}, sndPop{}, sndHeartbeat{}, sndTape{};
     Sound entSteps[4]{};                        // the thing's own footfalls, panned + attenuated
     AudioSynth synth;
     World world;
@@ -55,6 +55,7 @@ struct Game {
     float stamina = 1.0f, fov = 70.0f, stepAcc = 0, bobPhase = 0;
     bool flashOn = false;
     float flashCur = 0;
+    float battery = 1.0f;                     // flashlight charge, 0..1 — drains while on, dead at 0
 
     // per-frame derived (look/movement feeds weapons, entity, and render)
     Vector3 fwd{ 1, 0, 0 };
@@ -102,11 +103,14 @@ struct Game {
     std::unordered_set<uint64_t> poppedTableBunches; // and party-table balloon bunches
     struct Confetti { Vector3 pos, vel; float life; Color col; };
     std::vector<Confetti> confetti;           // bursts from popped balloons
-    int almond = 0, coins = 0;
+    int almond = 0, coins = 0, tapes = 0;
     float boostT = 0, crouchCur = 0, whisperT = 0;
     double nextWhisper = 0;
+    bool hidden = false;                      // crouched and tucked beside cover — the hunt can't find you
+    float closeCallT = 0, tapeFoundT = 0;      // brief overlays: it stood right there / a tape found
+    const char *tapeLine = "";                 // which recovered-tape line to show
     char bestPath[512] = {};
-    int bestEsc = 0, bestKill = 0, bestM = 0, bestWins = 0;
+    int bestEsc = 0, bestKill = 0, bestM = 0, bestWins = 0, bestTapes = 0;
     bool everFlashed = false;                 // HUD: flashlight reminder until first use
     bool inMenu = false;                      // title screen up, world drifting behind it
 
@@ -125,6 +129,9 @@ struct Game {
     static uint64_t cellKey2(int a, int b) { return ((uint64_t)(uint32_t)a << 32) | (uint32_t)b; }
     bool bottleAt(int a, int b);              // almond water, left out for whoever needs it
     bool coinAt(int a, int b);                // a doubloon he dropped on his rounds
+    bool batteryAt(int a, int b);             // a spare battery, tucked somewhere
+    bool tapeAt(int a, int b);                // a cassette tape, someone else's recovered days
+    bool hideSpotAt(int a, int b);            // furniture big enough to tuck in beside
     bool balloonAt(int a, int b, Vector3 &out);   // LEVEL FUN ceiling balloon centre, if one floats here
     // party-table balloon bunch in this cell: fills pos[]/cols[] (up to 4), the
     // knot point, and returns the count (0 = no bunch). Shared by render + aim.
