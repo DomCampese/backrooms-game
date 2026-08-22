@@ -838,6 +838,23 @@ bool World::lineOfSight(float ax, float az, float bx, float bz) {
     return true;
 }
 
+// The maze is a 2D floorplan extruded floor-to-ceiling, so light occlusion is a
+// 2D problem. Snapshot the cells around the player into a byte grid and the
+// fragment shader can march it to answer "does this light reach this point".
+// Only full-height blockers count: an exit doorway (2) is a hole, a window (3)
+// is glass, and furniture is too short to seal a cell — all let light through.
+void World::buildOccupancy(int originI, int originK, int n, unsigned char *out) {
+    for (int z = 0; z < n; z++)
+        for (int x = 0; x < n; x++) {
+            int ci = originI + x, ck = originK + z;
+            unsigned char v = 0;
+            if (wallNVal(ci, ck) == 1) v |= 1;
+            if (wallWVal(ci, ck) == 1) v |= 2;
+            if (pillarAt(ci, ck)) v |= 4;
+            out[z * n + x] = v;
+        }
+}
+
 bool World::canStep(int ci, int ck, int ni, int nk) {
     if (pillarAt(ni, nk) || propAt(ni, nk) != 0) return false;   // furniture and pillars are solid
     // a wall (1) or window (3) on the shared edge blocks it; a doorway (2) is open

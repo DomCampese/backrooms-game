@@ -48,6 +48,10 @@ void Game::init() {
     ceilTexs[4] = makePartyCeilTex();   // the party hall's ceiling has gone dark
 
     worldShader = LoadShaderFromMemory(WORLD_VS, WORLD_FS);
+    // A failed compile silently falls back to raylib's default shader, which
+    // renders a plausible-looking but completely wrong scene. Say so instead.
+    if (worldShader.id == rlGetShaderIdDefault())
+        TraceLog(LOG_ERROR, "world shader failed to compile - see the SHADER lines above");
     locTime = GetShaderLocation(worldShader, "uTime");
     locBlackout = GetShaderLocation(worldShader, "uBlackout");
     locViewPos = GetShaderLocation(worldShader, "uViewPos");
@@ -65,15 +69,27 @@ void Game::init() {
     locFlareInt = GetShaderLocation(worldShader, "uFlareInt");
     locEntPos = GetShaderLocation(worldShader, "uEntPos");
     locEntDark = GetShaderLocation(worldShader, "uEntDark");
+    locOccOrigin = GetShaderLocation(worldShader, "uOccOrigin");
+    locOccN = GetShaderLocation(worldShader, "uOccN");
+    locEntBlock = GetShaderLocation(worldShader, "uEntBlock");
     locGloss = GetShaderLocation(worldShader, "uGloss");
     postShader = LoadShaderFromMemory(NULL, POST_FS);
     locPTime = GetShaderLocation(postShader, "uTime");
     locPFear = GetShaderLocation(postShader, "uFear");
 
     texAO = makeAOStripTex();
+    {   // light-occlusion grid: one byte per cell, point-sampled, never filtered
+        occBuf.assign(OCC_N * OCC_N, 0);
+        Image occImg = { occBuf.data(), OCC_N, OCC_N, 1, PIXELFORMAT_UNCOMPRESSED_GRAYSCALE };
+        texOcc = LoadTextureFromImage(occImg);
+        SetTextureFilter(texOcc, TEXTURE_FILTER_POINT);
+        SetTextureWrap(texOcc, TEXTURE_WRAP_CLAMP);
+    }
     for (int i = 0; i < 6; i++) {
         mats[i] = LoadMaterialDefault();
         mats[i].shader = worldShader;
+        // rides the normal-map slot, which DrawMesh binds as "texture2"
+        mats[i].maps[MATERIAL_MAP_NORMAL].texture = texOcc;
     }
     mats[3].maps[MATERIAL_MAP_DIFFUSE].texture = texProps;
     mats[4].maps[MATERIAL_MAP_DIFFUSE].texture = texScrawl;   // wall scrawl decals
@@ -187,6 +203,7 @@ void Game::updateMenu(double now) {
     ent.st = EState::Hidden; entDist = 1e9f; entDarkCur = 0;
     fear = 0.0f; blackoutCur = 1.0f;
     streamChunks();
+    updateOccupancy();
     int k = GetKeyPressed();                    // F11 (fullscreen) shouldn't count as "begin"
     if ((k != 0 && k != KEY_F11) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) startRun(now);
 }
@@ -237,6 +254,7 @@ void Game::applyLevel(int lv) {
     synth.tParty = lv == 4 ? 1.0f : 0.0f;
     nextBlackout = lv == 2 ? 1e18 : GetTime() + 30 + grng.f01() * 60;   // no blackouts in the poolrooms
     blackoutEnd = -1;
+    occValid = false;                                   // different floorplan, different shadows
     taken.clear(); coinsWorld.clear(); chalk.clear();   // it's a different maze down here
     poppedBalloons.clear(); poppedTableBunches.clear(); confetti.clear();
     SetWindowTitle(TextFormat("THE BACKROOMS — %s", c.name));
@@ -406,6 +424,7 @@ bool Game::tick() {
     closeCallT = fmaxf(0, closeCallT - dt);
     tapeFoundT = fmaxf(0, tapeFoundT - dt);
     streamChunks();
+    updateOccupancy();
 
     renderScene(now);
     renderUI(now);
@@ -927,4 +946,16 @@ void Game::streamChunks() {
                 if (!d.built) { world.ensureMesh(pcx + dx, pcz + dz); budget--; }
             }
     if (frame % 90 == 0) world.unloadFar(pcx, pcz, 5);
+}
+
+// Keep the shader's light-occlusion grid centred on the player. Rebuilding is a
+// few thousand cell lookups, so only redo it once you've walked far enough that
+// the window is worth moving — it stays valid well past fog range either way.
+void Game::updateOccupancy() {
+    int wantI = cellOf(px) - OCC_N / 2, wantK = cellOf(pz) - OCC_N / 2;
+    if (occValid && abs(wantI - occOriginI) < 6 && abs(wantK - occOriginK) < 6) return;
+    occOriginI = wantI; occOriginK = wantK;
+    world.buildOccupancy(occOriginI, occOriginK, OCC_N, occBuf.data());
+    UpdateTexture(texOcc, occBuf.data());
+    occValid = true;
 }
