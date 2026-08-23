@@ -44,6 +44,13 @@ void Game::renderScene(double now) {
     float entDarkSend = (ent.st == EState::Hidden) ? 0.0f : entDarkCur;
     SetShaderValue(worldShader, locEntPos, &entPos, SHADER_UNIFORM_VEC3);
     SetShaderValue(worldShader, locEntDark, &entDarkSend, SHADER_UNIFORM_FLOAT);
+    // ...and it's solid: a beam that catches it throws its shadow down the hall
+    float entBlock = (ent.st == EState::Hidden || ent.st == EState::Die) ? 0.0f : 1.0f;
+    SetShaderValue(worldShader, locEntBlock, &entBlock, SHADER_UNIFORM_FLOAT);
+    Vector2 occOrigin = { (float)occOriginI, (float)occOriginK };
+    float occN = occValid ? (float)OCC_N : 0.0f;
+    SetShaderValue(worldShader, locOccOrigin, &occOrigin, SHADER_UNIFORM_VEC2);
+    SetShaderValue(worldShader, locOccN, &occN, SHADER_UNIFORM_FLOAT);
 
     BeginTextureMode(rt);
     ClearBackground(BLACK);

@@ -60,6 +60,11 @@ struct World {
     // floor height here, counting prop tops at or below your feet (so you can stand on furniture)
     float groundAt(float x, float z, float feetY);
     bool lineOfSight(float ax, float az, float bx, float bz);
+    // Snapshot the local floorplan into a byte grid the shader marches for light
+    // occlusion: bit0 = solid wall on this cell's north edge, bit1 = on its west
+    // edge, bit2 = a pillar fills the cell. Only full-height blockers go in —
+    // doorways, window glass and furniture all let light through.
+    void buildOccupancy(int originI, int originK, int n, unsigned char *out);
     // can the hunter walk from cell (ci,ck) into the adjacent cell (ni,nk)?
     bool canStep(int ci, int ck, int ni, int nk);
     // BFS the cell grid from (si,sk) toward (ti,tk); fills the next cell to move

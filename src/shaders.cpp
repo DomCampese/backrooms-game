@@ -23,6 +23,10 @@ uniform vec3 uEntPos; uniform float uEntDark;      // the hunter kills the light
 uniform vec3 uAmb; uniform vec3 uFogCol; uniform float uFogDen;
 uniform vec3 uLightCol; uniform float uLS; uniform float uLY; uniform float uDead; uniform float uLightMul;
 uniform float uGloss;
+uniform sampler2D texture2;      // occupancy grid (material normal-map slot)
+uniform vec2 uOccOrigin;         // world cell coords of texel (0,0)
+uniform float uOccN;             // grid side in cells; 0 = no grid, everything lit
+uniform float uEntBlock;         // 1 while the thing is out — it occludes light too
 out vec4 finalColor;
 float lhash(vec2 g){ return fract(sin(dot(g, vec2(127.1,311.7)))*43758.5453123); }
 float vnoise(vec2 p){
@@ -58,10 +62,70 @@ float lightState(vec2 g){
     }
     return s * uBlackout;
 }
+int occAt(ivec2 c){
+    ivec2 t = c - ivec2(uOccOrigin);
+    int n = int(uOccN);
+    if (t.x < 0 || t.y < 0 || t.x >= n || t.y >= n) return 0;   // off-grid: assume open
+    return int(texelFetch(texture2, t, 0).r * 255.0 + 0.5);
+}
+// Does light from `a` reach `b`? Walls are a floorplan extruded to full height,
+// so this is a 2D grid march: step cell to cell and test the edge we cross.
+// Doorways, window glass and open gaps aren't in the grid, so light pours
+// through them — which is where the shafts across dark corridors come from.
+float lightVis(vec2 a, vec2 b){
+    if (uOccN < 1.0) return 1.0;
+    vec2 d = b - a;
+    float dist = length(d);
+    if (dist < 0.05) return 1.0;
+    vec2 dir = d / dist;
+    ivec2 c = ivec2(floor(a / 2.0)), ec = ivec2(floor(b / 2.0));
+    if (c == ec) return 1.0;
+    ivec2 stp = ivec2(sign(dir.x), sign(dir.y));
+    vec2 inv = 1.0 / max(abs(dir), vec2(1e-6));
+    vec2 tDelta = 2.0 * inv;
+    vec2 tMax = abs((vec2(c) + max(vec2(stp), 0.0)) * 2.0 - a) * inv;
+    if (stp.x == 0) tMax.x = 1e9;
+    if (stp.y == 0) tMax.y = 1e9;
+    for (int i = 0; i < 8; i++){   // 8 cells is 16 m — past the reach of an 8 m light grid
+        if (tMax.x < tMax.y){
+            if (tMax.x > dist) return 1.0;
+            c.x += stp.x;
+            // crossing between cells shares one west edge: the right-hand cell owns it
+            if ((occAt(ivec2(stp.x > 0 ? c.x : c.x + 1, c.y)) & 2) != 0) return 0.0;
+            tMax.x += tDelta.x;
+        } else {
+            if (tMax.y > dist) return 1.0;
+            c.y += stp.y;
+            if ((occAt(ivec2(c.x, stp.y > 0 ? c.y : c.y + 1)) & 1) != 0) return 0.0;
+            tMax.y += tDelta.y;
+        }
+        if (c == ec) return 1.0;
+        if ((occAt(c) & 4) != 0) return 0.0;   // a pillar fills its whole cell
+    }
+    return 1.0;
+}
+// the hunter is solid too: catch it in a beam and it throws a shadow down the
+// hall. It's a body, not a column — a ray that passes over its head still gets
+// through, so the beam clears it onto the ceiling behind.
+float entVis(vec3 a, vec3 b){
+    if (uEntBlock < 0.5) return 1.0;
+    vec2 d = b.xz - a.xz;
+    float L = length(d);
+    if (L < 1e-4) return 1.0;
+    vec2 n = d / L;
+    float t = clamp(dot(uEntPos.xz - a.xz, n), 0.0, L);
+    float side = smoothstep(0.26, 0.52, distance(a.xz + n * t, uEntPos.xz));
+    // uEntPos.y is chest height; the head is a bit under a metre above that
+    float rayY = mix(a.y, b.y, t / L);
+    float over = smoothstep(0.0, 0.45, rayY - (uEntPos.y + 0.95));
+    return max(side, over);
+}
 vec3 roomLight(vec3 P, vec3 N){
     vec2 base = floor((P.xz - uLS*0.5)/uLS + 0.5);
     vec3 light = vec3(0.0);
     vec3 V = normalize(uViewPos - P);
+    // march from just off the surface, so a wall face isn't shadowed by its own wall
+    vec2 shP = P.xz + N.xz * 0.16;
     for (int dx=-1; dx<=1; dx++)
     for (int dz=-1; dz<=1; dz++){
         vec2 g = base + vec2(float(dx), float(dz));
@@ -75,6 +139,22 @@ vec3 roomLight(vec3 P, vec3 N){
         vec3 ld = lp - P;
         float d2 = dot(ld,ld);
         float atten = 1.0/(1.0 + 0.075*d2);
+        if (st*atten < 0.004) continue;              // too faint to be worth tracing
+        // The panel is a metre-wide strip, not a point: trace both ends and let
+        // the average be the penumbra, so shadow edges land soft instead of cut.
+        // Only worth paying for up close — past a few metres the soft edge is
+        // finer than the pixels, so distant lights take the single centre tap.
+        float vis;
+        if (d2 < 36.0) {
+            vec2 toFrag = shP - lp.xz;
+            float toLen = length(toFrag);
+            // directly overhead there's no meaningful direction to spread along
+            vec2 perp = (toLen > 0.001) ? vec2(-toFrag.y, toFrag.x) / toLen * 0.45 : vec2(0.45, 0.0);
+            vis = 0.5*(lightVis(lp.xz + perp, shP) + lightVis(lp.xz - perp, shP));
+        } else vis = lightVis(lp.xz, shP);
+        // a wall kills the direct beam, never the light that bounces around it
+        st *= mix(0.22, 1.0, vis);
+        if (st <= 0.001) continue;
         vec3 Ln = normalize(ld);
         float ndl = clamp(dot(N, Ln)*0.55 + 0.45, 0.0, 1.0);
         light += uLightCol*(st*atten*ndl*2.0*uLightMul);
@@ -97,13 +177,17 @@ vec3 roomLight(vec3 P, vec3 N){
         float cone = pow(max(dot(fn, uFlashDir), 0.0), 26.0);
         float sput = 0.975 + 0.025*fract(sin(floor(uTime*24.0)*12.9898)*43758.5453);
         float fl = uFlash * cone * sput * 7.5/(1.0 + 0.10*fd2);
+        // a torch is near enough a point source: its shadows stay crisp
+        if (fl > 0.002) fl *= mix(0.06, 1.0, lightVis(uViewPos.xz, shP)) * entVis(uViewPos, vec3(shP.x, P.y, shP.y));
         light += vec3(1.0,0.97,0.86) * fl * clamp(dot(N, -fn)*0.6 + 0.4, 0.0, 1.0);
     }
     if (uFlareInt > 0.01){                            // burning flare: orange point light
         vec3 lv2 = uFlarePos - P;
         float d2 = dot(lv2,lv2);
+        float fi = uFlareInt * 5.0/(1.0 + 0.30*d2);
+        if (fi > 0.002) fi *= mix(0.08, 1.0, lightVis(uFlarePos.xz, shP)) * entVis(uFlarePos, vec3(shP.x, P.y, shP.y));
         float ndl = clamp(dot(N, normalize(lv2))*0.6 + 0.4, 0.0, 1.0);
-        light += vec3(1.0,0.42,0.15) * (uFlareInt * ndl * 5.0/(1.0 + 0.30*d2));
+        light += vec3(1.0,0.42,0.15) * (fi * ndl);
     }
     return light;
 }

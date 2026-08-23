@@ -57,6 +57,28 @@ make run
   computes the 9 nearest fluorescents *procedurally* — zero light data. A hash
   decides which tubes are dead and which strobe. Periodic blackout events kill
   the whole floor.
+- **Light actually stops at walls** — every source in the game is occluded by
+  real geometry: the fluorescents, your flashlight, a burning flare, the muzzle
+  flash. The trick is that this maze is a 2D floorplan extruded floor-to-ceiling,
+  so "can this light reach this point" is a *2D* question. The cells around you
+  are packed into a small byte grid (one bit per wall edge, one for pillars) and
+  uploaded as a texture; the fragment shader runs a DDA across it, testing the
+  wall edge it crosses at each step. No shadow maps, no light volumes, no extra
+  passes — one 64×64 texture and a loop.
+
+  Everything falls out of that for free: rooms you haven't lit stay dark, light
+  pours through doorways in shafts, pillars throw shadows across the floor, and
+  your torch beam stops dead at a corner instead of shining through it. Doorways
+  and window glass simply aren't in the grid, so light streams through them.
+- **Soft shadows, and no black holes** — a ceiling panel is a metre-wide strip,
+  not a point, so each one is traced from both ends and averaged: shadow edges
+  land soft, the way a real fluorescent casts them. And a wall blocks the *direct*
+  beam only — a fixed fraction still gets through to stand in for the light that
+  bounces around it, because a real room next to a lit one is never pitch black.
+  Net effect on the frame is a wider dynamic range, not a dimmer picture.
+- **The thing casts a shadow** — catch the hunter in your flashlight or a flare
+  and it throws its own silhouette down the hall. It's treated as a body rather
+  than a column, so a beam that clears its head still lights the ceiling behind.
 - **Audio** — one continuously synthesized stream: 120 Hz fluorescent hum with
   harmonics, low room tone, and a growl that swells when something is near.
   Footsteps are generated noise-burst samples.

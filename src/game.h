@@ -29,13 +29,20 @@ struct Game {
     const char *shotPath = nullptr;
 
     // resources
-    Texture2D texEntity{}, texPartygoer{}, texProps{}, texScrawl{}, texAO{};
+    Texture2D texEntity{}, texPartygoer{}, texProps{}, texScrawl{}, texAO{}, texOcc{};
+    // light-occlusion grid: the floorplan around you, uploaded for the shader to
+    // march. Recentred as you walk; OCC_N cells wide, so it always covers more
+    // than the fog can show you.
+    static constexpr int OCC_N = 64;
+    std::vector<unsigned char> occBuf;
+    int occOriginI = 0, occOriginK = 0;
+    bool occValid = false;
     Texture2D floorTexs[NLEVELS]{}, ceilTexs[NLEVELS]{}, wallTexs[NLEVELS]{};   // per-level surface sets
     Shader worldShader{}, postShader{};
     int locTime = -1, locBlackout = -1, locViewPos = -1, locFlash = -1, locFlashDir = -1,
         locAmb = -1, locFogCol = -1, locFogDen = -1, locLightCol = -1, locLS = -1, locLY = -1,
         locDead = -1, locLightMul = -1, locFlarePos = -1, locFlareInt = -1, locGloss = -1,
-        locEntPos = -1, locEntDark = -1;
+        locEntPos = -1, locEntDark = -1, locOccOrigin = -1, locOccN = -1, locEntBlock = -1;
     int locPTime = -1, locPFear = -1;
     Material mats[6]{};                        // 0 floor, 1 ceiling, 2 walls, 3 props, 4 scrawl, 5 baked AO
     Sound steps[4]{}, splashes[2]{}, sndBigSplash{}, sndClick{}, sndScare{}, sndWin{},
@@ -149,6 +156,7 @@ struct Game {
     void updateEntity(float dt, double now);
     void updateExits(double now);
     void streamChunks();
+    void updateOccupancy();                   // recentre + re-upload the light-occlusion grid
 
     // render (render.cpp)
     void renderScene(double now);             // 3D world into the offscreen target
