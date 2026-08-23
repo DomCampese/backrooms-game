@@ -72,6 +72,9 @@ struct World {
     bool pathStep(int si, int sk, int ti, int tk, int &outI, int &outK);
     // Level 0 only: a rare patch of carpet that has stopped being a floor
     bool softAt(int ci, int ck);
+    // Red Halls only: a standpipe with a shut-off wheel on it. The mesher builds
+    // the pipe, the game logic runs the puzzle, so both ask this.
+    bool valveAt(int ci, int ck);
     // some exit doors glow red and were never going anywhere good
     bool cursedExit(int ci, int ck);
     Vector2 findOpenSpot(float x, float z);

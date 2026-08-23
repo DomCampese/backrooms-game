@@ -517,3 +517,43 @@ Texture2D makeAOStripTex() {
     SetTextureWrap(t, TEXTURE_WRAP_CLAMP);   // v past 1 stays fully clear
     return t;
 }
+
+// The pack, seen side-on: a low, long-backed quadruped with too much leg and a
+// head that hangs. Drawn wide rather than tall — it reads as an animal from the
+// silhouette alone, which is all you get before it reaches you.
+Texture2D makeDogTex() {
+    const int W = 192, H = 128;
+    Image img = GenImageColor(W, H, BLANK);
+    Color *p = (Color *)img.data;
+    auto put = [&](int x, int y, Color c) { if (x >= 0 && x < W && y >= 0 && y < H) p[y * W + x] = c; };
+    auto vspan = [&](int x, int y0, int y1, Color c) { for (int y = y0; y <= y1; y++) put(x, y, c); };
+    Color hide  = { 44, 28, 26, 255 };
+    Color hide2 = { 62, 38, 32, 255 };
+    for (int x = 22; x < 170; x++) {
+        float u = (x - 22) / 148.0f;
+        float mange = vnoise2(x * 0.22f, 3.1f, 921u);
+        Color c = (mange > 0.56f) ? hide2 : hide;
+        // body: deepest over the shoulders, tucked at the waist, rump lifted
+        float top = 46.0f + 5.0f * sinf(u * 3.14159f) - 4.0f * expf(-powf((u - 0.22f) * 5.0f, 2.0f));
+        float bot = 78.0f - 4.0f * expf(-powf((u - 0.55f) * 6.0f, 2.0f));
+        if (u > 0.06f && u < 0.94f) vspan(x, (int)top, (int)bot, c);
+        // neck and hanging head, forward of the shoulders
+        if (u < 0.20f) {
+            float t = u / 0.20f;
+            vspan(x, (int)(52 + 16 * t), (int)(70 + 14 * t), c);
+        }
+        // four legs, thin and a little too long
+        for (int L = 0; L < 4; L++) {
+            float lu = 0.16f + L * 0.22f;
+            if (fabsf(u - lu) < 0.022f) vspan(x, (int)bot - 2, 116, (L & 1) ? hide : hide2);
+        }
+        // tail, low and straight
+        if (u > 0.90f) vspan(x, (int)(58 + (u - 0.90f) * 120.0f), (int)(64 + (u - 0.90f) * 130.0f), hide);
+    }
+    // the muzzle, and the two pale eyes that find you before you find them
+    for (int x = 12; x < 30; x++) vspan(x, 66, 78, hide);
+    for (int e = 0; e < 2; e++)
+        for (int dx = 0; dx < 4; dx++) for (int dy = 0; dy < 3; dy++)
+            put(26 + dx + e * 7, 60 + dy, Color{ 226, 216, 176, 255 });
+    return finishTexture(img, false);
+}

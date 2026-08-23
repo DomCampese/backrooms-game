@@ -13,3 +13,6 @@ Sound makeGunshot();
 Sound makeWinChime();
 Sound makeHeartbeat();
 Sound makeTapeChime();
+Sound makeValveTurn();             // seized iron giving way, then the clunk of it seating
+Sound makeDogBark(uint32_t seed);  // the pack, somewhere in the red dark
+Sound makeDogHowl();

@@ -234,3 +234,79 @@ Sound makeTapeChime() {
     }
     Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
 }
+
+// A seized wheel giving way: a rising metallic squeal that grinds in steps,
+// then the flat clunk of the gate seating home.
+Sound makeValveTurn() {
+    int n = (int)(1.15f * 44100);
+    Wave w = makeWaveBuf(n);
+    short *d = (short *)w.data;
+    Rng r(0x7A17ULL);
+    float lp = 0;
+    for (int i = 0; i < n; i++) {
+        float t = i / 44100.0f;
+        float wn = r.f01() * 2 - 1;
+        lp += 0.4f * (wn - lp);
+        // the squeal climbs as the wheel turns, and stutters as it catches
+        float phase = t * 9.0f; phase -= floorf(phase);
+        float grind = (phase > 0.35f) ? 1.0f : 0.55f;
+        float squeal = sinf(6.2831853f * (620.0f + 260.0f * t) * t) * 0.30f
+                     + sinf(6.2831853f * (930.0f + 380.0f * t) * t) * 0.16f;
+        squeal *= grind * expf(-t * 1.1f) * (t < 0.82f ? 1.0f : 0.0f);
+        float scrape = (wn - lp) * 0.22f * expf(-t * 1.4f) * (t < 0.82f ? 1.0f : 0.0f);
+        float clunk = 0.0f;
+        float ct = t - 0.86f;
+        if (ct > 0.0f)
+            clunk = (sinf(6.2831853f * 96.0f * ct) * 1.1f + lp * 0.8f)
+                  * (1.0f - expf(-ct * 900.0f)) * expf(-ct * 21.0f);
+        d[i] = (short)(clampf1(tanhf((squeal + scrape + clunk) * 1.5f)) * 30000);
+    }
+    Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
+}
+
+// A bark: a hard glottal burst, a shout of noise-driven formants, a snap shut.
+Sound makeDogBark(uint32_t seed) {
+    int n = (int)(0.42f * 44100);
+    Wave w = makeWaveBuf(n);
+    short *d = (short *)w.data;
+    Rng r((uint64_t)seed * 7919u + 13u);
+    float f0 = 155.0f + r.f01() * 70.0f;      // how big the animal reads
+    float lp = 0, bp = 0;
+    for (int i = 0; i < n; i++) {
+        float t = i / 44100.0f;
+        float wn = r.f01() * 2 - 1;
+        lp += 0.30f * (wn - lp);
+        // pitch drops sharply through the bark, the way a real one does
+        float f = f0 * (1.0f - 0.42f * t / 0.42f);
+        float voice = sinf(6.2831853f * f * t) * 0.55f
+                    + sinf(6.2831853f * f * 2.0f * t) * 0.28f
+                    + sinf(6.2831853f * f * 3.0f * t) * 0.14f;
+        bp += 0.45f * (lp - bp);             // a rough vocal-tract band
+        float env = (1.0f - expf(-t * 700.0f)) * expf(-t * 13.0f);
+        float s = (voice * (0.75f + 0.25f * bp) + bp * 0.8f) * env;
+        d[i] = (short)(clampf1(tanhf(s * 2.1f)) * 31000);
+    }
+    Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
+}
+
+// The pack calling to each other across the halls — long, and not quite a dog.
+Sound makeDogHowl() {
+    int n = (int)(1.9f * 44100);
+    Wave w = makeWaveBuf(n);
+    short *d = (short *)w.data;
+    Rng r(0xD06ULL);
+    float lp = 0;
+    for (int i = 0; i < n; i++) {
+        float t = i / 44100.0f;
+        float wn = r.f01() * 2 - 1;
+        lp += 0.08f * (wn - lp);
+        float slide = 210.0f + 95.0f * sinf(t * 1.5f) - 40.0f * t;   // wavering pitch
+        float voice = sinf(6.2831853f * slide * t) * 0.5f
+                    + sinf(6.2831853f * slide * 1.5f * t) * 0.22f
+                    + sinf(6.2831853f * slide * 2.0f * t) * 0.12f;
+        float env = (1.0f - expf(-t * 5.0f)) * expf(-t * 1.25f);
+        float breath = lp * 0.5f * env;
+        d[i] = (short)(clampf1(tanhf((voice * env + breath) * 1.7f)) * 29000);
+    }
+    Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
+}

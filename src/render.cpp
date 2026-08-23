@@ -185,6 +185,49 @@ void Game::renderScene(double now) {
             DrawSphere(gp, 1.35f, { 60, 235, 110, (unsigned char)(40 * pulse) });     // wide halo
         }
     }
+    if (level == 3) {   // valve wheels on their standpipes: red while open, green once shut
+        for (int dx = -7; dx <= 7; dx++) for (int dz = -7; dz <= 7; dz++) {
+            int a = pci + dx, b = pck + dz;
+            if (!world.valveAt(a, b)) continue;
+            float vx = a * CELL + 1.0f, vz = b * CELL + 1.0f;
+            float wy = world.floorY(a, b) + 1.13f;
+            bool shut = valvesTurned.count(cellKey2(a, b)) > 0;
+            float pl = propLum(vx, wy, vz);
+            Color rim = shut ? Color{ 96, 210, 128, 255 } : Color{ 196, 62, 48, 255 };
+            // a handwheel lying flat on a vertical pipe: rim, punched centre, hub
+            DrawCylinderEx({ vx, wy - 0.022f, vz }, { vx, wy + 0.022f, vz }, 0.21f, 0.21f, 12, lit(rim, pl));
+            DrawCylinderEx({ vx, wy - 0.03f, vz }, { vx, wy + 0.03f, vz }, 0.125f, 0.125f, 12,
+                           lit({ 84, 60, 44, 255 }, pl));
+            DrawCylinderEx({ vx, wy - 0.05f, vz }, { vx, wy + 0.05f, vz }, 0.045f, 0.045f, 8,
+                           lit({ 122, 96, 70, 255 }, pl));
+        }
+    }
+    for (int i = 0; i < MAXDOGS; i++) {   // the pack, low and wide against the red
+        const Dog &d = dogs[i];
+        if (d.st == DState::Gone) continue;
+        float ddx = d.x - px, ddz = d.z - pz;
+        float dd = sqrtf(ddx * ddx + ddz * ddz);
+        if (dd > 42) continue;
+        const LevelCfg &c = LEVELS[level];
+        float ambLum = (c.amb.x + c.amb.y + c.amb.z) / 3.0f;
+        float lum = lightAtCPU(d.x, d.dispY + 0.5f, d.z, blackoutCur,
+                               c.ls, c.wallH - 0.12f, c.dead, c.lightMul, ambLum);
+        if (flashCur > 0.05f) {
+            float d2 = dd * dd + 1e-4f;
+            float cone = powf(fmaxf((ddx * fwd.x + ddz * fwd.z) / (dd + 1e-4f), 0.0f), 26.0f);
+            lum = clampf(lum + flashCur * cone * 7.5f / (1.0f + 0.10f * d2), 0.0f, 1.0f);
+        }
+        if (flareInt > 0.01f) {
+            float fx = d.x - flarePos.x, fz = d.z - flarePos.z;
+            lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fx * fx + fz * fz)), 0.0f, 1.0f);
+        }
+        float fade = d.st == DState::Yelp ? clampf(1.0f - d.life / 2.6f, 0, 1) : 1.0f;
+        unsigned char l8 = cl8(40 + 215 * lum);
+        unsigned char al = cl8(255 * clampf(expf(-dd * c.fogDen) * 1.6f, 0, 1) * fade);
+        // shoulder height ~0.75 m, and a long body — drawn wide, not tall
+        DrawBillboardRec(cam, texDog, { 0, 0, 192, 128 },
+                         { d.x, d.dispY + 0.46f, d.z }, { 1.45f, 0.97f }, { l8, l8, l8, al });
+    }
     if (flare.active) {   // the flare itself: hot core, orange halo, stub of a body
         Vector3 fp = { flare.x, flare.y + 0.05f, flare.z };
         DrawCylinder({ flare.x, flare.y - 0.03f, flare.z }, 0.018f, 0.022f, 0.09f, 8, { 130, 30, 22, 255 });
@@ -491,6 +534,28 @@ void Game::renderUI(double now) {
                  { 140, 210, 165, 160 });
     else if (crouchCur > 0.5f)
         DrawText("[ crouched ]", sw / 2 - MeasureText("[ crouched ]", 14) / 2, sh - 62, 14, { 180, 170, 140, 120 });
+    if (level == 3 && (valveT > 0 || (pipesShut && valveT > 0))) {   // just closed one
+        float a = clampf(valveT / 1.6f, 0, 1);
+        if (pipesShut) {
+            const char *t = "THE PIPES GO QUIET";
+            DrawText(t, sw / 2 - MeasureText(t, 34) / 2, sh / 2 - 110, 34, Fade({ 120, 230, 145, 255 }, a));
+            const char *t2 = "...and the halls give up what they were holding";
+            DrawText(t2, sw / 2 - MeasureText(t2, 16) / 2, sh / 2 - 74, 16, Fade({ 150, 200, 160, 255 }, a * 0.9f));
+        } else {
+            const char *t = TextFormat("VALVE SHUT   %d / %d", (int)valvesTurned.size(), VALVES_NEEDED);
+            DrawText(t, sw / 2 - MeasureText(t, 26) / 2, sh / 2 - 100, 26, Fade({ 210, 180, 120, 255 }, a));
+        }
+    }
+    if (level == 3 && !valvesTurned.empty() && !pipesShut)   // standing tally
+        DrawText(TextFormat("valves  %d / %d", (int)valvesTurned.size(), VALVES_NEEDED),
+                 16, sh - 138, 16, { 198, 150, 96, 175 });
+    if (paused) {
+        DrawRectangle(0, 0, sw, sh, Fade(BLACK, 0.55f));
+        const char *t = "P A U S E D";
+        DrawText(t, sw / 2 - MeasureText(t, 46) / 2, sh / 2 - 42, 46, { 225, 212, 160, 235 });
+        const char *t2 = "P to resume";
+        DrawText(t2, sw / 2 - MeasureText(t2, 18) / 2, sh / 2 + 16, 18, { 165, 155, 120, 200 });
+    }
     if (debugHud) {
         DrawText(TextFormat("%d fps  pos(%.0f, %.0f)  chunks %d  entity %s  d=%.0fm  hidden=%d  batt=%.2f",
                             GetFPS(), px, pz, (int)world.chunks.size(),

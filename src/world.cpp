@@ -201,6 +201,14 @@ bool World::cursedExit(int ci, int ck) {
     return ih(ci, ck, (uint32_t)seed ^ 0xC0DEu) % 6 == 0;
 }
 
+// A shut-off wheel on a floor-to-ceiling standpipe. Rare enough that finding
+// three is a proper errand, and never inside a wall, pillar or furniture.
+bool World::valveAt(int ci, int ck) {
+    if (level != 3) return false;
+    if (ih(ci, ck, (uint32_t)seed ^ 0x7A17u) % 149 != 0) return false;
+    return !pillarAt(ci, ck) && propAt(ci, ck) == 0 && wallNVal(ci, ck) != 1 && wallWVal(ci, ck) != 1;
+}
+
 // rotated prop box: 4 sides + top, one UV region for sides, another for the top
 static void addPropBox(MB &mb, float cx, float cz, float yaw, float hx, float hz, float y0, float y1,
                        float u0, float v0, float u1, float v1,
@@ -221,6 +229,18 @@ static void addPropBox(MB &mb, float cx, float cz, float yaw, float hx, float hz
     mb.quad({corners[0].x,y1,corners[0].z},{corners[1].x,y1,corners[1].z},
             {corners[2].x,y1,corners[2].z},{corners[3].x,y1,corners[3].z},{0,1,0},
             {tu0,tv0},{tu1,tv0},{tu1,tv1},{tu0,tv1}, tint);
+}
+
+// A plain axis-aligned solid in a flat colour. Samples the props atlas' blank
+// metal corner, so the tint is the whole look — pipework, collars, standpipes.
+static void addSolidBox(MB &mb, float x0, float y0, float z0, float x1, float y1, float z1, Color t) {
+    const Vector2 u = { 0.75f, 0.75f };
+    mb.quad({x0,y0,z0},{x1,y0,z0},{x1,y1,z0},{x0,y1,z0},{0,0,-1},u,u,u,u,t);
+    mb.quad({x1,y0,z1},{x0,y0,z1},{x0,y1,z1},{x1,y1,z1},{0,0,1},u,u,u,u,t);
+    mb.quad({x0,y0,z1},{x0,y0,z0},{x0,y1,z0},{x0,y1,z1},{-1,0,0},u,u,u,u,t);
+    mb.quad({x1,y0,z0},{x1,y0,z1},{x1,y1,z1},{x1,y1,z0},{1,0,0},u,u,u,u,t);
+    mb.quad({x0,y1,z0},{x1,y1,z0},{x1,y1,z1},{x0,y1,z1},{0,1,0},u,u,u,u,t);
+    mb.quad({x0,y0,z1},{x1,y0,z1},{x1,y0,z0},{x0,y0,z0},{0,-1,0},u,u,u,u,t);
 }
 
 // skip bits: 1 = -z face, 2 = +z face, 4 = -x face, 8 = +x face. Wall runs overlap
@@ -710,6 +730,55 @@ void World::ensureMesh(int cx, int cz) {
                            MU0, MV0, MU1, MV1, MU0, MV0, MU1, MV1, Color{ 64, 108, 56, 255 });
                 break;
             }
+            }
+        }
+    }
+    if (level == 3) {
+        // Service pipework. Runs are decided per *row* rather than per cell, so a
+        // pipe follows a whole corridor the way a real service run does instead of
+        // appearing in patches. Consecutive cells emit abutting segments, so the
+        // run reads as one continuous pipe.
+        for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
+            float gx = wx + i * CELL, gz = wz + kk * CELL;
+            int gi = cx * CCELLS + i, gk = cz * CCELLS + kk;
+            // pipes hug the walls they run beside
+            if (dd.wallN[i][kk] == 1) {
+                uint32_t rh = ih(gk, 7717, seed ^ 0x9191u);
+                if (rh % 4 == 0) {
+                    float py = wallH - 0.22f - ((rh >> 5) & 3) * 0.09f;
+                    float side = ((rh >> 9) & 1) ? 0.34f : -0.34f;
+                    float r = 0.065f + ((rh >> 11) & 3) * 0.012f;
+                    Color pc = ((rh >> 13) & 1) ? Color{ 78, 54, 40, 255 }   // rusted iron
+                                                : Color{ 62, 60, 66, 255 };  // dull steel
+                    addSolidBox(pr, gx, py - r, gz + side - r, gx + CELL, py + r, gz + side + r, pc);
+                    if (((gi * 2654435761u) & 3) == 0)   // a collar every few metres
+                        addSolidBox(pr, gx + 0.85f, py - r - 0.03f, gz + side - r - 0.03f,
+                                    gx + 1.15f, py + r + 0.03f, gz + side + r + 0.03f,
+                                    Color{ 96, 74, 56, 255 });
+                }
+            }
+            if (dd.wallW[i][kk] == 1) {
+                uint32_t rh = ih(gi, 3313, seed ^ 0x9292u);
+                if (rh % 4 == 0) {
+                    float py = wallH - 0.22f - ((rh >> 5) & 3) * 0.09f;
+                    float side = ((rh >> 9) & 1) ? 0.34f : -0.34f;
+                    float r = 0.065f + ((rh >> 11) & 3) * 0.012f;
+                    Color pc = ((rh >> 13) & 1) ? Color{ 78, 54, 40, 255 }
+                                                : Color{ 62, 60, 66, 255 };
+                    addSolidBox(pr, gx + side - r, py - r, gz, gx + side + r, py + r, gz + CELL, pc);
+                    if (((gk * 2654435761u) & 3) == 0)
+                        addSolidBox(pr, gx + side - r - 0.03f, py - r - 0.03f, gz + 0.85f,
+                                    gx + side + r + 0.03f, py + r + 0.03f, gz + 1.15f,
+                                    Color{ 96, 74, 56, 255 });
+                }
+            }
+            // valve station: a standpipe floor to ceiling, wheel drawn by the renderer
+            if (valveAt(gi, gk)) {
+                float vx = gx + 1.0f, vz = gz + 1.0f, fy = dd.elev[i][kk] * 0.1f;
+                addSolidBox(pr, vx - 0.085f, fy, vz - 0.085f, vx + 0.085f, wallH, vz + 0.085f,
+                            Color{ 84, 60, 44, 255 });
+                addSolidBox(pr, vx - 0.13f, fy + 1.02f, vz - 0.13f, vx + 0.13f, fy + 1.24f, vz + 0.13f,
+                            Color{ 104, 80, 58, 255 });   // the body the wheel sits on
             }
         }
     }

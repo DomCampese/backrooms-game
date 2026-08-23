@@ -18,3 +18,4 @@ Texture2D makePartyWallTex();      // LEVEL FUN =): bunting, confetti, smileys
 Texture2D makePartyCarpetTex();    // LEVEL FUN =): deep red party carpet
 Texture2D makePartyCeilTex();      // LEVEL FUN =): near-black party-hall ceiling
 Texture2D makeAOStripTex();        // gradient strip for baked contact-shadow decals
+Texture2D makeDogTex();            // THE RED HALLS: whatever the pack is, seen side-on
