@@ -36,6 +36,7 @@ void Game::init() {
     texPartygoer = makePartygoerTex();
     texProps = makePropsTex();
     texScrawl = makeScrawlTex();
+    texDog = makeDogTex();
     // per-level surface sets: [floor, ceiling, walls]
     floorTexs[0] = makeCarpetTex(); floorTexs[1] = makeConcreteFloorTex();
     floorTexs[2] = makeTileTex();   floorTexs[4] = makePartyCarpetTex();
@@ -109,6 +110,9 @@ void Game::init() {
     sndKill = makeJumpscare(); SetSoundPitch(sndKill, 0.55f); SetSoundVolume(sndKill, 0.80f);
     sndHeartbeat = makeHeartbeat(); SetSoundVolume(sndHeartbeat, 0.55f);
     sndTape = makeTapeChime();     SetSoundVolume(sndTape, 0.6f);
+    sndValve = makeValveTurn();    SetSoundVolume(sndValve, 0.7f);
+    sndHowl = makeDogHowl();       SetSoundVolume(sndHowl, 0.5f);
+    for (int i = 0; i < 3; i++) sndBarks[i] = makeDogBark(400 + i * 31);
 
     synth.init();
 
@@ -255,6 +259,10 @@ void Game::applyLevel(int lv) {
     nextBlackout = lv == 2 ? 1e18 : GetTime() + 30 + grng.f01() * 60;   // no blackouts in the poolrooms
     blackoutEnd = -1;
     occValid = false;                                   // different floorplan, different shadows
+    for (auto &d : dogs) d.st = DState::Gone;           // the pack doesn't follow you out
+    nextPack = GetTime() + (lv == 3 ? 8 + grng.f01() * 8 : 1e9);
+    nextHowl = GetTime() + 12 + grng.f01() * 20;
+    valvesTurned.clear(); pipesShut = false; valveT = 0;   // a fresh set of standpipes
     taken.clear(); coinsWorld.clear(); chalk.clear();   // it's a different maze down here
     poppedBalloons.clear(); poppedTableBunches.clear(); confetti.clear();
     SetWindowTitle(TextFormat("THE BACKROOMS — %s", c.name));
@@ -387,6 +395,40 @@ bool Game::tick() {
         return true;
     }
 
+    if (IsKeyPressed(KEY_P) && !shotPath) {
+        paused = !paused;
+        if (paused) {
+            pausedAt = now;
+            if (IsCursorHidden()) EnableCursor();
+        } else {
+            // Every schedule in this game is an absolute timestamp. Left alone,
+            // a minute paused would dump a blackout, a whisper and a spawn all
+            // at once on resume — so slide them by however long we were away.
+            double held = now - pausedAt;
+            nextFlareRegen += held;
+            nextBlackout += held;
+            if (blackoutEnd > 0) blackoutEnd += held;   // -1 is the "no blackout" sentinel
+            nextWhisper += held;
+            runStart += held;                            // the clock shouldn't count the pause
+            ent.nextSpawn += held;
+            nextPack += held;                            // ...and the pack keeps its own clocks
+            nextHowl += held;
+            for (auto &d : dogs) { d.nextBark += held; d.nextRoam += held; }
+            DisableCursor();
+        }
+        SetSoundPitch(sndClick, paused ? 0.7f : 1.1f);
+        PlaySound(sndClick);
+    }
+    if (paused) {
+        // frozen, but the ambience stream still has to be fed or it underruns
+        synth.growlTarget = 0; synth.hissTarget = 0; synth.whisperTarget = 0;
+        synth.update();
+        renderScene(now);
+        renderUI(now);
+        if (shotPath && frame == 600) { TakeScreenshot(shotPath); return false; }   // testing
+        return true;
+    }
+
     if (IsKeyPressed(KEY_F) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || IsKeyPressed(KEY_L)) {
         if (flashOn || battery > 0.001f) {
             flashOn = !flashOn;
@@ -415,6 +457,7 @@ bool Game::tick() {
     updateInteraction();
     updateAmbience(dt, now);
     updateEntity(dt, now);
+    updateDogs(dt, now);
     updateExits(now);
     caughtT = fmaxf(0, caughtT - dt);
     escapeT = fmaxf(0, escapeT - dt);
@@ -423,6 +466,7 @@ bool Game::tick() {
     winT = fmaxf(0, winT - dt);
     closeCallT = fmaxf(0, closeCallT - dt);
     tapeFoundT = fmaxf(0, tapeFoundT - dt);
+    valveT = fmaxf(0, valveT - dt);
     streamChunks();
     updateOccupancy();
 
@@ -608,6 +652,25 @@ void Game::updateWeapons(float dt, double now) {
             ammo--; gunCd = 0.42f; muzzleT = 0.09f; recoil = 1.0f; muzzleSmoke = 1.0f;
             PlaySound(sndShot);
             popBalloonsAlongAim();   // in LEVEL FUN, the party takes hits too
+            for (int i = 0; i < MAXDOGS; i++) {   // and in the Red Halls, the pack does
+                Dog &d = dogs[i];
+                if (d.st == DState::Gone || d.st == DState::Yelp) continue;
+                float ex = d.x - px, ez = d.z - pz;
+                float along = ex * f2x + ez * f2z, perp = fabsf(ex * r2x + ez * r2z);
+                if (along <= 0 || perp > 0.6f || along > 30.0f) continue;
+                if (!world.lineOfSight(px, pz, d.x, d.z)) continue;
+                if (--d.hp <= 0) {
+                    d.st = DState::Yelp; d.life = 0;
+                    SetSoundPitch(sndBarks[i % 3], 1.6f); SetSoundVolume(sndBarks[i % 3], 0.9f);
+                    PlaySound(sndBarks[i % 3]);
+                } else {
+                    PlaySound(sndHit);
+                    float dl = sqrtf(ex * ex + ez * ez) + 1e-4f;
+                    d.x += ex / dl * 1.6f; d.z += ez / dl * 1.6f;
+                    world.collideCircle(d.x, d.z, 0.3f);
+                }
+                break;   // one round, one dog
+            }
             // the report carries down every hallway
             if (ent.st == EState::Hidden) ent.nextSpawn = fmin(ent.nextSpawn, now + 5 + grng.f01() * 6);
             else if (ent.st == EState::Stalk) ent.gaze += 0.8f;
@@ -727,6 +790,33 @@ void Game::updateInteraction() {
         almond--; stamina = 1.0f; fear *= 0.35f; boostT = 8.0f;
         SetSoundPitch(splashes[0], 1.5f); SetSoundVolume(splashes[0], 0.5f);
         PlaySound(splashes[0]);
+    }
+    // Red Halls: close a standpipe. A valve cell never holds a prop, so this can
+    // never be the same cell as a vending machine — both may read the same press.
+    if (IsKeyPressed(KEY_E) && level == 3) {
+        bool turned = false;
+        for (int dx = -1; dx <= 1 && !turned; dx++) for (int dz = -1; dz <= 1 && !turned; dz++) {
+            int a = pci + dx, b = pck + dz;
+            if (!world.valveAt(a, b)) continue;
+            uint64_t ky = cellKey2(a, b);
+            if (valvesTurned.count(ky)) continue;
+            float vx = a * CELL + 1.0f, vz = b * CELL + 1.0f;
+            float ddx = px - vx, ddz = pz - vz;
+            if (ddx * ddx + ddz * ddz > 1.7f * 1.7f) continue;
+            valvesTurned.insert(ky);
+            valveT = 3.4f;
+            turned = true;
+            PlaySound(sndValve);
+            if ((int)valvesTurned.size() >= VALVES_NEEDED && !pipesShut) {
+                pipesShut = true;
+                PlaySound(sndWin);
+                for (int c2 = 0; c2 < 9; c2++) {   // the pipes give up their cache
+                    float aa = c2 * 0.698f + grng.f01();
+                    float rr = 1.2f + grng.f01() * 1.1f;
+                    coinsWorld.push_back({ px + cosf(aa) * rr, 0, pz + sinf(aa) * rr });
+                }
+            }
+        }
     }
     if (IsKeyPressed(KEY_E)) {   // vending machine: three doubloons a bottle
         for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
@@ -905,6 +995,132 @@ void Game::updateEntity(float dt, double now) {
     synth.growlTarget = (ent.st == EState::Chase) ? 0.75f * clampf(1 - entDist / 35.0f, 0.1f, 1.0f)
                       : (ent.st == EState::Stalk && entVisible) ? 0.22f * clampf(1 - entDist / 35.0f, 0, 1) : 0.0f;
     synth.update();
+}
+
+// The Red Halls pack. Where Clark hunts by sight — stare at him and he comes —
+// the dogs hunt by *sound*. Sprinting, firing, striking a flare all carry; going
+// still and quiet lets them lose the thread. They're faster than you, so running
+// is never the answer: fire turns them, a bullet puts one down, and silence
+// eventually bores them.
+void Game::updateDogs(float dt, double now) {
+    if (level != 3) {                       // they only live here
+        for (auto &d : dogs) d.st = DState::Gone;
+        return;
+    }
+    // how much noise you're making right now, in metres of audible radius
+    float noise = 5.0f;
+    if (sprinting) noise = 20.0f;
+    else if (velx * velx + velz * velz > 1.0f) noise = 11.0f;
+    if (crouchCur > 0.7f) noise *= 0.45f;
+    if (muzzleT > 0 || gunCd > 0.35f) noise = 45.0f;         // a shot in here carries
+    if (flare.active && flare.burn > FLAREBURN - 0.6f) noise = 30.0f;
+
+    if (now > nextHowl && caughtT <= 0) {    // the pack calling across the halls
+        nextHowl = now + 26 + grng.f01() * 34;
+        int live = 0;
+        for (auto &d : dogs) if (d.st != DState::Gone) live++;
+        if (live > 0) { SetSoundPan(sndHowl, 0.5f); PlaySound(sndHowl); }
+    }
+    // send them in one at a time so the hall fills up rather than swarming
+    if (now > nextPack) {
+        nextPack = now + 14 + grng.f01() * 16;
+        for (auto &d : dogs) {
+            if (d.st != DState::Gone) continue;
+            float a = grng.f01() * 6.2831853f, dist = 17 + grng.f01() * 9;
+            Vector2 spot = world.findOpenSpot(px + cosf(a) * dist, pz + sinf(a) * dist);
+            d.x = spot.x; d.z = spot.y;
+            d.st = DState::Prowl; d.life = 0; d.lost = 0; d.hp = 2;
+            d.dispY = world.floorY(cellOf(d.x), cellOf(d.z));
+            d.repathT = 0; d.wpx = d.x; d.wpz = d.z;
+            d.nextBark = now + grng.f01() * 3.0;
+            break;
+        }
+    }
+
+    for (int i = 0; i < MAXDOGS; i++) {
+        Dog &d = dogs[i];
+        if (d.st == DState::Gone) continue;
+        float ddx = px - d.x, ddz = pz - d.z;
+        float dist = sqrtf(ddx * ddx + ddz * ddz) + 1e-4f;
+        d.life += dt;
+
+        if (d.st == DState::Yelp) {          // shot or burned: bolts, then gone
+            float rx = d.x - px, rz = d.z - pz, rl = sqrtf(rx * rx + rz * rz) + 1e-4f;
+            d.x += rx / rl * 7.5f * dt; d.z += rz / rl * 7.5f * dt;
+            world.collideCircle(d.x, d.z, 0.3f);
+            if (d.life > 2.6f) d.st = DState::Gone;
+        } else {
+            // fire is the one thing that turns them, same as it turns Clark
+            if (flare.active) {
+                float fx = d.x - flare.x, fz = d.z - flare.z;
+                if (fx * fx + fz * fz < 5.5f * 5.5f) {
+                    d.st = DState::Yelp; d.life = 0;
+                    SetSoundPitch(sndBarks[i % 3], 1.5f); PlaySound(sndBarks[i % 3]);
+                }
+            }
+            bool heard = dist < noise;
+            if (d.st == DState::Prowl) {
+                if (heard) { d.st = DState::Charge; d.life = 0; d.lost = 0; d.repathT = 0; }
+                else if (d.life > 55) d.st = DState::Gone;      // wandered off
+            } else if (d.st == DState::Charge) {
+                d.lost = heard ? 0.0f : d.lost + dt;
+                if (d.lost > 6.0f) { d.st = DState::Prowl; d.life = 0; }
+            }
+            // Prowling, it noses about the halls on its own business — only a
+            // charge comes for you. Homing in while "prowling" would make the
+            // noise rules meaningless, since it would arrive either way.
+            float spd = (d.st == DState::Charge) ? 5.6f : 2.1f;
+            float tgx, tgz;
+            if (d.st == DState::Charge) { tgx = px; tgz = pz; }
+            else {
+                float rdx = d.roamX - d.x, rdz = d.roamZ - d.z;
+                if (now > d.nextRoam || rdx * rdx + rdz * rdz < 1.4f * 1.4f) {
+                    float a = grng.f01() * 6.2831853f, r = 9 + grng.f01() * 11;
+                    Vector2 sp = world.findOpenSpot(d.x + cosf(a) * r, d.z + sinf(a) * r);
+                    d.roamX = sp.x; d.roamZ = sp.y;
+                    d.nextRoam = now + 9 + grng.f01() * 9;
+                }
+                tgx = d.roamX; tgz = d.roamZ;
+            }
+            d.repathT -= dt;
+            float wdx = d.wpx - d.x, wdz = d.wpz - d.z;
+            if (d.repathT <= 0 || wdx * wdx + wdz * wdz < 0.2f) {
+                d.repathT = 0.3;
+                int oi, ok;
+                float tdx = tgx - d.x, tdz = tgz - d.z;
+                if (tdx * tdx + tdz * tdz > 2.0f * 2.0f && !world.lineOfSight(d.x, d.z, tgx, tgz) &&
+                    world.pathStep(cellOf(d.x), cellOf(d.z), cellOf(tgx), cellOf(tgz), oi, ok))
+                    { d.wpx = oi * CELL + 1.0f; d.wpz = ok * CELL + 1.0f; }
+                else { d.wpx = tgx; d.wpz = tgz; }
+            }
+            float sx = d.wpx - d.x, sz = d.wpz - d.z, sl = sqrtf(sx * sx + sz * sz) + 1e-4f;
+            d.x += sx / sl * spd * dt; d.z += sz / sl * spd * dt;
+            world.collideCircle(d.x, d.z, 0.3f);
+
+            if (now > d.nextBark && dist < 26.0f && caughtT <= 0) {
+                d.nextBark = now + (d.st == DState::Charge ? 0.7 + grng.f01() * 0.6
+                                                          : 3.5 + grng.f01() * 4.0);
+                Sound &s = sndBarks[i % 3];
+                float sd = clampf((ddx / dist) * r2x + (ddz / dist) * r2z, -1.0f, 1.0f);
+                SetSoundPan(s, 0.5f + sd * 0.5f);   // + is to your right; pan 0 = right
+                SetSoundPitch(s, 0.92f + grng.f01() * 0.2f);
+                SetSoundVolume(s, clampf(1.5f / (1.0f + 0.05f * dist * dist), 0.0f, 0.95f));
+                PlaySound(s);
+            }
+            if (dist < 1.15f && caughtT <= 0 && !hidden) {   // they have you
+                PlaySound(sndScare);
+                caughtT = 2.4f; caughtCount++;
+                saveBest();
+                float a = grng.f01() * 6.2831853f;
+                Vector2 spot = world.findOpenSpot(px + cosf(a) * 800, pz + sinf(a) * 800);
+                px = spot.x; pz = spot.y; velx = velz = 0;
+                for (auto &o : dogs) o.st = DState::Gone;
+                nextPack = now + 25 + grng.f01() * 20;
+            }
+        }
+        float gy = world.floorY(cellOf(d.x), cellOf(d.z));
+        d.dispY += (gy - d.dispY) * fminf(1, 10 * dt);
+    }
 }
 
 void Game::updateExits(double now) {

@@ -29,7 +29,7 @@ struct Game {
     const char *shotPath = nullptr;
 
     // resources
-    Texture2D texEntity{}, texPartygoer{}, texProps{}, texScrawl{}, texAO{}, texOcc{};
+    Texture2D texEntity{}, texPartygoer{}, texProps{}, texScrawl{}, texAO{}, texOcc{}, texDog{};
     // light-occlusion grid: the floorplan around you, uploaded for the shader to
     // march. Recentred as you walk; OCC_N cells wide, so it always covers more
     // than the fog can show you.
@@ -46,7 +46,9 @@ struct Game {
     int locPTime = -1, locPFear = -1;
     Material mats[6]{};                        // 0 floor, 1 ceiling, 2 walls, 3 props, 4 scrawl, 5 baked AO
     Sound steps[4]{}, splashes[2]{}, sndBigSplash{}, sndClick{}, sndScare{}, sndWin{},
-          sndFlare{}, sndShot{}, sndHit{}, sndKill{}, sndPop{}, sndHeartbeat{}, sndTape{};
+          sndFlare{}, sndShot{}, sndHit{}, sndKill{}, sndPop{}, sndHeartbeat{}, sndTape{},
+          sndValve{}, sndHowl{};
+    Sound sndBarks[3]{};                        // the pack, panned to whichever one spoke
     Sound entSteps[4]{};                        // the thing's own footfalls, panned + attenuated
     AudioSynth synth;
     World world;
@@ -88,6 +90,10 @@ struct Game {
     // run state
     int level = 0;
     Entity ent;
+    static constexpr int MAXDOGS = 3;
+    Dog dogs[MAXDOGS];                        // the Red Halls pack
+    double nextPack = 0;                      // when the halls send the next one
+    double nextHowl = 0;
     float entDist = 1e9f;                     // distance to Clark this frame
     float entDarkCur = 0;                     // how hard it's smothering the lights (ramps with the hunt)
     double nextBlackout = 0, blackoutEnd = -1;
@@ -120,6 +126,14 @@ struct Game {
     int bestEsc = 0, bestKill = 0, bestM = 0, bestWins = 0, bestTapes = 0;
     bool everFlashed = false;                 // HUD: flashlight reminder until first use
     bool inMenu = false;                      // title screen up, world drifting behind it
+    bool paused = false;                      // P: the world holds its breath
+    double pausedAt = 0;                      // when it stopped, so schedules can be slid on resume
+
+    // Red Halls puzzle: shut every standpipe and the halls give up what they hold
+    static constexpr int VALVES_NEEDED = 3;
+    std::unordered_set<uint64_t> valvesTurned;
+    float valveT = 0;                         // brief note after closing one
+    bool pipesShut = false;                   // all three closed on this descent
 
     void winRun(double now);                  // stepped through the true way out — reset the descent
     void updateMenu(double now);              // drift the title-screen camera; any key begins
@@ -154,6 +168,7 @@ struct Game {
     void updateInteraction();
     void updateAmbience(float dt, double now);
     void updateEntity(float dt, double now);
+    void updateDogs(float dt, double now);    // the Red Halls pack: hunts by sound
     void updateExits(double now);
     void streamChunks();
     void updateOccupancy();                   // recentre + re-upload the light-occlusion grid

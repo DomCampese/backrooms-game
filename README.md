@@ -146,6 +146,24 @@ make run
   two and a half metres below the office, with real stairs at every edge and
   the walls above reading as balconies. The warehouse stacks its loading
   docks two tiers high. There was always another floor.
+- **The Red Halls have pipework** — service runs of rusted iron and dull steel
+  follow the corridors just under the ceiling, with collars every few metres.
+  Runs are decided per corridor rather than per cell, so a pipe follows a wall
+  the whole way instead of appearing in patches.
+- **The pack** — the Red Halls have their own residents, and they don't hunt
+  the way Clark does. Clark hunts by sight: stare at him and he comes. **The
+  dogs hunt by sound.** Sprinting carries, a gunshot carries a long way, a
+  struck flare carries — crouching and standing still barely carries at all.
+  Prowling, they nose around the halls on their own business; hear you and they
+  commit, and they are faster than you are, so running is never the answer.
+  Fire turns them, a bullet puts one down, and going quiet makes them lose the
+  thread. You hear them before you see them: barks panned to whichever one
+  spoke, and the pack calling to each other across the dark.
+- **Shutting off the pipes** — three standpipes in the Red Halls carry a
+  seized shut-off wheel. Turn all three (E at each) and the pipes go quiet and
+  the halls give up the cache they were holding — a spill of doubloons, which
+  is the currency you need to leave for good. The wheels read red while open
+  and green once shut, so you can see at a glance which ones you've found.
 - **Exits** — glowing doorways carved into wall runs. A normal one takes you
   one level deeper (and ~1 in 6 is cursed: it glows red and drops you into the
   Red Halls instead).
@@ -229,6 +247,7 @@ Details that reward paying attention:
 | M | chalk a floor mark |
 | E | vending machine |
 | F11 | borderless fullscreen |
+| P | pause |
 | ESC / click | release / capture mouse |
 | F3 | debug HUD |
 
