@@ -29,7 +29,8 @@ struct Game {
     const char *shotPath = nullptr;
 
     // resources
-    Texture2D texEntity{}, texPartygoer{}, texProps{}, texScrawl{}, texAO{}, texOcc{}, texDog{};
+    Texture2D texEntity{}, texPartygoer{}, texProps{}, texScrawl{}, texAO{}, texOcc{}, texDog{},
+              texAlmond{};
     // light-occlusion grid: the floorplan around you, uploaded for the shader to
     // march. Recentred as you walk; OCC_N cells wide, so it always covers more
     // than the fog can show you.
@@ -47,7 +48,7 @@ struct Game {
     Material mats[6]{};                        // 0 floor, 1 ceiling, 2 walls, 3 props, 4 scrawl, 5 baked AO
     Sound steps[4]{}, splashes[2]{}, sndBigSplash{}, sndClick{}, sndScare{}, sndWin{},
           sndFlare{}, sndShot{}, sndHit{}, sndKill{}, sndPop{}, sndHeartbeat{}, sndTape{},
-          sndValve{}, sndHowl{};
+          sndValve{}, sndHowl{}, sndGulp{};
     Sound sndBarks[3]{};                        // the pack, panned to whichever one spoke
     Sound entSteps[4]{};                        // the thing's own footfalls, panned + attenuated
     AudioSynth synth;
@@ -118,6 +119,21 @@ struct Game {
     std::vector<Confetti> confetti;           // bursts from popped balloons
     int almond = 0, coins = 0, tapes = 0;
     float boostT = 0, crouchCur = 0, whisperT = 0;
+
+    // ---- your grip on the place. Drains the whole time you're down here, faster
+    // the deeper you go and faster still in the dark or while something is
+    // hunting you. Almond water is the only thing that puts any of it back.
+    float sanity = 1.0f;
+    int sanityStage = 0;            // deepest threshold crossed, so each warning fires once
+    float sanityWarnT = 0;          // brief overlay when it slips a notch
+    const char *sanityLine = "";
+    double nextHeartbeat = 0;       // low sanity: you start hearing yourself
+    static float sanityDrain(int lv);   // per-level base drain, meter-fraction per second
+
+    // ---- drinking: a scripted little animation, not an instant stat bump
+    static constexpr float DRINK_TIME = 1.75f;
+    float drinkT = 0;               // counts DOWN from DRINK_TIME while the carton is up
+    bool drinkLanded = false;       // the swallow already paid out this time
     double nextWhisper = 0;
     bool hidden = false;                      // crouched and tucked beside cover — the hunt can't find you
     float closeCallT = 0, tapeFoundT = 0;      // brief overlays: it stood right there / a tape found
@@ -149,6 +165,11 @@ struct Game {
     // deterministic world pickups, keyed by cell
     static uint64_t cellKey2(int a, int b) { return ((uint64_t)(uint32_t)a << 32) | (uint32_t)b; }
     bool bottleAt(int a, int b);              // almond water, left out for whoever needs it
+    // A carton sitting on furniture rather than the floor: returns the surface
+    // height to stand it on, or -1 if this cell's prop is nothing you'd set a
+    // drink down on. Shared by the mesher-side render and the pickup test.
+    float bottleShelfY(int a, int b);
+    void updateDrink(float dt, double now); // run the drinking animation
     bool coinAt(int a, int b);                // a doubloon he dropped on his rounds
     bool batteryAt(int a, int b);             // a spare battery, tucked somewhere
     bool tapeAt(int a, int b);                // a cassette tape, someone else's recovered days

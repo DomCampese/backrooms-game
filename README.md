@@ -122,6 +122,23 @@ make run
   switch it off, but a dead battery won't switch back on. Spares turn up
   in the world like almond water and doubloons do, and top up a solid chunk
   of charge. Choose when you actually need it.
+- **Your grip on the place** — a meter that only ever goes one way on its
+  own. It drains the whole time you're down here, faster the deeper you go
+  (roughly nine minutes' worth on Level 0, four in LEVEL FUN), faster again
+  in the dark or while something is hunting you, and slower when you're
+  tucked in and breathing slow. As it slips, the walls start to move on you,
+  the whispers come closer together, and eventually you can hear your own
+  pulse. Bottom it out and the halls stop waiting to be found — spawns and
+  blackouts start coming for you. Almond water is the only thing that puts
+  any of it back.
+- **Almond water** — the carton is the real one now: gable top, brown label,
+  the almond on the front, a little stained from however long it's been
+  sitting there. Press 3 and you actually drink it — the carton comes up,
+  tips back for three swallows, and drops away, and both hands are busy the
+  whole time, so you can't shoot your way out of a decision to drink. It
+  steadies you, restores your wind, and puts a solid third of your grip
+  back. They turn up on the floor and standing on tables, desks, cabinets
+  and nightstands — wherever somebody set one down and didn't come back.
 - **Cassette tapes** — rarer finds, scattered through the halls: someone
   else's fragment of the descent, a line of found text and a warble of tape
   hiss when you pick one up. They don't do anything — they're just there to

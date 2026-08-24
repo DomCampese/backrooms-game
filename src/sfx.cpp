@@ -310,3 +310,36 @@ Sound makeDogHowl() {
     }
     Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
 }
+
+// Three swallows of almond water: each one a wet click opening into a short
+// resonant glug, the throat tightening a little further down the carton.
+Sound makeGulp() {
+    int n = (int)(1.55f * 44100);
+    Wave w = makeWaveBuf(n);
+    short *d = (short *)w.data;
+    Rng r(0xA1B0ULL);
+    float lp = 0, bp = 0;
+    for (int i = 0; i < n; i++) {
+        float t = i / 44100.0f;
+        float wn = r.f01() * 2 - 1;
+        lp += 0.22f * (wn - lp);
+        float sig = 0.0f;
+        for (int g = 0; g < 3; g++) {
+            float gt = t - (0.40f + g * 0.36f);   // timed to the carton reaching your lips
+            if (gt < 0.0f || gt > 0.40f) continue;
+            // the click of the throat opening
+            float click = (wn - lp) * 1.1f * expf(-gt * 150.0f);
+            // then a body that drops in pitch as the swallow goes down
+            float f = 168.0f - g * 22.0f - gt * 190.0f;
+            float body = sinf(6.2831853f * fmaxf(46.0f, f) * gt)
+                       * (1.0f - expf(-gt * 90.0f)) * expf(-gt * 12.0f) * 0.72f;
+            // a little liquid rattle riding on top
+            bp += 0.5f * (lp * 0.5f - bp);
+            sig += (click + body + bp * 0.35f * expf(-gt * 16.0f)) * (1.0f - g * 0.16f);
+        }
+        // the carton crumples faintly as it empties
+        if (t > 1.24f) sig += (wn - lp) * 0.13f * expf(-(t - 1.24f) * 9.0f);
+        d[i] = (short)(clampf1(tanhf(sig * 1.35f)) * 26000);
+    }
+    Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
+}

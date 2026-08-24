@@ -557,3 +557,105 @@ Texture2D makeDogTex() {
             put(26 + dx + e * 7, 60 + dy, Color{ 226, 216, 176, 255 });
     return finishTexture(img, false);
 }
+
+// The almond water carton: gable-top, cream board, a brown label panel with the
+// almond on it. Drawn big in the hand while you drink and small as a billboard
+// where one is sitting out, so the whole silhouette lives in one portrait sheet
+// with the shape carried by alpha — no quad edges to give it away.
+Texture2D makeAlmondTex() {
+    const int W = 128, H = 192;
+    Image img = GenImageColor(W, H, BLANK);
+    Color *p = (Color *)img.data;
+    auto put = [&](int x, int y, Color c) { if (x >= 0 && x < W && y >= 0 && y < H) p[y * W + x] = c; };
+    auto row = [&](int y, int x0, int x1, Color c) { for (int x = x0; x <= x1; x++) put(x, y, c); };
+
+    const Color board   = { 234, 228, 212, 255 };   // bleached carton stock
+    const Color boardHi = { 246, 242, 231, 255 };   // the face the light finds
+    const Color boardSh = { 189, 182, 166, 255 };   // the side turned away
+    const Color fold    = { 205, 198, 181, 255 };   // gable creases
+    const Color ink     = {  74,  50,  33, 255 };   // label brown
+    const Color inkSoft = { 104,  74,  50, 255 };
+    const Color nut     = { 198, 156, 108, 255 };   // the almond itself
+    const Color nutHi   = { 224, 192, 152, 255 };
+    const Color capc    = { 156, 146, 128, 255 };
+
+    const int bx0 = 20, bx1 = 108;                  // body span
+    const int by0 = 60, by1 = 184;                  // body top / bottom
+    const int shade = 88;                           // where the front face turns
+
+    // ---- gable top: two folded panels rising to a ridge, narrowing as they go
+    for (int y = 22; y < by0; y++) {
+        float t = (y - 22) / (float)(by0 - 22);         // 0 at the ridge, 1 at the shoulder
+        int hw = (int)(18 + t * ((bx1 - bx0) * 0.5f - 18));
+        int cx = (bx0 + bx1) / 2;
+        for (int x = cx - hw; x <= cx + hw; x++) {
+            // the crease down each side of the peak catches less light
+            float e = fabsf((x - cx) / (float)(hw + 1));
+            Color c = (e > 0.72f) ? fold : (x > shade ? boardSh : board);
+            put(x, y, c);
+        }
+    }
+    row(22, (bx0 + bx1) / 2 - 18, (bx0 + bx1) / 2 + 18, fold);       // ridge line
+    row(23, (bx0 + bx1) / 2 - 18, (bx0 + bx1) / 2 + 18, boardHi);
+
+    // ---- body
+    for (int y = by0; y <= by1; y++)
+        for (int x = bx0; x <= bx1; x++) {
+            Color c = board;
+            if (x > shade) c = boardSh;                 // right face falls off
+            else if (x < bx0 + 7) c = boardHi;          // left edge catches the light
+            put(x, y, c);
+        }
+    row(by0, bx0, bx1, fold);                            // shoulder crease
+    row(by1, bx0, bx1, fold);                            // bottom fold
+    for (int y = by0; y <= by1; y++) put(shade, y, fold);   // the vertical corner
+
+    // ---- screw cap, sat squarely on the front gable panel
+    ImageDrawCircle(&img, 52, 43, 10, Color{ 138, 128, 112, 255 });   // the shadow it casts
+    ImageDrawCircle(&img, 52, 41, 10, capc);
+    ImageDrawCircle(&img, 52, 40, 7, Color{ 186, 177, 159, 255 });    // the flat of the top
+    for (int i = -9; i <= 9; i += 4)                                  // knurling round the rim
+        ImageDrawLine(&img, 52 + i, 37, 52 + i, 45, Color{ 146, 136, 120, 60 });
+
+    // ---- label panel
+    const int lx0 = 27, lx1 = 101, ly0 = 80, ly1 = 168;
+    ImageDrawRectangle(&img, lx0, ly0, lx1 - lx0, ly1 - ly0, ink);
+    ImageDrawRectangleLines(&img, lx0 + 3, ly0 + 3, (lx1 - lx0) - 6, (ly1 - ly0) - 6,
+                            Color{ 214, 198, 170, 255 });
+
+    // ---- the almond: a teardrop, point up, with a seam down the middle
+    const int ax = 64, ay = 106, ah = 18, aw = 13;
+    for (int y = -ah; y <= ah; y++) {
+        float t = (y + ah) / (2.0f * ah);                       // 0 tip, 1 base
+        float hw = aw * sinf(powf(t, 0.72f) * 3.14159f * 0.94f);
+        for (int x = -(int)hw; x <= (int)hw; x++) {
+            float e = fabsf(x / (hw + 0.001f));
+            put(ax + x, ay + y, (e > 0.78f || t < 0.06f) ? inkSoft : (x < -1 ? nutHi : nut));
+        }
+    }
+    for (int y = -ah + 6; y <= ah - 4; y++) put(ax, ay + y, inkSoft);   // seam
+
+    // ---- wordmark, centred by measure so the font's real metrics decide
+    const char *l1 = "ALMOND", *l2 = "WATER";
+    ImageDrawText(&img, l1, (lx0 + lx1) / 2 - MeasureText(l1, 14) / 2, 132, 14, Color{ 238, 228, 206, 255 });
+    ImageDrawText(&img, l2, (lx0 + lx1) / 2 - MeasureText(l2, 14) / 2, 148, 14, Color{ 238, 228, 206, 255 });
+
+    // ---- wear. Nothing down here has been on a shelf recently, and a carton
+    // that reads factory-fresh looks pasted on top of the game rather than
+    // found in it. Faint blotches on the board only — the label stays legible.
+    for (int y = 22; y <= by1; y++)
+        for (int x = 0; x < W; x++) {
+            Color &c = p[y * W + x];
+            if (c.a == 0) continue;
+            if (x >= lx0 && x <= lx1 && y >= ly0 && y <= ly1) continue;   // leave the label alone
+            float g = vnoise2(x * 0.055f, y * 0.055f, 4471u);
+            float stain = clampf((g - 0.58f) * 2.1f, 0.0f, 1.0f) * 0.20f;
+            float grime = (vnoise2(x * 0.5f, y * 0.5f, 9137u) - 0.5f) * 0.055f;
+            float k = 1.0f - stain + grime;
+            c.r = (unsigned char)clampf(c.r * k, 0, 255);
+            c.g = (unsigned char)clampf(c.g * k * 0.998f, 0, 255);
+            c.b = (unsigned char)clampf(c.b * k * 0.986f, 0, 255);   // stains go warm
+        }
+
+    return finishTexture(img, false);
+}
