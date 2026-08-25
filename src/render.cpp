@@ -326,7 +326,7 @@ void Game::renderUI(double now) {
         return;
     }
 
-    if (drinkT > 0) {   // almond water going down: the carton comes up and tips back
+    if (drinkT > 0) {   // almond water going down: the can comes up and back at you
         float el = DRINK_TIME - drinkT;
         auto ease = [](float t) { t = clampf(t, 0, 1); return t * t * (3.0f - 2.0f * t); };
         float up  = ease(el / 0.42f) * (1.0f - ease((el - 1.36f) / 0.39f));   // in, then away
@@ -336,30 +336,51 @@ void Game::renderUI(double now) {
             float gt = el - (0.40f + g * 0.36f);
             if (gt > 0 && gt < 0.26f) bob += sinf(gt / 0.26f * 3.14159f);
         }
-        float ch = sh * 0.60f;                            // sprite height on screen
-        float cw = ch * (float)texAlmond.width / (float)texAlmond.height;
+        // You drink by bringing the can to your face, not by tipping it out to
+        // one side. Two cues sell that in a flat viewmodel: it grows as it
+        // closes on the camera, and the barrel foreshortens as the lid swings
+        // round toward you — width is preserved, height is not, which is what
+        // rotating about a horizontal axis actually does to a silhouette.
+        // Do the foreshortening with real trig rather than a fudge factor, and
+        // keep the angle modest: past about 40 degrees you are looking down into
+        // the can, the lid opens to a near-circle, and it stops reading as a can.
+        const float TILT_MAX = 40.0f * DEG2RAD;
+        float th = tip * TILT_MAX;
+        float baseH = sh * 0.58f;
+        float grow  = 1.0f + 0.34f * tip;                 // closing on the camera
+        float ch = baseH * grow * cosf(th);               // sprite height on screen
+        float cw = baseH * grow * (float)texAlmond.width / (float)texAlmond.height;
         // pivot at the foot of the can, where your wrist would be. In sprite
         // space the base sits at 182/192, so that is the origin.
         Vector2 org = { cw * 0.5f, ch * 0.948f };
-        // a can has to go further over than a carton before it pours
-        float rot = 6.0f - tip * 62.0f - bob * 5.5f;
+        float rot = 5.0f - tip * 15.0f - bob * 2.5f;      // only a slight roll now
         float bx4 = sinf(bobPhase * 3.14159f) * 4.0f * bobAmt;
-        float wx = sw * 0.70f - tip * sw * 0.045f + bx4;
-        float wy = (sh + ch) - up * (ch - 40.0f) - tip * sh * 0.16f + bob * 5.0f;
+        float wx = sw * 0.70f - tip * sw * 0.15f + bx4;   // and it tracks in toward centre
+        float wy = (sh + baseH) - up * (baseH - 40.0f) - tip * sh * 0.11f + bob * 5.0f;
 
         float rr = rot * DEG2RAD, cs = cosf(rr), sn = sinf(rr);
-        auto rp = [&](float lx, float ly) {   // carton-local (from the pivot) → screen
+        auto rp = [&](float lx, float ly) {   // can-local (from the pivot) → screen
             return Vector2{ wx + lx * cs - ly * sn, wy + lx * sn + ly * cs };
         };
-        // the viewmodel is drawn flat like the weapons are, but a carton that
-        // stays bright through a blackout looks pasted on, so dim it with the room
+        auto ellipse = [&](float lcx, float lcy, float rx, float ry, Color c) {
+            const int N = 22;
+            Vector2 mid = rp(lcx, lcy), prev = rp(lcx + rx, lcy);
+            for (int i = 1; i <= N; i++) {   // negative sweep: CCW once y points down
+                float a2 = -i * 6.2831853f / N;
+                Vector2 cur = rp(lcx + rx * cosf(a2), lcy + ry * sinf(a2));
+                DrawTriangle(mid, prev, cur, c);
+                prev = cur;
+            }
+        };
+        // the viewmodel is drawn flat like the weapons are, but a can that stays
+        // bright through a blackout looks pasted on, so dim it with the room
         unsigned char v = (unsigned char)(clampf(0.42f + 0.58f * blackoutCur, 0.3f, 1.0f) * 196.0f);
         Color skin = { (unsigned char)(v * 0.60f), (unsigned char)(v * 0.47f),
                        (unsigned char)(v * 0.38f), 255 };
         Color skinSh = { (unsigned char)(v * 0.44f), (unsigned char)(v * 0.34f),
                          (unsigned char)(v * 0.28f), 255 };
 
-        // heel of the hand, behind the carton and mostly off the bottom edge
+        // heel of the hand, behind the can and mostly off the bottom edge
         {
             Vector2 a = rp(-cw * 0.30f, -ch * 0.02f), b = rp(cw * 0.26f, -ch * 0.02f);
             Vector2 c2 = rp(cw * 0.30f, ch * 0.34f), d = rp(-cw * 0.34f, ch * 0.34f);
@@ -368,6 +389,30 @@ void Game::renderUI(double now) {
         DrawTexturePro(texAlmond, { 0, 0, (float)texAlmond.width, (float)texAlmond.height },
                        { wx, wy, cw, ch }, org, rot,
                        { v, (unsigned char)(v * 0.985f), (unsigned char)(v * 0.93f), 255 });
+        // The lid, opening up as it swings toward you. The sprite can only ever
+        // show it edge-on, so past a little tilt it gets drawn over the top:
+        // this is the part your eye reads as "coming at me" rather than "over".
+        if (tip > 0.03f) {
+            float lidY = -ch * 0.818f;                    // lid's front edge, in can-local
+            float rx = cw * 0.268f;                       // the lid is narrower than the barrel
+            float ry = rx * sinf(th);                     // opens exactly as far as the tilt says
+            Color aluTop = { (unsigned char)(v * 0.80f), (unsigned char)(v * 0.81f),
+                             (unsigned char)(v * 0.84f), 255 };
+            Color aluRim = { (unsigned char)(v * 0.56f), (unsigned char)(v * 0.57f),
+                             (unsigned char)(v * 0.60f), 255 };
+            ellipse(0, lidY, rx, ry, aluRim);
+            ellipse(0, lidY, rx * 0.87f, ry * 0.80f, aluTop);
+            // The mouth has to be a flat sliver hugging the far rim, at low
+            // contrast. A round dark blob in the middle of a pale disc reads as
+            // an eyeball, which is a different game entirely.
+            ellipse(-rx * 0.04f, lidY - ry * 0.50f, rx * 0.30f, ry * 0.20f,
+                    Color{ (unsigned char)(v * 0.38f), (unsigned char)(v * 0.36f),
+                           (unsigned char)(v * 0.35f), 255 });
+            // the tab, lying flat along the lid, barely darker than it
+            ellipse(rx * 0.10f, lidY + ry * 0.18f, rx * 0.44f, ry * 0.26f,
+                    Color{ (unsigned char)(v * 0.68f), (unsigned char)(v * 0.69f),
+                           (unsigned char)(v * 0.72f), 255 });
+        }
         // fingers reach round the far side; only the tips come over the near edge
         for (int f = 0; f < 4; f++) {
             float fy = -ch * 0.33f + f * ch * 0.075f;
