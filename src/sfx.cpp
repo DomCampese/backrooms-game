@@ -312,7 +312,7 @@ Sound makeDogHowl() {
 }
 
 // Three swallows of almond water: each one a wet click opening into a short
-// resonant glug, the throat tightening a little further down the carton.
+// resonant glug, the throat tightening a little further down the can.
 Sound makeGulp() {
     int n = (int)(1.55f * 44100);
     Wave w = makeWaveBuf(n);
@@ -337,8 +337,13 @@ Sound makeGulp() {
             bp += 0.5f * (lp * 0.5f - bp);
             sig += (click + body + bp * 0.35f * expf(-gt * 16.0f)) * (1.0f - g * 0.16f);
         }
-        // the carton crumples faintly as it empties
-        if (t > 1.24f) sig += (wn - lp) * 0.13f * expf(-(t - 1.24f) * 9.0f);
+        // the empty can rings faintly as it comes away from your mouth
+        if (t > 1.24f) {
+            float et = t - 1.24f;
+            sig += (sinf(6.2831853f * 1180.0f * et) * 0.055f
+                  + sinf(6.2831853f * 2630.0f * et) * 0.030f) * expf(-et * 15.0f);
+            sig += (wn - lp) * 0.07f * expf(-et * 40.0f);   // the tap of it
+        }
         d[i] = (short)(clampf1(tanhf(sig * 1.35f)) * 26000);
     }
     Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;

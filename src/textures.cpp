@@ -558,103 +558,152 @@ Texture2D makeDogTex() {
     return finishTexture(img, false);
 }
 
-// The almond water carton: gable-top, cream board, a brown label panel with the
-// almond on it. Drawn big in the hand while you drink and small as a billboard
-// where one is sitting out, so the whole silhouette lives in one portrait sheet
-// with the shape carried by alpha — no quad edges to give it away.
+// The almond water can: a slim aluminium tallboy, cream label, brown band with
+// the almond on it. Drawn big in the hand while you drink and small as a
+// billboard where one is sitting out, so the whole silhouette lives in one
+// portrait sheet with the shape carried by alpha — no quad edges to give it
+// away. The label is drawn flat and then wrapped: every column is shaded by the
+// cylinder's curvature and the artwork is remapped through asin, so the
+// wordmark compresses toward the edges the way print on a real can does.
 Texture2D makeAlmondTex() {
-    const int W = 128, H = 192;
+    const int W = 112, H = 192;
     Image img = GenImageColor(W, H, BLANK);
     Color *p = (Color *)img.data;
     auto put = [&](int x, int y, Color c) { if (x >= 0 && x < W && y >= 0 && y < H) p[y * W + x] = c; };
-    auto row = [&](int y, int x0, int x1, Color c) { for (int x = x0; x <= x1; x++) put(x, y, c); };
 
-    const Color board   = { 234, 228, 212, 255 };   // bleached carton stock
-    const Color boardHi = { 246, 242, 231, 255 };   // the face the light finds
-    const Color boardSh = { 189, 182, 166, 255 };   // the side turned away
-    const Color fold    = { 205, 198, 181, 255 };   // gable creases
-    const Color ink     = {  74,  50,  33, 255 };   // label brown
-    const Color inkSoft = { 104,  74,  50, 255 };
-    const Color nut     = { 198, 156, 108, 255 };   // the almond itself
-    const Color nutHi   = { 224, 192, 152, 255 };
-    const Color capc    = { 156, 146, 128, 255 };
+    const float cx = 56.0f;
+    const float bodyHW = 38.0f;        // the barrel of the can
+    const float lidHW  = 30.0f;        // narrower, above the shoulder
+    const int   lidY   = 25;           // where the lid's front edge sits
+    const int   neckY  = 36;           // shoulder: taper finishes here
+    const int   botY   = 172;          // where the base starts rolling under
+    const int   endY   = 182;
 
-    const int bx0 = 20, bx1 = 108;                  // body span
-    const int by0 = 60, by1 = 184;                  // body top / bottom
-    const int shade = 88;                           // where the front face turns
+    const Color alu    = { 176, 178, 184, 255 };   // bare aluminium
+    const Color aluDk  = { 118, 120, 127, 255 };
+    const Color cream  = { 236, 230, 214, 255 };   // the printed label
+    const Color ink    = {  74,  50,  33, 255 };   // label brown
+    const Color inkSoft= { 104,  74,  50, 255 };
+    const Color nut    = { 198, 156, 108, 255 };
+    const Color nutHi  = { 224, 192, 152, 255 };
 
-    // ---- gable top: two folded panels rising to a ridge, narrowing as they go
-    for (int y = 22; y < by0; y++) {
-        float t = (y - 22) / (float)(by0 - 22);         // 0 at the ridge, 1 at the shoulder
-        int hw = (int)(18 + t * ((bx1 - bx0) * 0.5f - 18));
-        int cx = (bx0 + bx1) / 2;
-        for (int x = cx - hw; x <= cx + hw; x++) {
-            // the crease down each side of the peak catches less light
-            float e = fabsf((x - cx) / (float)(hw + 1));
-            Color c = (e > 0.72f) ? fold : (x > shade ? boardSh : board);
-            put(x, y, c);
+    // ---- the label, drawn flat. s runs -1..1 around the visible half of the
+    // can, so this strip is what you'd see if you unrolled it.
+    const int LW = 176, LH = 108, labelTop = 54;
+    Image lbl = GenImageColor(LW, LH, BLANK);
+    Color *lp = (Color *)lbl.data;
+    for (int y = 0; y < LH; y++)
+        for (int x = 0; x < LW; x++) lp[y * LW + x] = cream;
+    ImageDrawRectangle(&lbl, 0, 18, LW, 74, ink);                    // the brown band
+    ImageDrawRectangle(&lbl, 0, 16, LW, 2, Color{ 176, 150, 112, 255 });
+    ImageDrawRectangle(&lbl, 0, 92, LW, 2, Color{ 176, 150, 112, 255 });
+    {   // the almond, a teardrop with a seam, sat in the middle of the band
+        const int ax = LW / 2, ay = 40, ah = 13, aw = 9;
+        for (int y = -ah; y <= ah; y++) {
+            float t = (y + ah) / (2.0f * ah);
+            float hw = aw * sinf(powf(t, 0.72f) * 3.14159f * 0.94f);
+            for (int x = -(int)hw; x <= (int)hw; x++) {
+                float e = fabsf(x / (hw + 0.001f));
+                int px2 = ax + x, py2 = ay + y;
+                if (px2 < 0 || px2 >= LW || py2 < 0 || py2 >= LH) continue;
+                lp[py2 * LW + px2] = (e > 0.78f || t < 0.06f) ? inkSoft : (x < -1 ? nutHi : nut);
+            }
         }
+        for (int y = -ah + 5; y <= ah - 3; y++)
+            if (ay + y >= 0 && ay + y < LH) lp[(ay + y) * LW + ax] = inkSoft;
     }
-    row(22, (bx0 + bx1) / 2 - 18, (bx0 + bx1) / 2 + 18, fold);       // ridge line
-    row(23, (bx0 + bx1) / 2 - 18, (bx0 + bx1) / 2 + 18, boardHi);
-
-    // ---- body
-    for (int y = by0; y <= by1; y++)
-        for (int x = bx0; x <= bx1; x++) {
-            Color c = board;
-            if (x > shade) c = boardSh;                 // right face falls off
-            else if (x < bx0 + 7) c = boardHi;          // left edge catches the light
-            put(x, y, c);
-        }
-    row(by0, bx0, bx1, fold);                            // shoulder crease
-    row(by1, bx0, bx1, fold);                            // bottom fold
-    for (int y = by0; y <= by1; y++) put(shade, y, fold);   // the vertical corner
-
-    // ---- screw cap, sat squarely on the front gable panel
-    ImageDrawCircle(&img, 52, 43, 10, Color{ 138, 128, 112, 255 });   // the shadow it casts
-    ImageDrawCircle(&img, 52, 41, 10, capc);
-    ImageDrawCircle(&img, 52, 40, 7, Color{ 186, 177, 159, 255 });    // the flat of the top
-    for (int i = -9; i <= 9; i += 4)                                  // knurling round the rim
-        ImageDrawLine(&img, 52 + i, 37, 52 + i, 45, Color{ 146, 136, 120, 60 });
-
-    // ---- label panel
-    const int lx0 = 27, lx1 = 101, ly0 = 80, ly1 = 168;
-    ImageDrawRectangle(&img, lx0, ly0, lx1 - lx0, ly1 - ly0, ink);
-    ImageDrawRectangleLines(&img, lx0 + 3, ly0 + 3, (lx1 - lx0) - 6, (ly1 - ly0) - 6,
-                            Color{ 214, 198, 170, 255 });
-
-    // ---- the almond: a teardrop, point up, with a seam down the middle
-    const int ax = 64, ay = 106, ah = 18, aw = 13;
-    for (int y = -ah; y <= ah; y++) {
-        float t = (y + ah) / (2.0f * ah);                       // 0 tip, 1 base
-        float hw = aw * sinf(powf(t, 0.72f) * 3.14159f * 0.94f);
-        for (int x = -(int)hw; x <= (int)hw; x++) {
-            float e = fabsf(x / (hw + 0.001f));
-            put(ax + x, ay + y, (e > 0.78f || t < 0.06f) ? inkSoft : (x < -1 ? nutHi : nut));
-        }
-    }
-    for (int y = -ah + 6; y <= ah - 4; y++) put(ax, ay + y, inkSoft);   // seam
-
-    // ---- wordmark, centred by measure so the font's real metrics decide
     const char *l1 = "ALMOND", *l2 = "WATER";
-    ImageDrawText(&img, l1, (lx0 + lx1) / 2 - MeasureText(l1, 14) / 2, 132, 14, Color{ 238, 228, 206, 255 });
-    ImageDrawText(&img, l2, (lx0 + lx1) / 2 - MeasureText(l2, 14) / 2, 148, 14, Color{ 238, 228, 206, 255 });
+    ImageDrawText(&lbl, l1, LW / 2 - MeasureText(l1, 13) / 2, 57, 13, Color{ 238, 228, 206, 255 });
+    ImageDrawText(&lbl, l2, LW / 2 - MeasureText(l2, 13) / 2, 74, 13, Color{ 238, 228, 206, 255 });
 
-    // ---- wear. Nothing down here has been on a shelf recently, and a carton
-    // that reads factory-fresh looks pasted on top of the game rather than
-    // found in it. Faint blotches on the board only — the label stays legible.
-    for (int y = 22; y <= by1; y++)
+    // ---- roll it onto the can, shading each column by the curvature
+    auto shade = [&](float u) {                       // u: -1 (left edge) .. 1 (right)
+        float curve = sqrtf(fmaxf(0.0f, 1.0f - u * u));          // the cylinder's facing
+        float spec  = expf(-powf((u + 0.42f) * 3.1f, 2.0f));     // key light, upper left
+        float rim   = expf(-powf((u - 0.86f) * 7.0f, 2.0f));     // a thin bounce off the far edge
+        return clampf(0.40f + 0.52f * curve + 0.40f * spec + 0.18f * rim, 0.0f, 1.55f);
+    };
+    auto tint = [&](Color c, float k) {
+        return Color{ cl8(c.r * k), cl8(c.g * k), cl8(c.b * k), 255 };
+    };
+
+    for (int y = lidY; y <= endY; y++) {
+        float hw;
+        if (y < neckY) hw = lidHW + (bodyHW - lidHW) * (y - lidY) / (float)(neckY - lidY);
+        else if (y <= botY) hw = bodyHW;
+        else hw = bodyHW - (bodyHW - 31.0f) * (y - botY) / (float)(endY - botY);
+        for (int x = (int)(cx - hw); x <= (int)(cx + hw); x++) {
+            float u = (x - cx) / hw;
+            float k = shade(u);
+            Color base = alu;
+            int ly = y - labelTop;
+            if (ly >= 0 && ly < LH) {                 // inside the printed wrap
+                // The flat strip is wider than the can it wraps onto, and near
+                // the edges many flat columns fall into one column here. Point
+                // sampling that drops most of them and eats the thin strokes of
+                // the wordmark, so average the whole span each column covers.
+                auto flatX = [&](float ux) {
+                    float sx = asinf(clampf(ux, -1.0f, 1.0f)) / 1.5707963f;
+                    return (sx + 1.0f) * 0.5f * (LW - 1);
+                };
+                float f0 = flatX((x - 0.5f - cx) / hw), f1 = flatX((x + 0.5f - cx) / hw);
+                int i0 = (int)floorf(fminf(f0, f1)), i1 = (int)ceilf(fmaxf(f0, f1));
+                i0 = i0 < 0 ? 0 : i0;
+                i1 = i1 > LW - 1 ? LW - 1 : i1;
+                float ar = 0, ag = 0, ab = 0;
+                int n = 0;
+                for (int fx = i0; fx <= i1; fx++) {
+                    Color sc = lp[ly * LW + fx];
+                    ar += sc.r; ag += sc.g; ab += sc.b; n++;
+                }
+                if (n > 0) base = { cl8(ar / n), cl8(ag / n), cl8(ab / n), 255 };
+            }
+            put(x, y, tint(base, k));
+        }
+        // the rolled seams top and bottom read as a darker line
+        if (y == neckY || y == botY)
+            for (int x = (int)(cx - hw); x <= (int)(cx + hw); x++)
+                put(x, y, tint(aluDk, shade((x - cx) / hw)));
+    }
+    UnloadImage(lbl);
+
+    // ---- the lid, seen from just above: a shallow ellipse with a pull tab
+    for (int y = lidY - 8; y <= lidY; y++) {
+        float t = (y - (lidY - 8)) / 8.0f;
+        float hw = lidHW * sqrtf(fmaxf(0.0f, 1.0f - (1.0f - t) * (1.0f - t)));
+        for (int x = (int)(cx - hw); x <= (int)(cx + hw); x++) {
+            float u = (x - cx) / (hw + 0.001f);
+            // the lid catches more light than the wall does, and dishes in the middle
+            float k = 0.86f + 0.30f * expf(-powf(u * 1.7f, 2.0f)) - 0.16f * t;
+            put(x, y, tint(alu, k));
+        }
+    }
+    for (int x = (int)(cx - lidHW); x <= (int)(cx + lidHW); x++)   // the chime, round the rim
+        put(x, lidY, tint(aluDk, 0.92f));
+    {   // pull tab: a small dark ring with the rivet holding it down
+        for (int dy = -4; dy <= 4; dy++)
+            for (int dx = -8; dx <= 8; dx++) {
+                float e = sqrtf((dx / 8.0f) * (dx / 8.0f) + (dy / 4.0f) * (dy / 4.0f));
+                if (e > 1.0f) continue;
+                put((int)cx + dx + 2, lidY - 4 + dy, (e > 0.62f) ? aluDk : tint(alu, 0.80f));
+            }
+        put((int)cx + 2, lidY - 4, tint(aluDk, 0.7f));
+    }
+
+    // ---- wear. Nothing down here has been on a shelf recently, and a can that
+    // reads factory-fresh looks pasted on top of the game rather than found in
+    // it. Faint blotches and a scuff or two; the wordmark stays legible.
+    for (int y = 0; y < H; y++)
         for (int x = 0; x < W; x++) {
             Color &c = p[y * W + x];
             if (c.a == 0) continue;
-            if (x >= lx0 && x <= lx1 && y >= ly0 && y <= ly1) continue;   // leave the label alone
             float g = vnoise2(x * 0.055f, y * 0.055f, 4471u);
-            float stain = clampf((g - 0.58f) * 2.1f, 0.0f, 1.0f) * 0.20f;
-            float grime = (vnoise2(x * 0.5f, y * 0.5f, 9137u) - 0.5f) * 0.055f;
+            float stain = clampf((g - 0.58f) * 2.1f, 0.0f, 1.0f) * 0.18f;
+            float grime = (vnoise2(x * 0.5f, y * 0.5f, 9137u) - 0.5f) * 0.05f;
             float k = 1.0f - stain + grime;
-            c.r = (unsigned char)clampf(c.r * k, 0, 255);
-            c.g = (unsigned char)clampf(c.g * k * 0.998f, 0, 255);
-            c.b = (unsigned char)clampf(c.b * k * 0.986f, 0, 255);   // stains go warm
+            c.r = cl8(c.r * k);
+            c.g = cl8(c.g * k * 0.998f);
+            c.b = cl8(c.b * k * 0.986f);   // stains go warm
         }
 
     return finishTexture(img, false);

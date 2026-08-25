@@ -103,12 +103,19 @@ void Game::renderScene(double now) {
         float bxx = a * CELL + 1.0f, bzz = b * CELL + 1.0f;
         float gy = world.floorY(a, b);
         float pl = propLum(bxx, gy + 0.15f, bzz);
-        if (isB) {   // almond water: the carton itself, on the floor or on the furniture
+        if (isB) {   // almond water: the can itself, on the floor or on the furniture
             float shelf = bottleShelfY(a, b);
             float sy = gy + (shelf >= 0 ? shelf : 0.0f);
-            const float CH = 0.26f;                       // carton height in metres
+            // the can stands 122mm; the sheet is taller than that to hold the
+            // lid and the transparent margin, so size the sheet, not the can
+            const float CH = 0.148f;
+            // the can's base sits at 182/192 down the sheet, so centring the
+            // sheet on the surface would stand it ~8mm off the top. Drop it by
+            // the margin instead, and it rests on the wood.
+            const float FOOT = CH * (192.0f - 182.0f) / 192.0f;
             DrawBillboardRec(cam, texAlmond, { 0, 0, (float)texAlmond.width, (float)texAlmond.height },
-                             { bxx, sy + CH * 0.5f, bzz }, { CH * 0.667f, CH },
+                             { bxx, sy + CH * 0.5f - FOOT, bzz },
+                             { CH * (float)texAlmond.width / (float)texAlmond.height, CH },
                              lit({ 255, 255, 255, 255 }, pl));
         } else if (isC) {
             float bob = sinf((float)now * 2.0f + a * 1.7f + b) * 0.03f;
@@ -329,12 +336,13 @@ void Game::renderUI(double now) {
             float gt = el - (0.40f + g * 0.36f);
             if (gt > 0 && gt < 0.26f) bob += sinf(gt / 0.26f * 3.14159f);
         }
-        float ch = sh * 0.72f;                            // sprite height on screen
+        float ch = sh * 0.60f;                            // sprite height on screen
         float cw = ch * (float)texAlmond.width / (float)texAlmond.height;
-        // pivot at the foot of the carton, where your wrist would be. In sprite
-        // space the carton's base sits at 184/192, so that is the origin.
-        Vector2 org = { cw * 0.5f, ch * 0.958f };
-        float rot = 6.0f - tip * 44.0f - bob * 4.5f;      // upright, then tilted to your mouth
+        // pivot at the foot of the can, where your wrist would be. In sprite
+        // space the base sits at 182/192, so that is the origin.
+        Vector2 org = { cw * 0.5f, ch * 0.948f };
+        // a can has to go further over than a carton before it pours
+        float rot = 6.0f - tip * 62.0f - bob * 5.5f;
         float bx4 = sinf(bobPhase * 3.14159f) * 4.0f * bobAmt;
         float wx = sw * 0.70f - tip * sw * 0.045f + bx4;
         float wy = (sh + ch) - up * (ch - 40.0f) - tip * sh * 0.16f + bob * 5.0f;
@@ -353,8 +361,8 @@ void Game::renderUI(double now) {
 
         // heel of the hand, behind the carton and mostly off the bottom edge
         {
-            Vector2 a = rp(-cw * 0.40f, -ch * 0.02f), b = rp(cw * 0.30f, -ch * 0.02f);
-            Vector2 c2 = rp(cw * 0.30f, ch * 0.34f), d = rp(-cw * 0.40f, ch * 0.34f);
+            Vector2 a = rp(-cw * 0.30f, -ch * 0.02f), b = rp(cw * 0.26f, -ch * 0.02f);
+            Vector2 c2 = rp(cw * 0.30f, ch * 0.34f), d = rp(-cw * 0.34f, ch * 0.34f);
             DrawTriangle(a, d, c2, skinSh); DrawTriangle(a, c2, b, skinSh);
         }
         DrawTexturePro(texAlmond, { 0, 0, (float)texAlmond.width, (float)texAlmond.height },
@@ -364,13 +372,13 @@ void Game::renderUI(double now) {
         for (int f = 0; f < 4; f++) {
             float fy = -ch * 0.33f + f * ch * 0.075f;
             float th = ch * 0.054f;
-            Vector2 a = rp(-cw * 0.46f, fy), b = rp(-cw * (0.24f + f * 0.012f), fy);
+            Vector2 a = rp(-cw * 0.52f, fy), b = rp(-cw * (0.27f + f * 0.013f), fy);
             DrawLineEx(a, b, th, skin);
             DrawCircleV(b, th * 0.5f, skin);              // the tip, rounded off
         }
         // thumb, laid up the near side below the label
         {
-            Vector2 a = rp(cw * 0.28f, ch * 0.01f), b = rp(cw * 0.19f, -ch * 0.16f);
+            Vector2 a = rp(cw * 0.24f, ch * 0.01f), b = rp(cw * 0.16f, -ch * 0.18f);
             DrawLineEx(a, b, ch * 0.056f, skinSh);
             DrawCircleV(b, ch * 0.029f, skinSh);
         }
