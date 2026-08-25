@@ -37,7 +37,9 @@ void Game::init() {
     texProps = makePropsTex();
     texScrawl = makeScrawlTex();
     texDog = makeDogTex();
-    texAlmond = makeAlmondTex();
+    texAlmondWrap = makeAlmondWrapTex();
+    canMesh = buildCanMesh();
+    handMesh = buildHandMesh();
     // per-level surface sets: [floor, ceiling, walls]
     floorTexs[0] = makeCarpetTex(); floorTexs[1] = makeConcreteFloorTex();
     floorTexs[2] = makeTileTex();   floorTexs[4] = makePartyCarpetTex();
@@ -87,7 +89,7 @@ void Game::init() {
         SetTextureFilter(texOcc, TEXTURE_FILTER_POINT);
         SetTextureWrap(texOcc, TEXTURE_WRAP_CLAMP);
     }
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 7; i++) {
         mats[i] = LoadMaterialDefault();
         mats[i].shader = worldShader;
         // rides the normal-map slot, which DrawMesh binds as "texture2"
@@ -96,6 +98,7 @@ void Game::init() {
     mats[3].maps[MATERIAL_MAP_DIFFUSE].texture = texProps;
     mats[4].maps[MATERIAL_MAP_DIFFUSE].texture = texScrawl;   // wall scrawl decals
     mats[5].maps[MATERIAL_MAP_DIFFUSE].texture = texAO;       // baked contact-shadow gradients
+    mats[6].maps[MATERIAL_MAP_DIFFUSE].texture = texAlmondWrap;   // the can
 
     for (int i = 0; i < 4; i++) steps[i] = makeFootstep(100 + i * 17);
     for (int i = 0; i < 4; i++) entSteps[i] = makeFootstep(300 + i * 23);   // heavier, its own gait

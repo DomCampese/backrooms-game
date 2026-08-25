@@ -106,17 +106,10 @@ void Game::renderScene(double now) {
         if (isB) {   // almond water: the can itself, on the floor or on the furniture
             float shelf = bottleShelfY(a, b);
             float sy = gy + (shelf >= 0 ? shelf : 0.0f);
-            // the can stands 122mm; the sheet is taller than that to hold the
-            // lid and the transparent margin, so size the sheet, not the can
-            const float CH = 0.148f;
-            // the can's base sits at 182/192 down the sheet, so centring the
-            // sheet on the surface would stand it ~8mm off the top. Drop it by
-            // the margin instead, and it rests on the wood.
-            const float FOOT = CH * (192.0f - 182.0f) / 192.0f;
-            DrawBillboardRec(cam, texAlmond, { 0, 0, (float)texAlmond.width, (float)texAlmond.height },
-                             { bxx, sy + CH * 0.5f - FOOT, bzz },
-                             { CH * (float)texAlmond.width / (float)texAlmond.height, CH },
-                             lit({ 255, 255, 255, 255 }, pl));
+            // the mesh is built with its base on y=0, so this just puts the base
+            // where it belongs. Spin each one by its cell so they aren't clones.
+            float spin = (float)(ih(a, b, 0x0CA9u) & 1023) / 1023.0f * 6.2831853f;
+            drawCan(MatrixMultiply(MatrixRotateY(spin), MatrixTranslate(bxx, sy, bzz)));
         } else if (isC) {
             float bob = sinf((float)now * 2.0f + a * 1.7f + b) * 0.03f;
             DrawCylinder({ bxx, gy + 0.06f + bob, bzz }, 0.085f, 0.085f, 0.024f, 12, lit({ 234, 188, 74, 255 }, pl));
@@ -276,6 +269,7 @@ void Game::renderScene(double now) {
         DrawBillboardRec(cam, spr, { 0, 0, 128, 256 },
                          { ent.x, eg + 0.98f - sink, ent.z }, { 0.98f, 1.96f }, { lum8, lum8, lum8, al });
     }
+    if (drinkT > 0) drawDrinkCan(cam);   // in the 3D pass: perspective does the foreshortening
     EndMode3D();
     EndTextureMode();
 }
@@ -326,109 +320,7 @@ void Game::renderUI(double now) {
         return;
     }
 
-    if (drinkT > 0) {   // almond water going down: the can comes up and back at you
-        float el = DRINK_TIME - drinkT;
-        auto ease = [](float t) { t = clampf(t, 0, 1); return t * t * (3.0f - 2.0f * t); };
-        float up  = ease(el / 0.42f) * (1.0f - ease((el - 1.36f) / 0.39f));   // in, then away
-        float tip = ease((el - 0.34f) / 0.34f) * (1.0f - ease((el - 1.30f) / 0.34f));
-        float bob = 0;                                    // three swallows, timed to the sound
-        for (int g = 0; g < 3; g++) {
-            float gt = el - (0.40f + g * 0.36f);
-            if (gt > 0 && gt < 0.26f) bob += sinf(gt / 0.26f * 3.14159f);
-        }
-        // You drink by bringing the can to your face, not by tipping it out to
-        // one side. Two cues sell that in a flat viewmodel: it grows as it
-        // closes on the camera, and the barrel foreshortens as the lid swings
-        // round toward you — width is preserved, height is not, which is what
-        // rotating about a horizontal axis actually does to a silhouette.
-        // Do the foreshortening with real trig rather than a fudge factor, and
-        // keep the angle modest: past about 40 degrees you are looking down into
-        // the can, the lid opens to a near-circle, and it stops reading as a can.
-        const float TILT_MAX = 40.0f * DEG2RAD;
-        float th = tip * TILT_MAX;
-        float baseH = sh * 0.58f;
-        float grow  = 1.0f + 0.34f * tip;                 // closing on the camera
-        float ch = baseH * grow * cosf(th);               // sprite height on screen
-        float cw = baseH * grow * (float)texAlmond.width / (float)texAlmond.height;
-        // pivot at the foot of the can, where your wrist would be. In sprite
-        // space the base sits at 182/192, so that is the origin.
-        Vector2 org = { cw * 0.5f, ch * 0.948f };
-        float rot = 5.0f - tip * 15.0f - bob * 2.5f;      // only a slight roll now
-        float bx4 = sinf(bobPhase * 3.14159f) * 4.0f * bobAmt;
-        float wx = sw * 0.70f - tip * sw * 0.15f + bx4;   // and it tracks in toward centre
-        float wy = (sh + baseH) - up * (baseH - 40.0f) - tip * sh * 0.11f + bob * 5.0f;
-
-        float rr = rot * DEG2RAD, cs = cosf(rr), sn = sinf(rr);
-        auto rp = [&](float lx, float ly) {   // can-local (from the pivot) → screen
-            return Vector2{ wx + lx * cs - ly * sn, wy + lx * sn + ly * cs };
-        };
-        auto ellipse = [&](float lcx, float lcy, float rx, float ry, Color c) {
-            const int N = 22;
-            Vector2 mid = rp(lcx, lcy), prev = rp(lcx + rx, lcy);
-            for (int i = 1; i <= N; i++) {   // negative sweep: CCW once y points down
-                float a2 = -i * 6.2831853f / N;
-                Vector2 cur = rp(lcx + rx * cosf(a2), lcy + ry * sinf(a2));
-                DrawTriangle(mid, prev, cur, c);
-                prev = cur;
-            }
-        };
-        // the viewmodel is drawn flat like the weapons are, but a can that stays
-        // bright through a blackout looks pasted on, so dim it with the room
-        unsigned char v = (unsigned char)(clampf(0.42f + 0.58f * blackoutCur, 0.3f, 1.0f) * 196.0f);
-        Color skin = { (unsigned char)(v * 0.60f), (unsigned char)(v * 0.47f),
-                       (unsigned char)(v * 0.38f), 255 };
-        Color skinSh = { (unsigned char)(v * 0.44f), (unsigned char)(v * 0.34f),
-                         (unsigned char)(v * 0.28f), 255 };
-
-        // heel of the hand, behind the can and mostly off the bottom edge
-        {
-            Vector2 a = rp(-cw * 0.30f, -ch * 0.02f), b = rp(cw * 0.26f, -ch * 0.02f);
-            Vector2 c2 = rp(cw * 0.30f, ch * 0.34f), d = rp(-cw * 0.34f, ch * 0.34f);
-            DrawTriangle(a, d, c2, skinSh); DrawTriangle(a, c2, b, skinSh);
-        }
-        DrawTexturePro(texAlmond, { 0, 0, (float)texAlmond.width, (float)texAlmond.height },
-                       { wx, wy, cw, ch }, org, rot,
-                       { v, (unsigned char)(v * 0.985f), (unsigned char)(v * 0.93f), 255 });
-        // The lid, opening up as it swings toward you. The sprite can only ever
-        // show it edge-on, so past a little tilt it gets drawn over the top:
-        // this is the part your eye reads as "coming at me" rather than "over".
-        if (tip > 0.03f) {
-            float lidY = -ch * 0.818f;                    // lid's front edge, in can-local
-            float rx = cw * 0.268f;                       // the lid is narrower than the barrel
-            float ry = rx * sinf(th);                     // opens exactly as far as the tilt says
-            Color aluTop = { (unsigned char)(v * 0.80f), (unsigned char)(v * 0.81f),
-                             (unsigned char)(v * 0.84f), 255 };
-            Color aluRim = { (unsigned char)(v * 0.56f), (unsigned char)(v * 0.57f),
-                             (unsigned char)(v * 0.60f), 255 };
-            ellipse(0, lidY, rx, ry, aluRim);
-            ellipse(0, lidY, rx * 0.87f, ry * 0.80f, aluTop);
-            // The mouth has to be a flat sliver hugging the far rim, at low
-            // contrast. A round dark blob in the middle of a pale disc reads as
-            // an eyeball, which is a different game entirely.
-            ellipse(-rx * 0.04f, lidY - ry * 0.50f, rx * 0.30f, ry * 0.20f,
-                    Color{ (unsigned char)(v * 0.38f), (unsigned char)(v * 0.36f),
-                           (unsigned char)(v * 0.35f), 255 });
-            // the tab, lying flat along the lid, barely darker than it
-            ellipse(rx * 0.10f, lidY + ry * 0.18f, rx * 0.44f, ry * 0.26f,
-                    Color{ (unsigned char)(v * 0.68f), (unsigned char)(v * 0.69f),
-                           (unsigned char)(v * 0.72f), 255 });
-        }
-        // fingers reach round the far side; only the tips come over the near edge
-        for (int f = 0; f < 4; f++) {
-            float fy = -ch * 0.33f + f * ch * 0.075f;
-            float th = ch * 0.054f;
-            Vector2 a = rp(-cw * 0.52f, fy), b = rp(-cw * (0.27f + f * 0.013f), fy);
-            DrawLineEx(a, b, th, skin);
-            DrawCircleV(b, th * 0.5f, skin);              // the tip, rounded off
-        }
-        // thumb, laid up the near side below the label
-        {
-            Vector2 a = rp(cw * 0.24f, ch * 0.01f), b = rp(cw * 0.16f, -ch * 0.18f);
-            DrawLineEx(a, b, ch * 0.056f, skinSh);
-            DrawCircleV(b, ch * 0.029f, skinSh);
-        }
-        DrawCircle(sw / 2, sh / 2, 2.0f, { 230, 220, 190, 110 });
-    } else if (weapon == 1 || (weapon == 0 && flares > 0)) {   // viewmodel, bottom-right
+    if (drinkT <= 0 && (weapon == 1 || (weapon == 0 && flares > 0))) {   // viewmodel, bottom-right
         // reload: the muzzle dips while the cylinder is out, then comes back up
         float dip = (weapon == 1 && reloadT > 0)
                   ? sinf(clampf(1.0f - reloadT / 1.8f, 0.0f, 1.0f) * 3.14159f) : 0.0f;
@@ -697,4 +589,75 @@ void Game::renderUI(double now) {
                  12, 34, 16, { 200, 190, 140, 180 });
     }
     EndDrawing();
+}
+
+// One can, lit by the room like every other surface. Alpha 255 on the vertices
+// puts it down the shader's textured branch.
+void Game::drawCan(Matrix xf) {
+    DrawMesh(canMesh, mats[6], xf);
+}
+
+// The drink, in three dimensions. The 2D version faked foreshortening by
+// squashing a sprite; here the can is real geometry held in front of the camera,
+// so the projection does it properly — it grows as it closes on your face, the
+// barrel shortens as it comes over, and the lid opens toward you on its own.
+void Game::drawDrinkCan(const Camera3D &cam) {
+    float el = DRINK_TIME - drinkT;
+    auto ease = [](float t) { t = clampf(t, 0, 1); return t * t * (3.0f - 2.0f * t); };
+    float up  = ease(el / 0.42f) * (1.0f - ease((el - 1.36f) / 0.39f));   // in, then away
+    float tip = ease((el - 0.34f) / 0.34f) * (1.0f - ease((el - 1.30f) / 0.34f));
+    float bob = 0;                                    // three swallows, timed to the sound
+    for (int g = 0; g < 3; g++) {
+        float gt = el - (0.40f + g * 0.36f);
+        if (gt > 0 && gt < 0.26f) bob += sinf(gt / 0.26f * 3.14159f);
+    }
+
+    // camera basis, matching the convention the rest of the game uses
+    Vector3 F = fwd;
+    Vector3 Rt = { r2x, 0, r2z };
+    Vector3 Up = Vector3Normalize(Vector3CrossProduct(Rt, F));
+
+    // where the base of the can sits, relative to your eye. It comes in from
+    // below and to the right, then draws in toward the middle as you tilt it.
+    // Most of the "coming at you" read has to come from the can simply getting
+    // bigger. Leaning it at the camera instead just puts the lid in your face.
+    float dist = 0.48f - tip * 0.15f;
+    float side = 0.17f - tip * 0.055f;
+    float vert = -0.52f + up * 0.38f + tip * 0.05f + bob * 0.006f;
+    float bx4 = sinf(bobPhase * 3.14159f) * 0.012f * bobAmt;
+    Vector3 pos = Vector3Add(cam.position,
+                  Vector3Add(Vector3Scale(F, dist),
+                  Vector3Add(Vector3Scale(Rt, side + bx4), Vector3Scale(Up, vert))));
+
+    // Held items are drawn bigger than life or they read as toys at arm's
+    // length; this is the usual viewmodel cheat, not a modelling error.
+    const float SCALE = 1.62f;
+    // Swinging the can's axis at the camera is what you physically do to drink,
+    // and it looks terrible: you end up staring straight down the lid with no
+    // barrel and no label. So pitch it toward you only a little, and get most of
+    // the motion from a roll in the screen plane, which keeps the silhouette and
+    // the wordmark side-on where you can read them.
+    float pitch2 = (15.0f * DEG2RAD) * tip + (2.0f * DEG2RAD) * bob;
+    float roll2  = (52.0f * DEG2RAD) * tip + (3.0f * DEG2RAD) * bob;
+    Vector3 x0 = Rt, y0 = Up, z0 = Vector3Negate(F);  // label faces the camera
+    // pitch about the can's own right axis: the lid comes toward you
+    Vector3 y1 = Vector3Add(Vector3Scale(y0, cosf(pitch2)), Vector3Scale(z0, sinf(pitch2)));
+    Vector3 z1 = Vector3Add(Vector3Scale(y0, -sinf(pitch2)), Vector3Scale(z0, cosf(pitch2)));
+    // roll about that: the top leans away to the left, toward your mouth
+    Vector3 tiltX = Vector3Add(Vector3Scale(x0, cosf(roll2)), Vector3Scale(y1, sinf(roll2)));
+    Vector3 tiltY = Vector3Add(Vector3Scale(x0, -sinf(roll2)), Vector3Scale(y1, cosf(roll2)));
+    Vector3 tiltZ = z1;
+
+    // the mesh sits base-on-origin, so step back down its own axis to put the
+    // middle of the can at pos and let it turn about its centre
+    pos = Vector3Subtract(pos, Vector3Scale(tiltY, 0.061f * SCALE));   // 0.061 = half the can
+
+    Matrix m = { 0 };
+    m.m0 = tiltX.x * SCALE; m.m1 = tiltX.y * SCALE; m.m2 = tiltX.z * SCALE;
+    m.m4 = tiltY.x * SCALE; m.m5 = tiltY.y * SCALE; m.m6 = tiltY.z * SCALE;
+    m.m8 = tiltZ.x * SCALE; m.m9 = tiltZ.y * SCALE; m.m10 = tiltZ.z * SCALE;
+    m.m12 = pos.x;          m.m13 = pos.y;          m.m14 = pos.z;
+    m.m15 = 1.0f;
+    drawCan(m);
+    DrawMesh(handMesh, mats[6], m);   // the grip turns with it
 }

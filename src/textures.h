@@ -19,4 +19,4 @@ Texture2D makePartyCarpetTex();    // LEVEL FUN =): deep red party carpet
 Texture2D makePartyCeilTex();      // LEVEL FUN =): near-black party-hall ceiling
 Texture2D makeAOStripTex();        // gradient strip for baked contact-shadow decals
 Texture2D makeDogTex();            // THE RED HALLS: whatever the pack is, seen side-on
-Texture2D makeAlmondTex();         // almond water carton: gable top, brown label
+Texture2D makeAlmondWrapTex();     // almond water can, unwrapped: label strip + lid + base
