@@ -103,9 +103,13 @@ void Game::renderScene(double now) {
         float bxx = a * CELL + 1.0f, bzz = b * CELL + 1.0f;
         float gy = world.floorY(a, b);
         float pl = propLum(bxx, gy + 0.15f, bzz);
-        if (isB) {   // almond water: chubby bottle, faint glow
-            DrawCylinder({ bxx, gy, bzz }, 0.055f, 0.065f, 0.19f, 8, lit({ 108, 142, 196, 255 }, pl));
-            DrawCylinder({ bxx, gy + 0.19f, bzz }, 0.02f, 0.05f, 0.07f, 8, lit({ 140, 170, 215, 255 }, pl));
+        if (isB) {   // almond water: the can itself, on the floor or on the furniture
+            float shelf = bottleShelfY(a, b);
+            float sy = gy + (shelf >= 0 ? shelf : 0.0f);
+            // the mesh is built with its base on y=0, so this just puts the base
+            // where it belongs. Spin each one by its cell so they aren't clones.
+            float spin = (float)(ih(a, b, 0x0CA9u) & 1023) / 1023.0f * 6.2831853f;
+            drawCan(MatrixMultiply(MatrixRotateY(spin), MatrixTranslate(bxx, sy, bzz)));
         } else if (isC) {
             float bob = sinf((float)now * 2.0f + a * 1.7f + b) * 0.03f;
             DrawCylinder({ bxx, gy + 0.06f + bob, bzz }, 0.085f, 0.085f, 0.024f, 12, lit({ 234, 188, 74, 255 }, pl));
@@ -265,6 +269,7 @@ void Game::renderScene(double now) {
         DrawBillboardRec(cam, spr, { 0, 0, 128, 256 },
                          { ent.x, eg + 0.98f - sink, ent.z }, { 0.98f, 1.96f }, { lum8, lum8, lum8, al });
     }
+    if (drinkT > 0) drawDrinkCan(cam);   // in the 3D pass: perspective does the foreshortening
     EndMode3D();
     EndTextureMode();
 }
@@ -315,7 +320,7 @@ void Game::renderUI(double now) {
         return;
     }
 
-    if (weapon == 1 || (weapon == 0 && flares > 0)) {   // viewmodel, bottom-right
+    if (drinkT <= 0 && (weapon == 1 || (weapon == 0 && flares > 0))) {   // viewmodel, bottom-right
         // reload: the muzzle dips while the cylinder is out, then comes back up
         float dip = (weapon == 1 && reloadT > 0)
                   ? sinf(clampf(1.0f - reloadT / 1.8f, 0.0f, 1.0f) * 3.14159f) : 0.0f;
@@ -493,15 +498,31 @@ void Game::renderUI(double now) {
         DrawText("F — flashlight", sw - MeasureText("F — flashlight", 16) - 16, sh - 28, 16, { 190, 180, 140, 160 });
     else if (flashOn)
         DrawText("[ flashlight ]", sw - MeasureText("[ flashlight ]", 14) - 16, sh - 26, 14, { 235, 225, 180, 120 });
+    {   // your grip on the place: always up, because it is always going down
+        int bw = 90, bx4 = sw - bw - 16, by4 = sh - 60;
+        DrawRectangle(bx4 - 1, by4 - 1, bw + 2, 7, { 0, 0, 0, 120 });
+        // steady cream, souring toward red as it empties; the last stretch pulses
+        Color sc = sanity > 0.5f ? Color{ 168, 196, 176, 165 }
+                 : sanity > 0.25f ? Color{ 214, 190, 120, 180 }
+                                  : Color{ 214, 96, 84, 200 };
+        if (sanity < 0.25f) sc.a = (unsigned char)(150 + 80 * (0.5f + 0.5f * sinf((float)now * 4.2f)));
+        DrawRectangle(bx4, by4, (int)(bw * sanity), 5, sc);
+        DrawText("grip", bx4 - MeasureText("grip", 12) - 6, by4 - 4, 12, { 150, 142, 122, 120 });
+    }
+    if (sanityWarnT > 0 && winT <= 0 && caughtT <= 0) {   // it just slipped a notch
+        float a = clampf(sanityWarnT / 1.2f, 0, 1) * clampf((4.0f - sanityWarnT) / 0.4f, 0, 1);
+        DrawText(sanityLine, sw / 2 - MeasureText(sanityLine, 19) / 2, sh / 2 + 96, 19,
+                 Fade({ 206, 176, 176, 255 }, a * 0.9f));
+    }
     if (flashOn || battery < 0.99f) {   // charge bar, once it's been used or spent at all
-        int bw = 90, bx3 = sw - bw - 16, by3 = sh - 44;
+        int bw = 90, bx3 = sw - bw - 16, by3 = sh - 44;   // one row below the grip meter
         DrawRectangle(bx3 - 1, by3 - 1, bw + 2, 7, { 0, 0, 0, 120 });
         Color bc = battery < 0.15f ? Color{ 220, 90, 70, 190 } : Color{ 200, 190, 150, 150 };
         DrawRectangle(bx3, by3, (int)(bw * battery), 5, bc);
         if (flashOn && battery < 0.15f) {
             const char *t = "battery low";
             float pl = 0.5f + 0.5f * sinf((float)now * 5.0f);
-            DrawText(t, sw - MeasureText(t, 13) - 16, sh - 60, 13, Fade({ 220, 120, 100, 220 }, pl));
+            DrawText(t, sw - MeasureText(t, 13) - 16, sh - 78, 13, Fade({ 220, 120, 100, 220 }, pl));   // clear of the grip meter
         }
     }
     {   // inventory, bottom-left; the selected weapon is lit
@@ -568,4 +589,75 @@ void Game::renderUI(double now) {
                  12, 34, 16, { 200, 190, 140, 180 });
     }
     EndDrawing();
+}
+
+// One can, lit by the room like every other surface. Alpha 255 on the vertices
+// puts it down the shader's textured branch.
+void Game::drawCan(Matrix xf) {
+    DrawMesh(canMesh, mats[6], xf);
+}
+
+// The drink, in three dimensions. The 2D version faked foreshortening by
+// squashing a sprite; here the can is real geometry held in front of the camera,
+// so the projection does it properly — it grows as it closes on your face, the
+// barrel shortens as it comes over, and the lid opens toward you on its own.
+void Game::drawDrinkCan(const Camera3D &cam) {
+    float el = DRINK_TIME - drinkT;
+    auto ease = [](float t) { t = clampf(t, 0, 1); return t * t * (3.0f - 2.0f * t); };
+    float up  = ease(el / 0.42f) * (1.0f - ease((el - 1.36f) / 0.39f));   // in, then away
+    float tip = ease((el - 0.34f) / 0.34f) * (1.0f - ease((el - 1.30f) / 0.34f));
+    float bob = 0;                                    // three swallows, timed to the sound
+    for (int g = 0; g < 3; g++) {
+        float gt = el - (0.40f + g * 0.36f);
+        if (gt > 0 && gt < 0.26f) bob += sinf(gt / 0.26f * 3.14159f);
+    }
+
+    // camera basis, matching the convention the rest of the game uses
+    Vector3 F = fwd;
+    Vector3 Rt = { r2x, 0, r2z };
+    Vector3 Up = Vector3Normalize(Vector3CrossProduct(Rt, F));
+
+    // where the base of the can sits, relative to your eye. It comes in from
+    // below and to the right, then draws in toward the middle as you tilt it.
+    // Most of the "coming at you" read has to come from the can simply getting
+    // bigger. Leaning it at the camera instead just puts the lid in your face.
+    float dist = 0.48f - tip * 0.15f;
+    float side = 0.17f - tip * 0.055f;
+    float vert = -0.52f + up * 0.38f + tip * 0.05f + bob * 0.006f;
+    float bx4 = sinf(bobPhase * 3.14159f) * 0.012f * bobAmt;
+    Vector3 pos = Vector3Add(cam.position,
+                  Vector3Add(Vector3Scale(F, dist),
+                  Vector3Add(Vector3Scale(Rt, side + bx4), Vector3Scale(Up, vert))));
+
+    // Held items are drawn bigger than life or they read as toys at arm's
+    // length; this is the usual viewmodel cheat, not a modelling error.
+    const float SCALE = 1.62f;
+    // Swinging the can's axis at the camera is what you physically do to drink,
+    // and it looks terrible: you end up staring straight down the lid with no
+    // barrel and no label. So pitch it toward you only a little, and get most of
+    // the motion from a roll in the screen plane, which keeps the silhouette and
+    // the wordmark side-on where you can read them.
+    float pitch2 = (15.0f * DEG2RAD) * tip + (2.0f * DEG2RAD) * bob;
+    float roll2  = (52.0f * DEG2RAD) * tip + (3.0f * DEG2RAD) * bob;
+    Vector3 x0 = Rt, y0 = Up, z0 = Vector3Negate(F);  // label faces the camera
+    // pitch about the can's own right axis: the lid comes toward you
+    Vector3 y1 = Vector3Add(Vector3Scale(y0, cosf(pitch2)), Vector3Scale(z0, sinf(pitch2)));
+    Vector3 z1 = Vector3Add(Vector3Scale(y0, -sinf(pitch2)), Vector3Scale(z0, cosf(pitch2)));
+    // roll about that: the top leans away to the left, toward your mouth
+    Vector3 tiltX = Vector3Add(Vector3Scale(x0, cosf(roll2)), Vector3Scale(y1, sinf(roll2)));
+    Vector3 tiltY = Vector3Add(Vector3Scale(x0, -sinf(roll2)), Vector3Scale(y1, cosf(roll2)));
+    Vector3 tiltZ = z1;
+
+    // the mesh sits base-on-origin, so step back down its own axis to put the
+    // middle of the can at pos and let it turn about its centre
+    pos = Vector3Subtract(pos, Vector3Scale(tiltY, 0.061f * SCALE));   // 0.061 = half the can
+
+    Matrix m = { 0 };
+    m.m0 = tiltX.x * SCALE; m.m1 = tiltX.y * SCALE; m.m2 = tiltX.z * SCALE;
+    m.m4 = tiltY.x * SCALE; m.m5 = tiltY.y * SCALE; m.m6 = tiltY.z * SCALE;
+    m.m8 = tiltZ.x * SCALE; m.m9 = tiltZ.y * SCALE; m.m10 = tiltZ.z * SCALE;
+    m.m12 = pos.x;          m.m13 = pos.y;          m.m14 = pos.z;
+    m.m15 = 1.0f;
+    drawCan(m);
+    DrawMesh(handMesh, mats[6], m);   // the grip turns with it
 }

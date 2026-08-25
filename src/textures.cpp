@@ -557,3 +557,102 @@ Texture2D makeDogTex() {
             put(26 + dx + e * 7, 60 + dy, Color{ 226, 216, 176, 255 });
     return finishTexture(img, false);
 }
+
+// The almond water can, unwrapped for a real cylinder: one atlas holding the
+// label as a flat strip (top half, u wraps once around the can) plus the lid and
+// the base as squares below it. Nothing here is shaded — unlike the billboard
+// sheet this replaces, the geometry is real, so the world shader lights it.
+Texture2D makeAlmondWrapTex() {
+    const int W = 192, H = 192;
+    const int SIDE_H = 128;                       // rows 0..127 wrap round the barrel
+    Image img = GenImageColor(W, H, BLANK);
+    Color *p = (Color *)img.data;
+    auto put = [&](int x, int y, Color c) { if (x >= 0 && x < W && y >= 0 && y < H) p[y * W + x] = c; };
+
+    const Color alu   = { 186, 189, 196, 255 };
+    const Color aluDk = { 138, 141, 149, 255 };
+    const Color cream = { 234, 228, 212, 255 };
+    const Color gold  = { 176, 150, 112, 255 };
+    const Color ink   = {  74,  50,  33, 255 };
+    const Color inkSoft = { 104, 74, 50, 255 };
+    const Color nut   = { 198, 156, 108, 255 };
+    const Color nutHi = { 224, 192, 152, 255 };
+
+    // ---- the label, as horizontal bands down the can
+    for (int y = 0; y < SIDE_H; y++) {
+        Color c;
+        if      (y < 12)  c = alu;                // shoulder
+        else if (y < 26)  c = cream;
+        else if (y < 29)  c = gold;
+        else if (y < 92)  c = ink;                // the brown band
+        else if (y < 95)  c = gold;
+        else if (y < 112) c = cream;
+        else              c = alu;                // base roll
+        for (int x = 0; x < W; x++) put(x, y, c);
+    }
+    // the artwork twice round, so something readable is facing you from most angles
+    for (int rep = 0; rep < 2; rep++) {
+        int cx = 48 + rep * 96;
+        for (int y = -14; y <= 14; y++) {         // the almond
+            float t = (y + 14) / 28.0f;
+            float hw = 9.0f * sinf(powf(t, 0.72f) * 3.14159f * 0.94f);
+            for (int x = -(int)hw; x <= (int)hw; x++) {
+                float e = fabsf(x / (hw + 0.001f));
+                put(cx + x, 46 + y, (e > 0.78f || t < 0.06f) ? inkSoft : (x < -1 ? nutHi : nut));
+            }
+        }
+        for (int y = -9; y <= 11; y++) put(cx, 46 + y, inkSoft);   // seam
+    }
+    const char *l1 = "ALMOND", *l2 = "WATER";
+    for (int rep = 0; rep < 2; rep++) {
+        int cx = 48 + rep * 96;
+        ImageDrawText(&img, l1, cx - MeasureText(l1, 11) / 2, 64, 11, Color{ 238, 228, 206, 255 });
+        ImageDrawText(&img, l2, cx - MeasureText(l2, 11) / 2, 78, 11, Color{ 238, 228, 206, 255 });
+    }
+
+    // ---- lid (x 0..63) and base (x 64..127), both on rows 128..191
+    for (int q = 0; q < 2; q++) {
+        int ox = q * 64;
+        for (int y = 0; y < 64; y++)
+            for (int x = 0; x < 64; x++) {
+                float dx = (x - 31.5f) / 30.0f, dy = (y - 31.5f) / 30.0f;
+                float r = sqrtf(dx * dx + dy * dy);
+                if (r > 1.0f) continue;                       // outside the disc
+                Color c = alu;
+                if (r > 0.93f) c = aluDk;                     // the chime round the rim
+                else if (r > 0.86f) c = Color{ 205, 208, 214, 255 };
+                else if (q == 0) {                            // lid: countersink + tab + mouth
+                    if (r > 0.70f && r < 0.76f) c = aluDk;
+                    if (dy < -0.30f && fabsf(dx) < 0.20f && r < 0.66f)
+                        c = Color{ 96, 99, 105, 255 };        // the mouth, a teardrop up top
+                    if (fabsf(dy - 0.06f) < 0.09f && fabsf(dx) < 0.42f)
+                        c = Color{ 158, 161, 168, 255 };      // tab lying across the lid
+                    if (fabsf(dy - 0.06f) < 0.04f && fabsf(dx) < 0.30f) c = aluDk;
+                } else {                                      // base: a recessed dome
+                    if (r < 0.72f) c = Color{ 160, 163, 170, 255 };
+                    if (r < 0.62f) c = Color{ 178, 181, 188, 255 };
+                }
+                put(ox + x, 128 + y, c);
+            }
+    }
+
+    // ---- wear, so it doesn't read as showroom stock
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++) {
+            Color &c = p[y * W + x];
+            if (c.a == 0) continue;
+            float g = vnoise2(x * 0.05f, y * 0.05f, 4471u);
+            float stain = clampf((g - 0.58f) * 2.1f, 0.0f, 1.0f) * 0.17f;
+            float grime = (vnoise2(x * 0.5f, y * 0.5f, 9137u) - 0.5f) * 0.05f;
+            float k = 1.0f - stain + grime;
+            c.r = cl8(c.r * k); c.g = cl8(c.g * k * 0.998f); c.b = cl8(c.b * k * 0.984f);
+        }
+    // ---- the last square is skin, for the hand that holds it. Flat: the mesh
+    // takes its shape from the lighting, not from anything painted here.
+    for (int y = 128; y < 192; y++)
+        for (int x = 128; x < 192; x++) {
+            float n = (vnoise2(x * 0.6f, y * 0.6f, 3313u) - 0.5f) * 0.07f;
+            put(x, y, Color{ cl8(146 * (1 + n)), cl8(112 * (1 + n)), cl8(90 * (1 + n)), 255 });
+        }
+    return finishTexture(img, false);
+}

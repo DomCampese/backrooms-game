@@ -37,6 +37,9 @@ void Game::init() {
     texProps = makePropsTex();
     texScrawl = makeScrawlTex();
     texDog = makeDogTex();
+    texAlmondWrap = makeAlmondWrapTex();
+    canMesh = buildCanMesh();
+    handMesh = buildHandMesh();
     // per-level surface sets: [floor, ceiling, walls]
     floorTexs[0] = makeCarpetTex(); floorTexs[1] = makeConcreteFloorTex();
     floorTexs[2] = makeTileTex();   floorTexs[4] = makePartyCarpetTex();
@@ -86,7 +89,7 @@ void Game::init() {
         SetTextureFilter(texOcc, TEXTURE_FILTER_POINT);
         SetTextureWrap(texOcc, TEXTURE_WRAP_CLAMP);
     }
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 7; i++) {
         mats[i] = LoadMaterialDefault();
         mats[i].shader = worldShader;
         // rides the normal-map slot, which DrawMesh binds as "texture2"
@@ -95,6 +98,7 @@ void Game::init() {
     mats[3].maps[MATERIAL_MAP_DIFFUSE].texture = texProps;
     mats[4].maps[MATERIAL_MAP_DIFFUSE].texture = texScrawl;   // wall scrawl decals
     mats[5].maps[MATERIAL_MAP_DIFFUSE].texture = texAO;       // baked contact-shadow gradients
+    mats[6].maps[MATERIAL_MAP_DIFFUSE].texture = texAlmondWrap;   // the can
 
     for (int i = 0; i < 4; i++) steps[i] = makeFootstep(100 + i * 17);
     for (int i = 0; i < 4; i++) entSteps[i] = makeFootstep(300 + i * 23);   // heavier, its own gait
@@ -112,6 +116,7 @@ void Game::init() {
     sndTape = makeTapeChime();     SetSoundVolume(sndTape, 0.6f);
     sndValve = makeValveTurn();    SetSoundVolume(sndValve, 0.7f);
     sndHowl = makeDogHowl();       SetSoundVolume(sndHowl, 0.5f);
+    sndGulp = makeGulp();          SetSoundVolume(sndGulp, 0.75f);
     for (int i = 0; i < 3; i++) sndBarks[i] = makeDogBark(400 + i * 31);
 
     synth.init();
@@ -190,6 +195,8 @@ void Game::winRun(double now) {
     coins = 0; almond = 0; tapes = 0; flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; battery = 1.0f;
     caughtCount = 0; escapeCount = 0; killCount = 0; distWalked = 0;
     fear = 0; boostT = 0;
+    sanity = 1.0f; sanityStage = 0; sanityWarnT = 0; sanityLine = "";
+    drinkT = 0; drinkLanded = false; nextHeartbeat = now + 20;
     ent.st = EState::Hidden; ent.nextSpawn = now + 30;
     runStart = now;
 }
@@ -225,6 +232,8 @@ void Game::startRun(double now) {
     coins = 0; almond = 0; tapes = 0; flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; battery = 1.0f;
     caughtCount = 0; escapeCount = 0; killCount = 0; distWalked = 0;
     fear = 0; boostT = 0; blackoutCur = 1.0f; blackoutEnd = -1;
+    sanity = 1.0f; sanityStage = 0; sanityWarnT = 0; sanityLine = "";
+    drinkT = 0; drinkLanded = false; nextHeartbeat = now + 20;
     ent.st = EState::Hidden; ent.nextSpawn = now + 30;
     nextBlackout = now + 40 + grng.f01() * 60;
     nextWhisper = now + 45 + grng.f01() * 60;
@@ -234,6 +243,10 @@ void Game::startRun(double now) {
 
 void Game::applyLevel(int lv) {
     level = lv;
+    // no carton carries through a doorway — but one already raised has been paid
+    // for, so settle it before dropping the animation rather than eating it
+    if (drinkT > 0 && !drinkLanded) sanity = clampf(sanity + 0.34f + 0.04f * level, 0.0f, 1.0f);
+    drinkT = 0; drinkLanded = false;
     const LevelCfg &c = LEVELS[lv];
     world.unloadAll();
     world.level = lv;
@@ -268,9 +281,56 @@ void Game::applyLevel(int lv) {
     SetWindowTitle(TextFormat("THE BACKROOMS — %s", c.name));
 }
 
+// Which furniture someone would actually have set a drink down on, and how high
+// its surface sits. The heights match the prop AABB tops in gatherCellAABBs — if
+// those move, these move with them.
+float Game::bottleShelfY(int a, int b) {
+    switch (world.propAt(a, b)) {
+    case 2:  return 1.32f;   // filing cabinet
+    case 3:  return 0.72f;   // folding table
+    case 8:  return 0.60f;   // nightstand
+    case 11: return 0.74f;   // party table
+    case 12: return 0.74f;   // office desk
+    default: return -1.0f;   // nothing you'd stand a carton on
+    }
+}
+
 bool Game::bottleAt(int a, int b) {
-    if (world.pillarAt(a, b) || world.propAt(a, b) || world.poolAt(a, b)) return false;
-    return ih(a, b, (uint32_t)world.seed ^ 0xA1A1u) % 331 == 0;
+    if (world.pillarAt(a, b) || world.poolAt(a, b)) return false;
+    if (world.propAt(a, b)) {
+        // left standing on the furniture. Far likelier than on bare floor,
+        // because a table is where a person puts a drink down.
+        if (bottleShelfY(a, b) < 0) return false;
+        return ih(a, b, (uint32_t)world.seed ^ 0xA1A2u) % 4 == 0;
+    }
+    return ih(a, b, (uint32_t)world.seed ^ 0xA1A1u) % 137 == 0;
+}
+
+// How fast each place works on you: meter fraction per second, standing still in
+// the light with nothing hunting. Full to empty in roughly 9 / 7.5 / 6.5 / 5 / 4
+// minutes as you go down.
+float Game::sanityDrain(int lv) {
+    static const float R[NLEVELS] = { 1.0f / 540, 1.0f / 450, 1.0f / 390, 1.0f / 300, 1.0f / 240 };
+    return R[(lv < 0 || lv >= NLEVELS) ? 0 : lv];
+}
+
+// The carton comes up, tips back for three swallows, and drops away. The payout
+// lands on the middle swallow rather than on the keypress, so the animation is
+// the thing you are actually waiting through.
+void Game::updateDrink(float dt, double now) {
+    (void)now;
+    if (drinkT <= 0) return;
+    float el = DRINK_TIME - drinkT;             // seconds since it went up
+    if (!drinkLanded && el >= 0.62f) {
+        drinkLanded = true;
+        stamina = 1.0f;
+        fear *= 0.35f;
+        boostT = 8.0f;
+        // the deeper places take more out of you, so a carton gives more back
+        sanity = clampf(sanity + 0.34f + 0.04f * level, 0.0f, 1.0f);
+        sanityWarnT = 0;
+    }
+    drinkT = fmaxf(0.0f, drinkT - dt);
 }
 
 bool Game::coinAt(int a, int b) {
@@ -413,6 +473,7 @@ bool Game::tick() {
             ent.nextSpawn += held;
             nextPack += held;                            // ...and the pack keeps its own clocks
             nextHowl += held;
+            nextHeartbeat += held;
             for (auto &d : dogs) { d.nextBark += held; d.nextRoam += held; }
             DisableCursor();
         }
@@ -455,6 +516,7 @@ bool Game::tick() {
     updateWeapons(dt, now);
     updateFlare(dt, now);
     updateInteraction();
+    updateDrink(dt, now);
     updateAmbience(dt, now);
     updateEntity(dt, now);
     updateDogs(dt, now);
@@ -646,6 +708,7 @@ void Game::updateWeapons(float dt, double now) {
         if (reloadT <= 0) { ammo = MAXAMMO; SetSoundPitch(sndClick, 1.15f); PlaySound(sndClick); }
     }
     if (weapon == 1 && IsCursorHidden() && !captureClick && caughtT <= 0 && reloadT <= 0 && gunCd <= 0 &&
+        drinkT <= 0 &&
         IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         if (ammo <= 0) { SetSoundPitch(sndClick, 0.7f); PlaySound(sndClick); gunCd = 0.25f; }  // dry fire
         else {
@@ -708,7 +771,7 @@ void Game::updateWeapons(float dt, double now) {
 
 void Game::updateFlare(float dt, double now) {
     // ---- flare weapon
-    if (IsCursorHidden() && caughtT <= 0 && flares > 0 &&
+    if (IsCursorHidden() && caughtT <= 0 && flares > 0 && drinkT <= 0 &&
         (IsKeyPressed(KEY_Q) || (weapon == 0 && !captureClick && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)))) {
         flares--;
         flare.active = true; flare.flying = true; flare.burn = FLAREBURN;
@@ -762,7 +825,13 @@ void Game::updateInteraction() {
         if (!isB && !isC && !isBat && !isT) continue;
         float bxx = a * CELL + 1.0f, bzz = b * CELL + 1.0f;
         float ddx = px - bxx, ddz = pz - bzz;
-        if (ddx * ddx + ddz * ddz < 0.8f * 0.8f) {
+        // collision keeps you off the furniture, so a carton standing on it needs
+        // a grab radius that reaches across the piece you can't walk through
+        float gr = (isB && bottleShelfY(a, b) >= 0) ? 1.35f : 0.8f;
+        // ...but not through a wall. lineOfSight ignores props, so the piece the
+        // carton is standing on doesn't block your own reach across it.
+        if (gr > 1.0f && !world.lineOfSight(px, pz, bxx, bzz)) continue;
+        if (ddx * ddx + ddz * ddz < gr * gr) {
             taken.insert(ky);
             if (isB) almond++;
             else if (isC) coins++;
@@ -786,10 +855,11 @@ void Game::updateInteraction() {
             coinsWorld.erase(coinsWorld.begin() + c2);
         } else ++c2;
     }
-    if (IsKeyPressed(KEY_THREE) && almond > 0) {   // drink: catch your breath, steady your hands
-        almond--; stamina = 1.0f; fear *= 0.35f; boostT = 8.0f;
-        SetSoundPitch(splashes[0], 1.5f); SetSoundVolume(splashes[0], 0.5f);
-        PlaySound(splashes[0]);
+    if (IsKeyPressed(KEY_THREE) && almond > 0 && drinkT <= 0) {   // drink: steady your hands
+        almond--;
+        drinkT = DRINK_TIME;
+        drinkLanded = false;
+        PlaySound(sndGulp);
     }
     // Red Halls: close a standpipe. A valve cell never holds a prop, so this can
     // never be the same cell as a vending machine — both may read the same press.
@@ -841,7 +911,7 @@ void Game::updateAmbience(float dt, double now) {
     // ---- whispers in the walls
     if (whisperT <= 0 && now > nextWhisper && ent.st == EState::Hidden) {
         whisperT = 4.5f;
-        nextWhisper = now + 70 + grng.f01() * 90;
+        nextWhisper = now + (70 + grng.f01() * 90) * (0.35 + 0.65 * sanity);
     }
     whisperT = fmaxf(0, whisperT - dt);
     synth.whisperTarget = whisperT > 0 ? 0.55f : 0.0f;
@@ -857,6 +927,44 @@ void Game::updateAmbience(float dt, double now) {
     }
     blackoutCur += ((blackout ? 0.02f : 1.0f) - blackoutCur) * fminf(1, 18 * dt);
     synth.humTarget = blackout ? 0.12f : 1.0f;
+
+    // ---- your grip on the place. It only ever goes one way on its own.
+    float drain = sanityDrain(level);
+    if (blackout) drain *= 2.2f;                              // the dark works much faster
+    else if (!flashOn && !(flare.active && flare.burn > 0)) drain *= 1.35f;
+    if (ent.st == EState::Chase) drain *= 2.6f;               // actively being run down
+    else if (ent.st != EState::Hidden) drain *= 1.5f;         // or just knowing it's out
+    if (hidden) drain *= 0.45f;                               // tucked in, breathing slow
+    else if (crouchCur > 0.7f) drain *= 0.8f;
+    sanity = clampf(sanity - drain * dt, 0.0f, 1.0f);
+
+    static const char *SANITY_LINES[] = {
+        "your hands won't hold still.",
+        "the corridor is not the same width twice.",
+        "something is breathing in time with you.",
+        "you are not going to remember this part.",
+    };
+    int stage = sanity < 0.12f ? 4 : sanity < 0.30f ? 3 : sanity < 0.50f ? 2
+              : sanity < 0.72f ? 1 : 0;
+    if (stage > sanityStage) {           // slipped a notch: say so, once
+        sanityStage = stage;
+        sanityWarnT = 4.0f;
+        sanityLine = SANITY_LINES[stage - 1];
+    } else if (stage < sanityStage) {
+        sanityStage = stage;             // a carton walks it back, and re-arms the warning
+    }
+    sanityWarnT = fmaxf(0, sanityWarnT - dt);
+
+    // low enough and you start hearing your own pulse, quicker the further down
+    if (sanity < 0.34f && now > nextHeartbeat) {
+        PlaySound(sndHeartbeat);
+        nextHeartbeat = now + 1.1 + sanity * 3.4;
+    }
+    // bottomed out, it stops being a meter and starts being an invitation
+    if (sanity <= 0.0f) {
+        if (ent.st == EState::Hidden && ent.nextSpawn > now + 4.0) ent.nextSpawn = now + 4.0;
+        if (nextBlackout > now + 8.0) nextBlackout = now + 8.0;
+    }
 
     // confetti from popped balloons: drift down, tumble, fade out
     for (size_t i = 0; i < confetti.size();) {
@@ -986,6 +1094,7 @@ void Game::updateEntity(float dt, double now) {
     }
     fear += (fearT - fear) * fminf(1, 2.2f * dt);
     if (whisperT > 0) fear = fmaxf(fear, 0.22f);
+    fear = fmaxf(fear, (1.0f - sanity) * 0.60f);   // losing it looks like being afraid
     // it brings the dark: lights die in a pool around it, worse the closer the hunt
     float darkT = (ent.st == EState::Chase) ? 1.0f
                 : (ent.st == EState::Stalk)  ? 0.45f

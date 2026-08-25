@@ -36,6 +36,11 @@ inline int cellOf(float x) { return (int)floorf(x / CELL); }
 
 struct MB;   // mesh builder, internal to world.cpp
 
+// One almond water can at life size, base on y=0. UVs index makeAlmondWrapTex.
+Mesh buildCanMesh();
+// The hand gripping it, in the can's own space — drawn with the can's transform.
+Mesh buildHandMesh();
+
 struct World {
     unsigned seed = 1337;
     int level = 0;           // 0 = Level 0, 1 = Level 1 (garage), 2 = Poolrooms, 3 = Red Halls, 4 = LEVEL FUN

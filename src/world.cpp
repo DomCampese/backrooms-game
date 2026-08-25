@@ -24,6 +24,19 @@ struct MB {
         const unsigned short q[6] = { 0, 1, 2, 0, 2, 3 };
         for (int i = 0; i < 6; i++) idx.push_back(base + q[i]);
     }
+    void tri(Vector3 a, Vector3 b, Vector3 cc, Vector3 nn,
+             Vector2 ta, Vector2 tb, Vector2 tc, Color col) {
+        unsigned short base = (unsigned short)(v.size() / 3);
+        const Vector3 P[3] = { a, b, cc };
+        const Vector2 T[3] = { ta, tb, tc };
+        for (int i = 0; i < 3; i++) {
+            v.push_back(P[i].x); v.push_back(P[i].y); v.push_back(P[i].z);
+            uv.push_back(T[i].x); uv.push_back(T[i].y);
+            n.push_back(nn.x); n.push_back(nn.y); n.push_back(nn.z);
+            c.push_back(col.r); c.push_back(col.g); c.push_back(col.b); c.push_back(col.a);
+        }
+        for (int i = 0; i < 3; i++) idx.push_back(base + (unsigned short)i);
+    }
     Mesh bake() {
         Mesh m = {};
         if (idx.empty()) return m;
@@ -993,4 +1006,101 @@ void World::unloadAll() {
             for (int i = 0; i < 8; i++)
                 if (kv.second.meshes[i].vertexCount > 0) UnloadMesh(kv.second.meshes[i]);
     chunks.clear();
+}
+
+
+// One almond water can, built at life size with its base on y=0 so a transform
+// can just put the base where it belongs — on a table, or in your hand. UVs
+// index makeAlmondWrapTex: the barrel takes the label strip once round, and the
+// two caps take the lid and base squares below it. Alpha 255 puts it down the
+// shader's textured branch, so the room lights it like everything else.
+Mesh buildCanMesh() {
+    MB b;
+    const int N = 24;
+    const float R = 0.033f, H = 0.122f;          // 66mm across, 122mm tall
+    const float TAU = 6.2831853f;
+    const float SV = 128.0f / 192.0f;            // the label strip ends here in v
+    const Color w = { 255, 255, 255, 255 };
+    // the barrel, as a stack of rings: a roll at the base, the straight wall,
+    // then the shoulder drawing in to the lid
+    const float ry[4] = { 0.0f,        H * 0.035f, H * 0.90f, H };
+    const float rr[4] = { R * 0.90f,   R,          R,         R * 0.86f };
+    const float rv[4] = { SV,          SV * 0.96f, SV * 0.07f, 0.0f };
+    for (int i = 0; i < N; i++) {
+        float a0 = i * TAU / N, a1 = (i + 1) * TAU / N;
+        // u runs backwards round the barrel: on the face turned toward you,
+        // increasing angle travels screen-left, so mapping u forwards puts the
+        // wordmark on mirrored
+        float u0 = 1.0f - i / (float)N, u1 = 1.0f - (i + 1) / (float)N;
+        float c0 = cosf(a0), s0 = sinf(a0), c1 = cosf(a1), s1 = sinf(a1);
+        for (int k = 0; k < 3; k++) {
+            Vector3 p00 = { c0 * rr[k],     ry[k],     s0 * rr[k] };
+            Vector3 p10 = { c1 * rr[k],     ry[k],     s1 * rr[k] };
+            Vector3 p11 = { c1 * rr[k + 1], ry[k + 1], s1 * rr[k + 1] };
+            Vector3 p01 = { c0 * rr[k + 1], ry[k + 1], s0 * rr[k + 1] };
+            // radial normals: close enough on a barrel this straight, and it
+            // keeps the shading continuous across the shoulder
+            Vector3 nm = { (c0 + c1) * 0.5f, 0.0f, (s0 + s1) * 0.5f };
+            b.quad(p00, p10, p11, p01, nm,
+                   { u0, rv[k] }, { u1, rv[k] }, { u1, rv[k + 1] }, { u0, rv[k + 1] }, w);
+        }
+    }
+    // caps. Inset the UVs a touch so bilinear can't drag one square into the next.
+    const float IN = 1.5f / 192.0f;
+    auto capUV = [&](float ox, float ang) {
+        float u = 0.5f + 0.5f * cosf(ang) * 0.94f, vv = 0.5f + 0.5f * sinf(ang) * 0.94f;
+        return Vector2{ ox + IN + u * (64.0f / 192.0f - 2 * IN),
+                        SV + IN + vv * (64.0f / 192.0f - 2 * IN) };
+    };
+    for (int i = 0; i < N; i++) {
+        float a0 = i * TAU / N, a1 = (i + 1) * TAU / N;
+        // lid, facing up: the first square in the atlas
+        b.tri({ 0, H, 0 }, { cosf(a1) * rr[3], H, sinf(a1) * rr[3] },
+              { cosf(a0) * rr[3], H, sinf(a0) * rr[3] }, { 0, 1, 0 },
+              capUV(0.0f, 0.0f), capUV(0.0f, a1), capUV(0.0f, a0), w);
+        // base, facing down: wound the other way, and the second square
+        b.tri({ 0, 0, 0 }, { cosf(a0) * rr[0], 0, sinf(a0) * rr[0] },
+              { cosf(a1) * rr[0], 0, sinf(a1) * rr[0] }, { 0, -1, 0 },
+              capUV(64.0f / 192.0f, 0.0f), capUV(64.0f / 192.0f, a0),
+              capUV(64.0f / 192.0f, a1), w);
+    }
+    return b.bake();
+}
+
+
+// The hand that holds the can. Modelled in the can's own space and drawn with
+// the can's transform, because the grip turns with it — so the fingers stay put
+// however far the can is tipped. Everything inside the barrel is hidden by it,
+// so only the parts that reach past the edge actually show.
+Mesh buildHandMesh() {
+    MB b;
+    const float R = 0.033f;
+    const Color w = { 255, 255, 255, 255 };
+    // the skin square is the last one in the atlas; one point in the middle of
+    // it is all this needs, since the shading comes from the normals
+    const Vector2 T = { 160.0f / 192.0f, 160.0f / 192.0f };
+    auto box = [&](Vector3 lo, Vector3 hi) {
+        const Vector3 p[8] = {
+            { lo.x, lo.y, lo.z }, { hi.x, lo.y, lo.z }, { hi.x, lo.y, hi.z }, { lo.x, lo.y, hi.z },
+            { lo.x, hi.y, lo.z }, { hi.x, hi.y, lo.z }, { hi.x, hi.y, hi.z }, { lo.x, hi.y, hi.z },
+        };
+        b.quad(p[7], p[6], p[5], p[4], {  0,  1,  0 }, T, T, T, T, w);   // top
+        b.quad(p[0], p[1], p[2], p[3], {  0, -1,  0 }, T, T, T, T, w);   // bottom
+        b.quad(p[3], p[2], p[6], p[7], {  0,  0,  1 }, T, T, T, T, w);   // near
+        b.quad(p[1], p[0], p[4], p[5], {  0,  0, -1 }, T, T, T, T, w);   // far
+        b.quad(p[0], p[3], p[7], p[4], { -1,  0,  0 }, T, T, T, T, w);   // left
+        b.quad(p[2], p[1], p[5], p[6], {  1,  0,  0 }, T, T, T, T, w);   // right
+    };
+    // Grip low. The label band runs from y 0.031 to 0.097 up the barrel, so a
+    // hand anywhere near the middle simply covers the thing it is holding.
+    // back of the hand, tucked behind and below
+    box({ -R * 1.25f, -0.004f, -R * 1.25f }, { R * 0.30f, 0.034f, -R * 0.45f });
+    // four fingers round the left side, tips just over the near face
+    for (int i = 0; i < 4; i++) {
+        float y0 = 0.002f + i * 0.0085f;
+        box({ -R * 1.25f, y0, -R * 0.85f }, { -R * 0.10f, y0 + 0.0062f, R * 0.98f });
+    }
+    // thumb, laid up the near side
+    box({ R * 0.15f, 0.002f, R * 0.45f }, { R * 0.62f, 0.030f, R * 0.96f });
+    return b.bake();
 }
