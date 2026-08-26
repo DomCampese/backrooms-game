@@ -569,45 +569,47 @@ Texture2D makeAlmondWrapTex() {
     Color *p = (Color *)img.data;
     auto put = [&](int x, int y, Color c) { if (x >= 0 && x < W && y >= 0 && y < H) p[y * W + x] = c; };
 
-    const Color alu   = { 186, 189, 196, 255 };
-    const Color aluDk = { 138, 141, 149, 255 };
-    const Color cream = { 234, 228, 212, 255 };
-    const Color gold  = { 176, 150, 112, 255 };
+    const Color alu   = { 214, 217, 224, 255 };
+    const Color aluDk = { 165, 168, 176, 255 };
+    const Color cream = { 248, 244, 232, 255 };
     const Color ink   = {  74,  50,  33, 255 };
     const Color inkSoft = { 104, 74, 50, 255 };
     const Color nut   = { 198, 156, 108, 255 };
     const Color nutHi = { 224, 192, 152, 255 };
 
     // ---- the label, as horizontal bands down the can
+    // Brown on cream, not cream on brown. A dark band over half the barrel makes
+    // the whole can read as a black blob at any distance — which is how the
+    // first pass of this looked in the world.
     for (int y = 0; y < SIDE_H; y++) {
         Color c;
-        if      (y < 12)  c = alu;                // shoulder
+        if      (y < 13)  c = alu;                // shoulder
         else if (y < 26)  c = cream;
-        else if (y < 29)  c = gold;
-        else if (y < 92)  c = ink;                // the brown band
-        else if (y < 95)  c = gold;
-        else if (y < 112) c = cream;
+        else if (y < 30)  c = ink;                // pinstripe closing the field
+        else if (y < 99)  c = cream;              // the label field
+        else if (y < 103) c = ink;
+        else if (y < 114) c = cream;
         else              c = alu;                // base roll
         for (int x = 0; x < W; x++) put(x, y, c);
     }
     // the artwork twice round, so something readable is facing you from most angles
     for (int rep = 0; rep < 2; rep++) {
         int cx = 48 + rep * 96;
-        for (int y = -14; y <= 14; y++) {         // the almond
-            float t = (y + 14) / 28.0f;
-            float hw = 9.0f * sinf(powf(t, 0.72f) * 3.14159f * 0.94f);
+        for (int y = -15; y <= 15; y++) {         // the almond
+            float t = (y + 15) / 30.0f;
+            float hw = 10.0f * sinf(powf(t, 0.72f) * 3.14159f * 0.94f);
             for (int x = -(int)hw; x <= (int)hw; x++) {
                 float e = fabsf(x / (hw + 0.001f));
-                put(cx + x, 46 + y, (e > 0.78f || t < 0.06f) ? inkSoft : (x < -1 ? nutHi : nut));
+                put(cx + x, 52 + y, (e > 0.80f || t < 0.06f) ? ink : (x < -1 ? nutHi : nut));
             }
         }
-        for (int y = -9; y <= 11; y++) put(cx, 46 + y, inkSoft);   // seam
+        for (int y = -10; y <= 12; y++) put(cx, 52 + y, inkSoft);   // seam
     }
     const char *l1 = "ALMOND", *l2 = "WATER";
     for (int rep = 0; rep < 2; rep++) {
         int cx = 48 + rep * 96;
-        ImageDrawText(&img, l1, cx - MeasureText(l1, 11) / 2, 64, 11, Color{ 238, 228, 206, 255 });
-        ImageDrawText(&img, l2, cx - MeasureText(l2, 11) / 2, 78, 11, Color{ 238, 228, 206, 255 });
+        ImageDrawText(&img, l1, cx - MeasureText(l1, 11) / 2, 72, 11, ink);
+        ImageDrawText(&img, l2, cx - MeasureText(l2, 11) / 2, 85, 11, ink);
     }
 
     // ---- lid (x 0..63) and base (x 64..127), both on rows 128..191

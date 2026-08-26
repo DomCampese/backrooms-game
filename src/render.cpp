@@ -619,11 +619,11 @@ void Game::drawDrinkCan(const Camera3D &cam) {
 
     // where the base of the can sits, relative to your eye. It comes in from
     // below and to the right, then draws in toward the middle as you tilt it.
-    // Most of the "coming at you" read has to come from the can simply getting
-    // bigger. Leaning it at the camera instead just puts the lid in your face.
-    float dist = 0.48f - tip * 0.15f;
-    float side = 0.17f - tip * 0.055f;
-    float vert = -0.52f + up * 0.38f + tip * 0.05f + bob * 0.006f;
+    // It has to come AT you, so it tracks in toward the middle of the view and
+    // closes most of the gap to your face while it does.
+    float dist = 0.52f - tip * 0.20f;
+    float side = 0.19f - tip * 0.115f;
+    float vert = -0.52f + up * 0.38f + tip * 0.06f + bob * 0.006f;
     float bx4 = sinf(bobPhase * 3.14159f) * 0.012f * bobAmt;
     Vector3 pos = Vector3Add(cam.position,
                   Vector3Add(Vector3Scale(F, dist),
@@ -631,14 +631,17 @@ void Game::drawDrinkCan(const Camera3D &cam) {
 
     // Held items are drawn bigger than life or they read as toys at arm's
     // length; this is the usual viewmodel cheat, not a modelling error.
-    const float SCALE = 1.62f;
-    // Swinging the can's axis at the camera is what you physically do to drink,
-    // and it looks terrible: you end up staring straight down the lid with no
-    // barrel and no label. So pitch it toward you only a little, and get most of
-    // the motion from a roll in the screen plane, which keeps the silhouette and
-    // the wordmark side-on where you can read them.
-    float pitch2 = (15.0f * DEG2RAD) * tip + (2.0f * DEG2RAD) * bob;
-    float roll2  = (52.0f * DEG2RAD) * tip + (3.0f * DEG2RAD) * bob;
+    const float SCALE = 1.30f;
+    // Pitch is the main move: the can's axis swings over toward the camera so the
+    // lid comes to your mouth, which is what drinking actually looks like from
+    // behind your own eyes. Rolling it in the screen plane instead just reads as
+    // tipping it out sideways. A little roll on top keeps it off dead-centre so
+    // some of the barrel and the label stay in view.
+    // 38 degrees is the ceiling worth using: enough that the lid is clearly
+    // swinging toward your mouth, not so much that the barrel disappears behind
+    // it and you are left looking at a metal disc.
+    float pitch2 = (38.0f * DEG2RAD) * tip + (4.0f * DEG2RAD) * bob;
+    float roll2  = (10.0f * DEG2RAD) * tip + (2.0f * DEG2RAD) * bob;
     Vector3 x0 = Rt, y0 = Up, z0 = Vector3Negate(F);  // label faces the camera
     // pitch about the can's own right axis: the lid comes toward you
     Vector3 y1 = Vector3Add(Vector3Scale(y0, cosf(pitch2)), Vector3Scale(z0, sinf(pitch2)));

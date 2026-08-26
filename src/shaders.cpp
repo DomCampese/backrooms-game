@@ -220,7 +220,11 @@ void main(){
         vec4 texel = texture(texture0, fragUV);
         // relief on matte surfaces (grimy walls, carpet, concrete); glossy tile
         // stays smooth, flat decals / contact-shadows don't bump at all
-        float relief = (fragC.a > 0.98 ? 0.5 : 0.0) * clamp(1.0 - uGloss*1.6, 0.0, 1.0);
+        // Relief is a world-space bump, which is right for grimy walls and carpet
+        // and wrong for small curved objects — and badly wrong for anything that
+        // moves, because the noise field is fixed in the world and the surface
+        // swims through it. Alpha 254 means "textured, opaque, leave it smooth".
+        float relief = (fragC.a > 0.995 ? 0.5 : 0.0) * clamp(1.0 - uGloss*1.6, 0.0, 1.0);
         vec3 Nb = bumpNormal(fragPos, normalize(fragN), 3.3, relief);
         col = texel.rgb * fragC.rgb * roomLight(fragPos, Nb);
         aOut = fragC.a * texel.a;                    // translucent contact shadows + scrawl decals

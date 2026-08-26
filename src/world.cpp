@@ -1020,7 +1020,9 @@ Mesh buildCanMesh() {
     const float R = 0.033f, H = 0.122f;          // 66mm across, 122mm tall
     const float TAU = 6.2831853f;
     const float SV = 128.0f / 192.0f;            // the label strip ends here in v
-    const Color w = { 255, 255, 255, 255 };
+    // alpha 254, not 255: textured and opaque, but out of the shader's
+    // world-space relief bump, which has no business on a drinks can
+    const Color w = { 255, 255, 255, 254 };
     // the barrel, as a stack of rings: a roll at the base, the straight wall,
     // then the shoulder drawing in to the lid
     const float ry[4] = { 0.0f,        H * 0.035f, H * 0.90f, H };
@@ -1038,9 +1040,16 @@ Mesh buildCanMesh() {
             Vector3 p10 = { c1 * rr[k],     ry[k],     s1 * rr[k] };
             Vector3 p11 = { c1 * rr[k + 1], ry[k + 1], s1 * rr[k + 1] };
             Vector3 p01 = { c0 * rr[k + 1], ry[k + 1], s0 * rr[k + 1] };
-            // radial normals: close enough on a barrel this straight, and it
-            // keeps the shading continuous across the shoulder
-            Vector3 nm = { (c0 + c1) * 0.5f, 0.0f, (s0 + s1) * 0.5f };
+            // Radial normals are the honest answer and they read badly here: a
+            // half-lambert falloff wrapped round a barrel only 20 pixels wide
+            // puts most of the can inside its own terminator, so it goes dark
+            // next to the flat-faced furniture it sits on. Cant them upward so
+            // the barrel catches the ceiling panels and the falloff is gentler
+            // — the same trick small round props usually get.
+            float mx = (c0 + c1) * 0.5f, mz = (s0 + s1) * 0.5f;
+            float ny = 1.05f;   // well past honest: readability wins on a 20px object
+            float nl = sqrtf(mx * mx + mz * mz + ny * ny);
+            Vector3 nm = { mx / nl, ny / nl, mz / nl };
             b.quad(p00, p10, p11, p01, nm,
                    { u0, rv[k] }, { u1, rv[k] }, { u1, rv[k + 1] }, { u0, rv[k + 1] }, w);
         }
@@ -1075,7 +1084,7 @@ Mesh buildCanMesh() {
 Mesh buildHandMesh() {
     MB b;
     const float R = 0.033f;
-    const Color w = { 255, 255, 255, 255 };
+    const Color w = { 255, 255, 255, 254 };   // smooth, like the can it holds
     // the skin square is the last one in the atlas; one point in the middle of
     // it is all this needs, since the shading comes from the normals
     const Vector2 T = { 160.0f / 192.0f, 160.0f / 192.0f };
