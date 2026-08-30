@@ -24,6 +24,7 @@ static constexpr int TAPE_LINE_COUNT = sizeof(TAPE_LINES) / sizeof(TAPE_LINES[0]
 
 void Game::init() {
     shotPath = getenv("BACKROOMS_SHOT");
+    if (const char *sf = getenv("BACKROOMS_SHOTFRAME")) shotFrame = atoi(sf);   // testing
     SetTraceLogLevel(LOG_WARNING);
     SetConfigFlags(FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
     InitWindow(1440, 850, "THE BACKROOMS — Level 0");
@@ -451,7 +452,7 @@ bool Game::tick() {
         updateMenu(now);
         renderScene(now);
         renderUI(now);
-        if (shotPath && frame == 600) { TakeScreenshot(shotPath); return false; }   // testing
+        if (shotPath && frame == shotFrame) { TakeScreenshot(shotPath); return false; }   // testing
         return true;
     }
 
@@ -486,7 +487,7 @@ bool Game::tick() {
         synth.update();
         renderScene(now);
         renderUI(now);
-        if (shotPath && frame == 600) { TakeScreenshot(shotPath); return false; }   // testing
+        if (shotPath && frame == shotFrame) { TakeScreenshot(shotPath); return false; }   // testing
         return true;
     }
 
@@ -535,7 +536,7 @@ bool Game::tick() {
     renderScene(now);
     renderUI(now);
 
-    if (shotPath && frame == 600) {
+    if (shotPath && frame == shotFrame) {
         TakeScreenshot(shotPath);
         printf("fps=%d chunks=%d\n", GetFPS(), (int)world.chunks.size());
         return false;

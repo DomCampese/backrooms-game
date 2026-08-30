@@ -546,17 +546,54 @@ void World::ensureMesh(int cx, int cz) {
                            wood ? CU0 : MU0, wood ? CV0 : MV0, wood ? CU1 : MU1, wood ? CV1 : MV1,
                            wood ? CU0 : MU0, wood ? CV0 : MV0, wood ? CU1 : MU1, wood ? CV1 : MV1, tint);
             };
-            auto blob = [&](float hx2, float hz2) {   // soft contact shadow under the piece
-                auto ptv = [&](float lx, float lz) {
+            // Contact shadow under the piece. This used to be one flat quad with
+            // all four UVs pinned to a single texel, so it had no gradient at
+            // all — every piece of furniture stood on a hard black rectangle
+            // larger than itself, with a visible straight edge on the floor.
+            // Lay it into the AO mesh instead and use the same falloff the wall
+            // creases use: solid under the piece, fading to nothing past it.
+            auto blob = [&](float hx2, float hz2) {
+                const float S = 0.24f;                    // how far the falloff reaches
+                const float d = S * 0.7071f;              // the corner, cut across
+                const Vector3 up = { 0, 1, 0 };
+                auto P = [&](float lx, float lz) {
                     return Vector3{ pcx + lx * ca - lz * sa, ey + 0.006f, pcz + lx * sa + lz * ca };
                 };
-                pr.quad(ptv(-hx2, -hz2), ptv(hx2, -hz2), ptv(hx2, hz2), ptv(-hx2, hz2), {0,1,0},
-                        {0.75f,0.75f},{0.75f,0.75f},{0.75f,0.75f},{0.75f,0.75f}, Color{ 12, 12, 12, 160 });
+                // core, right under the piece: darkest end of the gradient
+                ao.quad(P(-hx2,-hz2), P(hx2,-hz2), P(hx2,hz2), P(-hx2,hz2), up,
+                        {0,0},{1,0},{1,0},{0,0}, aoc);
+                // four skirts fading outward. Each inner edge runs so the quad
+                // stays wound the same way round as the core.
+                const float sd[4][6] = {
+                    {  hx2,-hz2, -hx2,-hz2,  0,  -S },
+                    {  hx2, hz2,  hx2,-hz2,  S,   0 },
+                    { -hx2, hz2,  hx2, hz2,  0,   S },
+                    { -hx2,-hz2, -hx2, hz2, -S,   0 },
+                };
+                for (auto &e : sd)
+                    ao.quad(P(e[0], e[1]), P(e[2], e[3]),
+                            P(e[2] + e[4], e[3] + e[5]), P(e[0] + e[4], e[1] + e[5]), up,
+                            {0,0},{1,0},{1,1},{0,1}, aoc);
+                // and the corners, so the skirt closes instead of leaving notches
+                const float cn[4][4] = {
+                    {  hx2,  hz2,  1,  1 }, { -hx2,  hz2, -1,  1 },
+                    { -hx2, -hz2, -1, -1 }, {  hx2, -hz2,  1, -1 },
+                };
+                for (auto &c2 : cn) {
+                    Vector3 inner = P(c2[0], c2[1]);
+                    Vector3 pxv = P(c2[0] + c2[2] * S, c2[1]);
+                    Vector3 pmv = P(c2[0] + c2[2] * d, c2[1] + c2[3] * d);
+                    Vector3 pzv = P(c2[0], c2[1] + c2[3] * S);
+                    bool xFirst = (c2[2] * c2[3]) > 0;    // keeps the winding consistent
+                    Vector3 a1 = xFirst ? pxv : pzv, b1 = xFirst ? pzv : pxv;
+                    ao.tri(inner, a1, pmv, up, {0,0},{0,1},{1,1}, aoc);
+                    ao.tri(inner, pmv, b1, up, {0,0},{1,1},{0,1}, aoc);
+                }
             };
             switch (dd.prop[i][kk]) {
             case 1: {   // box stack — on LEVEL FUN they're wrapped like presents,
                         // and the packing tape reads as ribbon
-                blob(0.58f, 0.58f);
+                blob(0.40f, 0.40f);
                 float bh = 0.55f + r1 * 0.2f, bhx = 0.34f + r2 * 0.08f;
                 auto wrap = [&](int rot2) {
                     if (level != 4) return WHITE;
@@ -580,7 +617,7 @@ void World::ensureMesh(int cx, int cz) {
                            FU0, FV0, FU1, FV1, MU0, MV0, MU1, MV1);
                 break;
             case 3: {   // folding table
-                blob(0.68f, 0.46f);
+                blob(0.58f, 0.40f);
                 float ty = 0.72f;
                 addPropBox(pr, pcx, pcz, rot, 0.62f, 0.40f, ey + ty - 0.04f, ey + ty,
                            MU0, MV0, MU1, MV1, MU0, MV0, MU1, MV1);
@@ -614,7 +651,7 @@ void World::ensureMesh(int cx, int cz) {
                 break;
             }
             case 5: {   // couch: mustard upholstery gone grey, facing nothing in particular
-                blob(0.86f, 0.56f);
+                blob(0.74f, 0.48f);
                 Color uph = { 172, 152, 96, 255 };
                 part(0, 0.10f, 0.78f, 0.42f, ey + 0.16f, ey + 0.44f, false, uph);   // seat
                 part(0, -0.36f, 0.78f, 0.14f, ey + 0.16f, ey + 0.92f, false, uph);  // backrest
@@ -650,7 +687,7 @@ void World::ensureMesh(int cx, int cz) {
                 break;
             }
             case 11: {  // party table: paper cloth, a cake nobody cut, cups nobody drank
-                blob(0.62f, 0.62f);
+                blob(0.52f, 0.52f);
                 float ty = 0.74f;
                 uint32_t th = ih(cx * CCELLS + i, cz * CCELLS + kk, seed ^ 0xCAFEu);
                 Color cloth = PARTY[th % 5];
@@ -1020,7 +1057,9 @@ Mesh buildCanMesh() {
     const float R = 0.033f, H = 0.122f;          // 66mm across, 122mm tall
     const float TAU = 6.2831853f;
     const float SV = 128.0f / 192.0f;            // the label strip ends here in v
-    const Color w = { 255, 255, 255, 255 };
+    // alpha 254, not 255: textured and opaque, but out of the shader's
+    // world-space relief bump, which has no business on a drinks can
+    const Color w = { 255, 255, 255, 254 };
     // the barrel, as a stack of rings: a roll at the base, the straight wall,
     // then the shoulder drawing in to the lid
     const float ry[4] = { 0.0f,        H * 0.035f, H * 0.90f, H };
@@ -1038,9 +1077,16 @@ Mesh buildCanMesh() {
             Vector3 p10 = { c1 * rr[k],     ry[k],     s1 * rr[k] };
             Vector3 p11 = { c1 * rr[k + 1], ry[k + 1], s1 * rr[k + 1] };
             Vector3 p01 = { c0 * rr[k + 1], ry[k + 1], s0 * rr[k + 1] };
-            // radial normals: close enough on a barrel this straight, and it
-            // keeps the shading continuous across the shoulder
-            Vector3 nm = { (c0 + c1) * 0.5f, 0.0f, (s0 + s1) * 0.5f };
+            // Radial normals are the honest answer and they read badly here: a
+            // half-lambert falloff wrapped round a barrel only 20 pixels wide
+            // puts most of the can inside its own terminator, so it goes dark
+            // next to the flat-faced furniture it sits on. Cant them upward so
+            // the barrel catches the ceiling panels and the falloff is gentler
+            // — the same trick small round props usually get.
+            float mx = (c0 + c1) * 0.5f, mz = (s0 + s1) * 0.5f;
+            float ny = 1.05f;   // well past honest: readability wins on a 20px object
+            float nl = sqrtf(mx * mx + mz * mz + ny * ny);
+            Vector3 nm = { mx / nl, ny / nl, mz / nl };
             b.quad(p00, p10, p11, p01, nm,
                    { u0, rv[k] }, { u1, rv[k] }, { u1, rv[k + 1] }, { u0, rv[k + 1] }, w);
         }
@@ -1075,7 +1121,7 @@ Mesh buildCanMesh() {
 Mesh buildHandMesh() {
     MB b;
     const float R = 0.033f;
-    const Color w = { 255, 255, 255, 255 };
+    const Color w = { 255, 255, 255, 254 };   // smooth, like the can it holds
     // the skin square is the last one in the atlas; one point in the middle of
     // it is all this needs, since the shading comes from the normals
     const Vector2 T = { 160.0f / 192.0f, 160.0f / 192.0f };
