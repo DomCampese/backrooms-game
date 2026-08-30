@@ -86,7 +86,7 @@ float lightVis(vec2 a, vec2 b){
     vec2 tMax = abs((vec2(c) + max(vec2(stp), 0.0)) * 2.0 - a) * inv;
     if (stp.x == 0) tMax.x = 1e9;
     if (stp.y == 0) tMax.y = 1e9;
-    for (int i = 0; i < 8; i++){   // 8 cells is 16 m — past the reach of an 8 m light grid
+    for (int i = 0; i < 16; i++){  // each step crosses one 2 m cell, so this reaches 32 m
         if (tMax.x < tMax.y){
             if (tMax.x > dist) return 1.0;
             c.x += stp.x;
@@ -139,19 +139,42 @@ vec3 roomLight(vec3 P, vec3 N){
         vec3 ld = lp - P;
         float d2 = dot(ld,ld);
         float atten = 1.0/(1.0 + 0.075*d2);
+        // Only the 3x3 panels around this point are summed, and that window is a
+        // hard cut: at the edge of it a light is still worth ~8% of full, then
+        // vanishes the instant P crosses into the next cell. That draws a
+        // straight seam along every light-cell boundary — the lines on the
+        // floor. Fade each panel out before it leaves the set so nothing pops.
+        vec2 wf = 1.0 - smoothstep(vec2(0.60), vec2(1.0), abs(lp.xz - P.xz)/(1.5*uLS));
+        atten *= wf.x * wf.y;
+        if (atten < 1e-5) continue;
         if (st*atten < 0.004) continue;              // too faint to be worth tracing
-        // The panel is a metre-wide strip, not a point: trace both ends and let
-        // the average be the penumbra, so shadow edges land soft instead of cut.
-        // Only worth paying for up close — past a few metres the soft edge is
-        // finer than the pixels, so distant lights take the single centre tap.
+        // The panel is a metre-wide strip, not a point, so its shadow carries a
+        // real penumbra that widens with the distance from the blocker. A single
+        // centre tap gives a perfectly hard, aliased edge, and nine of those laid
+        // over one another is what reads as straight lines drawn on the floor.
+        // Trace across the panel, and widen the spread with range.
+        // The march gives up after a fixed number of cells, and where it gives up
+        // the shadow simply stops — and because the DDA spends one step per cell
+        // crossed, the contour where it runs out is |dx|+|dz| = const: a diamond,
+        // whose sides are straight diagonals across open floor. That is where the
+        // lines on the ground came from. Fade each light's shadow out well inside
+        // the budget so the march never truncates in view.
+        float l1 = abs(lp.x - shP.x) + abs(lp.z - shP.y);   // shP is a vec2: .y is world z
+        float sw = 1.0 - smoothstep(18.0, 26.0, l1);
         float vis;
-        if (d2 < 36.0) {
+        if (sw < 0.002) {
+            vis = 1.0;                                   // too far to shadow; it's faint anyway
+        } else {
             vec2 toFrag = shP - lp.xz;
             float toLen = length(toFrag);
             // directly overhead there's no meaningful direction to spread along
-            vec2 perp = (toLen > 0.001) ? vec2(-toFrag.y, toFrag.x) / toLen * 0.45 : vec2(0.45, 0.0);
-            vis = 0.5*(lightVis(lp.xz + perp, shP) + lightVis(lp.xz - perp, shP));
-        } else vis = lightVis(lp.xz, shP);
+            vec2 pdir = (toLen > 0.001) ? vec2(-toFrag.y, toFrag.x) / toLen : vec2(1.0, 0.0);
+            vec2 perp = pdir * (0.34 + 0.055 * sqrt(d2));
+            vis = (lightVis(lp.xz - perp, shP)
+                 + lightVis(lp.xz, shP)
+                 + lightVis(lp.xz + perp, shP)) * (1.0/3.0);
+        }
+        vis = mix(1.0, vis, sw);                         // ease the shadow off with range
         // a wall kills the direct beam, never the light that bounces around it
         st *= mix(0.22, 1.0, vis);
         if (st <= 0.001) continue;

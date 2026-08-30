@@ -27,6 +27,7 @@ struct Game {
 
     // env/test knobs (BACKROOMS_* — see README)
     const char *shotPath = nullptr;
+    int shotFrame = 600;                      // BACKROOMS_SHOTFRAME: capture earlier, for quick looks
 
     // resources
     Texture2D texEntity{}, texPartygoer{}, texProps{}, texScrawl{}, texAO{}, texOcc{}, texDog{},

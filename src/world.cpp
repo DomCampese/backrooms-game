@@ -546,17 +546,54 @@ void World::ensureMesh(int cx, int cz) {
                            wood ? CU0 : MU0, wood ? CV0 : MV0, wood ? CU1 : MU1, wood ? CV1 : MV1,
                            wood ? CU0 : MU0, wood ? CV0 : MV0, wood ? CU1 : MU1, wood ? CV1 : MV1, tint);
             };
-            auto blob = [&](float hx2, float hz2) {   // soft contact shadow under the piece
-                auto ptv = [&](float lx, float lz) {
+            // Contact shadow under the piece. This used to be one flat quad with
+            // all four UVs pinned to a single texel, so it had no gradient at
+            // all — every piece of furniture stood on a hard black rectangle
+            // larger than itself, with a visible straight edge on the floor.
+            // Lay it into the AO mesh instead and use the same falloff the wall
+            // creases use: solid under the piece, fading to nothing past it.
+            auto blob = [&](float hx2, float hz2) {
+                const float S = 0.24f;                    // how far the falloff reaches
+                const float d = S * 0.7071f;              // the corner, cut across
+                const Vector3 up = { 0, 1, 0 };
+                auto P = [&](float lx, float lz) {
                     return Vector3{ pcx + lx * ca - lz * sa, ey + 0.006f, pcz + lx * sa + lz * ca };
                 };
-                pr.quad(ptv(-hx2, -hz2), ptv(hx2, -hz2), ptv(hx2, hz2), ptv(-hx2, hz2), {0,1,0},
-                        {0.75f,0.75f},{0.75f,0.75f},{0.75f,0.75f},{0.75f,0.75f}, Color{ 12, 12, 12, 160 });
+                // core, right under the piece: darkest end of the gradient
+                ao.quad(P(-hx2,-hz2), P(hx2,-hz2), P(hx2,hz2), P(-hx2,hz2), up,
+                        {0,0},{1,0},{1,0},{0,0}, aoc);
+                // four skirts fading outward. Each inner edge runs so the quad
+                // stays wound the same way round as the core.
+                const float sd[4][6] = {
+                    {  hx2,-hz2, -hx2,-hz2,  0,  -S },
+                    {  hx2, hz2,  hx2,-hz2,  S,   0 },
+                    { -hx2, hz2,  hx2, hz2,  0,   S },
+                    { -hx2,-hz2, -hx2, hz2, -S,   0 },
+                };
+                for (auto &e : sd)
+                    ao.quad(P(e[0], e[1]), P(e[2], e[3]),
+                            P(e[2] + e[4], e[3] + e[5]), P(e[0] + e[4], e[1] + e[5]), up,
+                            {0,0},{1,0},{1,1},{0,1}, aoc);
+                // and the corners, so the skirt closes instead of leaving notches
+                const float cn[4][4] = {
+                    {  hx2,  hz2,  1,  1 }, { -hx2,  hz2, -1,  1 },
+                    { -hx2, -hz2, -1, -1 }, {  hx2, -hz2,  1, -1 },
+                };
+                for (auto &c2 : cn) {
+                    Vector3 inner = P(c2[0], c2[1]);
+                    Vector3 pxv = P(c2[0] + c2[2] * S, c2[1]);
+                    Vector3 pmv = P(c2[0] + c2[2] * d, c2[1] + c2[3] * d);
+                    Vector3 pzv = P(c2[0], c2[1] + c2[3] * S);
+                    bool xFirst = (c2[2] * c2[3]) > 0;    // keeps the winding consistent
+                    Vector3 a1 = xFirst ? pxv : pzv, b1 = xFirst ? pzv : pxv;
+                    ao.tri(inner, a1, pmv, up, {0,0},{0,1},{1,1}, aoc);
+                    ao.tri(inner, pmv, b1, up, {0,0},{1,1},{0,1}, aoc);
+                }
             };
             switch (dd.prop[i][kk]) {
             case 1: {   // box stack — on LEVEL FUN they're wrapped like presents,
                         // and the packing tape reads as ribbon
-                blob(0.58f, 0.58f);
+                blob(0.40f, 0.40f);
                 float bh = 0.55f + r1 * 0.2f, bhx = 0.34f + r2 * 0.08f;
                 auto wrap = [&](int rot2) {
                     if (level != 4) return WHITE;
@@ -580,7 +617,7 @@ void World::ensureMesh(int cx, int cz) {
                            FU0, FV0, FU1, FV1, MU0, MV0, MU1, MV1);
                 break;
             case 3: {   // folding table
-                blob(0.68f, 0.46f);
+                blob(0.58f, 0.40f);
                 float ty = 0.72f;
                 addPropBox(pr, pcx, pcz, rot, 0.62f, 0.40f, ey + ty - 0.04f, ey + ty,
                            MU0, MV0, MU1, MV1, MU0, MV0, MU1, MV1);
@@ -614,7 +651,7 @@ void World::ensureMesh(int cx, int cz) {
                 break;
             }
             case 5: {   // couch: mustard upholstery gone grey, facing nothing in particular
-                blob(0.86f, 0.56f);
+                blob(0.74f, 0.48f);
                 Color uph = { 172, 152, 96, 255 };
                 part(0, 0.10f, 0.78f, 0.42f, ey + 0.16f, ey + 0.44f, false, uph);   // seat
                 part(0, -0.36f, 0.78f, 0.14f, ey + 0.16f, ey + 0.92f, false, uph);  // backrest
@@ -650,7 +687,7 @@ void World::ensureMesh(int cx, int cz) {
                 break;
             }
             case 11: {  // party table: paper cloth, a cake nobody cut, cups nobody drank
-                blob(0.62f, 0.62f);
+                blob(0.52f, 0.52f);
                 float ty = 0.74f;
                 uint32_t th = ih(cx * CCELLS + i, cz * CCELLS + kk, seed ^ 0xCAFEu);
                 Color cloth = PARTY[th % 5];
