@@ -37,8 +37,8 @@ float lightAtCPU(float x, float y, float z, float blackout,
         }
         // mirror the shader's window, so billboard tinting doesn't step at the
         // light-cell boundaries either
-        float wx = clampf((1.5f * ls - fabsf(lx - x)) / (0.60f * 1.5f * ls), 0.0f, 1.0f);
-        float wz = clampf((1.5f * ls - fabsf(lz - z)) / (0.60f * 1.5f * ls), 0.0f, 1.0f);
+        float wx = clampf((1.5f * ls - fabsf(lx - x)) / (0.20f * 1.5f * ls), 0.0f, 1.0f);
+        float wz = clampf((1.5f * ls - fabsf(lz - z)) / (0.20f * 1.5f * ls), 0.0f, 1.0f);
         wx = wx * wx * (3 - 2 * wx); wz = wz * wz * (3 - 2 * wz);
         sum += st / (1.0f + 0.055f * d2) * 1.8f * mul * wx * wz;
     }
