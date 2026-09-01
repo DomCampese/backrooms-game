@@ -671,7 +671,7 @@ void Game::updateDevKeys(double now) {
         if (IsKeyPressed(KEY_E)) {   // (re)spawn Clark stalking ~12m ahead
             Vector2 spot = world.findOpenSpot(px + f2x * 12, pz + f2z * 12);
             ent.x = spot.x; ent.z = spot.y;
-            ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.hp = 3;
+            ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.hp = 3; ent.stagger = 0;
         }
         if (IsKeyPressed(KEY_C)) {   // force chase (spawns him first if hidden)
             if (ent.st == EState::Hidden) {
@@ -730,7 +730,7 @@ void Game::updateWeapons(float dt, double now) {
                 } else {
                     PlaySound(sndHit);
                     float dl = sqrtf(ex * ex + ez * ez) + 1e-4f;
-                    d.x += ex / dl * 1.6f; d.z += ez / dl * 1.6f;
+                    d.x += ex / dl * 0.8f; d.z += ez / dl * 0.8f;   // rocked, not repelled
                     world.collideCircle(d.x, d.z, 0.3f);
                 }
                 break;   // one round, one dog
@@ -753,12 +753,21 @@ void Game::updateWeapons(float dt, double now) {
                             coinsWorld.push_back({ ent.x + cosf(aa) * 0.5f, 0, ent.z + sinf(aa) * 0.5f });
                         }
                         saveBest();
-                    } else {             // staggered: knocked back, bolts
+                    } else {             // hurt, and now it knows exactly where you are
                         PlaySound(sndHit);
+                        // A round used to send him running, which meant a single
+                        // shot bought you distance and the fight was over before
+                        // it started. It rocks him back a step and costs him a
+                        // moment's speed, and then he comes on. Fire is still
+                        // the one thing that turns him.
                         float dd = sqrtf(ex * ex + ez * ez);
-                        if (dd > 0.01f) { ent.x += ex / dd * 2.0f; ent.z += ez / dd * 2.0f; }
+                        if (dd > 0.01f) { ent.x += ex / dd * 0.5f; ent.z += ez / dd * 0.5f; }
                         world.collideCircle(ent.x, ent.z, 0.38f);
-                        ent.st = EState::Flee; ent.life = 1.4f;
+                        ent.stagger = 0.45f;
+                        if (ent.st != EState::Chase) {   // being shot at is a proper introduction
+                            ent.st = EState::Chase;
+                            ent.life = 0; ent.unseen = 0; ent.repathT = 0;
+                        }
                     }
                 }
             }
@@ -986,9 +995,10 @@ void Game::updateEntity(float dt, double now) {
     if (shotPath && frame == 300 && ent.st == EState::Hidden) {   // autotest: force a visible spawn
         Vector2 spot = world.findOpenSpot(px + fwd.x * 8, pz + fwd.z * 8);
         ent.x = spot.x; ent.z = spot.y;
-        ent.st = EState::Stalk; ent.gaze = -100; ent.life = 0; ent.unseen = 0; ent.hp = 3;
+        ent.st = EState::Stalk; ent.gaze = -100; ent.life = 0; ent.unseen = 0; ent.hp = 3; ent.stagger = 0;
     }
     float fearT = 0.06f;
+    ent.stagger = fmaxf(0.0f, ent.stagger - dt);
     entDist = 1e9f;
     bool entVisible = false;
     if (ent.st == EState::Hidden) {
@@ -998,7 +1008,7 @@ void Game::updateEntity(float dt, double now) {
             float d = 20 + grng.f01() * 10;
             Vector2 spot = world.findOpenSpot(px + cosf(a) * d, pz + sinf(a) * d);
             ent.x = spot.x; ent.z = spot.y;
-            ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.hp = 3;
+            ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.hp = 3; ent.stagger = 0;
             ent.dispY = world.floorY(cellOf(ent.x), cellOf(ent.z));
         }
     } else {
@@ -1027,6 +1037,7 @@ void Game::updateEntity(float dt, double now) {
             if (entDist < 5.5f && entDist > 1.6f && ent.lunge <= 0 && grng.f01() < dt * 0.5f)
                 ent.lunge = 0.55f;   // sudden burst — don't let him get close
             float chaseSpd = 3.3f + 1.0f * clampf(1 - entDist / 25.0f, 0, 1) + (ent.lunge > 0 ? 3.2f : 0.0f);
+            if (ent.stagger > 0) chaseSpd *= 0.35f;   // the round rocked him, briefly
             // beeline when it can see you; otherwise route around walls on the cell grid
             ent.repathT -= dt;
             float wdx = ent.wpx - ent.x, wdz = ent.wpz - ent.z;

@@ -113,10 +113,12 @@ make run
   in your coat every so often. Water puts them out.
 - **Revolver** — select with 2 (or the mouse wheel). Six rounds, R to reload
   (the gun dips while the cylinder's out), synthesized gunshot, muzzle flash
-  that lights the hall. Hits stagger Clark; three put him down — the halls
-  stay quiet for a couple of minutes, then something out in the fog stands
-  back up. With the flare selected you carry it in hand, cap out, ready to
-  strike.
+  that lights the hall. A hit rocks Clark back a step and costs him a
+  moment's speed, but it does not turn him — it tells him exactly where you
+  are, and he comes on. Three put him down; the halls stay quiet for a
+  couple of minutes, then something out in the fog stands back up. Fire is
+  the only thing that makes him break off. With the flare selected you
+  carry it in hand, cap out, ready to strike.
 - **The flashlight runs on a battery** — it drains while it's on, flickers a
   warning as it dies, and goes dark if you let it run out — you can always
   switch it off, but a dead battery won't switch back on. Spares turn up
