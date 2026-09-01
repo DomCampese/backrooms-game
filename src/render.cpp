@@ -269,7 +269,24 @@ void Game::renderScene(double now) {
         DrawBillboardRec(cam, spr, { 0, 0, 128, 256 },
                          { ent.x, eg + 0.98f - sink, ent.z }, { 0.98f, 1.96f }, { lum8, lum8, lum8, al });
     }
-    if (drinkT > 0) drawDrinkCan(cam);   // in the 3D pass: perspective does the foreshortening
+    if (drinkT > 0) {
+        // Held against a wall, the can falls inside that wall's shadow and goes
+        // black in your hands. A viewmodel shouldn't be shadowed by the room it
+        // is being held in, so switch the occlusion grid off for this one draw
+        // — uOccN of 0 makes lightVis return "lit" everywhere — and put it back
+        // straight after. Perspective still does the foreshortening.
+        float occOff = 0.0f;
+        SetShaderValue(worldShader, locOccN, &occOff, SHADER_UNIFORM_FLOAT);
+        // ...and give it a floor of ambient, so a can held up in an unlit stretch
+        // of corridor is still legible rather than a silhouette. Only lifts where
+        // the room is genuinely dark; anywhere lit, the panels dominate this.
+        const Vector3 &la = LEVELS[level].amb;
+        Vector3 vmAmb = { fmaxf(la.x, 0.150f), fmaxf(la.y, 0.142f), fmaxf(la.z, 0.128f) };
+        SetShaderValue(worldShader, locAmb, &vmAmb, SHADER_UNIFORM_VEC3);
+        drawDrinkCan(cam);
+        SetShaderValue(worldShader, locOccN, &occN, SHADER_UNIFORM_FLOAT);   // both as they were
+        SetShaderValue(worldShader, locAmb, &la, SHADER_UNIFORM_VEC3);
+    }
     EndMode3D();
     EndTextureMode();
 }
@@ -621,17 +638,26 @@ void Game::drawDrinkCan(const Camera3D &cam) {
     // below and to the right, then draws in toward the middle as you tilt it.
     // It has to come AT you, so it tracks in toward the middle of the view and
     // closes most of the gap to your face while it does.
-    float dist = 0.52f - tip * 0.20f;
-    float side = 0.19f - tip * 0.115f;
-    float vert = -0.52f + up * 0.38f + tip * 0.06f + bob * 0.006f;
-    float bx4 = sinf(bobPhase * 3.14159f) * 0.012f * bobAmt;
+    // It also has to finish at eye level. Held low, you look down onto the lid
+    // and the labelled face tips away underneath it — which is how you end up
+    // staring at a metal disc with the wordmark nowhere in sight.
+    //
+    // And it has to be held close. Collision never lets you within 0.34 m of
+    // anything solid, so a can inside that radius can't be cut into by the wall
+    // you're standing at — which is what made it disappear in corridors. The
+    // scale below is reduced by the same factor the distance was, so it covers
+    // exactly as much of the screen as before.
+    float dist = 0.34f - tip * 0.12f;
+    float side = 0.124f - tip * 0.065f;
+    float vert = -0.358f + up * 0.345f + tip * 0.013f + bob * 0.004f;
+    float bx4 = sinf(bobPhase * 3.14159f) * 0.008f * bobAmt;
     Vector3 pos = Vector3Add(cam.position,
                   Vector3Add(Vector3Scale(F, dist),
                   Vector3Add(Vector3Scale(Rt, side + bx4), Vector3Scale(Up, vert))));
 
     // Held items are drawn bigger than life or they read as toys at arm's
     // length; this is the usual viewmodel cheat, not a modelling error.
-    const float SCALE = 1.30f;
+    const float SCALE = 0.84f;
     // Pitch is the main move: the can's axis swings over toward the camera so the
     // lid comes to your mouth, which is what drinking actually looks like from
     // behind your own eyes. Rolling it in the screen plane instead just reads as
@@ -640,8 +666,8 @@ void Game::drawDrinkCan(const Camera3D &cam) {
     // 38 degrees is the ceiling worth using: enough that the lid is clearly
     // swinging toward your mouth, not so much that the barrel disappears behind
     // it and you are left looking at a metal disc.
-    float pitch2 = (38.0f * DEG2RAD) * tip + (4.0f * DEG2RAD) * bob;
-    float roll2  = (10.0f * DEG2RAD) * tip + (2.0f * DEG2RAD) * bob;
+    float pitch2 = (32.0f * DEG2RAD) * tip + (4.0f * DEG2RAD) * bob;
+    float roll2  = (8.0f * DEG2RAD) * tip + (2.0f * DEG2RAD) * bob;
     Vector3 x0 = Rt, y0 = Up, z0 = Vector3Negate(F);  // label faces the camera
     // pitch about the can's own right axis: the lid comes toward you
     Vector3 y1 = Vector3Add(Vector3Scale(y0, cosf(pitch2)), Vector3Scale(z0, sinf(pitch2)));
