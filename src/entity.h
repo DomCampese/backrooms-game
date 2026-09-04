@@ -26,6 +26,7 @@ struct Entity {
     float gaze = 0, life = 0, unseen = 0;
     float dispY = 0;   // smoothed floor height under him, so he doesn't pop on stairs
     float lunge = 0;   // mid-chase burst of speed
+    float stagger = 0; // brief hitch after taking a round — he slows, he doesn't leave
     int hp = 3;
     float wpx = 0, wpz = 0;   // current chase waypoint (next cell centre on the path to you)
     double repathT = 0;       // when to recompute the route
