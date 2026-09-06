@@ -32,7 +32,7 @@ struct Game {
     // resources
     Texture2D texEntity{}, texPartygoer{}, texProps{}, texScrawl{}, texAO{}, texOcc{}, texDog{},
               texAlmondWrap{};
-    Mesh canMesh{}, handMesh{};                // the almond water can, and the hand on it
+    Mesh canMesh{};                            // the almond water can, real geometry
     // light-occlusion grid: the floorplan around you, uploaded for the shader to
     // march. Recentred as you walk; OCC_N cells wide, so it always covers more
     // than the fog can show you.

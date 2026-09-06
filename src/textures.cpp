@@ -649,12 +649,5 @@ Texture2D makeAlmondWrapTex() {
             float k = 1.0f - stain + grime;
             c.r = cl8(c.r * k); c.g = cl8(c.g * k * 0.998f); c.b = cl8(c.b * k * 0.984f);
         }
-    // ---- the last square is skin, for the hand that holds it. Flat: the mesh
-    // takes its shape from the lighting, not from anything painted here.
-    for (int y = 128; y < 192; y++)
-        for (int x = 128; x < 192; x++) {
-            float n = (vnoise2(x * 0.6f, y * 0.6f, 3313u) - 0.5f) * 0.07f;
-            put(x, y, Color{ cl8(146 * (1 + n)), cl8(112 * (1 + n)), cl8(90 * (1 + n)), 255 });
-        }
     return finishTexture(img, false);
 }

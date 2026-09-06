@@ -38,8 +38,6 @@ struct MB;   // mesh builder, internal to world.cpp
 
 // One almond water can at life size, base on y=0. UVs index makeAlmondWrapTex.
 Mesh buildCanMesh();
-// The hand gripping it, in the can's own space — drawn with the can's transform.
-Mesh buildHandMesh();
 
 struct World {
     unsigned seed = 1337;

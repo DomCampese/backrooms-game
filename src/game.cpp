@@ -40,7 +40,6 @@ void Game::init() {
     texDog = makeDogTex();
     texAlmondWrap = makeAlmondWrapTex();
     canMesh = buildCanMesh();
-    handMesh = buildHandMesh();
     // per-level surface sets: [floor, ceiling, walls]
     floorTexs[0] = makeCarpetTex(); floorTexs[1] = makeConcreteFloorTex();
     floorTexs[2] = makeTileTex();   floorTexs[4] = makePartyCarpetTex();
