@@ -1,8 +1,4 @@
-# CLAUDE.md — working notes for this repository
-
-Context for anyone (human or model) picking this up cold. The point of this
-file is that no single long session should be the only place this knowledge
-lives.
+# CLAUDE.md
 
 ## What this is
 
