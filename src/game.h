@@ -17,12 +17,29 @@ struct FlareProj {
     float x = 0, y = 0, z = 0, vx = 0, vy = 0, vz = 0, burn = 0;
 };
 
+// The tape player, and what the cassettes you find are actually for. Play one
+// in your hand and a voice that isn't the building's puts some of your grip
+// back — but a running deck is a noise source, and the Red Halls pack hunts by
+// noise. Set it down still playing and the sound is *there* instead of here,
+// which is the only lever you have on them that isn't fire or a bullet.
+struct TapeDeck {
+    bool carried = true;      // in your coat, or lying wherever you set it down
+    bool playing = false;
+    float t = 0;              // seconds of tape left to run
+    float x = 0, y = 0, z = 0, vx = 0, vy = 0, vz = 0;
+    bool flying = false;      // still in the air after you tossed it
+    float yaw = 0;            // heading it was set down at, so it doesn't snap when it lands
+    float reel = 0;           // hub rotation, so the spin says the tape is moving
+};
+
 struct Game {
     // tuning
     static constexpr float PR = 0.34f;        // player radius
     static constexpr int   MAXFLARES = 3;
     static constexpr float FLAREBURN = 9.0f;  // seconds
     static constexpr int   MAXAMMO = 6;
+    static constexpr float TAPE_RUN = 26.0f;    // one side of a tape, as far as you'll listen
+    static constexpr float TAPE_NOISE = 32.0f;  // how far a playing deck carries, in metres
     static constexpr int   ESCAPE_COST = 12;  // doubloons that buy your way out for good
 
     // env/test knobs (BACKROOMS_* — see README)
@@ -31,8 +48,9 @@ struct Game {
 
     // resources
     Texture2D texEntity{}, texPartygoer{}, texProps{}, texScrawl{}, texAO{}, texOcc{}, texDog{},
-              texAlmondWrap{};
+              texAlmondWrap{}, texDeck{};
     Mesh canMesh{}, handMesh{};                // the almond water can, and the hand on it
+    Mesh deckMesh{}, reelMesh{}, deckLampMesh{};   // the tape player, its reels, its record lamp
     // light-occlusion grid: the floorplan around you, uploaded for the shader to
     // march. Recentred as you walk; OCC_N cells wide, so it always covers more
     // than the fog can show you.
@@ -47,10 +65,10 @@ struct Game {
         locDead = -1, locLightMul = -1, locFlarePos = -1, locFlareInt = -1, locGloss = -1,
         locEntPos = -1, locEntDark = -1, locOccOrigin = -1, locOccN = -1, locEntBlock = -1;
     int locPTime = -1, locPFear = -1;
-    Material mats[7]{};                        // 0 floor, 1 ceiling, 2 walls, 3 props, 4 scrawl, 5 baked AO, 6 can
+    Material mats[8]{};                        // 0 floor, 1 ceiling, 2 walls, 3 props, 4 scrawl, 5 baked AO, 6 can, 7 tape player
     Sound steps[4]{}, splashes[2]{}, sndBigSplash{}, sndClick{}, sndScare{}, sndWin{},
           sndFlare{}, sndShot{}, sndHit{}, sndKill{}, sndPop{}, sndHeartbeat{}, sndTape{},
-          sndValve{}, sndHowl{}, sndGulp{};
+          sndValve{}, sndHowl{}, sndGulp{}, sndVoice{};
     Sound sndBarks[3]{};                        // the pack, panned to whichever one spoke
     Sound entSteps[4]{};                        // the thing's own footfalls, panned + attenuated
     AudioSynth synth;
@@ -85,8 +103,13 @@ struct Game {
     double nextFlareRegen = 0;
     FlareProj flare;
 
+    // the tape player: a voice for your grip, or a noise to send them somewhere else
+    TapeDeck deck;
+    float deckNoteT = 0;                      // brief line when you thread or set down a tape
+    const char *deckNote = "";
+
     // revolver: hitscan, six rounds, three hits put Clark down
-    int weapon = 0;                           // 0 flare, 1 revolver — keys 1/2 or mouse wheel
+    int weapon = 0;                           // 0 flare, 1 revolver, 2 tape player — keys 1/2/4 or wheel
     int ammo = MAXAMMO;
     float reloadT = 0, gunCd = 0, muzzleT = 0, recoil = 0, wheelCd = 0;
 
@@ -124,7 +147,8 @@ struct Game {
 
     // ---- your grip on the place. Drains the whole time you're down here, faster
     // the deeper you go and faster still in the dark or while something is
-    // hunting you. Almond water is the only thing that puts any of it back.
+    // hunting you. Almond water puts it back in one go; a tape playing where you
+    // can hear it puts it back slowly, for as long as you let it run.
     float sanity = 1.0f;
     int sanityStage = 0;            // deepest threshold crossed, so each warning fires once
     float sanityWarnT = 0;          // brief overlay when it slips a notch
@@ -174,6 +198,9 @@ struct Game {
     void updateDrink(float dt, double now); // run the drinking animation
     void drawCan(Matrix xf);                // one can, lit by the room like anything else
     void drawDrinkCan(const Camera3D &cam); // the can in your hand, mid-drink
+    void updateTapeDeck(float dt, double now);       // thread a tape, set the deck down, run the reels
+    void drawDeck(Matrix xf, bool lamp);             // one tape player, reels and all
+    void drawHeldDeck(const Camera3D &cam);          // the deck in your hand, as real geometry
     bool coinAt(int a, int b);                // a doubloon he dropped on his rounds
     bool batteryAt(int a, int b);             // a spare battery, tucked somewhere
     bool tapeAt(int a, int b);                // a cassette tape, someone else's recovered days

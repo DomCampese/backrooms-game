@@ -24,8 +24,8 @@ departure from the whole design — generate it instead.
 | `util.{h,cpp}` | hashes, RNG, value noise, shared helpers |
 
 `tick()` calls the update functions in a fixed order — look, movement, dev
-keys, weapons, flare, interaction, drink, ambience, entity, dogs, exits, then
-chunk streaming, then render. Order matters: e.g. weapons run before the
+keys, weapons, flare, tape deck, interaction, drink, ambience, entity, dogs,
+exits, then chunk streaming, then render. Order matters: e.g. weapons run before the
 entity update, so a shot lands before the entity decides what to do about it.
 
 ## Building
@@ -58,6 +58,11 @@ headers. Turn those into a usable shim:
    `MATERIAL_MAP_DIFFUSE` (which is an alias for `MATERIAL_MAP_ALBEDO`).
 4. raymath declares its functions `inline`; strip that keyword or they will
    not resolve against the shared object.
+5. `raylib.h.modified`'s last line is a declaration with a trailing `//`
+   comment and **no trailing newline**, so a naive `echo '}'` to close the
+   `extern "C"` lands *inside that comment* and is swallowed. The build then
+   fails hundreds of lines away in `<initializer_list>` with "template with C
+   linkage". Insert the brace as its own line before appending anything else.
 
 Then build against the shim and link the wheel's `.so`:
 
@@ -159,6 +164,33 @@ Two specific ways to break the shader silently:
 - Swizzles are checked: `shP` is a `vec2`, so `shP.z` is a compile error. The
   z-ish component of a 2D world-space point is `.y`.
 
+**`TextFormat` hands back a slot in a small rotating buffer.** Four or so
+calls in, the pointer you kept from the first one now holds a later string.
+The bottom-left inventory block was already close to the limit; adding one
+more row made the flare line render as the tape-player line. Draw each line
+straight off its `TextFormat` call — never collect `const char *` results and
+`DrawText` them all at the end.
+
+**raylib's default font stops at Latin-1, so an em dash draws as `?`.** `×`
+(U+00D7) is fine; `—` (U+2014) is not, and several HUD strings were rendering
+a literal question mark on screen. Use `·` (U+00B7) instead. Window titles are
+unaffected — those go to the window manager, not the font atlas.
+
+**Emissive detail sitting flush on a surface z-fights, and loses at range.**
+The tape player's record lamp sat 0.1 mm proud of the shell: perfect in the
+viewmodel a foot from the camera, completely gone once the deck was on a floor
+four metres away — which is exactly when it had a job to do. Stand small decal
+geometry ~1.5 mm off its host surface. A close-up screenshot will not catch
+this; check the thing at the distance it is actually used.
+
+**Blackouts are scheduled off wall-clock time, not frame count.** `applyLevel`
+sets `nextBlackout = GetTime() + 30 + rand*60`, so a headless capture is only
+repeatable if it lands before that window. The software rasteriser runs about
+2.5 fps, so `BACKROOMS_SHOTFRAME=150` is already ~60 s in and can capture a
+pitch-black frame that looks exactly like a broken shader. For iteration use
+`BACKROOMS_SHOTFRAME=80` (~30 s), which is inside the guaranteed-lit window
+and twice as fast. Level 2 never blacks out at all.
+
 **`pkill -f "some pattern"` can kill your own shell.** If the pattern appears
 in the command line of the shell running it — which it does whenever you type
 the command inline, or write a heredoc containing it — `pkill` matches itself
@@ -201,8 +233,9 @@ opaque, below the relief threshold.
 ### Chunk mesh slots
 
 `ChunkData::meshes[8]`: 0 floor, 1 ceiling, 2 walls, 3 props, 4 water,
-5 wall scrawl, 6 window glass, 7 baked AO. Materials are `Game::mats[7]`:
-0 floor, 1 ceiling, 2 walls, 3 props, 4 scrawl, 5 baked AO, 6 the can.
+5 wall scrawl, 6 window glass, 7 baked AO. Materials are `Game::mats[8]`:
+0 floor, 1 ceiling, 2 walls, 3 props, 4 scrawl, 5 baked AO, 6 the can,
+7 the tape player.
 
 Every material carries the occupancy grid in its **normal-map slot**, because
 `DrawMesh` reliably binds that as `texture2` where `SetShaderValueTexture` did
@@ -231,8 +264,8 @@ tinting. **Change one, change the other**, or sprites stop matching the room.
 
 ### Viewmodels
 
-The drink viewmodel is real 3D geometry drawn inside the 3D pass. Three rules
-were learned the hard way:
+The drink can and the tape player are real 3D geometry drawn inside the 3D
+pass, and both obey the same three rules, learned the hard way:
 
 - **Hold it inside 0.34 m.** Collision guarantees you are never closer than
   that to anything solid, so a viewmodel nearer than that can never be clipped
