@@ -651,3 +651,98 @@ Texture2D makeAlmondWrapTex() {
         }
     return finishTexture(img, false);
 }
+
+// The tape player, unwrapped. Four 64px tiles in a 128px atlas, because the
+// thing is a box and a box only needs four different faces:
+//   (0,0) top     — the cassette bay, seen from above, and the label above it
+//   (1,0) body    — moulded plastic for the sides, back and underside
+//   (0,1) front   — speaker grille and the transport buttons
+//   (1,1) reel    — one hub with tape wound on it, for the two spinning discs
+Texture2D makeDeckTex() {
+    const int W = 128, H = 128, T = 64;
+    Image img = GenImageColor(W, H, BLANK);
+    Color *p = (Color *)img.data;
+    auto put = [&](int x, int y, Color c) { if (x >= 0 && x < W && y >= 0 && y < H) p[y * W + x] = c; };
+
+    const Color shell   = { 108, 110, 114, 255 };   // grey moulded plastic
+    const Color shellDk = {  78,  80,  85, 255 };
+    const Color shellHi = { 138, 140, 145, 255 };
+    const Color bay     = {  26,  25,  29, 255 };   // inside the cassette door
+    const Color trim    = {  52,  52,  58, 255 };
+    const Color tape    = {  58,  42,  34, 255 };   // wound oxide
+    const Color tapeHi  = {  82,  60,  48, 255 };
+    const Color hub     = { 176, 172, 168, 255 };   // light plastic: the slots have to read against it
+    const Color label   = { 206, 198, 178, 255 };
+
+    Rng r(0xDEC4ULL);
+    // ---- (0,0) and (1,0) both start as plastic, with a moulding grain and wear
+    for (int ty = 0; ty < 2; ty++) for (int tx = 0; tx < 2; tx++) {
+        if (ty == 1 && tx == 1) continue;             // the reel tile is drawn from scratch
+        int ox = tx * T, oy = ty * T;
+        for (int y = 0; y < T; y++) for (int x = 0; x < T; x++) {
+            float g = vnoise2(x * 0.55f + ox, y * 0.55f + oy, 7u);
+            float e = fminf(fminf((float)x, (float)y), fminf(T - 1.0f - x, T - 1.0f - y));
+            float wear = clampf(1.0f - e / 5.0f, 0, 1) * 0.35f;   // the edges have been rubbed shiny
+            Color c = shell;
+            c.r = cl8(c.r * (0.90f + g * 0.16f) + wear * 40);
+            c.g = cl8(c.g * (0.90f + g * 0.16f) + wear * 40);
+            c.b = cl8(c.b * (0.90f + g * 0.16f) + wear * 42);
+            put(ox + x, oy + y, c);
+        }
+    }
+    // ---- (0,0) top: the bay window, and a strip of label above it
+    for (int y = 19; y < 45; y++) for (int x = 12; x < 52; x++) {
+        bool edge = (y < 21 || y > 42 || x < 14 || x > 49);
+        put(x, y, edge ? trim : bay);
+    }
+    for (int y = 4; y < 16; y++) for (int x = 6; x < 58; x++) {
+        float g = vnoise2(x * 0.9f, y * 0.9f, 11u);
+        put(x, y, { cl8(label.r * (0.86f + g * 0.2f)), cl8(label.g * (0.86f + g * 0.2f)),
+                    cl8(label.b * (0.86f + g * 0.2f)), 255 });
+    }
+    ImageDrawText(&img, "FIELD REC", 9, 5, 10, { 62, 58, 54, 255 });
+
+    // ---- (0,1) front: speaker grille on the left, transport buttons on the right
+    {
+        const int oy = T;
+        for (int gy = 0; gy < 9; gy++) for (int gx = 0; gx < 9; gx++) {
+            int cx = 8 + gx * 3, cy = oy + 18 + gy * 3;
+            put(cx, cy, shellDk); put(cx + 1, cy, { 60, 62, 66, 255 });
+        }
+        for (int b = 0; b < 3; b++) {                 // play, stop, and the one that never worked
+            int bx = 38, by = oy + 14 + b * 13;
+            for (int y = 0; y < 9; y++) for (int x = 0; x < 18; x++) {
+                bool lip = (y == 0 || x == 0);
+                put(bx + x, by + y, lip ? shellHi : (y > 6 ? shellDk : shell));
+            }
+        }
+        for (int x = 0; x < T; x++) { put(x, oy + 2, shellDk); put(x, oy + 3, shellHi); }  // seam
+    }
+
+    // ---- (1,1) reel: tape wound on a hub, with the spoke slots cut in it
+    {
+        const int ox = T, oy = T;
+        for (int y = 0; y < T; y++) for (int x = 0; x < T; x++) {
+            float dx = (x - 31.5f) / 30.0f, dy = (y - 31.5f) / 30.0f;
+            float rad = sqrtf(dx * dx + dy * dy), ang = atan2f(dy, dx);
+            Color c;
+            if (rad > 1.0f) c = bay;                             // outside the flange: the dark bay
+            else if (rad > 0.42f) {                              // wound tape, in fine rings
+                float ring = sinf(rad * 130.0f) * 0.5f + 0.5f;
+                c = { cl8(tape.r + ring * (tapeHi.r - tape.r)), cl8(tape.g + ring * (tapeHi.g - tape.g)),
+                      cl8(tape.b + ring * (tapeHi.b - tape.b)), 255 };
+            } else {
+                // the hub: three slots cut through it, which is the only thing
+                // that says whether the reel is turning
+                float sl = fmodf(ang + 6.2831853f, 2.0943951f);
+                c = (rad > 0.10f && rad < 0.34f && sl < 0.72f) ? Color{ 20, 19, 22, 255 } : hub;
+            }
+            put(ox + x, oy + y, c);
+        }
+    }
+
+    Texture2D t = LoadTextureFromImage(img);
+    UnloadImage(img);
+    SetTextureFilter(t, TEXTURE_FILTER_BILINEAR);
+    return t;
+}

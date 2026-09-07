@@ -145,8 +145,26 @@ make run
   — wherever somebody set one down and didn't come back.
 - **Cassette tapes** — rarer finds, scattered through the halls: someone
   else's fragment of the descent, a line of found text and a warble of tape
-  hiss when you pick one up. They don't do anything — they're just there to
-  find.
+  hiss when you pick one up. They are what the tape player runs on.
+- **The tape player** — a battered field recorder, on 4. Thread one of the
+  tapes you've found and press play, and a voice comes up out of the hiss:
+  synthesized formants through tape wow and dropouts, garbled just past
+  intelligible. The words aren't the point. Someone was here, and while you
+  can hear them your grip on the place climbs back instead of draining — the
+  only thing besides a can that gives any of it back, and unlike a can it
+  gives it back slowly, for as long as you let the tape run.
+
+  The catch is that a running deck is *loud*. In the Red Halls, where the pack
+  hunts by sound, playing a tape in your hand makes you a beacon they can hear
+  from thirty metres. So the other thing you can do is press play, then set the
+  deck down and walk away: the noise is now over **there**, and so are they.
+  They commit to the deck, not to you, and stay on it until the tape runs out.
+  You give up the voice to do it: the further the deck is from you, and the
+  more wall between, the less it steadies you, and it does nothing at all for
+  you past about fourteen metres — which is well inside the range the pack can
+  still hear it from. Leave it close enough to keep hearing and they arrive
+  where you're standing. The record lamp pulses while it runs, and you fetch it
+  back with E.
 - **Terrain** — Level 0 sinks into carpeted conversation pits, Level 1 raises
   concrete loading docks, and the pools get proper steps down into the water.
   Real stair geometry, smooth step physics — and you can jump onto most of
@@ -177,8 +195,9 @@ make run
   struck flare carries — crouching and standing still barely carries at all.
   Prowling, they nose around the halls on their own business; hear you and they
   commit, and they are faster than you are, so running is never the answer.
-  Fire turns them, a bullet puts one down, and going quiet makes them lose the
-  thread. You hear them before you see them: barks panned to whichever one
+  Fire turns them, a bullet puts one down, going quiet makes them lose the
+  thread — and a tape player left running somewhere else takes them there
+  instead. You hear them before you see them: barks panned to whichever one
   spoke, and the pack calling to each other across the dark.
 - **Shutting off the pipes** — three standpipes in the Red Halls carry a
   seized shut-off wheel. Turn all three (E at each) and the pipes go quiet and
@@ -260,13 +279,14 @@ Details that reward paying attention:
 | CTRL | crouch |
 | SPACE | jump |
 | F / right click | flashlight |
-| 1 / 2 / wheel | select weapon (flare / revolver) |
+| 1 / 2 / 4 / wheel | select item (flare / revolver / tape player) |
 | left click | use selected weapon |
 | Q | throw flare (always) |
 | R | reload revolver |
 | 3 | drink almond water |
+| 4 | tape player (click to play a tape; click again to set it down running) |
 | M | chalk a floor mark |
-| E | vending machine |
+| E | vending machine, or pick the tape player back up |
 | F11 | borderless fullscreen |
 | P | pause |
 | ESC / click | release / capture mouse |
@@ -278,7 +298,9 @@ With the F3 debug HUD open, dev hotkeys are live: `B` force blackout,
 `E` spawn Clark stalking ahead, `C` force a chase, `H` despawn him,
 `G` refill flares + ammo, `N` jump to the next level (including the Red Halls).
 
-- `BACKROOMS_SHOT=out.png` — run 600 frames headlessly, save a screenshot, exit.
+- `BACKROOMS_SHOT=out.png` — run headlessly, save a screenshot, exit.
+- `BACKROOMS_SHOTFRAME=n` — which frame that screenshot is taken on (default 600).
+  Lower it to sweep the game quickly; the software renderer is slow.
 - `BACKROOMS_MENU=1` — hold on the title screen (skips the auto-start; visual testing).
 - `BACKROOMS_EXITS=1` — exit doors everywhere (visual testing).
 - `BACKROOMS_POS="x,z,yaw"` — start at a specific spot (visual testing).

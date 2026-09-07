@@ -20,3 +20,4 @@ Texture2D makePartyCeilTex();      // LEVEL FUN =): near-black party-hall ceilin
 Texture2D makeAOStripTex();        // gradient strip for baked contact-shadow decals
 Texture2D makeDogTex();            // THE RED HALLS: whatever the pack is, seen side-on
 Texture2D makeAlmondWrapTex();     // almond water can, unwrapped: label strip + lid + base
+Texture2D makeDeckTex();           // the tape player: top / body / front / reel, in one atlas

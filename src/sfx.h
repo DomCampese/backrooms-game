@@ -17,3 +17,4 @@ Sound makeValveTurn();             // seized iron giving way, then the clunk of 
 Sound makeDogBark(uint32_t seed);  // the pack, somewhere in the red dark
 Sound makeDogHowl();
 Sound makeGulp();                   // three swallows of almond water, and the empty can ringing
+Sound makeTapeVoice();              // a voice off a worn cassette — garbled, hissing, and looping

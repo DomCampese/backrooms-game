@@ -38,6 +38,12 @@ struct MB;   // mesh builder, internal to world.cpp
 
 // One almond water can at life size, base on y=0. UVs index makeAlmondWrapTex.
 Mesh buildCanMesh();
+// The tape player, underside on y=0, and the two reels + record lamp that go on
+// it. Separate meshes because the reels turn and the lamp only burns while the
+// tape is running. UVs index makeDeckTex.
+Mesh buildDeckMesh();
+Mesh buildReelMesh();
+Mesh buildDeckLampMesh();
 
 struct World {
     unsigned seed = 1337;

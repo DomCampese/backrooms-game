@@ -348,3 +348,120 @@ Sound makeGulp() {
     }
     Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
 }
+
+// Someone else's voice, off a cassette that has been played too many times.
+// A glottal pulse train through two formant resonators, syllables strung into
+// phrases with breath between them, the whole thing under tape hiss, wow and
+// the odd dropout. It is deliberately just short of intelligible: the words
+// are not the point, the fact that there was once a person saying them is.
+//
+// Built to loop — the deck runs it end to end for as long as the tape lasts —
+// so it opens and closes inside a breath, and the seam is crossfaded.
+Sound makeTapeVoice() {
+    const int SR = 44100;
+    const float LEN = 7.5f;
+    const int n = (int)(LEN * SR);
+    Wave w = makeWaveBuf(n);
+    short *d = (short *)w.data;
+    Rng r(0x7A9E4D02ULL);
+
+    // ---- lay out the phrasing first: a syllable is a pitch, two formants and
+    // an envelope, and speech is syllables in runs with pauses between runs.
+    struct Syl { float t0, t1, f0, F1, F2, amp; };
+    const int MAXSYL = 96;
+    Syl syl[MAXSYL];
+    int nsyl = 0;
+    float cur = 0.30f;                            // opens in silence, so the loop seam lands in a breath
+    while (cur < LEN - 0.70f && nsyl < MAXSYL) {
+        int words = 2 + (int)(r.f01() * 4.0f);
+        float base = 96.0f + r.f01() * 26.0f;     // this speaker's pitch for this phrase
+        for (int i = 0; i < words && cur < LEN - 0.70f && nsyl < MAXSYL; i++) {
+            float dur = 0.10f + r.f01() * 0.16f;
+            // declination: a phrase falls away as it runs out of breath
+            float fall = 1.0f - 0.16f * (i / (float)words);
+            Syl &s = syl[nsyl++];
+            s.t0 = cur; s.t1 = cur + dur;
+            s.f0 = base * fall * (0.94f + r.f01() * 0.12f);
+            // vowel space: F1 low/high pairs with F2, roughly as real vowels do
+            s.F1 = 300.0f + r.f01() * 480.0f;
+            s.F2 = 1000.0f + r.f01() * 1150.0f;
+            s.amp = 0.72f + r.f01() * 0.28f;
+            cur = s.t1 + 0.012f + r.f01() * 0.045f;
+        }
+        cur += 0.34f + r.f01() * 0.62f;           // breath between phrases
+    }
+
+    // dropouts: a worn tape loses the signal for a moment here and there
+    const int NDROP = 5;
+    float dropT[NDROP], dropL[NDROP];
+    for (int i = 0; i < NDROP; i++) { dropT[i] = r.f01() * LEN; dropL[i] = 0.03f + r.f01() * 0.09f; }
+
+    float *tmp = (float *)MemAlloc((unsigned)(n * sizeof(float)));
+    // two 2-pole resonators (the formants), one shared lowpass for the hiss bed
+    float y1a = 0, y2a = 0, y1b = 0, y2b = 0, hissLp = 0, phase = 0, dcx = 0, dcy = 0;
+    int si = 0;
+    float peak = 1e-6f;
+    for (int i = 0; i < n; i++) {
+        float t = i / (float)SR;
+        // wow and flutter: the capstan has never run true
+        float wow = 1.0f + 0.013f * sinf(6.2831853f * 2.9f * t) + 0.006f * sinf(6.2831853f * 0.63f * t);
+
+        while (si < nsyl && t > syl[si].t1) si++;
+        float voice = 0.0f;
+        if (si < nsyl && t >= syl[si].t0) {
+            const Syl &s = syl[si];
+            float u = (t - s.t0) / (s.t1 - s.t0);
+            // envelope: quick on, slower off, so syllables run into each other
+            float env = clampf1(fminf(u / 0.16f, (1.0f - u) / 0.34f)) * s.amp;
+
+            // glottal source: a sawtooth is close enough once the formants have
+            // had it, plus a little breath noise through the same filters
+            phase += s.f0 * wow / SR;
+            phase -= floorf(phase);
+            float src = (2.0f * phase - 1.0f) * 0.75f + (r.f01() * 2.0f - 1.0f) * 0.10f;
+            src *= env;
+
+            // resonator: y = x + 2rcos(w)y1 - r^2 y2, one per formant
+            const float ra = 0.976f, rb = 0.962f;
+            float wa = 6.2831853f * s.F1 * wow / SR, wb = 6.2831853f * s.F2 * wow / SR;
+            float ya = src + 2.0f * ra * cosf(wa) * y1a - ra * ra * y2a;
+            y2a = y1a; y1a = ya;
+            float yb = src + 2.0f * rb * cosf(wb) * y1b - rb * rb * y2b;
+            y2b = y1b; y1b = yb;
+            voice = (ya * (1.0f - ra * ra) * 1.9f + yb * (1.0f - rb * rb) * 1.1f);
+        } else {
+            // let the filters ring down rather than snapping to zero
+            y1a *= 0.995f; y2a *= 0.995f; y1b *= 0.995f; y2b *= 0.995f;
+        }
+
+        // tape bed: hiss, plus a touch of mains hum bleeding off the heads
+        float wn = r.f01() * 2.0f - 1.0f;
+        hissLp += 0.30f * (wn - hissLp);
+        float bed = hissLp * 0.075f + sinf(6.2831853f * 50.0f * t) * 0.010f;
+
+        float drop = 1.0f;
+        for (int k = 0; k < NDROP; k++) {
+            float dt2 = t - dropT[k];
+            if (dt2 > 0 && dt2 < dropL[k]) drop *= 0.12f;
+        }
+
+        float s2 = voice * drop * 0.85f + bed;
+        // block DC so the resonators can't walk the signal off centre
+        dcy = s2 - dcx + 0.995f * dcy; dcx = s2;
+        tmp[i] = dcy;
+        float av = fabsf(dcy);
+        if (av > peak) peak = av;
+    }
+
+    // crossfade the seam so looping the clip doesn't click
+    const int XF = (int)(0.05f * SR);
+    for (int i = 0; i < XF; i++) {
+        float m = i / (float)XF;
+        tmp[i] = tmp[i] * m + tmp[n - XF + i] * (1.0f - m);
+    }
+    float g = 0.86f / peak;
+    for (int i = 0; i < n; i++) d[i] = (short)(clampf1(tmp[i] * g) * 30000);
+    MemFree(tmp);
+
+    Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
+}
