@@ -40,6 +40,12 @@ struct MB;   // mesh builder, internal to world.cpp
 Mesh buildCanMesh();
 // The hand gripping it, in the can's own space — drawn with the can's transform.
 Mesh buildHandMesh();
+// The tape player, underside on y=0, and the two reels + record lamp that go on
+// it. Separate meshes because the reels turn and the lamp only burns while the
+// tape is running. UVs index makeDeckTex.
+Mesh buildDeckMesh();
+Mesh buildReelMesh();
+Mesh buildDeckLampMesh();
 
 struct World {
     unsigned seed = 1337;

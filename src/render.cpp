@@ -124,6 +124,9 @@ void Game::renderScene(double now) {
             DrawCylinder({ bxx + 0.028f, gy + 0.041f + bob, bzz }, 0.014f, 0.014f, 0.002f, 8, lit({ 30, 28, 30, 255 }, pl));
         }
     }
+    if (!deck.carried)   // the deck, wherever you set it down, facing the way you threw it
+        drawDeck(MatrixMultiply(MatrixRotateY(deck.yaw), MatrixTranslate(deck.x, deck.y, deck.z)),
+                 deck.playing);
     for (auto &cw : coinsWorld) {
         float gy = world.floorY(cellOf(cw.x), cellOf(cw.z));
         float bob = sinf((float)now * 2.4f + cw.x) * 0.03f;
@@ -269,7 +272,7 @@ void Game::renderScene(double now) {
         DrawBillboardRec(cam, spr, { 0, 0, 128, 256 },
                          { ent.x, eg + 0.98f - sink, ent.z }, { 0.98f, 1.96f }, { lum8, lum8, lum8, al });
     }
-    if (drinkT > 0) {
+    if (drinkT > 0 || (weapon == 2 && deck.carried)) {
         // Held against a wall, the can falls inside that wall's shadow and goes
         // black in your hands. A viewmodel shouldn't be shadowed by the room it
         // is being held in, so switch the occlusion grid off for this one draw
@@ -283,7 +286,8 @@ void Game::renderScene(double now) {
         const Vector3 &la = LEVELS[level].amb;
         Vector3 vmAmb = { fmaxf(la.x, 0.150f), fmaxf(la.y, 0.142f), fmaxf(la.z, 0.128f) };
         SetShaderValue(worldShader, locAmb, &vmAmb, SHADER_UNIFORM_VEC3);
-        drawDrinkCan(cam);
+        if (drinkT > 0) drawDrinkCan(cam);        // both hands are busy — the deck goes away
+        else drawHeldDeck(cam);
         SetShaderValue(worldShader, locOccN, &occN, SHADER_UNIFORM_FLOAT);   // both as they were
         SetShaderValue(worldShader, locAmb, &la, SHADER_UNIFORM_VEC3);
     }
@@ -316,7 +320,7 @@ void Game::renderUI(double now) {
         int tw = MeasureText(t1, ts);
         DrawText(t1, sw / 2 - tw / 2 + 2, sh / 3 + 2, ts, Fade(BLACK, 0.55f));   // drop shadow
         DrawText(t1, sw / 2 - tw / 2, sh / 3, ts, Fade({ 228, 214, 158, 255 }, fl));
-        const char *sub = "Level 0 — and everything under it";
+        const char *sub = "Level 0 · and everything under it";
         DrawText(sub, sw / 2 - MeasureText(sub, 20) / 2, sh / 3 + ts + 16, 20, { 150, 142, 108, 220 });
         // pulsing prompt
         float pl = 0.45f + 0.55f * (0.5f + 0.5f * sinf(timeF * 3.0f));
@@ -330,14 +334,14 @@ void Game::renderUI(double now) {
                              bestWins, bestKill, bestKill == 1 ? "" : "s", bestM);
             DrawText(tb, sw / 2 - MeasureText(tb, 16) / 2, sh * 2 / 3 + 40, 16, { 140, 132, 100, 200 });
         }
-        const char *tc = TextFormat("WASD move    SHIFT run    F flashlight    1/2 weapon    bank %d doubloons to leave",
+        const char *tc = TextFormat("WASD move    SHIFT run    F flashlight    1/2/4 item    bank %d doubloons to leave",
                                     ESCAPE_COST);
         DrawText(tc, sw / 2 - MeasureText(tc, 15) / 2, sh - 42, 15, { 128, 122, 96, 170 });
         EndDrawing();
         return;
     }
 
-    if (drinkT <= 0 && (weapon == 1 || (weapon == 0 && flares > 0))) {   // viewmodel, bottom-right
+    if (drinkT <= 0 && (weapon == 1 || (weapon == 0 && flares > 0))) {   // viewmodel, bottom-right (the deck draws in 3D)
         // reload: the muzzle dips while the cylinder is out, then comes back up
         float dip = (weapon == 1 && reloadT > 0)
                   ? sinf(clampf(1.0f - reloadT / 1.8f, 0.0f, 1.0f) * 3.14159f) : 0.0f;
@@ -430,7 +434,7 @@ void Game::renderUI(double now) {
         DrawText(t1, sw / 2 - MeasureText(t1, 52) / 2, sh / 3, 52, Fade({ 220, 205, 150, 255 }, ta));
         const char *t2 = "if you're reading this, you've already noclipped";
         DrawText(t2, sw / 2 - MeasureText(t2, 18) / 2, sh / 3 + 66, 18, Fade({ 160, 150, 110, 255 }, ta * 0.9f));
-        const char *t3 = "WASD walk   SHIFT run   CTRL crouch   SPACE jump   F flashlight   1/2 weapon   3 drink   M chalk   E vend";
+        const char *t3 = "WASD walk   SHIFT run   CTRL crouch   SPACE jump   F flashlight   1/2/4 item   3 drink   M chalk   E vend/pick up";
         DrawText(t3, sw / 2 - MeasureText(t3, 16) / 2, sh - 60, 16, Fade({ 140, 132, 100, 255 }, ta * 0.8f));
         if (bestEsc || bestKill || bestM || bestWins) {
             const char *tb = bestTapes > 0
@@ -440,7 +444,7 @@ void Game::renderUI(double now) {
                              bestWins, bestKill, bestKill == 1 ? "" : "s", bestM);
             DrawText(tb, sw / 2 - MeasureText(tb, 16) / 2, sh / 3 + 98, 16, Fade({ 150, 140, 105, 255 }, ta * 0.8f));
         }
-        const char *tg = TextFormat("bank %d doubloons — fight Clark for them — then take a door out", ESCAPE_COST);
+        const char *tg = TextFormat("bank %d doubloons · fight Clark for them · then take a door out", ESCAPE_COST);
         DrawText(tg, sw / 2 - MeasureText(tg, 16) / 2, sh / 3 + 128, 16, Fade({ 120, 200, 140, 255 }, ta * 0.75f));
     }
     if (winT > 0) {   // you bought your way out and found a true door
@@ -498,6 +502,11 @@ void Game::renderUI(double now) {
         const char *t2 = "...and never saw you";
         DrawText(t2, sw / 2 - MeasureText(t2, 15) / 2, sh / 2 - 98, 15, Fade({ 160, 130, 120, 220 }, a * 0.9f));
     }
+    if (deckNoteT > 0 && winT <= 0 && caughtT <= 0) {   // the deck just did something
+        float a = clampf(deckNoteT > 2.0f ? (2.6f - deckNoteT) / 0.6f : deckNoteT / 1.2f, 0, 1);
+        DrawText(deckNote, sw / 2 - MeasureText(deckNote, 16) / 2, sh - 150, 16,
+                 Fade({ 196, 168, 214, 230 }, a * 0.9f));
+    }
     if (tapeFoundT > 0) {   // a cassette recovered — someone else's fragment of the descent
         float a = clampf(tapeFoundT > 2.6f ? (3.2f - tapeFoundT) / 0.6f : tapeFoundT / 1.6f, 0, 1);
         const char *t = "TAPE RECOVERED";
@@ -512,7 +521,9 @@ void Game::renderUI(double now) {
     // persistent flashlight reminder until first use; small state dot + charge bar after
     if (flashOn) everFlashed = true;
     if (!everFlashed && elapsed > 9.0)
-        DrawText("F — flashlight", sw - MeasureText("F — flashlight", 16) - 16, sh - 28, 16, { 190, 180, 140, 160 });
+        // NOT an em dash: raylib's default font stops at Latin-1, and anything
+        // past it draws as a literal "?" on the HUD. U+00B7 is inside the range.
+        DrawText("F · flashlight", sw - MeasureText("F · flashlight", 16) - 16, sh - 28, 16, { 190, 180, 140, 160 });
     else if (flashOn)
         DrawText("[ flashlight ]", sw - MeasureText("[ flashlight ]", 14) - 16, sh - 26, 14, { 235, 225, 180, 120 });
     {   // your grip on the place: always up, because it is always going down
@@ -543,22 +554,33 @@ void Game::renderUI(double now) {
         }
     }
     {   // inventory, bottom-left; the selected weapon is lit
-        const char *w0 = TextFormat("1  flare  ×%d", flares);
-        const char *w1 = reloadT > 0 ? "2  revolver  [reloading]"
-                                     : TextFormat("2  revolver  %d/%d%s", ammo, MAXAMMO, ammo == 0 ? "  — R" : "");
+        // Draw each line straight off its TextFormat rather than holding the
+        // pointers and drawing at the end: TextFormat hands back a slot in a
+        // small rotating buffer, and this block now formats more lines than
+        // there are slots, so a held pointer comes back as a later line's text.
         Color selc = { 235, 200, 130, 210 }, dimc = { 150, 138, 112, 110 };
         if (tapes > 0)
-            DrawText(TextFormat("tapes  ×%d", tapes), 16, sh - 116, 16, { 172, 162, 190, 170 });
+            DrawText(TextFormat("tapes  ×%d", tapes), 16, sh - 138, 16, { 172, 162, 190, 170 });
         if (coins > 0 || wayOpen())   // doubloons double as your ticket out (ESCAPE_COST to leave)
-            DrawText(TextFormat("doubloons  ×%d / %d", coins, ESCAPE_COST), 16, sh - 94, 16,
+            DrawText(TextFormat("doubloons  ×%d / %d", coins, ESCAPE_COST), 16, sh - 116, 16,
                      wayOpen() ? Color{ 120, 230, 140, 210 } : Color{ 214, 178, 92, 170 });
-        DrawText(TextFormat("3  almond water  ×%d", almond), 16, sh - 72, 16,
+        DrawText(TextFormat("3  almond water  ×%d", almond), 16, sh - 94, 16,
                  almond > 0 ? Color{ 150, 190, 235, 170 } : dimc);
-        DrawText(w0, 16, sh - 50, 16, weapon == 0 ? selc : dimc);
-        DrawText(w1, 16, sh - 28, 16, weapon == 1 ? selc : dimc);
+        DrawText(TextFormat("1  flare  ×%d", flares), 16, sh - 72, 16, weapon == 0 ? selc : dimc);
+        DrawText(reloadT > 0 ? "2  revolver  [reloading]"
+                             : TextFormat("2  revolver  %d/%d%s", ammo, MAXAMMO, ammo == 0 ? "  · R" : ""),
+                 16, sh - 50, 16, weapon == 1 ? selc : dimc);
+        DrawText(!deck.carried
+                     ? (deck.playing ? "4  tape player  [running · left behind]"
+                                     : "4  tape player  [left behind · E]")
+                 : deck.playing ? TextFormat("4  tape player  [playing  %ds]", (int)deck.t + 1)
+                 : tapes > 0    ? "4  tape player  [tape ready]"
+                                : "4  tape player  [no tape]",
+                 16, sh - 28, 16,
+                 weapon == 2 ? (deck.playing ? Color{ 205, 150, 235, 220 } : selc) : dimc);
     }
     if (wayOpen() && winT <= 0 && caughtT <= 0 && escapeT <= 0) {   // you can leave now — go find a door
-        const char *t = "the doors know you now  —  find one that isn't cursed";
+        const char *t = "the doors know you now  ·  find one that isn't cursed";
         float pl = 0.55f + 0.45f * sinf((float)now * 2.5f);
         DrawText(t, sw / 2 - MeasureText(t, 20) / 2, 70, 20, Fade({ 120, 235, 145, 255 }, pl));
     }
@@ -568,7 +590,7 @@ void Game::renderUI(double now) {
         DrawRectangle(bx2, by2, (int)(bw * stamina), 6, { 200, 180, 120, 160 });
     }
     if (hidden)
-        DrawText("[ hidden — hold still ]", sw / 2 - MeasureText("[ hidden — hold still ]", 14) / 2, sh - 62, 14,
+        DrawText("[ hidden · hold still ]", sw / 2 - MeasureText("[ hidden · hold still ]", 14) / 2, sh - 62, 14,
                  { 140, 210, 165, 160 });
     else if (crouchCur > 0.5f)
         DrawText("[ crouched ]", sw / 2 - MeasureText("[ crouched ]", 14) / 2, sh - 62, 14, { 180, 170, 140, 120 });
@@ -612,6 +634,72 @@ void Game::renderUI(double now) {
 // puts it down the shader's textured branch.
 void Game::drawCan(Matrix xf) {
     DrawMesh(canMesh, mats[6], xf);
+}
+
+// One tape player: the body, the two reels turning in the bay, and the record
+// lamp if the tape is actually running. The reels are drawn as their own mesh
+// so they can spin — a still deck and a running one have to look different at a
+// glance, since the whole decoy mechanic turns on knowing which one you left.
+void Game::drawDeck(Matrix xf, bool lamp) {
+    DrawMesh(deckMesh, mats[7], xf);
+    for (int i = 0; i < 2; i++) {
+        // both hubs turn the same way — the tape only travels in one direction
+        Matrix r = MatrixMultiply(MatrixRotateY(deck.reel),
+                                  MatrixTranslate(i ? 0.024f : -0.024f, 0.0505f, 0.0f));
+        DrawMesh(reelMesh, mats[7], MatrixMultiply(r, xf));
+    }
+    if (lamp) {
+        // The lamp breathes. A steady dot of red is easy to miss on a dark floor;
+        // one that pulses is what tells you across a room that the tape you left
+        // is still running. colDiffuse multiplies the emissive branch's output,
+        // so tint the shared material for this draw and hand it straight back.
+        float pu = 0.45f + 0.55f * (0.5f + 0.5f * sinf((float)GetTime() * 4.2f));
+        mats[7].maps[MATERIAL_MAP_DIFFUSE].color = { cl8(255 * pu), cl8(255 * pu), cl8(255 * pu), 255 };
+        DrawMesh(deckLampMesh, mats[7], xf);
+        mats[7].maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
+    }
+}
+
+// The deck in your hand. Same three rules the drink can had to learn: held
+// inside 0.34 m so no corridor can cut through it, depth testing left alone,
+// and the caller lifts the world shadowing off it before this runs.
+void Game::drawHeldDeck(const Camera3D &cam) {
+    Vector3 F = fwd;
+    Vector3 Rt = { r2x, 0, r2z };
+    Vector3 Up = Vector3Normalize(Vector3CrossProduct(Rt, F));
+
+    float sway = sinf(bobPhase * 3.14159f) * 0.007f * bobAmt;
+    float rise = sinf(bobPhase * 1.57079f) * 0.004f * bobAmt;
+    // Down in the corner of the view, and — the rule the drink can had to learn
+    // — the whole offset kept inside 0.34 m of the eye. Collision never lets you
+    // that close to anything solid, so nothing in the world can cut into it.
+    // Held further out, corridor walls slice straight through it.
+    Vector3 pos = Vector3Add(cam.position,
+                  Vector3Add(Vector3Scale(F, 0.220f),
+                  Vector3Add(Vector3Scale(Rt, 0.125f + sway), Vector3Scale(Up, -0.128f + rise))));
+
+    // held this close, life size reads as a toy: the usual viewmodel cheat
+    const float SCALE = 0.62f;
+    // Tip the top face up toward the eye so the bay and the reels are the part
+    // you see — held flat, all you get is the front edge and it reads as a brick.
+    const float pitch2 = 52.0f * DEG2RAD, yaw2 = -26.0f * DEG2RAD;
+    Vector3 x0 = Rt, y0 = Up, z0 = Vector3Negate(F);      // front face toward you
+    Vector3 y1 = Vector3Add(Vector3Scale(y0, cosf(pitch2)), Vector3Scale(z0, sinf(pitch2)));
+    Vector3 z1 = Vector3Add(Vector3Scale(y0, -sinf(pitch2)), Vector3Scale(z0, cosf(pitch2)));
+    Vector3 ax = Vector3Add(Vector3Scale(x0, cosf(yaw2)), Vector3Scale(z1, -sinf(yaw2)));
+    Vector3 az = Vector3Add(Vector3Scale(x0, sinf(yaw2)), Vector3Scale(z1, cosf(yaw2)));
+
+    // the mesh sits underside-on-origin, so drop back down its own up axis to
+    // turn it about its middle rather than about its base
+    pos = Vector3Subtract(pos, Vector3Scale(y1, 0.029f * SCALE));
+
+    Matrix m = { 0 };
+    m.m0 = ax.x * SCALE; m.m1 = ax.y * SCALE; m.m2 = ax.z * SCALE;
+    m.m4 = y1.x * SCALE; m.m5 = y1.y * SCALE; m.m6 = y1.z * SCALE;
+    m.m8 = az.x * SCALE; m.m9 = az.y * SCALE; m.m10 = az.z * SCALE;
+    m.m12 = pos.x;       m.m13 = pos.y;       m.m14 = pos.z;
+    m.m15 = 1.0f;
+    drawDeck(m, deck.playing);
 }
 
 // The drink, in three dimensions. The 2D version faked foreshortening by

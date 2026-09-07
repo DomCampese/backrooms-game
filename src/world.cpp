@@ -1150,3 +1150,107 @@ Mesh buildHandMesh() {
     box({ R * 0.15f, 0.002f, R * 0.45f }, { R * 0.62f, 0.030f, R * 0.96f });
     return b.bake();
 }
+
+
+// The tape player, at life size with its underside on y=0, so one transform
+// puts it either on the floor or in your hand. UVs index makeDeckTex's four
+// tiles. Alpha 254 like the can: textured and opaque, but under the shader's
+// world-space relief threshold — relief is fixed in world space, and this is a
+// small object that moves, so it would swim through the noise field.
+Mesh buildDeckMesh() {
+    MB b;
+    const float HX = 0.059f, HZ = 0.038f, HY = 0.029f;   // 118 × 76 × 29 mm
+    const Color w = { 255, 255, 255, 254 };
+    // tile helpers: (0,0) top, (1,0) body, (0,1) front, (1,1) reel
+    auto tile = [](int tx, int ty, float u, float v) {
+        const float S = 0.5f, IN = 1.0f / 128.0f;        // inset: bilinear must not cross tiles
+        return Vector2{ tx * S + IN + u * (S - 2 * IN), ty * S + IN + v * (S - 2 * IN) };
+    };
+    auto face = [&](Vector3 a, Vector3 b2, Vector3 c, Vector3 d, Vector3 nn, int tx, int ty) {
+        b.quad(a, b2, c, d, nn, tile(tx, ty, 0, 1), tile(tx, ty, 1, 1),
+               tile(tx, ty, 1, 0), tile(tx, ty, 0, 0), w);
+    };
+
+    // front face (+z) carries the grille and the buttons; the rest is body
+    face({ -HX, 0, HZ }, { HX, 0, HZ }, { HX, HY * 2, HZ }, { -HX, HY * 2, HZ }, { 0, 0, 1 }, 0, 1);
+    face({ HX, 0, -HZ }, { -HX, 0, -HZ }, { -HX, HY * 2, -HZ }, { HX, HY * 2, -HZ }, { 0, 0, -1 }, 1, 0);
+    face({ -HX, 0, -HZ }, { -HX, 0, HZ }, { -HX, HY * 2, HZ }, { -HX, HY * 2, -HZ }, { -1, 0, 0 }, 1, 0);
+    face({ HX, 0, HZ }, { HX, 0, -HZ }, { HX, HY * 2, -HZ }, { HX, HY * 2, HZ }, { 1, 0, 0 }, 1, 0);
+    face({ -HX, 0, -HZ }, { HX, 0, -HZ }, { HX, 0, HZ }, { -HX, 0, HZ }, { 0, -1, 0 }, 1, 0);
+
+    // The top is the cassette bay, so it is cut as a frame rather than a slab:
+    // four border strips at full height, then walls dropping to a recessed floor
+    // the reels sit on. Without the recess the reels read as stickers.
+    const float TY = HY * 2, BY = TY - 0.008f;            // bay floor, 8 mm down
+    const float BX = HX * 0.62f, BZ = HZ * 0.42f;         // the opening
+    // border strips, UV'd from the same tile so the label and frame line up
+    auto topStrip = [&](float x0, float x1, float z0, float z1) {
+        auto uv = [&](float x, float z) {
+            // u runs backwards: with the lid's +x to the viewer's right, mapping
+            // u forwards puts the printed label on mirrored
+            return tile(0, 0, 1.0f - (x + HX) / (2 * HX), (z + HZ) / (2 * HZ));
+        };
+        b.quad({ x0, TY, z0 }, { x1, TY, z0 }, { x1, TY, z1 }, { x0, TY, z1 }, { 0, 1, 0 },
+               uv(x0, z0), uv(x1, z0), uv(x1, z1), uv(x0, z1), w);
+    };
+    topStrip(-HX, HX, -HZ, -BZ);
+    topStrip(-HX, HX, BZ, HZ);
+    topStrip(-HX, -BX, -BZ, BZ);
+    topStrip(BX, HX, -BZ, BZ);
+    // the bay: four inner walls and a floor, all off the dark middle of the tile
+    const Vector2 dk = tile(0, 0, 0.5f, 0.5f);            // solidly inside the window
+    auto flat = [&](Vector3 a, Vector3 b2, Vector3 c, Vector3 d, Vector3 nn) {
+        b.quad(a, b2, c, d, nn, dk, dk, dk, dk, w);
+    };
+    flat({ -BX, BY, -BZ }, { BX, BY, -BZ }, { BX, BY, BZ }, { -BX, BY, BZ }, { 0, 1, 0 });
+    flat({ -BX, BY, -BZ }, { -BX, TY, -BZ }, { BX, TY, -BZ }, { BX, BY, -BZ }, { 0, 0, 1 });
+    flat({ BX, BY, BZ }, { BX, TY, BZ }, { -BX, TY, BZ }, { -BX, BY, BZ }, { 0, 0, -1 });
+    flat({ -BX, BY, BZ }, { -BX, TY, BZ }, { -BX, TY, -BZ }, { -BX, BY, -BZ }, { 1, 0, 0 });
+    flat({ BX, BY, -BZ }, { BX, TY, -BZ }, { BX, TY, BZ }, { BX, BY, BZ }, { -1, 0, 0 });
+    return b.bake();
+}
+
+// One reel: a flat disc in the XZ plane about its own centre, so the deck can
+// draw it twice and spin it. Its own mesh rather than part of the body because
+// the spin is the only thing that says the tape is actually running.
+Mesh buildReelMesh() {
+    MB b;
+    const int N = 16;
+    const float R = 0.0145f, TAU = 6.2831853f;
+    const Color w = { 255, 255, 255, 254 };
+    auto uv = [](float ang, float rad) {
+        const float S = 0.5f, IN = 1.0f / 128.0f;
+        float u = 0.5f + 0.5f * cosf(ang) * rad, v = 0.5f + 0.5f * sinf(ang) * rad;
+        return Vector2{ S + IN + u * (S - 2 * IN), S + IN + v * (S - 2 * IN) };
+    };
+    for (int i = 0; i < N; i++) {
+        float a0 = i * TAU / N, a1 = (i + 1) * TAU / N;
+        b.tri({ 0, 0, 0 }, { cosf(a1) * R, 0, sinf(a1) * R }, { cosf(a0) * R, 0, sinf(a0) * R },
+              { 0, 1, 0 }, uv(0, 0), uv(a1, 0.97f), uv(a0, 0.97f), w);
+    }
+    return b.bake();
+}
+
+// The record lamp on the front. Alpha 51 (0.2) drops it into the shader's raw
+// emissive branch, so it burns its own colour instead of taking room light —
+// which is the point: in a blackout it is the only thing you can see of it.
+Mesh buildDeckLampMesh() {
+    MB b;
+    const Color glow = { 255, 66, 48, 51 };
+    // On the lid in front of the bay, where a recorder's record lamp sits and
+    // where your eye already is. Drawn on the lid *and* down the front edge, so
+    // it still reads when the deck is lying on a floor below you and the lid is
+    // side-on. Deliberately oversized for an indicator — at four metres the
+    // honest 3 mm of it is under a pixel, and this has to say "still running".
+    // The emissive branch ignores the texture, so the UV only has to be legal.
+    // Stand it 1.5 mm proud of the shell, not the tenth of a millimetre it had:
+    // flush against the lid the two surfaces z-fight, and the shell wins as soon
+    // as the deck is more than a couple of metres off — so the lamp read fine in
+    // your hand and vanished exactly when you needed it, lying on a dark floor.
+    const float x0 = 0.024f, x1 = 0.044f, y = 0.0595f, z0 = 0.019f, z1 = 0.031f;
+    const Vector2 t = { 0.25f, 0.25f };
+    b.quad({ x0, y, z0 }, { x1, y, z0 }, { x1, y, z1 }, { x0, y, z1 }, { 0, 1, 0 }, t, t, t, t, glow);
+    b.quad({ x0, 0.044f, 0.0395f }, { x1, 0.044f, 0.0395f },
+           { x1, y, 0.0395f }, { x0, y, 0.0395f }, { 0, 0, 1 }, t, t, t, t, glow);
+    return b.bake();
+}

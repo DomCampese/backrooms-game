@@ -41,6 +41,10 @@ void Game::init() {
     texAlmondWrap = makeAlmondWrapTex();
     canMesh = buildCanMesh();
     handMesh = buildHandMesh();
+    texDeck = makeDeckTex();
+    deckMesh = buildDeckMesh();
+    reelMesh = buildReelMesh();
+    deckLampMesh = buildDeckLampMesh();
     // per-level surface sets: [floor, ceiling, walls]
     floorTexs[0] = makeCarpetTex(); floorTexs[1] = makeConcreteFloorTex();
     floorTexs[2] = makeTileTex();   floorTexs[4] = makePartyCarpetTex();
@@ -90,7 +94,7 @@ void Game::init() {
         SetTextureFilter(texOcc, TEXTURE_FILTER_POINT);
         SetTextureWrap(texOcc, TEXTURE_WRAP_CLAMP);
     }
-    for (int i = 0; i < 7; i++) {
+    for (int i = 0; i < 8; i++) {
         mats[i] = LoadMaterialDefault();
         mats[i].shader = worldShader;
         // rides the normal-map slot, which DrawMesh binds as "texture2"
@@ -100,6 +104,7 @@ void Game::init() {
     mats[4].maps[MATERIAL_MAP_DIFFUSE].texture = texScrawl;   // wall scrawl decals
     mats[5].maps[MATERIAL_MAP_DIFFUSE].texture = texAO;       // baked contact-shadow gradients
     mats[6].maps[MATERIAL_MAP_DIFFUSE].texture = texAlmondWrap;   // the can
+    mats[7].maps[MATERIAL_MAP_DIFFUSE].texture = texDeck;         // the tape player
 
     for (int i = 0; i < 4; i++) steps[i] = makeFootstep(100 + i * 17);
     for (int i = 0; i < 4; i++) entSteps[i] = makeFootstep(300 + i * 23);   // heavier, its own gait
@@ -118,6 +123,7 @@ void Game::init() {
     sndValve = makeValveTurn();    SetSoundVolume(sndValve, 0.7f);
     sndHowl = makeDogHowl();       SetSoundVolume(sndHowl, 0.5f);
     sndGulp = makeGulp();          SetSoundVolume(sndGulp, 0.75f);
+    sndVoice = makeTapeVoice();    SetSoundVolume(sndVoice, 0.9f);
     for (int i = 0; i < 3; i++) sndBarks[i] = makeDogBark(400 + i * 31);
 
     synth.init();
@@ -194,6 +200,7 @@ void Game::winRun(double now) {
     px = sp.x; pz = sp.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
     yaw = 0.8f; pitch = 0.0f;
     coins = 0; almond = 0; tapes = 0; flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; battery = 1.0f;
+    deck = TapeDeck{}; if (IsSoundPlaying(sndVoice)) StopSound(sndVoice);
     caughtCount = 0; escapeCount = 0; killCount = 0; distWalked = 0;
     fear = 0; boostT = 0;
     sanity = 1.0f; sanityStage = 0; sanityWarnT = 0; sanityLine = "";
@@ -231,6 +238,7 @@ void Game::startRun(double now) {
     px = sp.x; pz = sp.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
     yaw = 0.8f; pitch = 0.0f;
     coins = 0; almond = 0; tapes = 0; flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; battery = 1.0f;
+    deck = TapeDeck{}; if (IsSoundPlaying(sndVoice)) StopSound(sndVoice);
     caughtCount = 0; escapeCount = 0; killCount = 0; distWalked = 0;
     fear = 0; boostT = 0; blackoutCur = 1.0f; blackoutEnd = -1;
     sanity = 1.0f; sanityStage = 0; sanityWarnT = 0; sanityLine = "";
@@ -248,6 +256,10 @@ void Game::applyLevel(int lv) {
     // for, so settle it before dropping the animation rather than eating it
     if (drinkT > 0 && !drinkLanded) sanity = clampf(sanity + 0.34f + 0.04f * level, 0.0f, 1.0f);
     drinkT = 0; drinkLanded = false;
+    // you wouldn't step through a door without picking your own kit back up —
+    // and a deck left behind on the last floor would be gone for the whole run
+    deck.carried = true; deck.flying = false; deck.playing = false; deck.t = 0;
+    if (IsSoundPlaying(sndVoice)) StopSound(sndVoice);
     const LevelCfg &c = LEVELS[lv];
     world.unloadAll();
     world.level = lv;
@@ -516,6 +528,7 @@ bool Game::tick() {
     updateDevKeys(now);
     updateWeapons(dt, now);
     updateFlare(dt, now);
+    updateTapeDeck(dt, now);
     updateInteraction();
     updateDrink(dt, now);
     updateAmbience(dt, now);
@@ -698,8 +711,12 @@ void Game::updateWeapons(float dt, double now) {
     // ---- weapons: 1 flare, 2 revolver; wheel cycles; left click uses the selected one
     if (IsKeyPressed(KEY_ONE)) weapon = 0;
     if (IsKeyPressed(KEY_TWO)) weapon = 1;
+    if (IsKeyPressed(KEY_FOUR)) weapon = 2;
     wheelCd = fmaxf(0, wheelCd - dt);
-    if (wheelCd <= 0 && fabsf(GetMouseWheelMove()) > 0.5f) { weapon ^= 1; wheelCd = 0.25f; }
+    {   // the wheel now runs a three-slot loop, and respects which way you spun it
+        float mw = GetMouseWheelMove();
+        if (wheelCd <= 0 && fabsf(mw) > 0.5f) { weapon = (weapon + (mw > 0 ? 1 : 2)) % 3; wheelCd = 0.25f; }
+    }
     gunCd = fmaxf(0, gunCd - dt);
     muzzleT = fmaxf(0, muzzleT - dt);
     muzzleSmoke = fmaxf(0, muzzleSmoke - dt * 0.7f);   // powder haze drifts and thins
@@ -822,6 +839,104 @@ void Game::updateFlare(float dt, double now) {
     } else synth.hissTarget = 0;
 }
 
+// ---- the tape player. What the cassettes are for.
+//
+// Playing one in your hand is the only thing besides a can that puts your grip
+// back, because a voice that isn't the building's is proof there was a before.
+// But a running deck is *loud*, and the Red Halls pack hunts by noise — so the
+// other thing you can do with it is set it down still playing and walk away.
+// The sound is then over there, and so are they. The cost is a real choice
+// rather than a hard lock: set it far enough out to send them somewhere useful
+// and you give up most of the voice, and keep it near enough to hear properly
+// and the pack arrives where you happen to be standing.
+void Game::updateTapeDeck(float dt, double now) {
+    deckNoteT = fmaxf(0, deckNoteT - dt);
+
+    // ---- thread a tape, or set the running deck down
+    if (IsCursorHidden() && !captureClick && caughtT <= 0 && drinkT <= 0 &&
+        weapon == 2 && deck.carried && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        if (!deck.playing && tapes > 0) {
+            tapes--;
+            deck.playing = true;
+            deck.t = TAPE_RUN;
+            deckNoteT = 2.6f; deckNote = "the tape runs. someone is talking.";
+            SetSoundPitch(sndClick, 1.05f); PlaySound(sndClick);
+            // It carries, and he comes to noise the same way he comes to a shot
+            // or a struck flare. Pulled once, on the press — doing it every
+            // frame would pin his next spawn to the length of the tape.
+            if (ent.st == EState::Hidden)
+                ent.nextSpawn = fmin(ent.nextSpawn, now + 10 + grng.f01() * 9);
+        } else if (deck.playing) {
+            // set it down: underarm, so it lands a few metres out rather than
+            // across the room — you want to know where you left it
+            deck.carried = false; deck.flying = true;
+            deck.x = px + fwd.x * 0.4f; deck.y = eyeY - 0.35f; deck.z = pz + fwd.z * 0.4f;
+            deck.vx = fwd.x * 5.0f; deck.vz = fwd.z * 5.0f; deck.vy = fwd.y * 5.0f + 1.4f;
+            deck.yaw = atan2f(fwd.x, fwd.z);
+            deckNoteT = 2.6f; deckNote = "you leave it talking, and walk away.";
+        } else if (tapes <= 0) {
+            deckNoteT = 2.2f; deckNote = "no tape. the deck is empty.";
+            SetSoundPitch(sndClick, 0.7f); PlaySound(sndClick);
+        }
+    }
+
+    // ---- once it is out of your hand it obeys the same physics the flare does
+    if (!deck.carried && deck.flying) {
+        deck.vy -= 18.0f * dt;
+        deck.x += deck.vx * dt; deck.y += deck.vy * dt; deck.z += deck.vz * dt;
+        float ox = deck.x, oz = deck.z;
+        world.collideCircle(deck.x, deck.z, 0.07f, deck.y);
+        if (fabsf(ox - deck.x) > 1e-5f) deck.vx *= -0.3f;
+        if (fabsf(oz - deck.z) > 1e-5f) deck.vz *= -0.3f;
+        float g = world.groundAt(deck.x, deck.z, deck.y);
+        if (deck.y < g + 0.005f && deck.vy < 0) {
+            deck.y = g + 0.005f;
+            if (deck.vy < -2.2f) { deck.vy *= -0.22f; deck.vx *= 0.4f; deck.vz *= 0.4f; }
+            else { deck.flying = false; deck.vx = deck.vy = deck.vz = 0; }
+        }
+        // water kills it outright, the same way it kills a flare
+        if (world.poolAt(cellOf(deck.x), cellOf(deck.z)) && deck.y < -0.10f && deck.playing) {
+            deck.playing = false; deck.t = 0;
+            Sound &sp = splashes[grng.ri(0, 1)];
+            SetSoundPitch(sp, 1.0f); SetSoundVolume(sp, 0.8f); PlaySound(sp);
+            deckNoteT = 2.6f; deckNote = "the water takes it. the voice stops.";
+        }
+    }
+
+    // ---- run the tape down
+    if (deck.playing) {
+        deck.t -= dt;
+        deck.reel += dt * 2.3f;
+        if (deck.reel > 6.2831853f) deck.reel -= 6.2831853f;
+        if (deck.t <= 0) {
+            deck.playing = false; deck.t = 0;
+            deckNoteT = 2.6f; deckNote = "the tape runs out.";
+            SetSoundPitch(sndClick, 0.85f); PlaySound(sndClick);
+        }
+    }
+
+    // ---- place the voice in the room, and let it steady you
+    float sx = deck.carried ? px : deck.x, sz = deck.carried ? pz : deck.z;
+    if (deck.playing) {
+        if (!IsSoundPlaying(sndVoice)) PlaySound(sndVoice);   // the clip loops itself
+        float ddx = sx - px, ddz = sz - pz;
+        float dist = sqrtf(ddx * ddx + ddz * ddz);
+        float pan = dist > 0.25f ? clampf((ddx / dist) * r2x + (ddz / dist) * r2z, -1.0f, 1.0f) : 0.0f;
+        SetSoundPan(sndVoice, 0.5f + pan * 0.5f);             // + is to your right; pan 0 = right
+        SetSoundVolume(sndVoice, clampf(1.0f / (1.0f + 0.05f * dist * dist), 0.0f, 0.9f));
+
+        // You have to be able to hear it for it to do you any good, so the
+        // further you set it from yourself the less it gives back — and through
+        // a wall, less again. Gone by 14 m, which is well inside the radius the
+        // deck is still audible to the pack at, so a deck placed far enough to
+        // pull them properly is a deck doing nothing at all for your head.
+        float aud = deck.carried ? 1.0f
+                  : clampf(1.0f - dist / 14.0f, 0.0f, 1.0f) *
+                    (world.lineOfSight(px, pz, deck.x, deck.z) ? 1.0f : 0.45f);
+        sanity = clampf(sanity + 0.0105f * aud * dt, 0.0f, 1.0f);
+    } else if (IsSoundPlaying(sndVoice)) StopSound(sndVoice);
+}
+
 void Game::updateInteraction() {
     // ---- pickups, drinking, vending machines, chalk
     int pci = cellOf(px), pck = cellOf(pz);
@@ -908,6 +1023,15 @@ void Game::updateInteraction() {
                 coins -= 3; almond++;
                 SetSoundPitch(sndClick, 0.8f); PlaySound(sndClick);
             }
+        }
+    }
+    if (IsKeyPressed(KEY_E) && !deck.carried) {   // pick the deck back up, running or not
+        float ddx = px - deck.x, ddz = pz - deck.z;
+        if (ddx * ddx + ddz * ddz < 1.5f * 1.5f) {
+            deck.carried = true; deck.flying = false;
+            deckNoteT = 2.2f; deckNote = deck.playing ? "you pick it up. it's still running."
+                                                      : "you pick the deck back up.";
+            SetSoundPitch(sndClick, 1.1f); PlaySound(sndClick);
         }
     }
     if (IsKeyPressed(KEY_M)) {   // chalk mark: the only map you get
@@ -1128,13 +1252,23 @@ void Game::updateDogs(float dt, double now) {
         for (auto &d : dogs) d.st = DState::Gone;
         return;
     }
-    // how much noise you're making right now, in metres of audible radius
+    // How much noise is being made right now, in metres of audible radius, and
+    // — the part that matters — *where from*. Normally that is you. But a tape
+    // player left running is a noise source in its own right, and the pack goes
+    // to the sound rather than to the person making it, which is the whole
+    // reason to put one down and walk off.
     float noise = 5.0f;
+    float nsx = px, nsz = pz;
     if (sprinting) noise = 20.0f;
     else if (velx * velx + velz * velz > 1.0f) noise = 11.0f;
     if (crouchCur > 0.7f) noise *= 0.45f;
-    if (muzzleT > 0 || gunCd > 0.35f) noise = 45.0f;         // a shot in here carries
-    if (flare.active && flare.burn > FLAREBURN - 0.6f) noise = 30.0f;
+    if (deck.playing && TAPE_NOISE > noise) {
+        noise = TAPE_NOISE;
+        nsx = deck.carried ? px : deck.x;      // carried, the loud thing is still you
+        nsz = deck.carried ? pz : deck.z;
+    }
+    if (muzzleT > 0 || gunCd > 0.35f) { noise = 45.0f; nsx = px; nsz = pz; }   // a shot in here carries
+    if (flare.active && flare.burn > FLAREBURN - 0.6f) { noise = 30.0f; nsx = px; nsz = pz; }   // struck in your hand
 
     if (now > nextHowl && caughtT <= 0) {    // the pack calling across the halls
         nextHowl = now + 26 + grng.f01() * 34;
@@ -1179,7 +1313,9 @@ void Game::updateDogs(float dt, double now) {
                     SetSoundPitch(sndBarks[i % 3], 1.5f); PlaySound(sndBarks[i % 3]);
                 }
             }
-            bool heard = dist < noise;
+            float sdx = nsx - d.x, sdz = nsz - d.z;
+            float sdist = sqrtf(sdx * sdx + sdz * sdz);     // to the noise, not to you
+            bool heard = sdist < noise;
             if (d.st == DState::Prowl) {
                 if (heard) { d.st = DState::Charge; d.life = 0; d.lost = 0; d.repathT = 0; }
                 else if (d.life > 55) d.st = DState::Gone;      // wandered off
@@ -1192,7 +1328,7 @@ void Game::updateDogs(float dt, double now) {
             // noise rules meaningless, since it would arrive either way.
             float spd = (d.st == DState::Charge) ? 5.6f : 2.1f;
             float tgx, tgz;
-            if (d.st == DState::Charge) { tgx = px; tgz = pz; }
+            if (d.st == DState::Charge) { tgx = nsx; tgz = nsz; }
             else {
                 float rdx = d.roamX - d.x, rdz = d.roamZ - d.z;
                 if (now > d.nextRoam || rdx * rdx + rdz * rdz < 1.4f * 1.4f) {
