@@ -136,12 +136,18 @@ generation, run all five levels plus the menu and check for shader errors:
 tools/sweep.sh
 ```
 
-Then **look at the images**. If the change should not have touched the world
-pass, prove it: build the previous commit somewhere else and
-`tools/pixdiff.py diff` the two frames. A HUD-only change puts essentially all
-of its differing pixels in one corner; anything scattered through the frame
-means you moved the world. A clean exit code proves nothing; several real
-bugs in this game's history rendered perfectly valid frames that were wrong.
+Then **look at the images**. Note that a Level 3 frame is *supposed* to look
+almost black — the Red Halls sit at a mean luma around 16 out of 255, so the
+regression shot for it is genuinely near-black and is not a broken shader or a
+blackout. Confirming that cost a build of the previous commit; take this line's
+word for it instead.
+
+If the change should not have touched the world pass, prove it: build the
+previous commit somewhere else and `tools/pixdiff.py diff` the two frames. A
+HUD-only change puts essentially all of its differing pixels in one corner;
+anything scattered through the frame means you moved the world. A clean exit
+code proves nothing; several real bugs in this game's history rendered
+perfectly valid frames that were wrong.
 
 A full sweep takes 10–20 minutes headless because the software rasteriser is
 slow. Run it in the background and do something else. Do **not** run two
@@ -198,10 +204,23 @@ the command inline, or write a heredoc containing it — `pkill` matches itself
 and the shell dies with no output. Use `pkill -x Xvfb`, or put the command in
 a script file and run the file.
 
-**Concurrent test scripts fight over Xvfb.** Every script here starts by
-killing any running Xvfb, so two sweeps at once kill each other's display
-mid-run. The symptom is a run reporting shader errors that are really GLFW
-failing to find a display. One at a time.
+**Do not run two sweeps at once.** `tools/shot.sh` reuses a running Xvfb
+rather than killing and restarting one — the older scripts here killed it,
+which meant two sweeps tore down each other's display mid-run and reported
+"shader errors" that were really GLFW failing to find a display. That specific
+failure is gone, but concurrent runs still write the same filenames into
+`shots/` and still contend for one slow software rasteriser. One at a time.
+
+**`vnoise2` returns 0..1, not -1..1** — and it is `vnoise2`, not `vnoise`.
+Writing the usual `noise * 0.5 + 0.5` on it silently gives you half the range
+sitting in the top half of it, which reads as a flat, washed-out texture
+rather than an obviously broken one. `fbm2` is the same.
+
+**raylib `Sound` has no loop flag.** `PlaySound` is one-shot. To sustain
+something — the tape player's voice runs for 26 s off a 7.5 s clip — retrigger
+it on `!IsSoundPlaying(snd)` each frame. There is a one-frame gap at the seam,
+so a clip meant to loop has to begin and end somewhere quiet and be
+crossfaded, or the join clicks audibly.
 
 **Temporary test hooks must be removed by exact string, not by slicing.**
 Cutting from `s.index(start)` to `s.index(end)` is dangerous when the end
@@ -243,6 +262,13 @@ Every material carries the occupancy grid in its **normal-map slot**, because
 not. If you add a material, wire that up or its shadows will be wrong — an
 unbound sampler reads as white, which the occlusion code interprets as "wall
 everywhere", and the object goes black.
+
+That wiring is a loop in `init()` with its **own hardcoded count**, separate
+from the array size: `Material mats[N]` and `for (int i = 0; i < N; i++)` are
+two literals that have to be changed together. Bump the array and forget the
+loop and the new material is never initialised at all — no shader, no
+occupancy texture — which is a worse failure than the black object above and
+does not look like a material problem when you hit it.
 
 ### Lighting
 
@@ -289,3 +315,10 @@ pass, and both obey the same three rules, learned the hard way:
 - When fixing something visual, prove it: capture the same frame before and
   after and compare, or measure pixels. "It looks better" has been wrong here
   more than once.
+- **Keep this file current as you work.** Every entry under "Things that will
+  bite you" is here because it cost someone an hour. When you lose time to
+  something that was not obvious from the code — a silent failure, a library
+  behaviour that surprised you, a number that had to change in two places —
+  add it before you finish, in the same commit as the work that found it. Say
+  what the symptom looked like, not just what the rule is: the symptom is what
+  the next person will actually be holding when they come looking.
