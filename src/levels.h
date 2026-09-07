@@ -4,9 +4,16 @@
 #include "raylib.h"
 
 struct LevelCfg {
-    float wallH, ls, dead, lightMul, fogDen, gloss;
-    Vector3 lightCol, amb, fogCol;
-    const char *name;
+    float wallH;      // floor-to-ceiling height, metres
+    float ls;         // light spacing: ceiling panels sit on a grid this many metres apart
+    float dead;       // fraction of panels that are simply out (0 = all lit)
+    float lightMul;   // overall brightness of the ones that work
+    float fogDen;     // exponential fog density — how soon the corridor disappears
+    float gloss;      // specular sheen on the floor: dry carpet ~0, wet tile high
+    Vector3 lightCol; // colour of the fluorescents
+    Vector3 amb;      // ambient floor, so unlit corners are not pure black
+    Vector3 fogCol;   // what the fog fades to at range
+    const char *name; // shown on the intro card and in the window title
 };
 constexpr int NLEVELS = 5;
 extern const LevelCfg LEVELS[NLEVELS];

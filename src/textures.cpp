@@ -21,7 +21,7 @@ Texture2D makeWallpaperTex() {
     Color *p = (Color *)img.data;
     for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
         float vy = (float)y / H;
-        float stripe = 0.97f + 0.03f * sinf(x * 6.2831853f / 42.0f);
+        float stripe = 0.97f + 0.03f * sinf(x * TAU / 42.0f);
         float lines = 0.985f + 0.015f * sinf(x * 0.9f);
         float grime = fbm2(x * 0.013f, y * 0.013f, 7u, 4);
         float stain = fbm2(x * 0.006f + 31.0f, y * 0.006f, 12u, 4);
@@ -741,7 +741,7 @@ Texture2D makeDeckTex() {
             } else {
                 // the hub: three slots cut through it, which is the only thing
                 // that says whether the reel is turning
-                float sl = fmodf(ang + 6.2831853f, 2.0943951f);
+                float sl = fmodf(ang + TAU, 2.0943951f);
                 c = (rad > 0.10f && rad < 0.34f && sl < 0.72f) ? Color{ 20, 19, 22, 255 } : hub;
             }
             put(ox + x, oy + y, c);

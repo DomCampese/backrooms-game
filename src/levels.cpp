@@ -2,6 +2,8 @@
 #include "util.h"
 #include <cmath>
 
+// One row per level. The columns are in LevelCfg's declaration order:
+//     wallH   ls   dead  lightMul fogDen gloss   lightCol            amb                     fogCol                  name
 const LevelCfg LEVELS[NLEVELS] = {
     { 3.0f,  8.0f, 0.06f, 1.00f, 0.055f, 0.06f, {1.00f,0.94f,0.74f}, {0.045f,0.042f,0.030f}, {0.140f,0.125f,0.070f}, "LEVEL 0" },
     { 4.2f, 12.0f, 0.30f, 0.85f, 0.075f, 0.22f, {0.72f,0.80f,0.95f}, {0.016f,0.017f,0.022f}, {0.018f,0.020f,0.026f}, "LEVEL 1" },
