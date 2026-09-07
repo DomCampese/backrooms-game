@@ -37,62 +37,65 @@ and runs.
 
 ### Sandboxes with no system raylib
 
-This is the case in the Claude Code web environment, and reconstructing it is
-the single most time-consuming thing about a cold start. There is no raylib
+This is the case in the Claude Code web environment. There is no raylib
 package available, but the **Python wheel ships a complete raylib shared
-object**, and you can link C++ against it directly.
+object** plus cffi-preprocessed headers, and C++ links against both directly.
+
+Reconstructing that by hand used to be the single most time-consuming thing
+about a cold start. It is now two commands:
 
 ```bash
-pip3 download raylib -d /tmp/rl --no-deps        # grab the wheel
-cd /tmp/rl && unzip -o raylib-*.whl -d rlwheel   # it contains raylib/*.so
+tools/sandbox-setup.sh     # fetch the wheel, generate rlshim/ — once
+tools/sandbox-build.sh     # build ./backrooms — dozens of times
 ```
 
-The wheel also carries `*.h.modified` files — cffi-preprocessed raylib
-headers. Turn those into a usable shim:
+`rlshim/` and `.rlwheel/` are generated and gitignored. What the setup script
+is doing, in case it ever needs changing: it copies the wheel's
+`{raylib,raymath,rlgl}.h.modified` into `rlshim/`, wraps each in `extern "C"`,
+puts back the `#define`s cffi strips (`PI`, `DEG2RAD`, `RAD2DEG`, the named
+`Color` constants, `MATERIAL_MAP_DIFFUSE`), and strips raymath's `inline`
+keyword so its functions resolve against the shared object.
 
-1. Copy `raylib.h.modified`, `raymath.h.modified`, `rlgl.h.modified` to
-   `rlshim/raylib.h`, `rlshim/raymath.h`, `rlshim/rlgl.h`.
-2. Add `#pragma once` and wrap each in `extern "C" { ... }`.
-3. cffi strips `#define`s, so restore what the game uses: `PI`, `DEG2RAD`,
-   `RAD2DEG`, the named `Color` constants (`WHITE`, `RED`, …), and
-   `MATERIAL_MAP_DIFFUSE` (which is an alias for `MATERIAL_MAP_ALBEDO`).
-4. raymath declares its functions `inline`; strip that keyword or they will
-   not resolve against the shared object.
-5. `raylib.h.modified`'s last line is a declaration with a trailing `//`
-   comment and **no trailing newline**, so a naive `echo '}'` to close the
-   `extern "C"` lands *inside that comment* and is swallowed. The build then
-   fails hundreds of lines away in `<initializer_list>` with "template with C
-   linkage". Insert the brace as its own line before appending anything else.
+Two things in there are load-bearing and non-obvious:
 
-Then build against the shim and link the wheel's `.so`:
-
-```bash
-c++ -std=c++17 -O2 -Wall -Wno-missing-field-initializers -Irlshim \
-    src/*.cpp -o backrooms \
-    /path/to/rlwheel/raylib/_raylib_cffi.cpython-*-linux-gnu.so \
-    -lpython3.11 -lm -ldl -lpthread
-```
-
-Keep that as a one-line script. You will run it dozens of times.
+- `raylib.h.modified`'s last line is a declaration with a trailing `//` comment
+  and **no trailing newline**, so appending `}` naively buries the brace inside
+  that comment. The `extern "C"` then never closes and the build fails hundreds
+  of lines away in `<initializer_list>` with "template with C linkage".
+- The wheel's `.so` must be linked by **absolute path with an `-rpath`**. Link
+  it relatively and the binary only runs from the repo root — it dies with
+  "cannot open shared object file" the moment anything runs it from elsewhere,
+  which `tools/shot.sh` does on every screenshot.
 
 ## Running headless, and taking screenshots
 
-There is no display in a sandbox, so run under Xvfb:
+There is no display in a sandbox, so everything runs under Xvfb. Use the
+script, which starts one if it needs to:
 
 ```bash
-export DISPLAY=:99
-Xvfb :99 -screen 0 1440x850x24 >/dev/null 2>&1 &
-sleep 2
-BACKROOMS_SEED=1337 BACKROOMS_LEVEL=0 BACKROOMS_POS="15,15,0.8" \
-  BACKROOMS_SHOT=shot.png ./backrooms
+tools/shot.sh out.png BACKROOMS_SEED=1337 BACKROOMS_LEVEL=0 \
+    BACKROOMS_POS=15,15,0.8 BACKROOMS_SHOTFRAME=80
 ```
 
 `BACKROOMS_SHOT` runs the game, captures one frame, and exits. Combined with
 `BACKROOMS_SEED` and `BACKROOMS_POS` the result is deterministic apart from
-light flicker, so the same command twice gives you comparable images.
+light flicker and the blackout schedule, so the same command twice gives you
+comparable images. Frames land in `shots/` (gitignored).
 
-**`TakeScreenshot` writes relative to the process working directory**, so pass
-a bare filename and `cd` to where you want the file.
+**`TakeScreenshot` writes relative to the process working directory** *and*
+rejects path separators outright, so it only ever gets a bare filename — which
+is why the script `cd`s into the output directory rather than passing a path.
+
+To look at the results numerically — which you should, because "it looks
+better" has been wrong here more than once:
+
+```bash
+tools/pixdiff.py crop shot.png zoom.png 850 560 500 290 2.0   # zoom a detail
+tools/pixdiff.py diff before.png after.png                    # what changed, and where
+```
+
+`diff` reports which eighth of the screen the differences land in, which is how
+you tell "I changed the HUD" from "I changed the world pass".
 
 ## Dev knobs
 
@@ -130,16 +133,14 @@ Before pushing anything that touches rendering, the shader, or world
 generation, run all five levels plus the menu and check for shader errors:
 
 ```bash
-for LV in 0 1 2 3 4; do
-  BACKROOMS_SEED=1337 BACKROOMS_LEVEL=$LV BACKROOMS_POS="15,15,0.8" \
-    BACKROOMS_SHOT=rg_lv$LV.png ./backrooms 2>/dev/null \
-    | grep -iE "SHADER: .*(failed|error)|ERROR:"
-done
-BACKROOMS_SEED=1337 BACKROOMS_MENU=1 BACKROOMS_SHOT=rg_menu.png ./backrooms 2>/dev/null \
-  | grep -iE "SHADER: .*(failed|error)"
+tools/sweep.sh
 ```
 
-Then **look at the images**. A clean exit code proves nothing; several real
+Then **look at the images**. If the change should not have touched the world
+pass, prove it: build the previous commit somewhere else and
+`tools/pixdiff.py diff` the two frames. A HUD-only change puts essentially all
+of its differing pixels in one corner; anything scattered through the frame
+means you moved the world. A clean exit code proves nothing; several real
 bugs in this game's history rendered perfectly valid frames that were wrong.
 
 A full sweep takes 10–20 minutes headless because the software rasteriser is
