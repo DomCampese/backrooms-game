@@ -776,5 +776,4 @@ void Game::drawDrinkCan(const Camera3D &cam) {
     m.m12 = pos.x;          m.m13 = pos.y;          m.m14 = pos.z;
     m.m15 = 1.0f;
     drawCan(m);
-    DrawMesh(handMesh, mats[6], m);   // the grip turns with it
 }
