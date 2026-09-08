@@ -163,6 +163,12 @@ void Game::init() {
     applyLevel(0);
     if (const char *lvEnv = getenv("BACKROOMS_LEVEL")) applyLevel(atoi(lvEnv) % NLEVELS);   // testing
 
+    // Testing: the torch is the only light in the game you aim, so it is the only
+    // one a fixed-position screenshot cannot otherwise exercise — and the beam
+    // now lights the air it crosses, which is exactly the sort of thing that has
+    // to be looked at rather than reasoned about.
+    if (getenv("BACKROOMS_FLASH")) { flashOn = true; flashCur = 1.0f; everFlashed = true; }
+
     inMenu = (shotPath == nullptr) || getenv("BACKROOMS_MENU") != nullptr;   // headless shots skip straight into the run
     if (!shotPath && !inMenu) DisableCursor();
 }
