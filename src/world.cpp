@@ -1155,44 +1155,6 @@ Mesh buildCanMesh() {
 }
 
 
-// The hand that holds the can. Modelled in the can's own space and drawn with
-// the can's transform, because the grip turns with it — so the fingers stay put
-// however far the can is tipped. Everything inside the barrel is hidden by it,
-// so only the parts that reach past the edge actually show.
-Mesh buildHandMesh() {
-    MB b;
-    const float R = 0.033f;
-    const Color w = { 255, 255, 255, 254 };   // smooth, like the can it holds
-    // the skin square is the last one in the atlas; one point in the middle of
-    // it is all this needs, since the shading comes from the normals
-    const Vector2 T = { 160.0f / 192.0f, 160.0f / 192.0f };
-    auto box = [&](Vector3 lo, Vector3 hi) {
-        const Vector3 p[8] = {
-            { lo.x, lo.y, lo.z }, { hi.x, lo.y, lo.z }, { hi.x, lo.y, hi.z }, { lo.x, lo.y, hi.z },
-            { lo.x, hi.y, lo.z }, { hi.x, hi.y, lo.z }, { hi.x, hi.y, hi.z }, { lo.x, hi.y, hi.z },
-        };
-        b.quad(p[7], p[6], p[5], p[4], {  0,  1,  0 }, T, T, T, T, w);   // top
-        b.quad(p[0], p[1], p[2], p[3], {  0, -1,  0 }, T, T, T, T, w);   // bottom
-        b.quad(p[3], p[2], p[6], p[7], {  0,  0,  1 }, T, T, T, T, w);   // near
-        b.quad(p[1], p[0], p[4], p[5], {  0,  0, -1 }, T, T, T, T, w);   // far
-        b.quad(p[0], p[3], p[7], p[4], { -1,  0,  0 }, T, T, T, T, w);   // left
-        b.quad(p[2], p[1], p[5], p[6], {  1,  0,  0 }, T, T, T, T, w);   // right
-    };
-    // Grip low. The label band runs from y 0.031 to 0.097 up the barrel, so a
-    // hand anywhere near the middle simply covers the thing it is holding.
-    // back of the hand, tucked behind and below
-    box({ -R * 1.25f, -0.004f, -R * 1.25f }, { R * 0.30f, 0.034f, -R * 0.45f });
-    // four fingers round the left side, tips just over the near face
-    for (int i = 0; i < 4; i++) {
-        float y0 = 0.002f + i * 0.0085f;
-        box({ -R * 1.25f, y0, -R * 0.85f }, { -R * 0.10f, y0 + 0.0062f, R * 0.98f });
-    }
-    // thumb, laid up the near side
-    box({ R * 0.15f, 0.002f, R * 0.45f }, { R * 0.62f, 0.030f, R * 0.96f });
-    return b.bake();
-}
-
-
 // The tape player, at life size with its underside on y=0, so one transform
 // puts it either on the floor or in your hand. UVs index makeDeckTex's four
 // tiles. Alpha 254 like the can: textured and opaque, but under the shader's

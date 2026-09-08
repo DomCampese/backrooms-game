@@ -78,7 +78,7 @@ struct Game {
     // resources
     Texture2D texEntity{}, texPartygoer{}, texProps{}, texScrawl{}, texAO{}, texOcc{}, texDog{},
               texAlmondWrap{}, texDeck{};
-    Mesh canMesh{}, handMesh{};                // the almond water can, and the hand on it
+    Mesh canMesh{};                            // the almond water can, real geometry
     Mesh deckMesh{}, reelMesh{}, deckLampMesh{};   // the tape player, its reels, its record lamp
     // light-occlusion grid: the floorplan around you, uploaded for the shader to
     // march. Recentred as you walk; OCC_N cells wide, so it always covers more

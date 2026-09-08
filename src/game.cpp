@@ -40,7 +40,6 @@ void Game::init() {
     texDog = makeDogTex();
     texAlmondWrap = makeAlmondWrapTex();
     canMesh = buildCanMesh();
-    handMesh = buildHandMesh();
     texDeck = makeDeckTex();
     deckMesh = buildDeckMesh();
     reelMesh = buildReelMesh();
