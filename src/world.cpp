@@ -88,7 +88,7 @@ void World::generate(ChunkData &d, int cx, int cz) {
         for (int i = a; i <= end; i++) {
             if (i == doorAt) continue;
             // rarely a window instead of blank wall; behind it, nothing
-            uint8_t v = ((level == 0 || level == 3) && rng.f01() < 0.035f) ? 3 : 1;
+            uint8_t v = ((level == 0 || level == 3) && rng.f01() < 0.035f) ? WALL_WINDOW : WALL_SOLID;
             if (horiz) d.wallN[i][b] = v; else d.wallW[b][i] = v;
         }
     }
@@ -103,20 +103,25 @@ void World::generate(ChunkData &d, int cx, int cz) {
         if (d.pillar[a][b] || d.prop[a][b]) continue;
         float f = rng.f01();
         if (level == 1)                                                    // warehouse
-            d.prop[a][b] = f < 0.45f ? 1 : f < 0.65f ? 2 : f < 0.80f ? 3 : f < 0.96f ? 13 : 10;
+            d.prop[a][b] = f < 0.45f ? PROP_BOXES : f < 0.65f ? PROP_CABINET : f < 0.80f ? PROP_TABLE
+                         : f < 0.96f ? PROP_SHELVING : PROP_VENDING;
         else if (level == 3)                                               // red halls: someone's bedroom
-            d.prop[a][b] = f < 0.30f ? 9 : f < 0.55f ? 6 : f < 0.80f ? 8 : 7;
+            d.prop[a][b] = f < 0.30f ? PROP_BED : f < 0.55f ? PROP_ARMOIRE : f < 0.80f ? PROP_NIGHTSTAND
+                         : PROP_LAMP;
         else if (level == 4)                                               // level fun: the party never ended
-            d.prop[a][b] = f < 0.52f ? 11 : f < 0.70f ? 1 : f < 0.82f ? 5 : f < 0.93f ? 3 : 10;
+            d.prop[a][b] = f < 0.52f ? PROP_PARTY_TABLE : f < 0.70f ? PROP_BOXES : f < 0.82f ? PROP_COUCH
+                         : f < 0.93f ? PROP_TABLE : PROP_VENDING;
         else   // L0: office clutter — desks someone worked at — plus furniture that has no business here
-            d.prop[a][b] = f < 0.20f ? 1 : f < 0.31f ? 2 : f < 0.39f ? 3 : f < 0.49f ? 4 :
-                           f < 0.58f ? 5 : f < 0.65f ? 6 : f < 0.70f ? 7 : f < 0.74f ? 8 :
-                           f < 0.77f ? 9 : f < 0.80f ? 10 : f < 0.90f ? 12 : f < 0.94f ? 13 :
-                           f < 0.97f ? 14 : 15;
+            d.prop[a][b] = f < 0.20f ? PROP_BOXES : f < 0.31f ? PROP_CABINET : f < 0.39f ? PROP_TABLE
+                         : f < 0.49f ? PROP_FALLEN_TILE : f < 0.58f ? PROP_COUCH : f < 0.65f ? PROP_ARMOIRE
+                         : f < 0.70f ? PROP_LAMP : f < 0.74f ? PROP_NIGHTSTAND : f < 0.77f ? PROP_BED
+                         : f < 0.80f ? PROP_VENDING : f < 0.90f ? PROP_DESK : f < 0.94f ? PROP_SHELVING
+                         : f < 0.97f ? PROP_COOLER : PROP_PLANT;
         d.propRot[a][b] = (uint8_t)rng.ri(0, 3);
         // boxes like company: sometimes a neighbouring stack
-        if (d.prop[a][b] == 1 && a + 1 < CCELLS && rng.f01() < 0.4f && !d.pillar[a + 1][b] && !d.prop[a + 1][b]) {
-            d.prop[a + 1][b] = 1; d.propRot[a + 1][b] = (uint8_t)rng.ri(0, 3);
+        if (d.prop[a][b] == PROP_BOXES && a + 1 < CCELLS && rng.f01() < 0.4f &&
+            !d.pillar[a + 1][b] && !d.prop[a + 1][b]) {
+            d.prop[a + 1][b] = PROP_BOXES; d.propRot[a + 1][b] = (uint8_t)rng.ri(0, 3);
         }
     }
     if (level == 2) {   // sunken pools where noise blobs say so, never under walls
@@ -158,13 +163,15 @@ void World::generate(ChunkData &d, int cx, int cz) {
         bool placed = false;
         for (int i = 1; i < CCELLS - 1 && !placed; i++)
             for (int kk = 0; kk < CCELLS && !placed; kk++)
-                if (d.wallN[i][kk] == 1 && d.wallN[i - 1][kk] == 1 && d.wallN[i + 1][kk] == 1) {
-                    d.wallN[i][kk] = 2; placed = true;
+                if (d.wallN[i][kk] == WALL_SOLID && d.wallN[i - 1][kk] == WALL_SOLID &&
+                    d.wallN[i + 1][kk] == WALL_SOLID) {
+                    d.wallN[i][kk] = WALL_EXIT; placed = true;
                 }
         for (int i = 0; i < CCELLS && !placed; i++)
             for (int kk = 1; kk < CCELLS - 1 && !placed; kk++)
-                if (d.wallW[i][kk] == 1 && d.wallW[i][kk - 1] == 1 && d.wallW[i][kk + 1] == 1) {
-                    d.wallW[i][kk] = 2; placed = true;
+                if (d.wallW[i][kk] == WALL_SOLID && d.wallW[i][kk - 1] == WALL_SOLID &&
+                    d.wallW[i][kk + 1] == WALL_SOLID) {
+                    d.wallW[i][kk] = WALL_EXIT; placed = true;
                 }
     }
     if (cx == 0 && cz == 0) {   // clear spawn room
@@ -172,7 +179,7 @@ void World::generate(ChunkData &d, int cx, int cz) {
             d.wallN[i][kk] = d.wallW[i][kk] = d.pillar[i][kk] = d.prop[i][kk] = d.pool[i][kk] = 0;
             d.elev[i][kk] = 0;
         }
-        if (exitTest) { d.wallN[6][11] = 1; d.wallN[7][11] = 2; d.wallN[8][11] = 1; }
+        if (exitTest) { d.wallN[6][11] = WALL_SOLID; d.wallN[7][11] = WALL_EXIT; d.wallN[8][11] = WALL_SOLID; }
     }
 }
 
@@ -200,14 +207,14 @@ bool World::poolAt(int ci, int ck) {
 float World::floorY(int ci, int ck) {
     if (poolAt(ci, ck)) return -0.6f;
     int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
-    return data(cx, cz).elev[ci - cx * CCELLS][ck - cz * CCELLS] * 0.1f;
+    return data(cx, cz).elev[ci - cx * CCELLS][ck - cz * CCELLS] * ELEV_UNIT;
 }
 
 bool World::softAt(int ci, int ck) {
     if (level != 0) return false;
     if (abs(ci) <= 10 && abs(ck) <= 10) return false;   // never near where you wake up
     if (ih(ci, ck, (uint32_t)seed ^ 0x50F7u) % 523 != 0) return false;
-    return !pillarAt(ci, ck) && propAt(ci, ck) == 0 && floorY(ci, ck) == 0.0f;
+    return !pillarAt(ci, ck) && propAt(ci, ck) == PROP_NONE && floorY(ci, ck) == 0.0f;
 }
 
 bool World::cursedExit(int ci, int ck) {
@@ -219,8 +226,13 @@ bool World::cursedExit(int ci, int ck) {
 bool World::valveAt(int ci, int ck) {
     if (level != 3) return false;
     if (ih(ci, ck, (uint32_t)seed ^ 0x7A17u) % 149 != 0) return false;
-    return !pillarAt(ci, ck) && propAt(ci, ck) == 0 && wallNVal(ci, ck) != 1 && wallWVal(ci, ck) != 1;
+    return !pillarAt(ci, ck) && propAt(ci, ck) == PROP_NONE &&
+           wallNVal(ci, ck) != WALL_SOLID && wallWVal(ci, ck) != WALL_SOLID;
 }
+
+// Baked contact-shadow tint. The AO strip texture carries the falloff in its
+// alpha channel, so wall creases and furniture shadows all share this one colour.
+static const Color AO_TINT = { 10, 9, 9, 255 };
 
 // rotated prop box: 4 sides + top, one UV region for sides, another for the top
 static void addPropBox(MB &mb, float cx, float cz, float yaw, float hx, float hz, float y0, float y1,
@@ -276,6 +288,278 @@ static void addBoxSides(MB &mb, float x0, float y0, float z0, float x1, float y1
         mb.quad({x0,y0,z0},{x1,y0,z0},{x1,y0,z1},{x0,y0,z1},{0,-1,0},{x0/3,z0/3},{x1/3,z0/3},{x1/3,z1/3},{x0/3,z1/3},w);
 }
 
+// Where a piece of furniture goes, and the handful of numbers that make each
+// one of a kind slightly different from the next.
+struct PropSite {
+    float cx, cz;    // cell centre, in world metres
+    float floorY;    // the floor under this cell — furniture stands on it
+    float rot;       // yaw, from ChunkData::propRot
+    int gi, gk;      // global cell coordinates: the seed for this piece's variations
+};
+
+// Build one piece of furniture into a chunk's meshes. Most of a prop is boxes
+// in the props mesh; the collapsed-tile prop also cuts a hole in the ceiling
+// mesh, and every piece lays a contact shadow into the AO mesh.
+//
+// Each piece is deliberately a handful of boxes rather than a model: everything
+// in this game is generated, and furniture that reads correctly at corridor
+// range is worth far more than furniture that reads correctly close up.
+static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level,
+                    MB &pr, MB &ce, MB &ao) {
+    const float pcx = site.cx, pcz = site.cz, rot = site.rot, ey = site.floorY;
+    uint32_t h = ih(site.gi, site.gk, seed ^ 0xB0B5u);
+    float r1 = (h & 0xFF) / 255.0f, r2 = ((h >> 8) & 0xFF) / 255.0f, r3 = ((h >> 16) & 0xFF) / 255.0f;
+    // UV regions of the prop atlas
+    const float CU0=0.02f, CV0=0.02f, CU1=0.48f, CV1=0.98f;       // cardboard
+    const float FU0=0.52f, FV0=0.02f, FU1=0.98f, FV1=0.48f;       // cabinet front
+    const float MU0=0.52f, MV0=0.52f, MU1=0.98f, MV1=0.98f;       // plain metal
+    float ca = cosf(rot), sa = sinf(rot);
+    // rotated sub-box placed relative to the prop centre
+    auto part = [&](float ox, float oz, float hx2, float hz2, float y0, float y1,
+                    bool wood, Color tint) {
+        addPropBox(pr, pcx + ox * ca - oz * sa, pcz + ox * sa + oz * ca, rot, hx2, hz2, y0, y1,
+                   wood ? CU0 : MU0, wood ? CV0 : MV0, wood ? CU1 : MU1, wood ? CV1 : MV1,
+                   wood ? CU0 : MU0, wood ? CV0 : MV0, wood ? CU1 : MU1, wood ? CV1 : MV1, tint);
+    };
+    // Contact shadow under the piece. This used to be one flat quad with
+    // all four UVs pinned to a single texel, so it had no gradient at
+    // all — every piece of furniture stood on a hard black rectangle
+    // larger than itself, with a visible straight edge on the floor.
+    // Lay it into the AO mesh instead and use the same falloff the wall
+    // creases use: solid under the piece, fading to nothing past it.
+    auto blob = [&](float hx2, float hz2) {
+        const float S = 0.24f;                    // how far the falloff reaches
+        const float d = S * 0.7071f;              // the corner, cut across
+        const Vector3 up = { 0, 1, 0 };
+        auto P = [&](float lx, float lz) {
+            return Vector3{ pcx + lx * ca - lz * sa, ey + 0.006f, pcz + lx * sa + lz * ca };
+        };
+        // core, right under the piece: darkest end of the gradient
+        ao.quad(P(-hx2,-hz2), P(hx2,-hz2), P(hx2,hz2), P(-hx2,hz2), up,
+                {0,0},{1,0},{1,0},{0,0}, AO_TINT);
+        // four skirts fading outward. Each inner edge runs so the quad
+        // stays wound the same way round as the core.
+        const float sd[4][6] = {
+            {  hx2,-hz2, -hx2,-hz2,  0,  -S },
+            {  hx2, hz2,  hx2,-hz2,  S,   0 },
+            { -hx2, hz2,  hx2, hz2,  0,   S },
+            { -hx2,-hz2, -hx2, hz2, -S,   0 },
+        };
+        for (auto &e : sd)
+            ao.quad(P(e[0], e[1]), P(e[2], e[3]),
+                    P(e[2] + e[4], e[3] + e[5]), P(e[0] + e[4], e[1] + e[5]), up,
+                    {0,0},{1,0},{1,1},{0,1}, AO_TINT);
+        // and the corners, so the skirt closes instead of leaving notches
+        const float cn[4][4] = {
+            {  hx2,  hz2,  1,  1 }, { -hx2,  hz2, -1,  1 },
+            { -hx2, -hz2, -1, -1 }, {  hx2, -hz2,  1, -1 },
+        };
+        for (auto &c2 : cn) {
+            Vector3 inner = P(c2[0], c2[1]);
+            Vector3 pxv = P(c2[0] + c2[2] * S, c2[1]);
+            Vector3 pmv = P(c2[0] + c2[2] * d, c2[1] + c2[3] * d);
+            Vector3 pzv = P(c2[0], c2[1] + c2[3] * S);
+            bool xFirst = (c2[2] * c2[3]) > 0;    // keeps the winding consistent
+            Vector3 a1 = xFirst ? pxv : pzv, b1 = xFirst ? pzv : pxv;
+            ao.tri(inner, a1, pmv, up, {0,0},{0,1},{1,1}, AO_TINT);
+            ao.tri(inner, pmv, b1, up, {0,0},{1,1},{0,1}, AO_TINT);
+        }
+    };
+    switch (kind) {
+    case PROP_BOXES: {   // box stack — on LEVEL FUN they're wrapped like presents,
+                // and the packing tape reads as ribbon
+        blob(0.40f, 0.40f);
+        float bh = 0.55f + r1 * 0.2f, bhx = 0.34f + r2 * 0.08f;
+        auto wrap = [&](int rot2) {
+            if (level != 4) return WHITE;
+            Color c = PARTY[(h >> rot2) % 5];
+            return Color{ cl8(c.r * 0.9f + 46), cl8(c.g * 0.9f + 46), cl8(c.b * 0.9f + 46), 255 };
+        };
+        addPropBox(pr, pcx + (r3 - 0.5f) * 0.5f, pcz + (r1 - 0.5f) * 0.5f, rot + r2,
+                   bhx, bhx, ey, ey + bh, CU0, CV0, CU1, CV1, CU0, CV0, CU1, CV1, wrap(5));
+        if (r2 > 0.35f)   // second box on top, skewed
+            addPropBox(pr, pcx + (r3 - 0.5f) * 0.5f + 0.06f, pcz + (r1 - 0.5f) * 0.5f - 0.05f,
+                       rot + r2 + 0.5f, bhx * 0.8f, bhx * 0.8f, ey + bh, ey + bh + 0.5f,
+                       CU0, CV0, CU1, CV1, CU0, CV0, CU1, CV1, wrap(9));
+        if (r1 > 0.6f)    // third box beside
+            addPropBox(pr, pcx + 0.62f, pcz + 0.3f, rot + r3 * 2, 0.27f, 0.27f, ey, ey + 0.5f,
+                       CU0, CV0, CU1, CV1, CU0, CV0, CU1, CV1, wrap(13));
+        break;
+    }
+    case PROP_CABINET:     // filing cabinet
+        blob(0.34f, 0.42f);
+        addPropBox(pr, pcx, pcz, rot, 0.26f, 0.34f, ey, ey + 1.32f,
+                   FU0, FV0, FU1, FV1, MU0, MV0, MU1, MV1);
+        break;
+    case PROP_TABLE: {   // folding table
+        blob(0.58f, 0.40f);
+        float ty = 0.72f;
+        addPropBox(pr, pcx, pcz, rot, 0.62f, 0.40f, ey + ty - 0.04f, ey + ty,
+                   MU0, MV0, MU1, MV1, MU0, MV0, MU1, MV1);
+        for (int lx = -1; lx <= 1; lx += 2) for (int lz = -1; lz <= 1; lz += 2) {
+            float ox = lx * 0.54f, oz = lz * 0.32f;
+            addPropBox(pr, pcx + ox * ca - oz * sa, pcz + ox * sa + oz * ca, rot,
+                       0.03f, 0.03f, ey, ey + ty - 0.04f, MU0, MV0, MU1, MV1, MU0, MV0, MU1, MV1);
+        }
+        break;
+    }
+    case PROP_FALLEN_TILE: {   // collapsed ceiling: dark hole above, tile leaning below, debris
+        // 2.994 is just under a 3 m ceiling. Only Level 0 generates this prop,
+        // and Level 0 is the 3 m one — see LEVELS in levels.cpp.
+        Color hole = { 12, 11, 9, 51 };
+        ce.quad({pcx-0.85f,2.994f,pcz-0.85f},{pcx-0.85f,2.994f,pcz+0.85f},
+                {pcx+0.85f,2.994f,pcz+0.85f},{pcx+0.85f,2.994f,pcz-0.85f},{0,-1,0},
+                {0,0},{0,1},{1,1},{1,0}, hole);
+        float bx0 = pcx - 0.58f * ca, bz0 = pcz - 0.58f * sa;   // base edge on floor
+        float tx = pcx + 0.35f * ca, tz = pcz + 0.35f * sa;     // top edge, lifted
+        Vector3 a = { bx0 - 0.58f * sa, ey + 0.02f, bz0 + 0.58f * ca };
+        Vector3 b = { bx0 + 0.58f * sa, ey + 0.02f, bz0 - 0.58f * ca };
+        Vector3 c2 = { tx + 0.58f * sa, ey + 0.42f, tz - 0.58f * ca };
+        Vector3 dq = { tx - 0.58f * sa, ey + 0.42f, tz + 0.58f * ca };
+        ce.quad(a, b, c2, dq, { -ca * 0.5f, 0.87f, -sa * 0.5f },
+                {0.05f,0.45f},{0.45f,0.45f},{0.45f,0.05f},{0.05f,0.05f}, WHITE);
+        Color deb = { 110, 105, 95, 255 };
+        ce.quad({pcx+0.4f,ey+0.012f,pcz+0.5f},{pcx+0.75f,ey+0.012f,pcz+0.55f},
+                {pcx+0.7f,ey+0.012f,pcz+0.85f},{pcx+0.38f,ey+0.012f,pcz+0.8f},{0,1,0},
+                {0.1f,0.1f},{0.3f,0.1f},{0.3f,0.3f},{0.1f,0.3f}, deb);
+        ce.quad({pcx-0.7f,ey+0.012f,pcz-0.35f},{pcx-0.45f,ey+0.012f,pcz-0.42f},
+                {pcx-0.4f,ey+0.012f,pcz-0.2f},{pcx-0.68f,ey+0.012f,pcz-0.15f},{0,1,0},
+                {0.3f,0.3f},{0.45f,0.3f},{0.45f,0.45f},{0.3f,0.45f}, deb);
+        break;
+    }
+    case PROP_COUCH: {   // couch: mustard upholstery gone grey, facing nothing in particular
+        blob(0.74f, 0.48f);
+        Color uph = { 172, 152, 96, 255 };
+        part(0, 0.10f, 0.78f, 0.42f, ey + 0.16f, ey + 0.44f, false, uph);   // seat
+        part(0, -0.36f, 0.78f, 0.14f, ey + 0.16f, ey + 0.92f, false, uph);  // backrest
+        part(-0.64f, 0.06f, 0.14f, 0.46f, ey, ey + 0.62f, false, uph);      // arms
+        part( 0.64f, 0.06f, 0.14f, 0.46f, ey, ey + 0.62f, false, uph);
+        part(0, 0.10f, 0.74f, 0.38f, ey, ey + 0.16f, false, Color{ 120, 106, 70, 255 });
+        break;
+    }
+    case PROP_ARMOIRE:     // armoire: a wardrobe looming where no bedroom is
+        blob(0.54f, 0.46f);
+        part(0, 0, 0.44f, 0.36f, ey, ey + 1.78f, true, Color{ 118, 82, 58, 255 });
+        part(0, 0, 0.48f, 0.40f, ey + 1.78f, ey + 1.90f, true, Color{ 92, 63, 44, 255 });  // cornice
+        part(0, 0.37f, 0.015f, 0.015f, ey + 0.85f, ey + 1.0f, false, Color{ 190, 170, 110, 255 }); // handles
+        break;
+    case PROP_LAMP:     // floor lamp, shade askew, never lit
+        blob(0.22f, 0.22f);
+        part(0, 0, 0.14f, 0.14f, ey, ey + 0.05f, false, Color{ 66, 62, 60, 255 });
+        part(0, 0, 0.025f, 0.025f, ey, ey + 1.34f, false, Color{ 66, 62, 60, 255 });
+        addPropBox(pr, pcx + 0.05f, pcz, rot + 0.3f, 0.17f, 0.17f, ey + 1.30f, ey + 1.60f,
+                   CU0, CV0, CU1, CV1, CU0, CV0, CU1, CV1, Color{ 214, 190, 142, 255 });
+        break;
+    case PROP_NIGHTSTAND:     // nightstand, nowhere near a bed. usually.
+        blob(0.36f, 0.36f);
+        part(0, 0, 0.26f, 0.26f, ey, ey + 0.55f, true, Color{ 126, 90, 62, 255 });
+        part(0, 0, 0.30f, 0.30f, ey + 0.55f, ey + 0.60f, true, Color{ 104, 74, 50, 255 });
+        break;
+    case PROP_BED: {   // bed: bare stained mattress, headboard against nothing
+        blob(0.60f, 1.02f);
+        Color wd = { 110, 78, 54, 255 };
+        part(0, 0, 0.52f, 0.92f, ey + 0.12f, ey + 0.26f, true, wd);          // frame
+        part(0, 0.04f, 0.48f, 0.86f, ey + 0.26f, ey + 0.46f, true, Color{ 216, 208, 188, 255 }); // mattress
+        part(0, -0.97f, 0.52f, 0.05f, ey, ey + 0.95f, true, wd);             // headboard
+        break;
+    }
+    case PROP_PARTY_TABLE: {  // party table: paper cloth, a cake nobody cut, cups nobody drank
+        blob(0.52f, 0.52f);
+        float ty = 0.74f;
+        uint32_t th = ih(site.gi, site.gk, seed ^ 0xCAFEu);
+        Color cloth = PARTY[th % 5];
+        part(0, 0, 0.55f, 0.55f, ey + ty - 0.05f, ey + ty, false, cloth);
+        for (int lx = -1; lx <= 1; lx += 2) for (int lz = -1; lz <= 1; lz += 2)
+            part(lx * 0.44f, lz * 0.44f, 0.035f, 0.035f, ey, ey + ty - 0.05f,
+                 false, Color{ 120, 118, 112, 255 });
+        part(0, 0, 0.17f, 0.17f, ey + ty, ey + ty + 0.16f, false, Color{ 238, 232, 220, 255 });   // cake
+        part(0, 0, 0.11f, 0.11f, ey + ty + 0.16f, ey + ty + 0.26f, false, Color{ 232, 152, 172, 255 });
+        part(0, 0, 0.013f, 0.013f, ey + ty + 0.26f, ey + ty + 0.37f, false, Color{ 240, 226, 172, 255 }); // candle
+        {   // paper cups set out around the cake, in party colours
+            int ncup = 3 + (th % 4);
+            for (int c = 0; c < ncup; c++) {
+                uint32_t ch = th * 2654435761u + (uint32_t)c * 40503u;
+                float ang = (ch & 0xFFFF) / 65535.0f * TAU;
+                float rad = 0.30f + ((ch >> 16) & 0xFF) / 255.0f * 0.15f;
+                part(cosf(ang) * rad, sinf(ang) * rad, 0.04f, 0.04f,
+                     ey + ty, ey + ty + 0.09f, false, PARTY[(ch >> 5) % 5]);
+            }
+        }
+        {   // ...and the candle is still lit. nobody lit it. two crossed
+            // emissive fins make a little flame that survives blackouts
+            auto fpt = [&](float lx, float ly2, float lz) {
+                return Vector3{ pcx + lx * ca - lz * sa, ly2, pcz + lx * sa + lz * ca };
+            };
+            Color flame = { 255, 196, 110, 70 };   // alpha <0.4: raw emissive in the shader
+            float fy0 = ey + ty + 0.37f, fy1 = fy0 + 0.055f;
+            pr.quad(fpt(-0.022f, fy0, 0), fpt(0.022f, fy0, 0), fpt(0.013f, fy1, 0), fpt(-0.013f, fy1, 0),
+                    { sa, 0, -ca }, {0,1},{1,1},{1,0},{0,0}, flame);
+            pr.quad(fpt(0, fy0, -0.022f), fpt(0, fy0, 0.022f), fpt(0, fy1, 0.013f), fpt(0, fy1, -0.013f),
+                    { ca, 0, sa }, {0,1},{1,1},{1,0},{0,0}, flame);
+        }
+        break;
+    }
+    case PROP_VENDING: {  // vending machine: still stocked, still humming, takes doubloons
+        blob(0.52f, 0.44f);
+        part(0, 0, 0.44f, 0.36f, ey, ey + 1.85f, false, Color{ 148, 152, 158, 255 });
+        auto ptv2 = [&](float lx, float ly2, float lz) {
+            return Vector3{ pcx + lx * ca - lz * sa, ly2, pcz + lx * sa + lz * ca };
+        };
+        Color panel = { 66, 90, 122, 60 };   // emissive front: soft cold glow
+        pr.quad(ptv2(-0.28f, ey + 0.55f, -0.375f), ptv2(0.28f, ey + 0.55f, -0.375f),
+                ptv2(0.28f, ey + 1.68f, -0.375f), ptv2(-0.28f, ey + 1.68f, -0.375f),
+                { sa, 0, -ca }, {0,1},{1,1},{1,0},{0,0}, panel);
+        break;
+    }
+    case PROP_DESK: {  // office desk: chair shoved back, monitor long dead. someone worked here
+        blob(0.72f, 0.52f);
+        Color wd = { 104, 80, 56, 255 };
+        part(0, -0.12f, 0.62f, 0.34f, ey + 0.70f, ey + 0.74f, true, wd);      // desktop
+        part(-0.46f, -0.12f, 0.14f, 0.30f, ey, ey + 0.70f, true, wd);         // pedestals
+        part( 0.46f, -0.12f, 0.14f, 0.30f, ey, ey + 0.70f, true, wd);
+        part(0.08f, -0.22f, 0.19f, 0.035f, ey + 0.76f, ey + 1.08f, false, Color{ 30, 30, 34, 255 }); // monitor
+        part(0.08f, -0.14f, 0.06f, 0.06f, ey + 0.74f, ey + 0.77f, false, Color{ 38, 38, 42, 255 });  // its foot
+        part(-0.30f, -0.14f, 0.11f, 0.08f, ey + 0.74f, ey + 0.765f, false, Color{ 200, 196, 186, 255 }); // papers
+        part(0.02f + r1 * 0.1f, 0.44f, 0.20f, 0.20f, ey + 0.40f, ey + 0.46f, false, Color{ 52, 50, 54, 255 }); // chair seat
+        part(0.02f + r1 * 0.1f, 0.62f, 0.20f, 0.04f, ey + 0.46f, ey + 0.96f, false, Color{ 52, 50, 54, 255 }); // backrest
+        part(0.02f + r1 * 0.1f, 0.44f, 0.035f, 0.035f, ey, ey + 0.40f, false, Color{ 72, 72, 76, 255 });        // post
+        break;
+    }
+    case PROP_SHELVING: {  // steel shelving, half-emptied in a hurry
+        blob(0.68f, 0.32f);
+        Color mt = { 132, 136, 142, 255 };
+        for (int s2 = 0; s2 <= 3; s2++)
+            part(0, 0, 0.60f, 0.24f, ey + 0.08f + s2 * 0.55f, ey + 0.12f + s2 * 0.55f, false, mt);
+        // corner posts, not full-depth panels — side-on you see *through* the rack
+        for (int ux = -1; ux <= 1; ux += 2) for (int uz = -1; uz <= 1; uz += 2)
+            part(ux * 0.575f, uz * 0.215f, 0.03f, 0.03f, ey, ey + 1.80f, false, mt);
+        part(-0.25f, 0.0f, 0.16f, 0.16f, ey + 0.12f, ey + 0.44f, true, Color{ 168, 138, 100, 255 });  // what's left
+        part( 0.30f, 0.02f, 0.14f, 0.14f, ey + 0.67f, ey + 0.94f, true, Color{ 150, 122, 88, 255 });
+        if (r2 > 0.4f)
+            part(-0.06f, -0.02f, 0.12f, 0.12f, ey + 1.22f, ey + 1.44f, true, Color{ 174, 146, 106, 255 });
+        break;
+    }
+    case PROP_COOLER: {  // water cooler. the water is not almond
+        blob(0.30f, 0.30f);
+        part(0, 0, 0.19f, 0.19f, ey, ey + 0.94f, false, Color{ 204, 206, 210, 255 });   // body
+        part(0, 0, 0.125f, 0.125f, ey + 0.94f, ey + 1.28f, false, Color{ 150, 186, 214, 255 });  // bottle
+        part(0, 0.205f, 0.05f, 0.02f, ey + 0.58f, ey + 0.66f, false, Color{ 88, 90, 94, 255 });  // tap
+        break;
+    }
+    case PROP_PLANT: {  // potted plant. still green. nobody waters it
+        blob(0.26f, 0.26f);
+        part(0, 0, 0.17f, 0.17f, ey, ey + 0.09f, false, Color{ 120, 70, 48, 255 });    // saucer
+        part(0, 0, 0.145f, 0.145f, ey + 0.02f, ey + 0.32f, false, Color{ 146, 88, 58, 255 });  // pot
+        part(0, 0, 0.032f, 0.032f, ey + 0.32f, ey + 0.88f, false, Color{ 76, 66, 44, 255 });   // stem
+        addPropBox(pr, pcx, pcz, rot + 0.6f, 0.30f, 0.06f, ey + 0.55f, ey + 1.06f,
+                   MU0, MV0, MU1, MV1, MU0, MV0, MU1, MV1, Color{ 56, 96, 50, 255 });          // fronds
+        addPropBox(pr, pcx, pcz, rot + 2.1f, 0.06f, 0.30f, ey + 0.64f, ey + 1.14f,
+                   MU0, MV0, MU1, MV1, MU0, MV0, MU1, MV1, Color{ 64, 108, 56, 255 });
+        break;
+    }
+    }
+}
+
 void World::ensureMesh(int cx, int cz) {
     ChunkData &d = data(cx, cz);
     if (d.built) return;
@@ -285,11 +569,10 @@ void World::ensureMesh(int cx, int cz) {
     // ---- baked ambient occlusion: gradient decals hugging every crease where
     // geometry meets. The strip texture fades alpha from the crease (v=0)
     // outward (v=1), so walls sit *in* the room instead of on top of it.
-    Color aoc = { 10, 9, 9, 255 };
     auto aoStrip = [&](Vector3 e0, Vector3 e1, Vector3 off, Vector3 nn, float v0) {
         ao.quad(e0, e1, { e1.x + off.x, e1.y + off.y, e1.z + off.z },
                 { e0.x + off.x, e0.y + off.y, e0.z + off.z }, nn,
-                { 0, v0 }, { 1, v0 }, { 1, 1 }, { 0, 1 }, aoc);
+                { 0, v0 }, { 1, v0 }, { 1, 1 }, { 0, 1 }, AO_TINT);
     };
     const float AOW = 0.55f;   // reach across the floor / ceiling
     const float AOH = 0.48f;   // creep up / down the wall face
@@ -343,7 +626,7 @@ void World::ensureMesh(int cx, int cz) {
         };
         for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
             float gx = wx + i * CELL, gz = wz + kk * CELL;
-            float fy = d.elev[i][kk] * 0.1f;
+            float fy = d.elev[i][kk] * ELEV_UNIT;
             fl.quad({gx,fy,gz},{gx+CELL,fy,gz},{gx+CELL,fy,gz+CELL},{gx,fy,gz+CELL},{0,1,0},
                     {gx/2,gz/2},{(gx+CELL)/2,gz/2},{(gx+CELL)/2,(gz+CELL)/2},{gx/2,(gz+CELL)/2},wcol);
             if (level == 0 && softAt(cx * CCELLS + i, cz * CCELLS + kk)) {
@@ -392,13 +675,12 @@ void World::ensureMesh(int cx, int cz) {
     for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
         float gx = wx + i * CELL, gz = wz + kk * CELL;
         uint8_t nv = dd.wallN[i][kk];
-        if (nv == 1) {
+        if (nv == WALL_SOLID) {
             int gi0 = cx * CCELLS + i, gk0 = cz * CCELLS + kk;
-            auto runs = [&](uint8_t v) { return v == 1 || v == 3; };
-            int sk = (runs(wallNVal(gi0 - 1, gk0)) ? 4 : 0) | (runs(wallNVal(gi0 + 1, gk0)) ? 8 : 0);
+            int sk = (blocksEdge(wallNVal(gi0 - 1, gk0)) ? 4 : 0) | (blocksEdge(wallNVal(gi0 + 1, gk0)) ? 8 : 0);
             addBoxSides(wa, gx - WT, 0, gz - WT, gx + CELL + WT, wallH, gz + WT, false, sk);
         }
-        else if (nv == 3) {   // window on x-running wall; behind the glass, nothing
+        else if (nv == WALL_WINDOW) {   // window on x-running wall; behind the glass, nothing
             addBoxSides(wa, gx - WT, 0, gz - WT, gx + CELL + WT, 1.0f, gz + WT);
             addBoxSides(wa, gx - WT, 2.1f, gz - WT, gx + CELL + WT, wallH, gz + WT, true);
             addBoxSides(wa, gx - WT, 1.0f, gz - WT, gx + 0.45f, 2.1f, gz + WT);
@@ -410,7 +692,7 @@ void World::ensureMesh(int cx, int cz) {
             gl.quad({gx+0.45f,1.0f,gz},{gx+1.55f,1.0f,gz},{gx+1.55f,2.1f,gz},{gx+0.45f,2.1f,gz},
                     {0,0,-1},{0,1},{1,1},{1,0},{0,0}, glass);
         }
-        else if (nv == 2) {   // exit doorway on x-running wall
+        else if (nv == WALL_EXIT) {   // exit doorway on x-running wall
             addBoxSides(wa, gx - WT, 0, gz - WT, gx + 0.35f, wallH, gz + WT);
             addBoxSides(wa, gx + 1.65f, 0, gz - WT, gx + CELL + WT, wallH, gz + WT);
             addBoxSides(wa, gx + 0.35f, 2.3f, gz - WT, gx + 1.65f, wallH, gz + WT, true);
@@ -421,13 +703,12 @@ void World::ensureMesh(int cx, int cz) {
                     {0,1},{1,1},{1,0},{0,0},glow);
         }
         uint8_t wv = dd.wallW[i][kk];
-        if (wv == 1) {
+        if (wv == WALL_SOLID) {
             int gi0 = cx * CCELLS + i, gk0 = cz * CCELLS + kk;
-            auto runs = [&](uint8_t v) { return v == 1 || v == 3; };
-            int sk = (runs(wallWVal(gi0, gk0 - 1)) ? 1 : 0) | (runs(wallWVal(gi0, gk0 + 1)) ? 2 : 0);
+            int sk = (blocksEdge(wallWVal(gi0, gk0 - 1)) ? 1 : 0) | (blocksEdge(wallWVal(gi0, gk0 + 1)) ? 2 : 0);
             addBoxSides(wa, gx - WT, 0, gz - WT, gx + WT, wallH, gz + CELL + WT, false, sk);
         }
-        else if (wv == 3) {   // window on z-running wall
+        else if (wv == WALL_WINDOW) {   // window on z-running wall
             addBoxSides(wa, gx - WT, 0, gz - WT, gx + WT, 1.0f, gz + CELL + WT);
             addBoxSides(wa, gx - WT, 2.1f, gz - WT, gx + WT, wallH, gz + CELL + WT, true);
             addBoxSides(wa, gx - WT, 1.0f, gz - WT, gx + WT, 2.1f, gz + 0.45f);
@@ -438,7 +719,7 @@ void World::ensureMesh(int cx, int cz) {
             gl.quad({gx,1.0f,gz+0.45f},{gx,1.0f,gz+1.55f},{gx,2.1f,gz+1.55f},{gx,2.1f,gz+0.45f},
                     {1,0,0},{0,1},{1,1},{1,0},{0,0}, glass);
         }
-        else if (wv == 2) {   // exit doorway on z-running wall
+        else if (wv == WALL_EXIT) {   // exit doorway on z-running wall
             addBoxSides(wa, gx - WT, 0, gz - WT, gx + WT, wallH, gz + 0.35f);
             addBoxSides(wa, gx - WT, 0, gz + 1.65f, gx + WT, wallH, gz + CELL + WT);
             addBoxSides(wa, gx - WT, 2.3f, gz + 0.35f, gx + WT, wallH, gz + 1.65f, true);
@@ -449,7 +730,7 @@ void World::ensureMesh(int cx, int cz) {
         }
         // baked AO around this cell's walls: floor strip, ceiling strip, and a
         // wall-face strip on both sides (solid walls and windows; doorways stay clean)
-        if (nv == 1 || nv == 3) {
+        if (blocksEdge(nv)) {
             int gi = cx * CCELLS + i, gk = cz * CCELLS + kk;
             float fyS = floorY(gi, gk - 1) + 0.005f, fyN = floorY(gi, gk) + 0.005f;
             // span exactly one cell — neighbours butt up seamlessly, no double-blend overlap
@@ -463,7 +744,7 @@ void World::ensureMesh(int cx, int cz) {
             aoStrip({ x0, wallH, gz - WT - 0.006f }, { x1, wallH, gz - WT - 0.006f }, { 0, -AOH, 0 }, { 0, 0, -1 }, AOC);   // and down from the ceiling
             aoStrip({ x0, wallH, gz + WT + 0.006f }, { x1, wallH, gz + WT + 0.006f }, { 0, -AOH, 0 }, { 0, 0, 1 }, AOC);
         }
-        if (wv == 1 || wv == 3) {
+        if (blocksEdge(wv)) {
             int gi = cx * CCELLS + i, gk = cz * CCELLS + kk;
             float fyW = floorY(gi - 1, gk) + 0.005f, fyE = floorY(gi, gk) + 0.005f;
             float z0 = gz, z1 = gz + CELL, cy = wallH - 0.005f;
@@ -484,7 +765,7 @@ void World::ensureMesh(int cx, int cz) {
             auto uvOf = [](int ph, float &u0, float &v0, float &u1, float &v1) {
                 u0 = (ph & 1) * 0.5f; v0 = (ph >> 1) * 0.25f; u1 = u0 + 0.5f; v1 = v0 + 0.25f;
             };
-            if (nv == 1) {
+            if (nv == WALL_SOLID) {
                 uint32_t hs = ih(gi, gk, seed ^ 0x5C1Bu);
                 if (hs % 7 == 0) {
                     float u0, v0, u1, v1; uvOf((hs >> 5) % 8, u0, v0, u1, v1);
@@ -497,7 +778,7 @@ void World::ensureMesh(int cx, int cz) {
                                         {u0,v1},{u1,v1},{u1,v0},{u0,v0}, WHITE);
                 }
             }
-            if (wv == 1) {
+            if (wv == WALL_SOLID) {
                 uint32_t hs = ih(gi, gk, seed ^ 0x5C2Du);
                 if (hs % 7 == 0) {
                     float u0, v0, u1, v1; uvOf((hs >> 5) % 8, u0, v0, u1, v1);
@@ -528,259 +809,12 @@ void World::ensureMesh(int cx, int cz) {
             aoStrip({ px0, cy, pz0 }, { px0, cy, pz1 }, { -AOW, 0, 0 }, { 0, -1, 0 }, AOC);
             aoStrip({ px1, cy, pz0 }, { px1, cy, pz1 }, { AOW, 0, 0 }, { 0, -1, 0 }, AOC);
         }
-        if (dd.prop[i][kk]) {
-            float pcx = gx + 1.0f, pcz = gz + 1.0f;
-            float rot = dd.propRot[i][kk] * 1.5708f;
-            float ey = dd.elev[i][kk] * 0.1f;   // furniture sits on the local floor
-            uint32_t h = ih(cx * CCELLS + i, cz * CCELLS + kk, seed ^ 0xB0B5u);
-            float r1 = (h & 0xFF) / 255.0f, r2 = ((h >> 8) & 0xFF) / 255.0f, r3 = ((h >> 16) & 0xFF) / 255.0f;
-            // UV regions of the prop atlas
-            const float CU0=0.02f, CV0=0.02f, CU1=0.48f, CV1=0.98f;       // cardboard
-            const float FU0=0.52f, FV0=0.02f, FU1=0.98f, FV1=0.48f;       // cabinet front
-            const float MU0=0.52f, MV0=0.52f, MU1=0.98f, MV1=0.98f;       // plain metal
-            float ca = cosf(rot), sa = sinf(rot);
-            // rotated sub-box placed relative to the prop centre
-            auto part = [&](float ox, float oz, float hx2, float hz2, float y0, float y1,
-                            bool wood, Color tint) {
-                addPropBox(pr, pcx + ox * ca - oz * sa, pcz + ox * sa + oz * ca, rot, hx2, hz2, y0, y1,
-                           wood ? CU0 : MU0, wood ? CV0 : MV0, wood ? CU1 : MU1, wood ? CV1 : MV1,
-                           wood ? CU0 : MU0, wood ? CV0 : MV0, wood ? CU1 : MU1, wood ? CV1 : MV1, tint);
-            };
-            // Contact shadow under the piece. This used to be one flat quad with
-            // all four UVs pinned to a single texel, so it had no gradient at
-            // all — every piece of furniture stood on a hard black rectangle
-            // larger than itself, with a visible straight edge on the floor.
-            // Lay it into the AO mesh instead and use the same falloff the wall
-            // creases use: solid under the piece, fading to nothing past it.
-            auto blob = [&](float hx2, float hz2) {
-                const float S = 0.24f;                    // how far the falloff reaches
-                const float d = S * 0.7071f;              // the corner, cut across
-                const Vector3 up = { 0, 1, 0 };
-                auto P = [&](float lx, float lz) {
-                    return Vector3{ pcx + lx * ca - lz * sa, ey + 0.006f, pcz + lx * sa + lz * ca };
-                };
-                // core, right under the piece: darkest end of the gradient
-                ao.quad(P(-hx2,-hz2), P(hx2,-hz2), P(hx2,hz2), P(-hx2,hz2), up,
-                        {0,0},{1,0},{1,0},{0,0}, aoc);
-                // four skirts fading outward. Each inner edge runs so the quad
-                // stays wound the same way round as the core.
-                const float sd[4][6] = {
-                    {  hx2,-hz2, -hx2,-hz2,  0,  -S },
-                    {  hx2, hz2,  hx2,-hz2,  S,   0 },
-                    { -hx2, hz2,  hx2, hz2,  0,   S },
-                    { -hx2,-hz2, -hx2, hz2, -S,   0 },
-                };
-                for (auto &e : sd)
-                    ao.quad(P(e[0], e[1]), P(e[2], e[3]),
-                            P(e[2] + e[4], e[3] + e[5]), P(e[0] + e[4], e[1] + e[5]), up,
-                            {0,0},{1,0},{1,1},{0,1}, aoc);
-                // and the corners, so the skirt closes instead of leaving notches
-                const float cn[4][4] = {
-                    {  hx2,  hz2,  1,  1 }, { -hx2,  hz2, -1,  1 },
-                    { -hx2, -hz2, -1, -1 }, {  hx2, -hz2,  1, -1 },
-                };
-                for (auto &c2 : cn) {
-                    Vector3 inner = P(c2[0], c2[1]);
-                    Vector3 pxv = P(c2[0] + c2[2] * S, c2[1]);
-                    Vector3 pmv = P(c2[0] + c2[2] * d, c2[1] + c2[3] * d);
-                    Vector3 pzv = P(c2[0], c2[1] + c2[3] * S);
-                    bool xFirst = (c2[2] * c2[3]) > 0;    // keeps the winding consistent
-                    Vector3 a1 = xFirst ? pxv : pzv, b1 = xFirst ? pzv : pxv;
-                    ao.tri(inner, a1, pmv, up, {0,0},{0,1},{1,1}, aoc);
-                    ao.tri(inner, pmv, b1, up, {0,0},{1,1},{0,1}, aoc);
-                }
-            };
-            switch (dd.prop[i][kk]) {
-            case 1: {   // box stack — on LEVEL FUN they're wrapped like presents,
-                        // and the packing tape reads as ribbon
-                blob(0.40f, 0.40f);
-                float bh = 0.55f + r1 * 0.2f, bhx = 0.34f + r2 * 0.08f;
-                auto wrap = [&](int rot2) {
-                    if (level != 4) return WHITE;
-                    Color c = PARTY[(h >> rot2) % 5];
-                    return Color{ cl8(c.r * 0.9f + 46), cl8(c.g * 0.9f + 46), cl8(c.b * 0.9f + 46), 255 };
-                };
-                addPropBox(pr, pcx + (r3 - 0.5f) * 0.5f, pcz + (r1 - 0.5f) * 0.5f, rot + r2,
-                           bhx, bhx, ey, ey + bh, CU0, CV0, CU1, CV1, CU0, CV0, CU1, CV1, wrap(5));
-                if (r2 > 0.35f)   // second box on top, skewed
-                    addPropBox(pr, pcx + (r3 - 0.5f) * 0.5f + 0.06f, pcz + (r1 - 0.5f) * 0.5f - 0.05f,
-                               rot + r2 + 0.5f, bhx * 0.8f, bhx * 0.8f, ey + bh, ey + bh + 0.5f,
-                               CU0, CV0, CU1, CV1, CU0, CV0, CU1, CV1, wrap(9));
-                if (r1 > 0.6f)    // third box beside
-                    addPropBox(pr, pcx + 0.62f, pcz + 0.3f, rot + r3 * 2, 0.27f, 0.27f, ey, ey + 0.5f,
-                               CU0, CV0, CU1, CV1, CU0, CV0, CU1, CV1, wrap(13));
-                break;
-            }
-            case 2:     // filing cabinet
-                blob(0.34f, 0.42f);
-                addPropBox(pr, pcx, pcz, rot, 0.26f, 0.34f, ey, ey + 1.32f,
-                           FU0, FV0, FU1, FV1, MU0, MV0, MU1, MV1);
-                break;
-            case 3: {   // folding table
-                blob(0.58f, 0.40f);
-                float ty = 0.72f;
-                addPropBox(pr, pcx, pcz, rot, 0.62f, 0.40f, ey + ty - 0.04f, ey + ty,
-                           MU0, MV0, MU1, MV1, MU0, MV0, MU1, MV1);
-                for (int lx = -1; lx <= 1; lx += 2) for (int lz = -1; lz <= 1; lz += 2) {
-                    float ox = lx * 0.54f, oz = lz * 0.32f;
-                    addPropBox(pr, pcx + ox * ca - oz * sa, pcz + ox * sa + oz * ca, rot,
-                               0.03f, 0.03f, ey, ey + ty - 0.04f, MU0, MV0, MU1, MV1, MU0, MV0, MU1, MV1);
-                }
-                break;
-            }
-            case 4: {   // collapsed ceiling: dark hole above, tile leaning below, debris
-                Color hole = { 12, 11, 9, 51 };
-                ce.quad({pcx-0.85f,2.994f,pcz-0.85f},{pcx-0.85f,2.994f,pcz+0.85f},
-                        {pcx+0.85f,2.994f,pcz+0.85f},{pcx+0.85f,2.994f,pcz-0.85f},{0,-1,0},
-                        {0,0},{0,1},{1,1},{1,0}, hole);
-                float bx0 = pcx - 0.58f * ca, bz0 = pcz - 0.58f * sa;   // base edge on floor
-                float tx = pcx + 0.35f * ca, tz = pcz + 0.35f * sa;     // top edge, lifted
-                Vector3 a = { bx0 - 0.58f * sa, ey + 0.02f, bz0 + 0.58f * ca };
-                Vector3 b = { bx0 + 0.58f * sa, ey + 0.02f, bz0 - 0.58f * ca };
-                Vector3 c2 = { tx + 0.58f * sa, ey + 0.42f, tz - 0.58f * ca };
-                Vector3 dq = { tx - 0.58f * sa, ey + 0.42f, tz + 0.58f * ca };
-                ce.quad(a, b, c2, dq, { -ca * 0.5f, 0.87f, -sa * 0.5f },
-                        {0.05f,0.45f},{0.45f,0.45f},{0.45f,0.05f},{0.05f,0.05f}, WHITE);
-                Color deb = { 110, 105, 95, 255 };
-                ce.quad({pcx+0.4f,ey+0.012f,pcz+0.5f},{pcx+0.75f,ey+0.012f,pcz+0.55f},
-                        {pcx+0.7f,ey+0.012f,pcz+0.85f},{pcx+0.38f,ey+0.012f,pcz+0.8f},{0,1,0},
-                        {0.1f,0.1f},{0.3f,0.1f},{0.3f,0.3f},{0.1f,0.3f}, deb);
-                ce.quad({pcx-0.7f,ey+0.012f,pcz-0.35f},{pcx-0.45f,ey+0.012f,pcz-0.42f},
-                        {pcx-0.4f,ey+0.012f,pcz-0.2f},{pcx-0.68f,ey+0.012f,pcz-0.15f},{0,1,0},
-                        {0.3f,0.3f},{0.45f,0.3f},{0.45f,0.45f},{0.3f,0.45f}, deb);
-                break;
-            }
-            case 5: {   // couch: mustard upholstery gone grey, facing nothing in particular
-                blob(0.74f, 0.48f);
-                Color uph = { 172, 152, 96, 255 };
-                part(0, 0.10f, 0.78f, 0.42f, ey + 0.16f, ey + 0.44f, false, uph);   // seat
-                part(0, -0.36f, 0.78f, 0.14f, ey + 0.16f, ey + 0.92f, false, uph);  // backrest
-                part(-0.64f, 0.06f, 0.14f, 0.46f, ey, ey + 0.62f, false, uph);      // arms
-                part( 0.64f, 0.06f, 0.14f, 0.46f, ey, ey + 0.62f, false, uph);
-                part(0, 0.10f, 0.74f, 0.38f, ey, ey + 0.16f, false, Color{ 120, 106, 70, 255 });
-                break;
-            }
-            case 6:     // armoire: a wardrobe looming where no bedroom is
-                blob(0.54f, 0.46f);
-                part(0, 0, 0.44f, 0.36f, ey, ey + 1.78f, true, Color{ 118, 82, 58, 255 });
-                part(0, 0, 0.48f, 0.40f, ey + 1.78f, ey + 1.90f, true, Color{ 92, 63, 44, 255 });  // cornice
-                part(0, 0.37f, 0.015f, 0.015f, ey + 0.85f, ey + 1.0f, false, Color{ 190, 170, 110, 255 }); // handles
-                break;
-            case 7:     // floor lamp, shade askew, never lit
-                blob(0.22f, 0.22f);
-                part(0, 0, 0.14f, 0.14f, ey, ey + 0.05f, false, Color{ 66, 62, 60, 255 });
-                part(0, 0, 0.025f, 0.025f, ey, ey + 1.34f, false, Color{ 66, 62, 60, 255 });
-                addPropBox(pr, pcx + 0.05f, pcz, rot + 0.3f, 0.17f, 0.17f, ey + 1.30f, ey + 1.60f,
-                           CU0, CV0, CU1, CV1, CU0, CV0, CU1, CV1, Color{ 214, 190, 142, 255 });
-                break;
-            case 8:     // nightstand, nowhere near a bed. usually.
-                blob(0.36f, 0.36f);
-                part(0, 0, 0.26f, 0.26f, ey, ey + 0.55f, true, Color{ 126, 90, 62, 255 });
-                part(0, 0, 0.30f, 0.30f, ey + 0.55f, ey + 0.60f, true, Color{ 104, 74, 50, 255 });
-                break;
-            case 9: {   // bed: bare stained mattress, headboard against nothing
-                blob(0.60f, 1.02f);
-                Color wd = { 110, 78, 54, 255 };
-                part(0, 0, 0.52f, 0.92f, ey + 0.12f, ey + 0.26f, true, wd);          // frame
-                part(0, 0.04f, 0.48f, 0.86f, ey + 0.26f, ey + 0.46f, true, Color{ 216, 208, 188, 255 }); // mattress
-                part(0, -0.97f, 0.52f, 0.05f, ey, ey + 0.95f, true, wd);             // headboard
-                break;
-            }
-            case 11: {  // party table: paper cloth, a cake nobody cut, cups nobody drank
-                blob(0.52f, 0.52f);
-                float ty = 0.74f;
-                uint32_t th = ih(cx * CCELLS + i, cz * CCELLS + kk, seed ^ 0xCAFEu);
-                Color cloth = PARTY[th % 5];
-                part(0, 0, 0.55f, 0.55f, ey + ty - 0.05f, ey + ty, false, cloth);
-                for (int lx = -1; lx <= 1; lx += 2) for (int lz = -1; lz <= 1; lz += 2)
-                    part(lx * 0.44f, lz * 0.44f, 0.035f, 0.035f, ey, ey + ty - 0.05f,
-                         false, Color{ 120, 118, 112, 255 });
-                part(0, 0, 0.17f, 0.17f, ey + ty, ey + ty + 0.16f, false, Color{ 238, 232, 220, 255 });   // cake
-                part(0, 0, 0.11f, 0.11f, ey + ty + 0.16f, ey + ty + 0.26f, false, Color{ 232, 152, 172, 255 });
-                part(0, 0, 0.013f, 0.013f, ey + ty + 0.26f, ey + ty + 0.37f, false, Color{ 240, 226, 172, 255 }); // candle
-                {   // paper cups set out around the cake, in party colours
-                    int ncup = 3 + (th % 4);
-                    for (int c = 0; c < ncup; c++) {
-                        uint32_t ch = th * 2654435761u + (uint32_t)c * 40503u;
-                        float ang = (ch & 0xFFFF) / 65535.0f * 6.2831853f;
-                        float rad = 0.30f + ((ch >> 16) & 0xFF) / 255.0f * 0.15f;
-                        part(cosf(ang) * rad, sinf(ang) * rad, 0.04f, 0.04f,
-                             ey + ty, ey + ty + 0.09f, false, PARTY[(ch >> 5) % 5]);
-                    }
-                }
-                {   // ...and the candle is still lit. nobody lit it. two crossed
-                    // emissive fins make a little flame that survives blackouts
-                    auto fpt = [&](float lx, float ly2, float lz) {
-                        return Vector3{ pcx + lx * ca - lz * sa, ly2, pcz + lx * sa + lz * ca };
-                    };
-                    Color flame = { 255, 196, 110, 70 };   // alpha <0.4: raw emissive in the shader
-                    float fy0 = ey + ty + 0.37f, fy1 = fy0 + 0.055f;
-                    pr.quad(fpt(-0.022f, fy0, 0), fpt(0.022f, fy0, 0), fpt(0.013f, fy1, 0), fpt(-0.013f, fy1, 0),
-                            { sa, 0, -ca }, {0,1},{1,1},{1,0},{0,0}, flame);
-                    pr.quad(fpt(0, fy0, -0.022f), fpt(0, fy0, 0.022f), fpt(0, fy1, 0.013f), fpt(0, fy1, -0.013f),
-                            { ca, 0, sa }, {0,1},{1,1},{1,0},{0,0}, flame);
-                }
-                break;
-            }
-            case 10: {  // vending machine: still stocked, still humming, takes doubloons
-                blob(0.52f, 0.44f);
-                part(0, 0, 0.44f, 0.36f, ey, ey + 1.85f, false, Color{ 148, 152, 158, 255 });
-                auto ptv2 = [&](float lx, float ly2, float lz) {
-                    return Vector3{ pcx + lx * ca - lz * sa, ly2, pcz + lx * sa + lz * ca };
-                };
-                Color panel = { 66, 90, 122, 60 };   // emissive front: soft cold glow
-                pr.quad(ptv2(-0.28f, ey + 0.55f, -0.375f), ptv2(0.28f, ey + 0.55f, -0.375f),
-                        ptv2(0.28f, ey + 1.68f, -0.375f), ptv2(-0.28f, ey + 1.68f, -0.375f),
-                        { sa, 0, -ca }, {0,1},{1,1},{1,0},{0,0}, panel);
-                break;
-            }
-            case 12: {  // office desk: chair shoved back, monitor long dead. someone worked here
-                blob(0.72f, 0.52f);
-                Color wd = { 104, 80, 56, 255 };
-                part(0, -0.12f, 0.62f, 0.34f, ey + 0.70f, ey + 0.74f, true, wd);      // desktop
-                part(-0.46f, -0.12f, 0.14f, 0.30f, ey, ey + 0.70f, true, wd);         // pedestals
-                part( 0.46f, -0.12f, 0.14f, 0.30f, ey, ey + 0.70f, true, wd);
-                part(0.08f, -0.22f, 0.19f, 0.035f, ey + 0.76f, ey + 1.08f, false, Color{ 30, 30, 34, 255 }); // monitor
-                part(0.08f, -0.14f, 0.06f, 0.06f, ey + 0.74f, ey + 0.77f, false, Color{ 38, 38, 42, 255 });  // its foot
-                part(-0.30f, -0.14f, 0.11f, 0.08f, ey + 0.74f, ey + 0.765f, false, Color{ 200, 196, 186, 255 }); // papers
-                part(0.02f + r1 * 0.1f, 0.44f, 0.20f, 0.20f, ey + 0.40f, ey + 0.46f, false, Color{ 52, 50, 54, 255 }); // chair seat
-                part(0.02f + r1 * 0.1f, 0.62f, 0.20f, 0.04f, ey + 0.46f, ey + 0.96f, false, Color{ 52, 50, 54, 255 }); // backrest
-                part(0.02f + r1 * 0.1f, 0.44f, 0.035f, 0.035f, ey, ey + 0.40f, false, Color{ 72, 72, 76, 255 });        // post
-                break;
-            }
-            case 13: {  // steel shelving, half-emptied in a hurry
-                blob(0.68f, 0.32f);
-                Color mt = { 132, 136, 142, 255 };
-                for (int s2 = 0; s2 <= 3; s2++)
-                    part(0, 0, 0.60f, 0.24f, ey + 0.08f + s2 * 0.55f, ey + 0.12f + s2 * 0.55f, false, mt);
-                // corner posts, not full-depth panels — side-on you see *through* the rack
-                for (int ux = -1; ux <= 1; ux += 2) for (int uz = -1; uz <= 1; uz += 2)
-                    part(ux * 0.575f, uz * 0.215f, 0.03f, 0.03f, ey, ey + 1.80f, false, mt);
-                part(-0.25f, 0.0f, 0.16f, 0.16f, ey + 0.12f, ey + 0.44f, true, Color{ 168, 138, 100, 255 });  // what's left
-                part( 0.30f, 0.02f, 0.14f, 0.14f, ey + 0.67f, ey + 0.94f, true, Color{ 150, 122, 88, 255 });
-                if (r2 > 0.4f)
-                    part(-0.06f, -0.02f, 0.12f, 0.12f, ey + 1.22f, ey + 1.44f, true, Color{ 174, 146, 106, 255 });
-                break;
-            }
-            case 14: {  // water cooler. the water is not almond
-                blob(0.30f, 0.30f);
-                part(0, 0, 0.19f, 0.19f, ey, ey + 0.94f, false, Color{ 204, 206, 210, 255 });   // body
-                part(0, 0, 0.125f, 0.125f, ey + 0.94f, ey + 1.28f, false, Color{ 150, 186, 214, 255 });  // bottle
-                part(0, 0.205f, 0.05f, 0.02f, ey + 0.58f, ey + 0.66f, false, Color{ 88, 90, 94, 255 });  // tap
-                break;
-            }
-            case 15: {  // potted plant. still green. nobody waters it
-                blob(0.26f, 0.26f);
-                part(0, 0, 0.17f, 0.17f, ey, ey + 0.09f, false, Color{ 120, 70, 48, 255 });    // saucer
-                part(0, 0, 0.145f, 0.145f, ey + 0.02f, ey + 0.32f, false, Color{ 146, 88, 58, 255 });  // pot
-                part(0, 0, 0.032f, 0.032f, ey + 0.32f, ey + 0.88f, false, Color{ 76, 66, 44, 255 });   // stem
-                addPropBox(pr, pcx, pcz, rot + 0.6f, 0.30f, 0.06f, ey + 0.55f, ey + 1.06f,
-                           MU0, MV0, MU1, MV1, MU0, MV0, MU1, MV1, Color{ 56, 96, 50, 255 });          // fronds
-                addPropBox(pr, pcx, pcz, rot + 2.1f, 0.06f, 0.30f, ey + 0.64f, ey + 1.14f,
-                           MU0, MV0, MU1, MV1, MU0, MV0, MU1, MV1, Color{ 64, 108, 56, 255 });
-                break;
-            }
-            }
+        if (dd.prop[i][kk] != PROP_NONE) {
+            PropSite site = { gx + 1.0f, gz + 1.0f,
+                              dd.elev[i][kk] * ELEV_UNIT,     // furniture sits on the local floor
+                              dd.propRot[i][kk] * 1.5708f,    // a quarter turn at a time
+                              cx * CCELLS + i, cz * CCELLS + kk };
+            addProp(dd.prop[i][kk], site, seed, level, pr, ce, ao);
         }
     }
     if (level == 3) {
@@ -792,7 +826,7 @@ void World::ensureMesh(int cx, int cz) {
             float gx = wx + i * CELL, gz = wz + kk * CELL;
             int gi = cx * CCELLS + i, gk = cz * CCELLS + kk;
             // pipes hug the walls they run beside
-            if (dd.wallN[i][kk] == 1) {
+            if (dd.wallN[i][kk] == WALL_SOLID) {
                 uint32_t rh = ih(gk, 7717, seed ^ 0x9191u);
                 if (rh % 4 == 0) {
                     float py = wallH - 0.22f - ((rh >> 5) & 3) * 0.09f;
@@ -807,7 +841,7 @@ void World::ensureMesh(int cx, int cz) {
                                     Color{ 96, 74, 56, 255 });
                 }
             }
-            if (dd.wallW[i][kk] == 1) {
+            if (dd.wallW[i][kk] == WALL_SOLID) {
                 uint32_t rh = ih(gi, 3313, seed ^ 0x9292u);
                 if (rh % 4 == 0) {
                     float py = wallH - 0.22f - ((rh >> 5) & 3) * 0.09f;
@@ -824,7 +858,7 @@ void World::ensureMesh(int cx, int cz) {
             }
             // valve station: a standpipe floor to ceiling, wheel drawn by the renderer
             if (valveAt(gi, gk)) {
-                float vx = gx + 1.0f, vz = gz + 1.0f, fy = dd.elev[i][kk] * 0.1f;
+                float vx = gx + 1.0f, vz = gz + 1.0f, fy = dd.elev[i][kk] * ELEV_UNIT;
                 addSolidBox(pr, vx - 0.085f, fy, vz - 0.085f, vx + 0.085f, wallH, vz + 0.085f,
                             Color{ 84, 60, 44, 255 });
                 addSolidBox(pr, vx - 0.13f, fy + 1.02f, vz - 0.13f, vx + 0.13f, fy + 1.24f, vz + 0.13f,
@@ -850,22 +884,25 @@ void World::ensureMesh(int cx, int cz) {
                     nrm, uvp, uvp, uvp, uvp, sc);
         }
     }
-    d.meshes[0] = fl.bake();
-    d.meshes[1] = ce.bake();
-    d.meshes[2] = wa.bake();
-    d.meshes[3] = pr.bake();
-    d.meshes[4] = wt.bake();
-    d.meshes[5] = scr.bake();
-    d.meshes[6] = gl.bake();
-    d.meshes[7] = ao.bake();
+    d.meshes[MESH_FLOOR]   = fl.bake();
+    d.meshes[MESH_CEILING] = ce.bake();
+    d.meshes[MESH_WALLS]   = wa.bake();
+    d.meshes[MESH_PROPS]   = pr.bake();
+    d.meshes[MESH_WATER]   = wt.bake();
+    d.meshes[MESH_SCRAWL]  = scr.bake();
+    d.meshes[MESH_GLASS]   = gl.bake();
+    d.meshes[MESH_AO]      = ao.bake();
     d.built = true;
 }
 
+// Solid boxes in one cell, appended to out[]. Everything that has to know what
+// is in the way — collision, standing height, line of sight — reads the world
+// through this, so they all agree on where the furniture is.
 int World::gatherCellAABBs(int ci, int ck, AABB *out, int cap, int cnt, bool includeProps) {
     float x0 = ci * CELL, z0 = ck * CELL;
     uint8_t nv = wallNVal(ci, ck), wv = wallWVal(ci, ck);
-    if (cnt < cap && (nv == 1 || nv == 3)) out[cnt++] = { x0 - WT, z0 - WT, x0 + CELL + WT, z0 + WT, wallH };
-    if (cnt < cap && (wv == 1 || wv == 3)) out[cnt++] = { x0 - WT, z0 - WT, x0 + WT, z0 + CELL + WT, wallH };
+    if (cnt < cap && blocksEdge(nv)) out[cnt++] = { x0 - WT, z0 - WT, x0 + CELL + WT, z0 + WT, wallH };
+    if (cnt < cap && blocksEdge(wv)) out[cnt++] = { x0 - WT, z0 - WT, x0 + WT, z0 + CELL + WT, wallH };
     if (cnt < cap && pillarAt(ci, ck)) out[cnt++] = { x0 + 0.42f, z0 + 0.42f, x0 + 1.58f, z0 + 1.58f, wallH };
     if (includeProps && cnt < cap) {
         uint8_t pv = propAt(ci, ck);
@@ -873,25 +910,29 @@ int World::gatherCellAABBs(int ci, int ck, AABB *out, int cap, int cnt, bool inc
             float ey = floorY(ci, ck);
             uint32_t h = ih(ci, ck, seed ^ 0xB0B5u);   // same hash the mesher uses
             float r1 = (h & 0xFF) / 255.0f, r2 = ((h >> 8) & 0xFF) / 255.0f;
+            // Tops here must match the heights addProp actually builds, and
+            // Game::bottleShelfY quotes the same numbers again for the surfaces
+            // you can find a carton standing on. Move one, move all three.
+            // PROP_FALLEN_TILE is missing on purpose: rubble you walk over.
             switch (pv) {
-            case 1: {   // boxes: top of the tallest stacked one
+            case PROP_BOXES: {   // top of the tallest stacked one
                 float t = 0.55f + r1 * 0.2f;
                 if (r2 > 0.35f) t += 0.5f;
                 out[cnt++] = { x0 + 0.35f, z0 + 0.35f, x0 + 1.65f, z0 + 1.65f, ey + t }; break;
             }
-            case 2: out[cnt++] = { x0 + 0.60f, z0 + 0.60f, x0 + 1.40f, z0 + 1.40f, ey + 1.32f }; break;  // cabinet
-            case 3: out[cnt++] = { x0 + 0.32f, z0 + 0.32f, x0 + 1.68f, z0 + 1.68f, ey + 0.72f }; break;  // table
-            case 5: out[cnt++] = { x0 + 0.20f, z0 + 0.38f, x0 + 1.80f, z0 + 1.62f, ey + 0.44f }; break;  // couch
-            case 6: out[cnt++] = { x0 + 0.55f, z0 + 0.62f, x0 + 1.45f, z0 + 1.38f, ey + 1.90f }; break;  // armoire
-            case 7: out[cnt++] = { x0 + 0.82f, z0 + 0.82f, x0 + 1.18f, z0 + 1.18f, ey + 1.62f }; break;  // lamp
-            case 8: out[cnt++] = { x0 + 0.66f, z0 + 0.66f, x0 + 1.34f, z0 + 1.34f, ey + 0.60f }; break;  // nightstand
-            case 9: out[cnt++] = { x0 + 0.30f, z0 + 0.15f, x0 + 1.70f, z0 + 1.85f, ey + 0.46f }; break;  // bed
-            case 10: out[cnt++] = { x0 + 0.50f, z0 + 0.58f, x0 + 1.50f, z0 + 1.42f, ey + 1.85f }; break; // vending
-            case 11: out[cnt++] = { x0 + 0.40f, z0 + 0.40f, x0 + 1.60f, z0 + 1.60f, ey + 0.74f }; break; // party table
-            case 12: out[cnt++] = { x0 + 0.30f, z0 + 0.50f, x0 + 1.70f, z0 + 1.50f, ey + 0.74f }; break; // desk + chair
-            case 13: out[cnt++] = { x0 + 0.36f, z0 + 0.70f, x0 + 1.64f, z0 + 1.30f, ey + 1.80f }; break; // shelving
-            case 14: out[cnt++] = { x0 + 0.78f, z0 + 0.78f, x0 + 1.22f, z0 + 1.22f, ey + 0.94f }; break; // water cooler
-            case 15: out[cnt++] = { x0 + 0.80f, z0 + 0.80f, x0 + 1.20f, z0 + 1.20f, ey + 0.32f }; break; // potted plant
+            case PROP_CABINET:     out[cnt++] = { x0 + 0.60f, z0 + 0.60f, x0 + 1.40f, z0 + 1.40f, ey + 1.32f }; break;
+            case PROP_TABLE:       out[cnt++] = { x0 + 0.32f, z0 + 0.32f, x0 + 1.68f, z0 + 1.68f, ey + 0.72f }; break;
+            case PROP_COUCH:       out[cnt++] = { x0 + 0.20f, z0 + 0.38f, x0 + 1.80f, z0 + 1.62f, ey + 0.44f }; break;
+            case PROP_ARMOIRE:     out[cnt++] = { x0 + 0.55f, z0 + 0.62f, x0 + 1.45f, z0 + 1.38f, ey + 1.90f }; break;
+            case PROP_LAMP:        out[cnt++] = { x0 + 0.82f, z0 + 0.82f, x0 + 1.18f, z0 + 1.18f, ey + 1.62f }; break;
+            case PROP_NIGHTSTAND:  out[cnt++] = { x0 + 0.66f, z0 + 0.66f, x0 + 1.34f, z0 + 1.34f, ey + 0.60f }; break;
+            case PROP_BED:         out[cnt++] = { x0 + 0.30f, z0 + 0.15f, x0 + 1.70f, z0 + 1.85f, ey + 0.46f }; break;
+            case PROP_VENDING:     out[cnt++] = { x0 + 0.50f, z0 + 0.58f, x0 + 1.50f, z0 + 1.42f, ey + 1.85f }; break;
+            case PROP_PARTY_TABLE: out[cnt++] = { x0 + 0.40f, z0 + 0.40f, x0 + 1.60f, z0 + 1.60f, ey + 0.74f }; break;
+            case PROP_DESK:        out[cnt++] = { x0 + 0.30f, z0 + 0.50f, x0 + 1.70f, z0 + 1.50f, ey + 0.74f }; break;
+            case PROP_SHELVING:    out[cnt++] = { x0 + 0.36f, z0 + 0.70f, x0 + 1.64f, z0 + 1.30f, ey + 1.80f }; break;
+            case PROP_COOLER:      out[cnt++] = { x0 + 0.78f, z0 + 0.78f, x0 + 1.22f, z0 + 1.22f, ey + 0.94f }; break;
+            case PROP_PLANT:       out[cnt++] = { x0 + 0.80f, z0 + 0.80f, x0 + 1.20f, z0 + 1.20f, ey + 0.32f }; break;
             }
         }
     }
@@ -900,12 +941,12 @@ int World::gatherCellAABBs(int ci, int ck, AABB *out, int cap, int cnt, bool inc
 
 // feetY: obstacles whose top is at or below your feet are walkable, not solid
 void World::collideCircle(float &px, float &pz, float r, float feetY) {
-    AABB boxes[48];
+    AABB boxes[MAX_NEARBY_AABBS];
     int cnt = 0;
     int ci = cellOf(px), ck = cellOf(pz);
     for (int dx = -1; dx <= 1; dx++)
         for (int dz = -1; dz <= 1; dz++)
-            cnt = gatherCellAABBs(ci + dx, ck + dz, boxes, 48, cnt);
+            cnt = gatherCellAABBs(ci + dx, ck + dz, boxes, MAX_NEARBY_AABBS, cnt);
     for (int pass = 0; pass < 3; pass++)
         for (int i = 0; i < cnt; i++) {
             const AABB &b = boxes[i];
@@ -928,12 +969,12 @@ void World::collideCircle(float &px, float &pz, float r, float feetY) {
 // floor height here, counting prop tops at or below your feet (so you can stand on furniture)
 float World::groundAt(float x, float z, float feetY) {
     float g = floorY(cellOf(x), cellOf(z));
-    AABB boxes[48];
+    AABB boxes[MAX_NEARBY_AABBS];
     int cnt = 0;
     int ci = cellOf(x), ck = cellOf(z);
     for (int dx = -1; dx <= 1; dx++)
         for (int dz = -1; dz <= 1; dz++)
-            cnt = gatherCellAABBs(ci + dx, ck + dz, boxes, 48, cnt);
+            cnt = gatherCellAABBs(ci + dx, ck + dz, boxes, MAX_NEARBY_AABBS, cnt);
     for (int i = 0; i < cnt; i++)
         if (x > boxes[i].minx && x < boxes[i].maxx && z > boxes[i].minz && z < boxes[i].maxz &&
             boxes[i].top <= feetY + 0.05f && boxes[i].top > g) g = boxes[i].top;
@@ -946,11 +987,11 @@ bool World::lineOfSight(float ax, float az, float bx, float bz) {
     int steps = (int)(dist / 0.22f) + 1;
     for (int s = 1; s < steps; s++) {
         float t = (float)s / steps, x = ax + dx * t, z = az + dz * t;
-        AABB boxes[48];
+        AABB boxes[MAX_NEARBY_AABBS];
         int cnt = 0, ci = cellOf(x), ck = cellOf(z);
         for (int ddx = -1; ddx <= 1; ddx++)
             for (int ddz = -1; ddz <= 1; ddz++)
-                cnt = gatherCellAABBs(ci + ddx, ck + ddz, boxes, 48, cnt, false);  // props don't block sight
+                cnt = gatherCellAABBs(ci + ddx, ck + ddz, boxes, MAX_NEARBY_AABBS, cnt, false);  // props don't block sight
         for (int i = 0; i < cnt; i++)
             if (x > boxes[i].minx && x < boxes[i].maxx && z > boxes[i].minz && z < boxes[i].maxz) return false;
     }
@@ -967,20 +1008,20 @@ void World::buildOccupancy(int originI, int originK, int n, unsigned char *out) 
         for (int x = 0; x < n; x++) {
             int ci = originI + x, ck = originK + z;
             unsigned char v = 0;
-            if (wallNVal(ci, ck) == 1) v |= 1;
-            if (wallWVal(ci, ck) == 1) v |= 2;
+            if (wallNVal(ci, ck) == WALL_SOLID) v |= 1;
+            if (wallWVal(ci, ck) == WALL_SOLID) v |= 2;
             if (pillarAt(ci, ck)) v |= 4;
             out[z * n + x] = v;
         }
 }
 
 bool World::canStep(int ci, int ck, int ni, int nk) {
-    if (pillarAt(ni, nk) || propAt(ni, nk) != 0) return false;   // furniture and pillars are solid
-    // a wall (1) or window (3) on the shared edge blocks it; a doorway (2) is open
-    if (nk == ck - 1)      { uint8_t v = wallNVal(ci, ck);     if (v == 1 || v == 3) return false; }
-    else if (nk == ck + 1) { uint8_t v = wallNVal(ci, ck + 1); if (v == 1 || v == 3) return false; }
-    else if (ni == ci - 1) { uint8_t v = wallWVal(ci, ck);     if (v == 1 || v == 3) return false; }
-    else if (ni == ci + 1) { uint8_t v = wallWVal(ci + 1, ck); if (v == 1 || v == 3) return false; }
+    if (pillarAt(ni, nk) || propAt(ni, nk) != PROP_NONE) return false;   // furniture and pillars are solid
+    // the edge the two cells share: a wall or window blocks it, a doorway does not
+    if (nk == ck - 1)      { if (blocksEdge(wallNVal(ci, ck)))     return false; }
+    else if (nk == ck + 1) { if (blocksEdge(wallNVal(ci, ck + 1))) return false; }
+    else if (ni == ci - 1) { if (blocksEdge(wallWVal(ci, ck)))     return false; }
+    else if (ni == ci + 1) { if (blocksEdge(wallWVal(ci + 1, ck))) return false; }
     return true;
 }
 
@@ -1019,7 +1060,8 @@ Vector2 World::findOpenSpot(float x, float z) {
         for (int dx = -r; dx <= r; dx++)
             for (int dz = -r; dz <= r; dz++) {
                 if (std::max(abs(dx), abs(dz)) != r) continue;
-                if (!pillarAt(ci0 + dx, ck0 + dz) && propAt(ci0 + dx, ck0 + dz) == 0 && !poolAt(ci0 + dx, ck0 + dz))
+                if (!pillarAt(ci0 + dx, ck0 + dz) && propAt(ci0 + dx, ck0 + dz) == PROP_NONE &&
+                    !poolAt(ci0 + dx, ck0 + dz))
                     return { (ci0 + dx) * CELL + 1.0f, (ck0 + dz) * CELL + 1.0f };
             }
     return { x, z };
@@ -1030,7 +1072,7 @@ void World::unloadFar(int pcx, int pcz, int radius) {
         int cx = (int)(int32_t)(it->first >> 32), cz = (int)(int32_t)(it->first & 0xFFFFFFFF);
         if (abs(cx - pcx) > radius || abs(cz - pcz) > radius) {
             if (it->second.built)
-                for (int i = 0; i < 8; i++)
+                for (int i = 0; i < MESH_COUNT; i++)
                     if (it->second.meshes[i].vertexCount > 0) UnloadMesh(it->second.meshes[i]);
             it = chunks.erase(it);
         } else ++it;
@@ -1040,7 +1082,7 @@ void World::unloadFar(int pcx, int pcz, int radius) {
 void World::unloadAll() {
     for (auto &kv : chunks)
         if (kv.second.built)
-            for (int i = 0; i < 8; i++)
+            for (int i = 0; i < MESH_COUNT; i++)
                 if (kv.second.meshes[i].vertexCount > 0) UnloadMesh(kv.second.meshes[i]);
     chunks.clear();
 }
@@ -1055,7 +1097,6 @@ Mesh buildCanMesh() {
     MB b;
     const int N = 24;
     const float R = 0.033f, H = 0.122f;          // 66mm across, 122mm tall
-    const float TAU = 6.2831853f;
     const float SV = 128.0f / 192.0f;            // the label strip ends here in v
     // alpha 254, not 255: textured and opaque, but out of the shader's
     // world-space relief bump, which has no business on a drinks can
@@ -1178,7 +1219,7 @@ Mesh buildDeckMesh() {
 Mesh buildReelMesh() {
     MB b;
     const int N = 16;
-    const float R = 0.0145f, TAU = 6.2831853f;
+    const float R = 0.0145f;
     const Color w = { 255, 255, 255, 254 };
     auto uv = [](float ang, float rad) {
         const float S = 0.5f, IN = 1.0f / 128.0f;

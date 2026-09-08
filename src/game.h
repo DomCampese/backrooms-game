@@ -32,6 +32,35 @@ struct TapeDeck {
     float reel = 0;           // hub rotation, so the spin says the tape is moving
 };
 
+// Which of the three things you can hold is in your hands. Keys 1/2/4 pick one
+// directly; the mouse wheel cycles through them in this order.
+enum Weapon {
+    WEAPON_FLARE = 0,
+    WEAPON_REVOLVER,
+    WEAPON_DECK,
+    WEAPON_COUNT,
+};
+
+// A loose item lying in a cell, waiting to be walked over. Which one a cell
+// holds is a pure function of the cell and the world seed — see Game::pickupAt
+// — so the renderer and the pickup test always agree without storing anything.
+enum class Pickup { None, AlmondWater, Doubloon, Battery, Tape };
+
+// Slots in Game::mats. The first four line up with the chunk mesh slots of the
+// same name (MESH_FLOOR..MESH_PROPS), which is what lets renderScene draw them
+// in one loop.
+enum MatSlot {
+    MAT_FLOOR = 0,
+    MAT_CEILING,
+    MAT_WALLS,
+    MAT_PROPS,
+    MAT_SCRAWL,
+    MAT_AO,
+    MAT_CAN,
+    MAT_DECK,
+    MAT_COUNT,
+};
+
 struct Game {
     // tuning
     static constexpr float PR = 0.34f;        // player radius
@@ -65,11 +94,12 @@ struct Game {
         locDead = -1, locLightMul = -1, locFlarePos = -1, locFlareInt = -1, locGloss = -1,
         locEntPos = -1, locEntDark = -1, locOccOrigin = -1, locOccN = -1, locEntBlock = -1;
     int locPTime = -1, locPFear = -1;
-    Material mats[8]{};                        // 0 floor, 1 ceiling, 2 walls, 3 props, 4 scrawl, 5 baked AO, 6 can, 7 tape player
+    Material mats[MAT_COUNT]{};
     Sound steps[4]{}, splashes[2]{}, sndBigSplash{}, sndClick{}, sndScare{}, sndWin{},
           sndFlare{}, sndShot{}, sndHit{}, sndKill{}, sndPop{}, sndHeartbeat{}, sndTape{},
           sndValve{}, sndHowl{}, sndGulp{}, sndVoice{};
-    Sound sndBarks[3]{};                        // the pack, panned to whichever one spoke
+    static constexpr int NBARKS = 3;
+    Sound sndBarks[NBARKS]{};                   // the pack, panned to whichever one spoke
     Sound entSteps[4]{};                        // the thing's own footfalls, panned + attenuated
     AudioSynth synth;
     World world;
@@ -109,7 +139,7 @@ struct Game {
     const char *deckNote = "";
 
     // revolver: hitscan, six rounds, three hits put Clark down
-    int weapon = 0;                           // 0 flare, 1 revolver, 2 tape player — keys 1/2/4 or wheel
+    int weapon = WEAPON_FLARE;                // see enum Weapon — keys 1/2/4, or the wheel
     int ammo = MAXAMMO;
     float reloadT = 0, gunCd = 0, muzzleT = 0, recoil = 0, wheelCd = 0;
 
@@ -180,6 +210,10 @@ struct Game {
     void winRun(double now);                  // stepped through the true way out — reset the descent
     void updateMenu(double now);              // drift the title-screen camera; any key begins
     void startRun(double now);                // leave the menu and start a fresh descent
+    // Throw away the current descent and set up a fresh one from Level 0: a new
+    // maze, you back at the start of it, gear and tallies reset. Records and the
+    // win count survive, because those belong to the player rather than the run.
+    void beginDescent(double now);
 
     void init();
     bool tick();                              // one frame; false = run ended (headless shot taken)
@@ -190,6 +224,10 @@ struct Game {
 
     // deterministic world pickups, keyed by cell
     static uint64_t cellKey2(int a, int b) { return ((uint64_t)(uint32_t)a << 32) | (uint32_t)b; }
+    // Which loose item, if any, this cell holds. One cell can only offer one
+    // thing, so the checks run in a fixed priority order; both the renderer and
+    // the pickup test go through here so they can never disagree.
+    Pickup pickupAt(int a, int b);
     bool bottleAt(int a, int b);              // almond water, left out for whoever needs it
     // A carton sitting on furniture rather than the floor: returns the surface
     // height to stand it on, or -1 if this cell's prop is nothing you'd set a
@@ -228,4 +266,5 @@ struct Game {
     // render (render.cpp)
     void renderScene(double now);             // 3D world into the offscreen target
     void renderUI(double now);                // post pass, viewmodel, HUD, overlays
+    void drawWeaponViewmodel(int sw, int sh, double now);   // the revolver or flare, drawn flat in 2D
 };

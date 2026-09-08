@@ -1,16 +1,24 @@
 #include "audio.h"
+#include "util.h"
 #include <cmath>
 
+// Frames generated per stream buffer. One value, because raylib is told the
+// buffer size at init and then handed exactly that many frames on each refill.
+static constexpr int CHUNK_FRAMES = 2048;
+
 void AudioSynth::init() {
-    SetAudioStreamBufferSizeDefault(2048);
-    stream = LoadAudioStream(44100, 16, 2);
+    SetAudioStreamBufferSizeDefault(CHUNK_FRAMES);
+    stream = LoadAudioStream(SAMPLE_RATE, 16, 2);
     PlayAudioStream(stream);
 }
 
+// Fill however many buffers the stream has finished with. Everything in the
+// loop below is per *sample*, which is why the smoothing coefficients look so
+// small: at this sample rate, 2e-5 per sample is roughly a one-second fade.
 void AudioSynth::update() {
-    static short buf[4096];
+    static short buf[CHUNK_FRAMES * 2];   // interleaved stereo
     while (IsAudioStreamProcessed(stream)) {
-        for (int i = 0; i < 2048; i++) {
+        for (int i = 0; i < CHUNK_FRAMES; i++) {
             hum += (humTarget - hum) * 2e-5f;
             growl += (growlTarget - growl) * 4e-5f;
             hiss += (hissTarget - hiss) * 6e-5f;
@@ -40,7 +48,7 @@ void AudioSynth::update() {
                                                392, 392, 440, 392, 587, 523,
                                                392, 392, 784, 659, 523, 494, 440,
                                                698, 698, 659, 523, 587, 523 };
-                musT += 1.0 / 44100.0;
+                musT += 1.0 / SAMPLE_RATE;
                 if (musT > 0.42) { musT -= 0.42; musI = (musI + 1) % 25; }
                 float env = expf(-(float)musT * 4.0f);
                 float note = osc(15, MEL[musI] * 0.972f);   // half a semitone flat
@@ -59,6 +67,6 @@ void AudioSynth::update() {
             short v = (short)(tanhf((amb + growlOut + hissOut + whisperOut) * 1.3f) * 30000);
             buf[i * 2] = v; buf[i * 2 + 1] = v;
         }
-        UpdateAudioStream(stream, buf, 2048);
+        UpdateAudioStream(stream, buf, CHUNK_FRAMES);
     }
 }

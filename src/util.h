@@ -3,6 +3,14 @@
 #include "raylib.h"
 #include <cstdint>
 
+// One full turn in radians. Spelled out because the alternative — a bare
+// 6.2831853 — appears in a hundred places across the synth and the world.
+constexpr float TAU = 6.28318530718f;
+
+// Everything audible is generated at this rate: the one-shot Waves in sfx.cpp
+// and the ambience stream in audio.cpp both run on it.
+constexpr int SAMPLE_RATE = 44100;
+
 inline uint64_t hash64(uint64_t x) {
     x ^= x >> 30; x *= 0xBF58476D1CE4E5B9ULL;
     x ^= x >> 27; x *= 0x94D049BB133111EBULL;
