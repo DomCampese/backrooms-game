@@ -14,7 +14,7 @@ departure from the whole design — generate it instead.
 | `main.cpp` | `init()`, the `while (!WindowShouldClose())` loop, `shutdown()` |
 | `game.{h,cpp}` | all run state; per-frame update in `tick()` |
 | `render.cpp` | 3D scene pass, viewmodels, HUD, overlays |
-| `world.{h,cpp}` | infinite maze: chunk generation, mesh baking, collision, line of sight |
+| `world.{h,cpp}` | infinite maze: chunk generation, mesh baking, collision, line of sight. `WallKind` / `PropKind` / `ChunkMesh` name the codes stored per cell |
 | `levels.{h,cpp}` | per-level look/feel table; CPU mirror of the shader's lighting |
 | `shaders.cpp` | the world and post-process GLSL, as string literals |
 | `textures.cpp` | every surface, procedurally generated |
@@ -167,6 +167,25 @@ To compare frame cost against another build rather than eyeballing `fps=`
 tools/bench.sh ./backrooms.old ./backrooms 2      # best-of-3 each, same level
 ```
 
+For a change that is *meant* to be behaviour-preserving — a rename, a named
+constant, a comment — there is a cheaper and far stronger proof than any
+screenshot. Compile the file both ways and compare the generated assembly:
+
+```bash
+git worktree add /tmp/base HEAD --detach     # link rlshim/ and .rlwheel/ into it
+c++ -std=c++17 -O2 -Irlshim -S -o new.s src/sfx.cpp
+c++ -std=c++17 -O2 -Irlshim -S -o old.s /tmp/base/src/sfx.cpp
+diff <(grep -vE '^\s*\.(file|ident)|^\.LF[BE][0-9]+:' old.s) \
+     <(grep -vE '^\s*\.(file|ident)|^\.LF[BE][0-9]+:' new.s)
+```
+
+Identical output means the change cannot have altered behaviour, full stop —
+no sweep needed for that file. Adding an `#include` renumbers internal labels
+(`.LFB986` → `.LFB995`, `.LLSDA…`), which is why the filter is there; anything
+left after it is a real instruction difference. Extracting a function *will*
+change the assembly, because it changes inlining, so fall back to screenshots
+there.
+
 If the change should not have touched the world pass, prove it: build the
 previous commit somewhere else and `tools/pixdiff.py diff` the two frames. A
 HUD-only change puts essentially all of its differing pixels in one corner;
@@ -247,9 +266,30 @@ it on `!IsSoundPlaying(snd)` each frame. There is a one-frame gap at the seam,
 so a clip meant to loop has to begin and end somewhere quiet and be
 crossfaded, or the join clicks audibly.
 
+**`tools/pixdiff.py` needs Pillow, which a fresh sandbox does not have.**
+`pip install pillow` first, or every diff you try to run dies with
+`ModuleNotFoundError: No module named 'PIL'` — after the sweep you just waited
+fifteen minutes for.
+
+**Screenshots are not byte-reproducible, so `md5sum` is not a regression test.**
+Light flicker and the menu camera drift are driven by `GetTime()`, and the
+software rasteriser's frame rate varies run to run, so the same binary
+screenshotted twice differs in ~0.1% of pixels. Establish that noise floor by
+sweeping the *same* binary twice, then compare it against the before/after
+diff. A change that stays at the noise floor is clean; one that lands an order
+of magnitude above it moved something.
+
+**Timing in this sandbox swings about 15% run to run**, which is wider than most
+of the changes worth measuring, and `fps=` is a smoothed integer on top of that.
+A single before/after pair will happily tell you a change made things 20% slower
+when it only ever removed work. Use `tools/bench.sh`, which takes the best of N
+runs per binary; on anything close, N=3 is not enough — one level read 1.07,
+1.08 and 1.17 across three of them and settled at 1.04 at N=5.
+
 **A rule that has never visibly fired is not necessarily a rule that works.**
-The relief-bump opt-out was documented, used in four places, and did nothing at
-all: the shader tested `fragC.a > 0.995` and 254/255 is 0.9961. Nobody caught
+The relief-bump opt-out was documented, used at every smooth-object site in the
+mesher, and did nothing at all: the shader tested `fragC.a > 0.995` and 254/255
+is 0.9961. Nobody caught
 it because the old lighting wrapped so far past the terminator that a perturbed
 normal barely changed the shade — so the bug had no symptom until the
 terminator sharpened, and then the whole ceiling came out blotched like mould.
@@ -271,13 +311,6 @@ form-tie holes every 171 px, brick courses every 42 — is fine inside one copy
 and breaks at the wrap, putting a row of half-features down every seam in the
 world. The brick had shipped that way for a while and nobody saw it, because
 until each brick got its own tone there was nothing at the seam to mismatch.
-
-**Timing in this sandbox swings about 15% run to run**, which is wider than most
-of the changes worth measuring, and `fps=` is a smoothed integer on top of that.
-A single before/after pair will happily tell you a change made things 20% slower
-when it only ever removed work. Use `tools/bench.sh`, which takes the best of N
-runs per binary; on anything close, N=3 is not enough — one level read 1.07,
-1.08 and 1.17 across three of them and settled at 1.04 at N=5.
 
 **Temporary test hooks must be removed by exact string, not by slicing.**
 Cutting from `s.index(start)` to `s.index(end)` is dangerous when the end
@@ -308,9 +341,9 @@ geometry that should stay smooth uses alpha **254** (0.996): textured, visually
 opaque, below the relief threshold.
 
 **That threshold was `> 0.995` for a long time, and 254/255 is 0.9961.** So the
-documented escape hatch did not work: everything marked 254 — the can, the hand
-on it, the tape deck, its reels — was getting the relief it was explicitly
-opted out of, and had been all along. It stayed invisible because the old
+documented escape hatch did not work: everything marked 254 — the can, the tape
+deck, its reels — was getting the relief it was explicitly opted out of, and had
+been all along. It stayed invisible because the old
 lighting wrapped so far around the terminator that a perturbed normal barely
 changed the shade. The moment the terminator sharpened, the ceiling came out
 covered in dark blotches about a tile across, like mould. Two lessons: pick
@@ -320,10 +353,11 @@ that works.
 
 ### Chunk mesh slots
 
-`ChunkData::meshes[8]`: 0 floor, 1 ceiling, 2 walls, 3 props, 4 water,
-5 wall scrawl, 6 window glass, 7 baked AO. Materials are `Game::mats[8]`:
-0 floor, 1 ceiling, 2 walls, 3 props, 4 scrawl, 5 baked AO, 6 the can,
-7 the tape player.
+`ChunkData::meshes[MESH_COUNT]` is indexed by `enum ChunkMesh` (world.h) and
+`Game::mats[MAT_COUNT]` by `enum MatSlot` (game.h). The first four entries of
+each are the same four surfaces in the same order — floor, ceiling, walls,
+props — which is what lets `renderScene` draw them in one loop. Keep that
+alignment if you add slots.
 
 Every material carries the occupancy grid in its **normal-map slot**, because
 `DrawMesh` reliably binds that as `texture2` where `SetShaderValueTexture` did
@@ -331,12 +365,11 @@ not. If you add a material, wire that up or its shadows will be wrong — an
 unbound sampler reads as white, which the occlusion code interprets as "wall
 everywhere", and the object goes black.
 
-That wiring is a loop in `init()` with its **own hardcoded count**, separate
-from the array size: `Material mats[N]` and `for (int i = 0; i < N; i++)` are
-two literals that have to be changed together. Bump the array and forget the
-loop and the new material is never initialised at all — no shader, no
-occupancy texture — which is a worse failure than the black object above and
-does not look like a material problem when you hit it.
+That wiring is a loop in `init()`. It used to carry its own hardcoded count,
+separate from the array size, so bumping the array and forgetting the loop left
+the new material with no shader and no occupancy texture — a failure that looks
+nothing like a material problem. Both now come from `MAT_COUNT`; leave it that
+way.
 
 ### Lighting
 
@@ -417,6 +450,17 @@ pass, and both obey the same three rules, learned the hard way:
 
 ## Conventions
 
+- **Cell codes are enums, not integers.** What sits on a cell edge is a
+  `WallKind` (`WALL_SOLID`, `WALL_EXIT`, `WALL_WINDOW`), what stands in a cell
+  is a `PropKind` (`PROP_VENDING`, `PROP_PARTY_TABLE`, …), and the item lying
+  loose in it is a `Pickup`. `blocksEdge()` is the "can a body get through this
+  edge" test that collision, pathfinding, line of sight and the mesher share.
+  Light does not use it: `buildOccupancy` tests `WALL_SOLID` alone, because
+  glass stops you but not a fluorescent. Don't reintroduce bare `== 1` / `== 3`.
+- **A prop's height lives in three places and they must agree**: `addProp`
+  builds it (world.cpp), `gatherCellAABBs` gives it a collision box, and
+  `Game::bottleShelfY` says how high a carton stands on it. Change one, change
+  all three, or you get furniture you fall through or cartons floating.
 - Comments explain *why*, not *what*. Several in here record a bug that a
   reasonable-looking change would reintroduce; keep those.
 - No asset files. Everything procedural.

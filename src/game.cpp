@@ -40,7 +40,6 @@ void Game::init() {
     texDog = makeDogTex();
     texAlmondWrap = makeAlmondWrapTex();
     canMesh = buildCanMesh();
-    handMesh = buildHandMesh();
     texDeck = makeDeckTex();
     deckMesh = buildDeckMesh();
     reelMesh = buildReelMesh();
@@ -94,17 +93,22 @@ void Game::init() {
         SetTextureFilter(texOcc, TEXTURE_FILTER_POINT);
         SetTextureWrap(texOcc, TEXTURE_WRAP_CLAMP);
     }
-    for (int i = 0; i < 8; i++) {
+    // Every material needs the occupancy grid, or its shadows are wrong: an
+    // unbound sampler reads as white, the occlusion code takes that for "wall
+    // everywhere", and the object turns black. Count comes from the enum, so a
+    // new slot cannot be added without being initialised here.
+    for (int i = 0; i < MAT_COUNT; i++) {
         mats[i] = LoadMaterialDefault();
         mats[i].shader = worldShader;
         // rides the normal-map slot, which DrawMesh binds as "texture2"
         mats[i].maps[MATERIAL_MAP_NORMAL].texture = texOcc;
     }
-    mats[3].maps[MATERIAL_MAP_DIFFUSE].texture = texProps;
-    mats[4].maps[MATERIAL_MAP_DIFFUSE].texture = texScrawl;   // wall scrawl decals
-    mats[5].maps[MATERIAL_MAP_DIFFUSE].texture = texAO;       // baked contact-shadow gradients
-    mats[6].maps[MATERIAL_MAP_DIFFUSE].texture = texAlmondWrap;   // the can
-    mats[7].maps[MATERIAL_MAP_DIFFUSE].texture = texDeck;         // the tape player
+    // The floor, ceiling and wall diffuse maps change per level — applyLevel sets those.
+    mats[MAT_PROPS].maps[MATERIAL_MAP_DIFFUSE].texture = texProps;
+    mats[MAT_SCRAWL].maps[MATERIAL_MAP_DIFFUSE].texture = texScrawl;   // wall scrawl decals
+    mats[MAT_AO].maps[MATERIAL_MAP_DIFFUSE].texture = texAO;           // baked contact-shadow gradients
+    mats[MAT_CAN].maps[MATERIAL_MAP_DIFFUSE].texture = texAlmondWrap;
+    mats[MAT_DECK].maps[MATERIAL_MAP_DIFFUSE].texture = texDeck;
 
     for (int i = 0; i < 4; i++) steps[i] = makeFootstep(100 + i * 17);
     for (int i = 0; i < 4; i++) entSteps[i] = makeFootstep(300 + i * 23);   // heavier, its own gait
@@ -124,7 +128,7 @@ void Game::init() {
     sndHowl = makeDogHowl();       SetSoundVolume(sndHowl, 0.5f);
     sndGulp = makeGulp();          SetSoundVolume(sndGulp, 0.75f);
     sndVoice = makeTapeVoice();    SetSoundVolume(sndVoice, 0.9f);
-    for (int i = 0; i < 3; i++) sndBarks[i] = makeDogBark(400 + i * 31);
+    for (int i = 0; i < NBARKS; i++) sndBarks[i] = makeDogBark(400 + i * 31);
 
     synth.init();
 
@@ -199,20 +203,7 @@ void Game::winRun(double now) {
     PlaySound(sndWin);
     saveBest();
     // a clean new maze, from the top, gear and tallies reset — records persist
-    world.seed = shotPath ? 1337u : (unsigned)time(nullptr) ^ (unsigned)(now * 977.0);
-    grng = Rng(hash64(world.seed ^ 0xABCDEF));
-    applyLevel(0);
-    Vector2 sp = world.findOpenSpot(15, 15);
-    px = sp.x; pz = sp.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
-    yaw = 0.8f; pitch = 0.0f;
-    coins = 0; almond = 0; tapes = 0; flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; battery = 1.0f;
-    deck = TapeDeck{}; if (IsSoundPlaying(sndVoice)) StopSound(sndVoice);
-    caughtCount = 0; escapeCount = 0; killCount = 0; distWalked = 0;
-    fear = 0; boostT = 0;
-    sanity = 1.0f; sanityStage = 0; sanityWarnT = 0; sanityLine = "";
-    drinkT = 0; drinkLanded = false; nextHeartbeat = now + 20;
-    ent.st = EState::Hidden; ent.nextSpawn = now + 30;
-    runStart = now;
+    beginDescent(now);
 }
 
 // Title screen: the world drifts by behind the card until any key drops you in.
@@ -237,6 +228,19 @@ void Game::updateMenu(double now) {
 void Game::startRun(double now) {
     inMenu = false;
     if (!shotPath) DisableCursor();
+    beginDescent(now);
+    // The menu has been sitting here for however long; applyLevel scheduled the
+    // first blackout off that. Push everything out so a fresh run opens quiet.
+    blackoutCur = 1.0f; blackoutEnd = -1;
+    nextBlackout = now + 40 + grng.f01() * 60;
+    nextWhisper = now + 45 + grng.f01() * 60;
+    nextFlareRegen = now + 75;
+}
+
+// A fresh descent: a new maze from the top, you at the start of it, gear and
+// per-run tallies reset. Shared by the title screen and by escaping for good —
+// the difference between those two is only what each does afterwards.
+void Game::beginDescent(double now) {
     world.seed = shotPath ? 1337u : (unsigned)time(nullptr) ^ (unsigned)(now * 977.0);
     grng = Rng(hash64(world.seed ^ 0xABCDEF));
     applyLevel(0);
@@ -246,13 +250,10 @@ void Game::startRun(double now) {
     coins = 0; almond = 0; tapes = 0; flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; battery = 1.0f;
     deck = TapeDeck{}; if (IsSoundPlaying(sndVoice)) StopSound(sndVoice);
     caughtCount = 0; escapeCount = 0; killCount = 0; distWalked = 0;
-    fear = 0; boostT = 0; blackoutCur = 1.0f; blackoutEnd = -1;
+    fear = 0; boostT = 0;
     sanity = 1.0f; sanityStage = 0; sanityWarnT = 0; sanityLine = "";
     drinkT = 0; drinkLanded = false; nextHeartbeat = now + 20;
     ent.st = EState::Hidden; ent.nextSpawn = now + 30;
-    nextBlackout = now + 40 + grng.f01() * 60;
-    nextWhisper = now + 45 + grng.f01() * 60;
-    nextFlareRegen = now + 75;
     runStart = now;
 }
 
@@ -270,10 +271,9 @@ void Game::applyLevel(int lv) {
     world.unloadAll();
     world.level = lv;
     world.wallH = c.wallH;
-    for (int i = 0; i < 3; i++) {
-        Texture2D t = i == 0 ? floorTexs[lv] : i == 1 ? ceilTexs[lv] : wallTexs[lv];
-        mats[i].maps[MATERIAL_MAP_DIFFUSE].texture = t;
-    }
+    mats[MAT_FLOOR].maps[MATERIAL_MAP_DIFFUSE].texture = floorTexs[lv];
+    mats[MAT_CEILING].maps[MATERIAL_MAP_DIFFUSE].texture = ceilTexs[lv];
+    mats[MAT_WALLS].maps[MATERIAL_MAP_DIFFUSE].texture = wallTexs[lv];
     float ly = c.wallH - 0.12f;
     SetShaderValue(worldShader, locAmb, &c.amb, SHADER_UNIFORM_VEC3);
     SetShaderValue(worldShader, locFogCol, &c.fogCol, SHADER_UNIFORM_VEC3);
@@ -305,12 +305,12 @@ void Game::applyLevel(int lv) {
 // those move, these move with them.
 float Game::bottleShelfY(int a, int b) {
     switch (world.propAt(a, b)) {
-    case 2:  return 1.32f;   // filing cabinet
-    case 3:  return 0.72f;   // folding table
-    case 8:  return 0.60f;   // nightstand
-    case 11: return 0.74f;   // party table
-    case 12: return 0.74f;   // office desk
-    default: return -1.0f;   // nothing you'd stand a carton on
+    case PROP_CABINET:     return 1.32f;
+    case PROP_TABLE:       return 0.72f;
+    case PROP_NIGHTSTAND:  return 0.60f;
+    case PROP_PARTY_TABLE: return 0.74f;
+    case PROP_DESK:        return 0.74f;
+    default:               return -1.0f;   // nothing you'd stand a carton on
     }
 }
 
@@ -352,6 +352,18 @@ void Game::updateDrink(float dt, double now) {
     drinkT = fmaxf(0.0f, drinkT - dt);
 }
 
+// A cell offers at most one loose item. The order here is the priority: a cell
+// that would hold both a carton and a doubloon holds the carton. Everything
+// that looks at world pickups — the renderer and the pickup test — comes
+// through this one function, so the two can never place them differently.
+Pickup Game::pickupAt(int a, int b) {
+    if (bottleAt(a, b))  return Pickup::AlmondWater;
+    if (coinAt(a, b))    return Pickup::Doubloon;
+    if (batteryAt(a, b)) return Pickup::Battery;
+    if (tapeAt(a, b))    return Pickup::Tape;
+    return Pickup::None;
+}
+
 bool Game::coinAt(int a, int b) {
     if (world.pillarAt(a, b) || world.propAt(a, b) || world.poolAt(a, b)) return false;
     return ih(a, b, (uint32_t)world.seed ^ 0xC01Du) % 449 == 0;
@@ -371,8 +383,12 @@ bool Game::tapeAt(int a, int b) {
 // these and the hunt loses you, however close it gets.
 bool Game::hideSpotAt(int a, int b) {
     switch (world.propAt(a, b)) {
-    case 1: case 2: case 5: case 6: case 8: case 9: case 11: case 12: case 13: return true;
-    default: return false;
+    case PROP_BOXES: case PROP_CABINET: case PROP_COUCH: case PROP_ARMOIRE:
+    case PROP_NIGHTSTAND: case PROP_BED: case PROP_PARTY_TABLE: case PROP_DESK:
+    case PROP_SHELVING:
+        return true;
+    default:
+        return false;
     }
 }
 
@@ -391,7 +407,7 @@ bool Game::balloonAt(int a, int b, Vector3 &out) {
 // Balloon bunch knotted to the party table in this cell (the sway the renderer
 // adds is left off — it's tiny next to the hit radius, so aim stays honest).
 int Game::tableBalloonBunch(int a, int b, Vector3 *pos, Color *cols, Vector3 &tie) {
-    if (level != 4 || world.propAt(a, b) != 11) return 0;
+    if (level != 4 || world.propAt(a, b) != PROP_PARTY_TABLE) return 0;
     uint32_t h = ih(a, b, (uint32_t)world.seed ^ 0x8A11u);
     if (h % 3 != 0) return 0;                       // most tables, not all
     float tx = a * CELL + 1.0f, tz = b * CELL + 1.0f;
@@ -415,7 +431,7 @@ void Game::popBalloonsAlongAim() {
     if (level != 4) return;
     auto burst = [&](Vector3 at, Color base, int n) {
         for (int c2 = 0; c2 < n; c2++) {
-            float aa = grng.f01() * 6.2831853f, sp = 1.2f + grng.f01() * 2.2f;
+            float aa = grng.f01() * TAU, sp = 1.2f + grng.f01() * 2.2f;
             confetti.push_back({ at, { cosf(aa) * sp, 0.6f + grng.f01() * 1.6f, sinf(aa) * sp },
                                  1.3f + grng.f01() * 0.9f,
                                  grng.f01() < 0.5f ? base : PARTY[c2 % 5] });
@@ -714,14 +730,18 @@ void Game::updateDevKeys(double now) {
 }
 
 void Game::updateWeapons(float dt, double now) {
-    // ---- weapons: 1 flare, 2 revolver; wheel cycles; left click uses the selected one
-    if (IsKeyPressed(KEY_ONE)) weapon = 0;
-    if (IsKeyPressed(KEY_TWO)) weapon = 1;
-    if (IsKeyPressed(KEY_FOUR)) weapon = 2;
+    // ---- weapons: keys 1/2/4 pick one directly, the wheel cycles, left click
+    // uses whichever is in your hands
+    if (IsKeyPressed(KEY_ONE)) weapon = WEAPON_FLARE;
+    if (IsKeyPressed(KEY_TWO)) weapon = WEAPON_REVOLVER;
+    if (IsKeyPressed(KEY_FOUR)) weapon = WEAPON_DECK;
     wheelCd = fmaxf(0, wheelCd - dt);
-    {   // the wheel now runs a three-slot loop, and respects which way you spun it
+    {   // the wheel runs the loop both ways: +1 forward, -1 as +(N-1) to stay positive
         float mw = GetMouseWheelMove();
-        if (wheelCd <= 0 && fabsf(mw) > 0.5f) { weapon = (weapon + (mw > 0 ? 1 : 2)) % 3; wheelCd = 0.25f; }
+        if (wheelCd <= 0 && fabsf(mw) > 0.5f) {
+            weapon = (weapon + (mw > 0 ? 1 : WEAPON_COUNT - 1)) % WEAPON_COUNT;
+            wheelCd = 0.25f;
+        }
     }
     gunCd = fmaxf(0, gunCd - dt);
     muzzleT = fmaxf(0, muzzleT - dt);
@@ -731,7 +751,7 @@ void Game::updateWeapons(float dt, double now) {
         reloadT -= dt;
         if (reloadT <= 0) { ammo = MAXAMMO; SetSoundPitch(sndClick, 1.15f); PlaySound(sndClick); }
     }
-    if (weapon == 1 && IsCursorHidden() && !captureClick && caughtT <= 0 && reloadT <= 0 && gunCd <= 0 &&
+    if (weapon == WEAPON_REVOLVER && IsCursorHidden() && !captureClick && caughtT <= 0 && reloadT <= 0 && gunCd <= 0 &&
         drinkT <= 0 &&
         IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         if (ammo <= 0) { SetSoundPitch(sndClick, 0.7f); PlaySound(sndClick); gunCd = 0.25f; }  // dry fire
@@ -796,7 +816,7 @@ void Game::updateWeapons(float dt, double now) {
             }
         }
     }
-    if (IsKeyPressed(KEY_R) && weapon == 1 && ammo < MAXAMMO && reloadT <= 0) {
+    if (IsKeyPressed(KEY_R) && weapon == WEAPON_REVOLVER && ammo < MAXAMMO && reloadT <= 0) {
         reloadT = 1.8f;
         SetSoundPitch(sndClick, 0.95f); PlaySound(sndClick);
     }
@@ -805,7 +825,7 @@ void Game::updateWeapons(float dt, double now) {
 void Game::updateFlare(float dt, double now) {
     // ---- flare weapon
     if (IsCursorHidden() && caughtT <= 0 && flares > 0 && drinkT <= 0 &&
-        (IsKeyPressed(KEY_Q) || (weapon == 0 && !captureClick && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)))) {
+        (IsKeyPressed(KEY_Q) || (weapon == WEAPON_FLARE && !captureClick && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)))) {
         flares--;
         flare.active = true; flare.flying = true; flare.burn = FLAREBURN;
         flare.x = px + fwd.x * 0.4f; flare.y = eyeY - 0.15f; flare.z = pz + fwd.z * 0.4f;
@@ -860,7 +880,7 @@ void Game::updateTapeDeck(float dt, double now) {
 
     // ---- thread a tape, or set the running deck down
     if (IsCursorHidden() && !captureClick && caughtT <= 0 && drinkT <= 0 &&
-        weapon == 2 && deck.carried && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        weapon == WEAPON_DECK && deck.carried && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         if (!deck.playing && tapes > 0) {
             tapes--;
             deck.playing = true;
@@ -913,7 +933,7 @@ void Game::updateTapeDeck(float dt, double now) {
     if (deck.playing) {
         deck.t -= dt;
         deck.reel += dt * 2.3f;
-        if (deck.reel > 6.2831853f) deck.reel -= 6.2831853f;
+        if (deck.reel > TAU) deck.reel -= TAU;
         if (deck.t <= 0) {
             deck.playing = false; deck.t = 0;
             deckNoteT = 2.6f; deckNote = "the tape runs out.";
@@ -950,32 +970,40 @@ void Game::updateInteraction() {
         int a = pci + dx, b = pck + dz;
         uint64_t ky = cellKey2(a, b);
         if (taken.count(ky)) continue;
-        bool isB = bottleAt(a, b), isC = !isB && coinAt(a, b);
-        bool isBat = !isB && !isC && batteryAt(a, b);
-        bool isT = !isB && !isC && !isBat && tapeAt(a, b);
-        if (!isB && !isC && !isBat && !isT) continue;
+        Pickup kind = pickupAt(a, b);
+        if (kind == Pickup::None) continue;
         float bxx = a * CELL + 1.0f, bzz = b * CELL + 1.0f;
         float ddx = px - bxx, ddz = pz - bzz;
         // collision keeps you off the furniture, so a carton standing on it needs
         // a grab radius that reaches across the piece you can't walk through
-        float gr = (isB && bottleShelfY(a, b) >= 0) ? 1.35f : 0.8f;
+        bool onShelf = kind == Pickup::AlmondWater && bottleShelfY(a, b) >= 0;
+        float gr = onShelf ? 1.35f : 0.8f;
         // ...but not through a wall. lineOfSight ignores props, so the piece the
         // carton is standing on doesn't block your own reach across it.
         if (gr > 1.0f && !world.lineOfSight(px, pz, bxx, bzz)) continue;
-        if (ddx * ddx + ddz * ddz < gr * gr) {
-            taken.insert(ky);
-            if (isB) almond++;
-            else if (isC) coins++;
-            else if (isBat) {
-                battery = clampf(battery + 0.45f, 0, 1);
-                SetSoundPitch(sndClick, 0.85f); PlaySound(sndClick);
-            } else {
-                tapes++;
-                tapeFoundT = 3.2f;
-                tapeLine = TAPE_LINES[grng.ri(0, TAPE_LINE_COUNT - 1)];
-                PlaySound(sndTape);
-            }
-            if (isB || isC) { SetSoundPitch(sndClick, isB ? 1.3f : 1.6f); PlaySound(sndClick); }
+        if (ddx * ddx + ddz * ddz >= gr * gr) continue;
+        taken.insert(ky);
+        switch (kind) {
+        case Pickup::AlmondWater:
+            almond++;
+            SetSoundPitch(sndClick, 1.3f); PlaySound(sndClick);
+            break;
+        case Pickup::Doubloon:
+            coins++;
+            SetSoundPitch(sndClick, 1.6f); PlaySound(sndClick);
+            break;
+        case Pickup::Battery:
+            battery = clampf(battery + 0.45f, 0, 1);
+            SetSoundPitch(sndClick, 0.85f); PlaySound(sndClick);
+            break;
+        case Pickup::Tape:
+            tapes++;
+            tapeFoundT = 3.2f;
+            tapeLine = TAPE_LINES[grng.ri(0, TAPE_LINE_COUNT - 1)];
+            PlaySound(sndTape);
+            break;
+        case Pickup::None:
+            break;
         }
     }
     for (size_t c2 = 0; c2 < coinsWorld.size();) {   // spilled doubloons
@@ -992,52 +1020,57 @@ void Game::updateInteraction() {
         drinkLanded = false;
         PlaySound(sndGulp);
     }
-    // Red Halls: close a standpipe. A valve cell never holds a prop, so this can
-    // never be the same cell as a vending machine — both may read the same press.
-    if (IsKeyPressed(KEY_E) && level == 3) {
-        bool turned = false;
-        for (int dx = -1; dx <= 1 && !turned; dx++) for (int dz = -1; dz <= 1 && !turned; dz++) {
-            int a = pci + dx, b = pck + dz;
-            if (!world.valveAt(a, b)) continue;
-            uint64_t ky = cellKey2(a, b);
-            if (valvesTurned.count(ky)) continue;
-            float vx = a * CELL + 1.0f, vz = b * CELL + 1.0f;
-            float ddx = px - vx, ddz = pz - vz;
-            if (ddx * ddx + ddz * ddz > 1.7f * 1.7f) continue;
-            valvesTurned.insert(ky);
-            valveT = 3.4f;
-            turned = true;
-            PlaySound(sndValve);
-            if ((int)valvesTurned.size() >= VALVES_NEEDED && !pipesShut) {
-                pipesShut = true;
-                PlaySound(sndWin);
-                for (int c2 = 0; c2 < 9; c2++) {   // the pipes give up their cache
-                    float aa = c2 * 0.698f + grng.f01();
-                    float rr = 1.2f + grng.f01() * 1.1f;
-                    coinsWorld.push_back({ px + cosf(aa) * rr, 0, pz + sinf(aa) * rr });
+    // ---- E: the one "use what's in front of me" key. Each of the three things
+    // it can reach lives in its own block below. They can't collide: a valve
+    // cell never holds a prop, so a standpipe and a vending machine are never
+    // the same cell, and the deck is wherever you personally put it down.
+    if (IsKeyPressed(KEY_E)) {
+        // Red Halls: close a standpipe.
+        if (level == 3) {
+            bool turned = false;
+            for (int dx = -1; dx <= 1 && !turned; dx++) for (int dz = -1; dz <= 1 && !turned; dz++) {
+                int a = pci + dx, b = pck + dz;
+                if (!world.valveAt(a, b)) continue;
+                uint64_t ky = cellKey2(a, b);
+                if (valvesTurned.count(ky)) continue;
+                float vx = a * CELL + 1.0f, vz = b * CELL + 1.0f;
+                float ddx = px - vx, ddz = pz - vz;
+                if (ddx * ddx + ddz * ddz > 1.7f * 1.7f) continue;
+                valvesTurned.insert(ky);
+                valveT = 3.4f;
+                turned = true;
+                PlaySound(sndValve);
+                if ((int)valvesTurned.size() >= VALVES_NEEDED && !pipesShut) {
+                    pipesShut = true;
+                    PlaySound(sndWin);
+                    for (int c2 = 0; c2 < 9; c2++) {   // the pipes give up their cache
+                        float aa = c2 * 0.698f + grng.f01();
+                        float rr = 1.2f + grng.f01() * 1.1f;
+                        coinsWorld.push_back({ px + cosf(aa) * rr, 0, pz + sinf(aa) * rr });
+                    }
                 }
             }
         }
-    }
-    if (IsKeyPressed(KEY_E)) {   // vending machine: three doubloons a bottle
-        for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
-            int a = pci + dx, b = pck + dz;
-            if (world.propAt(a, b) != 10) continue;
-            float mx = a * CELL + 1.0f, mz = b * CELL + 1.0f;
-            float ddx = px - mx, ddz = pz - mz;
-            if (ddx * ddx + ddz * ddz < 1.6f * 1.6f && coins >= 3) {
-                coins -= 3; almond++;
-                SetSoundPitch(sndClick, 0.8f); PlaySound(sndClick);
+        {   // vending machine: three doubloons a bottle
+            for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+                int a = pci + dx, b = pck + dz;
+                if (world.propAt(a, b) != PROP_VENDING) continue;
+                float mx = a * CELL + 1.0f, mz = b * CELL + 1.0f;
+                float ddx = px - mx, ddz = pz - mz;
+                if (ddx * ddx + ddz * ddz < 1.6f * 1.6f && coins >= 3) {
+                    coins -= 3; almond++;
+                    SetSoundPitch(sndClick, 0.8f); PlaySound(sndClick);
+                }
             }
         }
-    }
-    if (IsKeyPressed(KEY_E) && !deck.carried) {   // pick the deck back up, running or not
-        float ddx = px - deck.x, ddz = pz - deck.z;
-        if (ddx * ddx + ddz * ddz < 1.5f * 1.5f) {
-            deck.carried = true; deck.flying = false;
-            deckNoteT = 2.2f; deckNote = deck.playing ? "you pick it up. it's still running."
-                                                      : "you pick the deck back up.";
-            SetSoundPitch(sndClick, 1.1f); PlaySound(sndClick);
+        if (!deck.carried) {   // pick the deck back up, running or not
+            float ddx = px - deck.x, ddz = pz - deck.z;
+            if (ddx * ddx + ddz * ddz < 1.5f * 1.5f) {
+                deck.carried = true; deck.flying = false;
+                deckNoteT = 2.2f; deckNote = deck.playing ? "you pick it up. it's still running."
+                                                          : "you pick the deck back up.";
+                SetSoundPitch(sndClick, 1.1f); PlaySound(sndClick);
+            }
         }
     }
     if (IsKeyPressed(KEY_M)) {   // chalk mark: the only map you get
@@ -1134,7 +1167,7 @@ void Game::updateEntity(float dt, double now) {
     if (ent.st == EState::Hidden) {
         if (sprinting) ent.nextSpawn -= 1.5 * dt;   // running feet echo a long way
         if (now > ent.nextSpawn) {
-            float a = grng.f01() * 6.2831853f;
+            float a = grng.f01() * TAU;
             float d = 20 + grng.f01() * 10;
             Vector2 spot = world.findOpenSpot(px + cosf(a) * d, pz + sinf(a) * d);
             ent.x = spot.x; ent.z = spot.y;
@@ -1208,7 +1241,7 @@ void Game::updateEntity(float dt, double now) {
                 PlaySound(sndScare);
                 caughtT = 2.4f; caughtCount++;
                 saveBest();
-                float a = grng.f01() * 6.2831853f;
+                float a = grng.f01() * TAU;
                 Vector2 spot = world.findOpenSpot(px + cosf(a) * 800, pz + sinf(a) * 800);
                 px = spot.x; pz = spot.y; velx = velz = 0;
                 ent.st = EState::Hidden; ent.nextSpawn = now + 30 + grng.f01() * 30;
@@ -1287,7 +1320,7 @@ void Game::updateDogs(float dt, double now) {
         nextPack = now + 14 + grng.f01() * 16;
         for (auto &d : dogs) {
             if (d.st != DState::Gone) continue;
-            float a = grng.f01() * 6.2831853f, dist = 17 + grng.f01() * 9;
+            float a = grng.f01() * TAU, dist = 17 + grng.f01() * 9;
             Vector2 spot = world.findOpenSpot(px + cosf(a) * dist, pz + sinf(a) * dist);
             d.x = spot.x; d.z = spot.y;
             d.st = DState::Prowl; d.life = 0; d.lost = 0; d.hp = 2;
@@ -1338,7 +1371,7 @@ void Game::updateDogs(float dt, double now) {
             else {
                 float rdx = d.roamX - d.x, rdz = d.roamZ - d.z;
                 if (now > d.nextRoam || rdx * rdx + rdz * rdz < 1.4f * 1.4f) {
-                    float a = grng.f01() * 6.2831853f, r = 9 + grng.f01() * 11;
+                    float a = grng.f01() * TAU, r = 9 + grng.f01() * 11;
                     Vector2 sp = world.findOpenSpot(d.x + cosf(a) * r, d.z + sinf(a) * r);
                     d.roamX = sp.x; d.roamZ = sp.y;
                     d.nextRoam = now + 9 + grng.f01() * 9;
@@ -1374,7 +1407,7 @@ void Game::updateDogs(float dt, double now) {
                 PlaySound(sndScare);
                 caughtT = 2.4f; caughtCount++;
                 saveBest();
-                float a = grng.f01() * 6.2831853f;
+                float a = grng.f01() * TAU;
                 Vector2 spot = world.findOpenSpot(px + cosf(a) * 800, pz + sinf(a) * 800);
                 px = spot.x; pz = spot.y; velx = velz = 0;
                 for (auto &o : dogs) o.st = DState::Gone;
@@ -1393,8 +1426,8 @@ void Game::updateExits(double now) {
         for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
             int i = ci + dx, k = ck + dz;
             float doorX = -1, doorZ = -1;
-            if (world.wallNVal(i, k) == 2) { doorX = i * CELL + 1.0f; doorZ = k * CELL; }
-            else if (world.wallWVal(i, k) == 2) { doorX = i * CELL; doorZ = k * CELL + 1.0f; }
+            if (world.wallNVal(i, k) == WALL_EXIT) { doorX = i * CELL + 1.0f; doorZ = k * CELL; }
+            else if (world.wallWVal(i, k) == WALL_EXIT) { doorX = i * CELL; doorZ = k * CELL + 1.0f; }
             else continue;
             float ddx = px - doorX, ddz = pz - doorZ;
             if (ddx * ddx + ddz * ddz < 0.72f * 0.72f) {

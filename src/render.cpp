@@ -62,18 +62,25 @@ void Game::renderScene(double now) {
         if (it == world.chunks.end() || !it->second.built) continue;
         float ccx = cx * CHUNK + CHUNK / 2 - px, ccz = cz * CHUNK + CHUNK / 2 - pz;
         if (ccx * f2x + ccz * f2z < -24.0f && (ccx * ccx + ccz * ccz) > 24 * 24) continue;
-        for (int m = 0; m < 4; m++)
+        // the first four mesh slots and the first four material slots are the
+        // same four surfaces in the same order, which is what lets this be a loop
+        for (int m = MESH_FLOOR; m <= MESH_PROPS; m++)
             if (it->second.meshes[m].vertexCount > 0)
                 DrawMesh(it->second.meshes[m], mats[m], ident);
-        if (it->second.meshes[5].vertexCount > 0)   // wall scrawl decals over the walls
-            DrawMesh(it->second.meshes[5], mats[4], ident);
+        if (it->second.meshes[MESH_SCRAWL].vertexCount > 0)   // graffiti, over the walls
+            DrawMesh(it->second.meshes[MESH_SCRAWL], mats[MAT_SCRAWL], ident);
     }
     for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) {   // blended passes last, over the opaque room
         auto it = world.chunks.find(World::key(pcx + dx, pcz + dz));
         if (it == world.chunks.end() || !it->second.built) continue;
-        if (it->second.meshes[7].vertexCount > 0) DrawMesh(it->second.meshes[7], mats[5], ident);   // baked AO creases
-        if (it->second.meshes[4].vertexCount > 0) DrawMesh(it->second.meshes[4], mats[0], ident);   // water
-        if (it->second.meshes[6].vertexCount > 0) DrawMesh(it->second.meshes[6], mats[0], ident);   // window glass
+        // water and glass are shaded from their vertex alpha, not from a texture,
+        // so they can borrow the floor material rather than needing their own
+        if (it->second.meshes[MESH_AO].vertexCount > 0)
+            DrawMesh(it->second.meshes[MESH_AO], mats[MAT_AO], ident);
+        if (it->second.meshes[MESH_WATER].vertexCount > 0)
+            DrawMesh(it->second.meshes[MESH_WATER], mats[MAT_FLOOR], ident);
+        if (it->second.meshes[MESH_GLASS].vertexCount > 0)
+            DrawMesh(it->second.meshes[MESH_GLASS], mats[MAT_FLOOR], ident);
     }
     // small props draw with raylib's unlit default shader, so estimate the room
     // light at each one (plus flare/muzzle glow) — no more balloons shining
@@ -96,32 +103,40 @@ void Game::renderScene(double now) {
     for (int dx = -7; dx <= 7; dx++) for (int dz = -7; dz <= 7; dz++) {   // world pickups nearby
         int a = pci + dx, b = pck + dz;
         if (taken.count(cellKey2(a, b))) continue;
-        bool isB = bottleAt(a, b), isC = !isB && coinAt(a, b);
-        bool isBat = !isB && !isC && batteryAt(a, b);
-        bool isT = !isB && !isC && !isBat && tapeAt(a, b);
-        if (!isB && !isC && !isBat && !isT) continue;
+        Pickup kind = pickupAt(a, b);            // the same call the pickup test makes
+        if (kind == Pickup::None) continue;
         float bxx = a * CELL + 1.0f, bzz = b * CELL + 1.0f;
         float gy = world.floorY(a, b);
         float pl = propLum(bxx, gy + 0.15f, bzz);
-        if (isB) {   // almond water: the can itself, on the floor or on the furniture
+        switch (kind) {
+        case Pickup::AlmondWater: {   // the can itself, on the floor or up on the furniture
             float shelf = bottleShelfY(a, b);
             float sy = gy + (shelf >= 0 ? shelf : 0.0f);
             // the mesh is built with its base on y=0, so this just puts the base
             // where it belongs. Spin each one by its cell so they aren't clones.
-            float spin = (float)(ih(a, b, 0x0CA9u) & 1023) / 1023.0f * 6.2831853f;
+            float spin = (float)(ih(a, b, 0x0CA9u) & 1023) / 1023.0f * TAU;
             drawCan(MatrixMultiply(MatrixRotateY(spin), MatrixTranslate(bxx, sy, bzz)));
-        } else if (isC) {
+            break;
+        }
+        case Pickup::Doubloon: {
             float bob = sinf((float)now * 2.0f + a * 1.7f + b) * 0.03f;
             DrawCylinder({ bxx, gy + 0.06f + bob, bzz }, 0.085f, 0.085f, 0.024f, 12, lit({ 234, 188, 74, 255 }, pl));
-        } else if (isBat) {   // a spare battery, standing on end
+            break;
+        }
+        case Pickup::Battery:   // standing on end
             DrawCube({ bxx, gy + 0.05f, bzz }, 0.06f, 0.10f, 0.06f, lit({ 70, 150, 90, 255 }, pl));
             DrawCylinder({ bxx, gy + 0.10f, bzz }, 0.018f, 0.018f, 0.02f, 8, lit({ 200, 180, 90, 255 }, pl));
-        } else {   // a cassette tape, label up
+            break;
+        case Pickup::Tape: {   // a cassette, label up, two hubs showing
             float bob = sinf((float)now * 1.6f + a * 2.1f + b) * 0.02f;
             DrawCube({ bxx, gy + 0.02f + bob, bzz }, 0.11f, 0.04f, 0.07f, lit({ 40, 38, 42, 255 }, pl));
             DrawCube({ bxx, gy + 0.041f + bob, bzz }, 0.075f, 0.001f, 0.05f, lit({ 210, 202, 182, 255 }, pl));
             DrawCylinder({ bxx - 0.028f, gy + 0.041f + bob, bzz }, 0.014f, 0.014f, 0.002f, 8, lit({ 30, 28, 30, 255 }, pl));
             DrawCylinder({ bxx + 0.028f, gy + 0.041f + bob, bzz }, 0.014f, 0.014f, 0.002f, 8, lit({ 30, 28, 30, 255 }, pl));
+            break;
+        }
+        case Pickup::None:
+            break;
         }
     }
     if (!deck.carried)   // the deck, wherever you set it down, facing the way you threw it
@@ -181,12 +196,12 @@ void Game::renderScene(double now) {
         float pulse = 0.7f + 0.3f * sinf((float)now * 3.0f);
         for (int dx = -6; dx <= 6; dx++) for (int dz = -6; dz <= 6; dz++) {
             int i = pci + dx, k = pck + dz;
-            float gx3 = -1, gz3 = -1;
-            if (world.wallNVal(i, k) == 2) { gx3 = i * CELL + 1.0f; gz3 = k * CELL; }
-            else if (world.wallWVal(i, k) == 2) { gx3 = i * CELL; gz3 = k * CELL + 1.0f; }
+            float doorX = 0, doorZ = 0;
+            if (world.wallNVal(i, k) == WALL_EXIT) { doorX = i * CELL + 1.0f; doorZ = k * CELL; }
+            else if (world.wallWVal(i, k) == WALL_EXIT) { doorX = i * CELL; doorZ = k * CELL + 1.0f; }
             else continue;
             if (world.cursedExit(i, k)) continue;   // cursed doors stay a trap, never green
-            Vector3 gp = { gx3, 1.15f, gz3 };
+            Vector3 gp = { doorX, 1.15f, doorZ };
             DrawSphere(gp, 0.34f, { 150, 255, 170, (unsigned char)(150 * pulse) });   // bright core
             DrawSphere(gp, 0.62f, { 90, 255, 120, (unsigned char)(95 * pulse) });
             DrawSphere(gp, 1.35f, { 60, 235, 110, (unsigned char)(40 * pulse) });     // wide halo
@@ -272,7 +287,7 @@ void Game::renderScene(double now) {
         DrawBillboardRec(cam, spr, { 0, 0, 128, 256 },
                          { ent.x, eg + 0.98f - sink, ent.z }, { 0.98f, 1.96f }, { lum8, lum8, lum8, al });
     }
-    if (drinkT > 0 || (weapon == 2 && deck.carried)) {
+    if (drinkT > 0 || (weapon == WEAPON_DECK && deck.carried)) {
         // Held against a wall, the can falls inside that wall's shadow and goes
         // black in your hands. A viewmodel shouldn't be shadowed by the room it
         // is being held in, so switch the occlusion grid off for this one draw
@@ -293,6 +308,91 @@ void Game::renderScene(double now) {
     }
     EndMode3D();
     EndTextureMode();
+}
+
+// The gun (or the flare) in the bottom-right corner, drawn flat in 2D over the
+// finished 3D frame. Both are built from a handful of boxes in a "gun-local"
+// frame: t runs along the barrel, s runs up toward the sights, so the whole
+// thing can be swung by recoil or dipped for a reload by rotating one angle.
+//
+// The tape player is not here — it is real geometry, drawn in the 3D pass by
+// drawHeldDeck, because a flat drawing could not show the reels turning.
+void Game::drawWeaponViewmodel(int sw, int sh, double now) {
+    // reload: the muzzle dips while the cylinder is out, then comes back up
+    float dip = (weapon == WEAPON_REVOLVER && reloadT > 0)
+              ? sinf(clampf(1.0f - reloadT / 1.8f, 0.0f, 1.0f) * 3.14159f) : 0.0f;
+    float deg = (weapon == WEAPON_REVOLVER ? 210.0f + recoil * 16.0f - dip * 26.0f : 236.0f);
+    float rad = deg * DEG2RAD;
+    float dirx = cosf(rad), diry = sinf(rad);   // along the barrel
+    float nx = -diry, ny = dirx;                // toward the top of the gun
+    float bobX = sinf(bobPhase * 3.14159f) * 3.0f * bobAmt;
+    Vector2 piv = weapon == WEAPON_REVOLVER
+        ? Vector2{ sw - 165.0f + bobX - dirx * recoil * 22.0f,
+                   sh - 30.0f + fabsf(bobX) * 0.6f - diry * recoil * 22.0f + dip * 16.0f }
+        : Vector2{ sw - 130.0f + bobX, sh - 12.0f + fabsf(bobX) * 0.6f };
+    // gun-local frame: t along the barrel, s toward the sights
+    const float k = 1.25f;   // overall viewmodel scale
+    auto pt = [&](float t, float s) {
+        return Vector2{ piv.x + (dirx * t + nx * s) * k, piv.y + (diry * t + ny * s) * k };
+    };
+    auto quad = [&](Vector2 a, Vector2 b, Vector2 c2, Vector2 d2, Color col) {
+        DrawTriangle(a, b, c2, col); DrawTriangle(a, c2, d2, col);
+    };
+    auto box = [&](float t0, float t1, float s0, float s1, Color col) {
+        quad(pt(t0, s1), pt(t0, s0), pt(t1, s0), pt(t1, s1), col);
+    };
+    if (weapon == WEAPON_REVOLVER) {   // revolver, kicks with recoil
+        Color steel = { 40, 38, 44, 255 }, steel2 = { 57, 54, 62, 255 };
+        Color dark = { 21, 20, 24, 255 }, wood = { 88, 58, 38, 255 };
+        Color glint = { 86, 84, 96, 255 };
+        // grip rakes back and down off the bottom of the screen
+        Vector2 gv = { (-dirx * 0.42f - nx * 0.91f) * 70.0f * k, (-diry * 0.42f - ny * 0.91f) * 70.0f * k };
+        Vector2 g0 = pt(-14, -8), g1 = pt(12, -8);
+        quad(g0, g1, { g1.x + gv.x, g1.y + gv.y },
+             { g0.x + gv.x - dirx * 8 * k, g0.y + gv.y - diry * 8 * k }, wood);
+        box(-16, 34, -10, 8, steel);                    // frame rear + recoil shield
+        box(-6, 90, 8, 13, steel);                      // top strap over the cylinder
+        box(30, 76, -14, 13, steel2);                   // cylinder bulge
+        box(43, 46, -12, 11, dark);                     // cylinder flutes
+        box(59, 62, -12, 11, dark);
+        box(82, 168, -3, 11, steel);                    // barrel
+        box(88, 138, -8, -3, steel2);                   // ejector rod shroud under it
+        box(163, 168, -3, 11, dark);                    // muzzle band
+        box(-26, -14, 9, 19, steel2);                   // hammer spur
+        box(-10, -2, 13, 17, steel);                    // rear sight
+        box(156, 163, 11, 17, steel);                   // front sight
+        box(82, 163, 9, 11, glint);                     // ceiling light rides the barrel
+        box(30, 76, 11, 13, glint);                     // and the cylinder
+        DrawRing(pt(24, -15), 7.5f * k, 10.5f * k, 0, 360, 24, steel);   // trigger guard
+        box(20, 24, -16, -9, dark);                     // trigger
+        if (muzzleSmoke > 0.02f) {   // powder haze curling off the muzzle, drifting up
+            Vector2 tip = pt(178, 4);
+            float s = muzzleSmoke;
+            for (int i = 0; i < 4; i++) {
+                float t = (float)now * 1.4f + i * 1.9f;
+                float rise = (1.0f - s) * 26.0f + i * 7.0f;
+                Vector2 pv = { tip.x + sinf(t) * (5 + i * 3) + dirx * i * 5,
+                               tip.y - rise + diry * i * 5 };
+                unsigned char al = (unsigned char)(clampf(s * 0.5f - i * 0.06f, 0, 1) * 90);
+                DrawCircleV(pv, (11 + i * 6) * (1.4f - s * 0.4f), { 150, 148, 150, al });
+            }
+        }
+        if (muzzleT > 0) {
+            float mt = muzzleT / 0.09f;
+            Vector2 tip = pt(180, 4);
+            DrawCircleV(tip, 46 * mt, { 255, 150, 60, (unsigned char)(90 * mt) });
+            DrawCircleV(tip, 24 * mt, { 255, 225, 140, (unsigned char)(210 * mt) });
+        }
+    } else {   // road flare in hand, cap out, ready to strike and throw
+        Color body = { 168, 42, 32, 255 }, edge = { 206, 74, 56, 255 };
+        Color capc = { 56, 26, 22, 255 }, band = { 216, 204, 184, 255 };
+        box(0, 96, -11, 11, body);                      // red tube
+        box(0, 90, 7, 11, edge);                        // light along the top
+        box(-4, 2, -9, 9, capc);                        // butt end
+        box(78, 90, -12, 12, band);                     // striker band
+        box(90, 100, -9, 9, capc);                      // cap
+    }
+    DrawCircle(sw / 2, sh / 2, 2.0f, { 230, 220, 190, 110 });   // aiming dot
 }
 
 void Game::renderUI(double now) {
@@ -341,83 +441,9 @@ void Game::renderUI(double now) {
         return;
     }
 
-    if (drinkT <= 0 && (weapon == 1 || (weapon == 0 && flares > 0))) {   // viewmodel, bottom-right (the deck draws in 3D)
-        // reload: the muzzle dips while the cylinder is out, then comes back up
-        float dip = (weapon == 1 && reloadT > 0)
-                  ? sinf(clampf(1.0f - reloadT / 1.8f, 0.0f, 1.0f) * 3.14159f) : 0.0f;
-        float deg = (weapon == 1 ? 210.0f + recoil * 16.0f - dip * 26.0f : 236.0f);
-        float rad = deg * DEG2RAD;
-        float dirx = cosf(rad), diry = sinf(rad);   // along the barrel
-        float nx = -diry, ny = dirx;                // toward the top of the gun
-        float bobX = sinf(bobPhase * 3.14159f) * 3.0f * bobAmt;
-        Vector2 piv = weapon == 1
-            ? Vector2{ sw - 165.0f + bobX - dirx * recoil * 22.0f,
-                       sh - 30.0f + fabsf(bobX) * 0.6f - diry * recoil * 22.0f + dip * 16.0f }
-            : Vector2{ sw - 130.0f + bobX, sh - 12.0f + fabsf(bobX) * 0.6f };
-        // gun-local frame: t along the barrel, s toward the sights
-        const float k = 1.25f;   // overall viewmodel scale
-        auto pt = [&](float t, float s) {
-            return Vector2{ piv.x + (dirx * t + nx * s) * k, piv.y + (diry * t + ny * s) * k };
-        };
-        auto quad = [&](Vector2 a, Vector2 b, Vector2 c2, Vector2 d2, Color col) {
-            DrawTriangle(a, b, c2, col); DrawTriangle(a, c2, d2, col);
-        };
-        auto box = [&](float t0, float t1, float s0, float s1, Color col) {
-            quad(pt(t0, s1), pt(t0, s0), pt(t1, s0), pt(t1, s1), col);
-        };
-        if (weapon == 1) {   // revolver, kicks with recoil
-            Color steel = { 40, 38, 44, 255 }, steel2 = { 57, 54, 62, 255 };
-            Color dark = { 21, 20, 24, 255 }, wood = { 88, 58, 38, 255 };
-            Color glint = { 86, 84, 96, 255 };
-            // grip rakes back and down off the bottom of the screen
-            Vector2 gv = { (-dirx * 0.42f - nx * 0.91f) * 70.0f * k, (-diry * 0.42f - ny * 0.91f) * 70.0f * k };
-            Vector2 g0 = pt(-14, -8), g1 = pt(12, -8);
-            quad(g0, g1, { g1.x + gv.x, g1.y + gv.y },
-                 { g0.x + gv.x - dirx * 8 * k, g0.y + gv.y - diry * 8 * k }, wood);
-            box(-16, 34, -10, 8, steel);                    // frame rear + recoil shield
-            box(-6, 90, 8, 13, steel);                      // top strap over the cylinder
-            box(30, 76, -14, 13, steel2);                   // cylinder bulge
-            box(43, 46, -12, 11, dark);                     // cylinder flutes
-            box(59, 62, -12, 11, dark);
-            box(82, 168, -3, 11, steel);                    // barrel
-            box(88, 138, -8, -3, steel2);                   // ejector rod shroud under it
-            box(163, 168, -3, 11, dark);                    // muzzle band
-            box(-26, -14, 9, 19, steel2);                   // hammer spur
-            box(-10, -2, 13, 17, steel);                    // rear sight
-            box(156, 163, 11, 17, steel);                   // front sight
-            box(82, 163, 9, 11, glint);                     // ceiling light rides the barrel
-            box(30, 76, 11, 13, glint);                     // and the cylinder
-            DrawRing(pt(24, -15), 7.5f * k, 10.5f * k, 0, 360, 24, steel);   // trigger guard
-            box(20, 24, -16, -9, dark);                     // trigger
-            if (muzzleSmoke > 0.02f) {   // powder haze curling off the muzzle, drifting up
-                Vector2 tip = pt(178, 4);
-                float s = muzzleSmoke;
-                for (int i = 0; i < 4; i++) {
-                    float t = (float)now * 1.4f + i * 1.9f;
-                    float rise = (1.0f - s) * 26.0f + i * 7.0f;
-                    Vector2 pv = { tip.x + sinf(t) * (5 + i * 3) + dirx * i * 5,
-                                   tip.y - rise + diry * i * 5 };
-                    unsigned char al = (unsigned char)(clampf(s * 0.5f - i * 0.06f, 0, 1) * 90);
-                    DrawCircleV(pv, (11 + i * 6) * (1.4f - s * 0.4f), { 150, 148, 150, al });
-                }
-            }
-            if (muzzleT > 0) {
-                float mt = muzzleT / 0.09f;
-                Vector2 tip = pt(180, 4);
-                DrawCircleV(tip, 46 * mt, { 255, 150, 60, (unsigned char)(90 * mt) });
-                DrawCircleV(tip, 24 * mt, { 255, 225, 140, (unsigned char)(210 * mt) });
-            }
-        } else {   // road flare in hand, cap out, ready to strike and throw
-            Color body = { 168, 42, 32, 255 }, edge = { 206, 74, 56, 255 };
-            Color capc = { 56, 26, 22, 255 }, band = { 216, 204, 184, 255 };
-            box(0, 96, -11, 11, body);                      // red tube
-            box(0, 90, 7, 11, edge);                        // light along the top
-            box(-4, 2, -9, 9, capc);                        // butt end
-            box(78, 90, -12, 12, band);                     // striker band
-            box(90, 100, -9, 9, capc);                      // cap
-        }
-        DrawCircle(sw / 2, sh / 2, 2.0f, { 230, 220, 190, 110 });   // aiming dot
-    }
+    // the viewmodel, over the world but under every overlay (the deck draws in 3D)
+    if (drinkT <= 0 && (weapon == WEAPON_REVOLVER || (weapon == WEAPON_FLARE && flares > 0)))
+        drawWeaponViewmodel(sw, sh, now);
 
     if (elapsed < 9.0 && winT <= 0) {   // intro (suppressed while the escape screen is up)
         float a = 1.0f - clampf((float)elapsed / 3.0f, 0, 1);
@@ -527,15 +553,15 @@ void Game::renderUI(double now) {
     else if (flashOn)
         DrawText("[ flashlight ]", sw - MeasureText("[ flashlight ]", 14) - 16, sh - 26, 14, { 235, 225, 180, 120 });
     {   // your grip on the place: always up, because it is always going down
-        int bw = 90, bx4 = sw - bw - 16, by4 = sh - 60;
-        DrawRectangle(bx4 - 1, by4 - 1, bw + 2, 7, { 0, 0, 0, 120 });
+        const int w = 90, x = sw - w - 16, y = sh - 60;
+        DrawRectangle(x - 1, y - 1, w + 2, 7, { 0, 0, 0, 120 });
         // steady cream, souring toward red as it empties; the last stretch pulses
-        Color sc = sanity > 0.5f ? Color{ 168, 196, 176, 165 }
-                 : sanity > 0.25f ? Color{ 214, 190, 120, 180 }
-                                  : Color{ 214, 96, 84, 200 };
-        if (sanity < 0.25f) sc.a = (unsigned char)(150 + 80 * (0.5f + 0.5f * sinf((float)now * 4.2f)));
-        DrawRectangle(bx4, by4, (int)(bw * sanity), 5, sc);
-        DrawText("grip", bx4 - MeasureText("grip", 12) - 6, by4 - 4, 12, { 150, 142, 122, 120 });
+        Color bar = sanity > 0.5f  ? Color{ 168, 196, 176, 165 }
+                  : sanity > 0.25f ? Color{ 214, 190, 120, 180 }
+                                   : Color{ 214, 96, 84, 200 };
+        if (sanity < 0.25f) bar.a = (unsigned char)(150 + 80 * (0.5f + 0.5f * sinf((float)now * 4.2f)));
+        DrawRectangle(x, y, (int)(w * sanity), 5, bar);
+        DrawText("grip", x - MeasureText("grip", 12) - 6, y - 4, 12, { 150, 142, 122, 120 });
     }
     if (sanityWarnT > 0 && winT <= 0 && caughtT <= 0) {   // it just slipped a notch
         float a = clampf(sanityWarnT / 1.2f, 0, 1) * clampf((4.0f - sanityWarnT) / 0.4f, 0, 1);
@@ -543,14 +569,14 @@ void Game::renderUI(double now) {
                  Fade({ 206, 176, 176, 255 }, a * 0.9f));
     }
     if (flashOn || battery < 0.99f) {   // charge bar, once it's been used or spent at all
-        int bw = 90, bx3 = sw - bw - 16, by3 = sh - 44;   // one row below the grip meter
-        DrawRectangle(bx3 - 1, by3 - 1, bw + 2, 7, { 0, 0, 0, 120 });
-        Color bc = battery < 0.15f ? Color{ 220, 90, 70, 190 } : Color{ 200, 190, 150, 150 };
-        DrawRectangle(bx3, by3, (int)(bw * battery), 5, bc);
+        const int w = 90, x = sw - w - 16, y = sh - 44;   // one row below the grip meter
+        DrawRectangle(x - 1, y - 1, w + 2, 7, { 0, 0, 0, 120 });
+        Color bar = battery < 0.15f ? Color{ 220, 90, 70, 190 } : Color{ 200, 190, 150, 150 };
+        DrawRectangle(x, y, (int)(w * battery), 5, bar);
         if (flashOn && battery < 0.15f) {
             const char *t = "battery low";
-            float pl = 0.5f + 0.5f * sinf((float)now * 5.0f);
-            DrawText(t, sw - MeasureText(t, 13) - 16, sh - 78, 13, Fade({ 220, 120, 100, 220 }, pl));   // clear of the grip meter
+            float pulse = 0.5f + 0.5f * sinf((float)now * 5.0f);
+            DrawText(t, sw - MeasureText(t, 13) - 16, sh - 78, 13, Fade({ 220, 120, 100, 220 }, pulse));   // clear of the grip meter
         }
     }
     {   // inventory, bottom-left; the selected weapon is lit
@@ -566,10 +592,10 @@ void Game::renderUI(double now) {
                      wayOpen() ? Color{ 120, 230, 140, 210 } : Color{ 214, 178, 92, 170 });
         DrawText(TextFormat("3  almond water  ×%d", almond), 16, sh - 94, 16,
                  almond > 0 ? Color{ 150, 190, 235, 170 } : dimc);
-        DrawText(TextFormat("1  flare  ×%d", flares), 16, sh - 72, 16, weapon == 0 ? selc : dimc);
+        DrawText(TextFormat("1  flare  ×%d", flares), 16, sh - 72, 16, weapon == WEAPON_FLARE ? selc : dimc);
         DrawText(reloadT > 0 ? "2  revolver  [reloading]"
                              : TextFormat("2  revolver  %d/%d%s", ammo, MAXAMMO, ammo == 0 ? "  · R" : ""),
-                 16, sh - 50, 16, weapon == 1 ? selc : dimc);
+                 16, sh - 50, 16, weapon == WEAPON_REVOLVER ? selc : dimc);
         DrawText(!deck.carried
                      ? (deck.playing ? "4  tape player  [running · left behind]"
                                      : "4  tape player  [left behind · E]")
@@ -577,7 +603,7 @@ void Game::renderUI(double now) {
                  : tapes > 0    ? "4  tape player  [tape ready]"
                                 : "4  tape player  [no tape]",
                  16, sh - 28, 16,
-                 weapon == 2 ? (deck.playing ? Color{ 205, 150, 235, 220 } : selc) : dimc);
+                 weapon == WEAPON_DECK ? (deck.playing ? Color{ 205, 150, 235, 220 } : selc) : dimc);
     }
     if (wayOpen() && winT <= 0 && caughtT <= 0 && escapeT <= 0) {   // you can leave now — go find a door
         const char *t = "the doors know you now  ·  find one that isn't cursed";
@@ -585,16 +611,16 @@ void Game::renderUI(double now) {
         DrawText(t, sw / 2 - MeasureText(t, 20) / 2, 70, 20, Fade({ 120, 235, 145, 255 }, pl));
     }
     if (stamina < 0.98f) {   // sprint bar, bottom centre
-        int bw = 220, bx2 = sw / 2 - bw / 2, by2 = sh - 42;
-        DrawRectangle(bx2 - 1, by2 - 1, bw + 2, 8, { 0, 0, 0, 120 });
-        DrawRectangle(bx2, by2, (int)(bw * stamina), 6, { 200, 180, 120, 160 });
+        const int w = 220, x = sw / 2 - w / 2, y = sh - 42;
+        DrawRectangle(x - 1, y - 1, w + 2, 8, { 0, 0, 0, 120 });
+        DrawRectangle(x, y, (int)(w * stamina), 6, { 200, 180, 120, 160 });
     }
     if (hidden)
         DrawText("[ hidden · hold still ]", sw / 2 - MeasureText("[ hidden · hold still ]", 14) / 2, sh - 62, 14,
                  { 140, 210, 165, 160 });
     else if (crouchCur > 0.5f)
         DrawText("[ crouched ]", sw / 2 - MeasureText("[ crouched ]", 14) / 2, sh - 62, 14, { 180, 170, 140, 120 });
-    if (level == 3 && (valveT > 0 || (pipesShut && valveT > 0))) {   // just closed one
+    if (level == 3 && valveT > 0) {   // just closed one
         float a = clampf(valveT / 1.6f, 0, 1);
         if (pipesShut) {
             const char *t = "THE PIPES GO QUIET";
@@ -633,7 +659,7 @@ void Game::renderUI(double now) {
 // One can, lit by the room like every other surface. Alpha 255 on the vertices
 // puts it down the shader's textured branch.
 void Game::drawCan(Matrix xf) {
-    DrawMesh(canMesh, mats[6], xf);
+    DrawMesh(canMesh, mats[MAT_CAN], xf);
 }
 
 // One tape player: the body, the two reels turning in the bay, and the record
@@ -641,12 +667,12 @@ void Game::drawCan(Matrix xf) {
 // so they can spin — a still deck and a running one have to look different at a
 // glance, since the whole decoy mechanic turns on knowing which one you left.
 void Game::drawDeck(Matrix xf, bool lamp) {
-    DrawMesh(deckMesh, mats[7], xf);
+    DrawMesh(deckMesh, mats[MAT_DECK], xf);
     for (int i = 0; i < 2; i++) {
         // both hubs turn the same way — the tape only travels in one direction
         Matrix r = MatrixMultiply(MatrixRotateY(deck.reel),
                                   MatrixTranslate(i ? 0.024f : -0.024f, 0.0505f, 0.0f));
-        DrawMesh(reelMesh, mats[7], MatrixMultiply(r, xf));
+        DrawMesh(reelMesh, mats[MAT_DECK], MatrixMultiply(r, xf));
     }
     if (lamp) {
         // The lamp breathes. A steady dot of red is easy to miss on a dark floor;
@@ -654,9 +680,9 @@ void Game::drawDeck(Matrix xf, bool lamp) {
         // is still running. colDiffuse multiplies the emissive branch's output,
         // so tint the shared material for this draw and hand it straight back.
         float pu = 0.45f + 0.55f * (0.5f + 0.5f * sinf((float)GetTime() * 4.2f));
-        mats[7].maps[MATERIAL_MAP_DIFFUSE].color = { cl8(255 * pu), cl8(255 * pu), cl8(255 * pu), 255 };
-        DrawMesh(deckLampMesh, mats[7], xf);
-        mats[7].maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
+        mats[MAT_DECK].maps[MATERIAL_MAP_DIFFUSE].color = { cl8(255 * pu), cl8(255 * pu), cl8(255 * pu), 255 };
+        DrawMesh(deckLampMesh, mats[MAT_DECK], xf);
+        mats[MAT_DECK].maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
     }
 }
 
@@ -776,5 +802,4 @@ void Game::drawDrinkCan(const Camera3D &cam) {
     m.m12 = pos.x;          m.m13 = pos.y;          m.m14 = pos.z;
     m.m15 = 1.0f;
     drawCan(m);
-    DrawMesh(handMesh, mats[6], m);   // the grip turns with it
 }
