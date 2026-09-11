@@ -110,6 +110,7 @@ Environment variables, all read at startup:
 | `BACKROOMS_POS="x,z,yaw"` | start at a specific spot and heading, in world metres/radians |
 | `BACKROOMS_EXITS=1` | exit doors everywhere, for visual testing |
 | `BACKROOMS_MENU=1` | hold on the title screen instead of starting the run |
+| `BACKROOMS_FLASH=1` | start with the flashlight on |
 
 **`BACKROOMS_NOENT` does not exist.** It appears in scratch scripts written
 during development and is silently ignored — it never suppressed the entity.
@@ -137,10 +138,34 @@ tools/sweep.sh
 ```
 
 Then **look at the images**. Note that a Level 3 frame is *supposed* to look
-almost black — the Red Halls sit at a mean luma around 16 out of 255, so the
+almost black — the Red Halls sit at a mean luma around 12 out of 255, so the
 regression shot for it is genuinely near-black and is not a broken shader or a
 blackout. Confirming that cost a build of the previous commit; take this line's
-word for it instead.
+word for it instead. (It was 16 before the fog started taking its brightness
+from the local light instead of a constant; an unlit corridor no longer glows
+at the far end, which is most of where the difference went.)
+
+The sweep is a fixed spot in a corridor and it will not show you everything.
+Two shots worth taking by hand when you touch lighting, because each exercises
+a path the sweep never reaches:
+
+```bash
+tools/shot.sh pool.png BACKROOMS_SEED=1337 BACKROOMS_LEVEL=2 BACKROOMS_POS=95,79,1.2
+tools/shot.sh beam.png BACKROOMS_SEED=1337 BACKROOMS_LEVEL=1 BACKROOMS_FLASH=1
+```
+
+The first is an open pool hall — white tile at high albedo under a whole grid
+of fittings, which is where an exposure that is merely bright elsewhere turns
+into blank white paper. The second is the only way to see the torch, which is
+the one light in the game you aim and therefore the one a fixed-position shot
+cannot otherwise reach.
+
+To compare frame cost against another build rather than eyeballing `fps=`
+(which is a smoothed integer, and the sandbox swings about 15% run to run):
+
+```bash
+tools/bench.sh ./backrooms.old ./backrooms 2      # best-of-3 each, same level
+```
 
 For a change that is *meant* to be behaviour-preserving — a rename, a named
 constant, a comment — there is a cheaper and far stronger proof than any
@@ -254,6 +279,39 @@ sweeping the *same* binary twice, then compare it against the before/after
 diff. A change that stays at the noise floor is clean; one that lands an order
 of magnitude above it moved something.
 
+**Timing in this sandbox swings about 15% run to run**, which is wider than most
+of the changes worth measuring, and `fps=` is a smoothed integer on top of that.
+A single before/after pair will happily tell you a change made things 20% slower
+when it only ever removed work. Use `tools/bench.sh`, which takes the best of N
+runs per binary; on anything close, N=3 is not enough — one level read 1.07,
+1.08 and 1.17 across three of them and settled at 1.04 at N=5.
+
+**A rule that has never visibly fired is not necessarily a rule that works.**
+The relief-bump opt-out was documented, used at every smooth-object site in the
+mesher, and did nothing at all: the shader tested `fragC.a > 0.995` and 254/255
+is 0.9961. Nobody caught
+it because the old lighting wrapped so far past the terminator that a perturbed
+normal barely changed the shade — so the bug had no symptom until the
+terminator sharpened, and then the whole ceiling came out blotched like mould.
+Pick thresholds that clear a byte quantum. See the alpha table below.
+
+**Every ambient in the level table is calibrated against the tone curve.** They
+are small numbers going into a curve whose slope near black decides what they
+are worth, and that slope is not close to 1: the old `1 - exp(-1.25x)` returned
+about 1.25x its input there, a filmic curve returns about 0.21x. Swapping the
+curve therefore darkens every shadow in the game about six-fold while leaving
+the lit surfaces looking fine, which does not present as a tone-curve problem —
+it presents as "why is Level 3 completely black now". Whatever compensates for
+that has to decay as ambient rises, or the one level whose ambient was never in
+the toe (the poolrooms, four times any other) blows out to white paper instead.
+
+**A pattern inside a tiling texture must have a period that divides its size.**
+The textures are 512 square and repeat. A feature grid at any other pitch —
+form-tie holes every 171 px, brick courses every 42 — is fine inside one copy
+and breaks at the wrap, putting a row of half-features down every seam in the
+world. The brick had shipped that way for a while and nobody saw it, because
+until each brick got its own tone there was nothing at the seam to mismatch.
+
 **Temporary test hooks must be removed by exact string, not by slicing.**
 Cutting from `s.index(start)` to `s.index(end)` is dangerous when the end
 anchor appears more than once — `if (shotPath && frame == shotFrame)` occurs
@@ -274,13 +332,24 @@ Getting this wrong produces surfaces that are subtly or wildly mislit:
 | `< 0.45` | window glass |
 | `< 0.62` | water surface |
 | `>= 0.62` | textured; `aOut = fragC.a * texel.a` |
-| `> 0.995` | additionally gets **world-space relief bump** |
+| `> 0.998` | additionally gets **world-space relief bump** |
 
 That last row is a trap. Relief is right for grimy walls and carpet, wrong for
 small curved objects, and badly wrong for anything that *moves* — the noise
 field is fixed in world space, so a moving object swims through it. Opaque
 geometry that should stay smooth uses alpha **254** (0.996): textured, visually
 opaque, below the relief threshold.
+
+**That threshold was `> 0.995` for a long time, and 254/255 is 0.9961.** So the
+documented escape hatch did not work: everything marked 254 — the can, the tape
+deck, its reels — was getting the relief it was explicitly opted out of, and had
+been all along. It stayed invisible because the old
+lighting wrapped so far around the terminator that a perturbed normal barely
+changed the shade. The moment the terminator sharpened, the ceiling came out
+covered in dark blotches about a tile across, like mould. Two lessons: pick
+thresholds that clear a byte quantum (0.998 sits between 254 and 255 with room
+either side), and a rule that has never visibly fired is not necessarily a rule
+that works.
 
 ### Chunk mesh slots
 
@@ -309,6 +378,43 @@ The shader sums only the **3×3 panels** around the shaded point, and each panel
 fades out before it leaves that window — without the fade you get a visible
 brightness seam along every light-cell boundary.
 
+A panel is shaded as the **1.24 m square of glowing plastic it actually is**,
+not as a point: `PANEL_HALF` in `shaders.cpp` is the same half-extent as `hp`
+in world.cpp's panel mesher, and the shading point is `P` clamped into that
+rectangle. Change the quad's size and change `PANEL_HALF` with it. Two things
+fall out of treating it as an area:
+
+- The terminator softens by how big the panel *looks* from the shaded point
+  (`w`, the sine of its half-angle), not by a fixed wrap. This matters most on
+  the ceiling, which hangs level with the fittings and so is lit edge-on by
+  every one of them: a fixed hard terminator there turns any surface relief
+  into blotches, and a fixed soft one flattens the whole building into the one
+  even wash the place used to be.
+- **Specular is evaluated once, outside the panel loop.** A reflection ray hits
+  the ceiling plane at exactly one point; look up whichever fitting is there and
+  clamp to its rectangle. Summing a lobe per light cost about a fifth of the
+  frame on every level — including the matte ones, whose `gloss` is far too low
+  for it to be visible — and gave a pinprick highlight instead of the panel's
+  own shape stretched across the floor. It is skipped entirely below
+  `uGloss > 0.10`.
+
+The tone curve is filmic (an ACES fit) and it **has a toe**, which the old
+`1 - exp(-1.25x)` did not. Near black the old curve returned about 1.25× its
+input and this one returns about 0.21×, so every ambient figure in the level
+table arrives roughly six times darker than it was authored to. `roomLight`
+lifts them back with a compensation that decays as ambient rises — a flat
+multiplier is wrong, and the way it goes wrong is not subtle: the poolrooms'
+ambient is four times any other level's, high enough that it was never in the
+toe, and a flat six-fold lift blew that whole level out to white paper. **If
+you touch the tone curve, that compensation moves with it.**
+
+The flashlight and a burning flare also light the *air* between the eye and the
+fragment. There is no ray marching: the eye and the torch are the same point,
+so the cone term is constant along a view ray and the whole in-scatter integral
+collapses to one `atan`; the flare is the same integral about the ray's closest
+approach to it. Both scale with the level's own fog density, so a level with
+clear air has no visible beam.
+
 Shadows are a 2D DDA over an occupancy grid (`World::buildOccupancy`) holding
 only full-height blockers: bit 0 north wall, bit 1 west wall, bit 2 pillar.
 Doorways, glass and furniture are deliberately absent so light pours through
@@ -320,6 +426,11 @@ which reads as straight diagonal lines drawn across the floor.
 
 `lightAtCPU` in `levels.cpp` mirrors this maths on the CPU for billboard
 tinting. **Change one, change the other**, or sprites stop matching the room.
+That now includes the panel rectangle, the angular terminator, the ambient toe
+compensation *and the tone curve itself* — props and billboards draw with
+raylib's unlit shader and never go through the world pass, so the estimate has
+to come out of the same curve or every sprite in the game sits at a different
+exposure from the room it is standing in.
 
 ### Viewmodels
 

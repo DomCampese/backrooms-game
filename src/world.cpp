@@ -566,6 +566,13 @@ void World::ensureMesh(int cx, int cz) {
     MB fl, ce, wa, pr, wt, scr, gl, ao;
     float wx = cx * CHUNK, wz = cz * CHUNK;
     Color wcol = WHITE;
+    // The ceiling gets no world-space relief (alpha 254, not 255). It hangs level
+    // with the light fittings, so every panel lights it edge-on — and a bump under
+    // raking light swings the terminator far harder than the same bump lit
+    // head-on. At 255 the relief field turned the whole ceiling into dark
+    // mould-like blotches roughly a tile across. Its own texture carries the
+    // fissures and speckle it needs.
+    Color ccol = { 255, 255, 255, 254 };
     // ---- baked ambient occlusion: gradient decals hugging every crease where
     // geometry meets. The strip texture fades alpha from the crease (v=0)
     // outward (v=1), so walls sit *in* the room instead of on top of it.
@@ -658,7 +665,7 @@ void World::ensureMesh(int cx, int cz) {
         }
     }
     ce.quad({wx,wallH,wz},{wx,wallH,wz+CHUNK},{wx+CHUNK,wallH,wz+CHUNK},{wx+CHUNK,wallH,wz},{0,-1,0},
-            {wx/2,wz/2},{wx/2,(wz+CHUNK)/2},{(wx+CHUNK)/2,(wz+CHUNK)/2},{(wx+CHUNK)/2,wz/2},wcol);
+            {wx/2,wz/2},{wx/2,(wz+CHUNK)/2},{(wx+CHUNK)/2,(wz+CHUNK)/2},{(wx+CHUNK)/2,wz/2},ccol);
     // light panels on the global grid (emissive: alpha=0); spacing varies per level
     Color panel = {255,255,255,0};
     float ls = level == 1 ? 12.0f : 8.0f;

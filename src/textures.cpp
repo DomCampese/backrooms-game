@@ -27,7 +27,25 @@ Texture2D makeWallpaperTex() {
         float stain = fbm2(x * 0.006f + 31.0f, y * 0.006f, 12u, 4);
         float base = stripe * lines * (1.0f - 0.16f * grime) * (1.0f - 0.10f * vy);
         if (stain > 0.62f) base *= 1.0f - (stain - 0.62f) * 0.8f;
+        // Wallpaper arrives on a roll and gets hung in strips, so there is a seam
+        // every so often — a hairline of shadow with a lifting edge beside it,
+        // and the two strips never quite match in tone. Without them a wall is
+        // one printed sheet a hundred metres long, which is the thing that most
+        // gives away that a corridor is generated rather than decorated.
+        int strip = x / 128, sx = x % 128;
+        base *= 1.0f + (lat(strip, 0, 15u) - 0.5f) * 0.030f;   // roll-to-roll tone drift
+        // A hairline, not a stripe. Anything stronger than this and the post
+        // pass's chromatic aberration picks the seam up and draws a coloured
+        // line down the wall at every one of them.
+        if (sx < 2) base *= 0.93f;                             // the seam itself
+        else if (sx < 9) base *= 0.985f + 0.015f * ((sx - 2) / 7.0f);
+        // damp creeping up from the skirting, worst in the corners of the roll
+        float damp = fbm2(x * 0.017f, y * 0.006f, 16u, 3) * (0.25f + 0.95f * vy * vy);
         float r = 199 * base, g = 178 * base, b = 104 * base;
+        if (damp > 0.42f) {
+            float t = std::min(0.55f, (damp - 0.42f) * 1.7f);
+            r = r * (1 - t) + 96 * t; g = g * (1 - t) + 92 * t; b = b * (1 - t) + 58 * t;
+        }
         if (y > H - 46) {                            // baseboard
             float t = fbm2(x * 0.02f, y * 0.1f, 99u, 3);
             r = 92 - 22 * t; g = 74 - 18 * t; b = 42 - 11 * t;
@@ -44,9 +62,17 @@ Texture2D makeCarpetTex() {
     Color *p = (Color *)img.data;
     for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
         float n = lat(x, y, 5u) * 0.16f - 0.08f;
-        float fiber = (fbm2(x * 0.18f, y * 0.18f, 33u, 2) - 0.5f) * 0.14f;
+        // Loop pile, not sand. Real contract carpet is rows of loops laid in one
+        // direction, and the give-away is that it is anisotropic: stretched along
+        // the run, tight across it. The old isotropic noise read as a flat dirty
+        // colour from any distance, which is the one thing carpet never does.
+        float fiber = (fbm2(x * 0.09f, y * 0.42f, 33u, 2) - 0.5f) * 0.17f;
+        float loop = sinf(y * 1.55f + vnoise2(x * 0.30f, y * 0.05f, 34u) * 3.4f);
+        float v = 1.0f + n + fiber + loop * 0.045f;
+        // walked lanes: the pile lies flat and goes darker and slightly shinier
+        float lane = fbm2(x * 0.004f, y * 0.010f, 35u, 3);
+        if (lane > 0.55f) v *= 1.0f - (lane - 0.55f) * 0.55f;
         float blotch = fbm2(x * 0.008f, y * 0.008f, 21u, 4);
-        float v = 1.0f + n + fiber;
         if (blotch > 0.56f) v *= 1.0f - (blotch - 0.56f) * 0.9f;
         p[y * W + x] = { cl8(141 * v), cl8(124 * v), cl8(66 * v), 255 };
     }
@@ -60,16 +86,43 @@ Texture2D makeCeilingTex() {
     for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
         float v = 1.0f;
         float sp = lat(x, y, 44u);
-        if (sp > 0.90f) v *= 0.78f;
+        if (sp > 0.90f) v *= 0.80f;
         if (sp > 0.985f) v *= 0.55f;
+        // Mineral-fibre board is not a flat surface with speckle on it: it is
+        // covered in wandering worm-track fissures, and it is the fissures your
+        // eye reads as "suspended ceiling" before it reads anything else. A
+        // narrow band of a warped noise field draws them; the pass either side
+        // of the band puts a lip on the near edge, which is what stops them
+        // looking like ink and starts them looking like grooves.
+        // Keep them fine. At a first pass these ran at a fifth of this frequency
+        // and four times this depth, and what came out was not fissured board but
+        // a ceiling covered in dark wandering water-trails.
+        float wob = fbm2(x * 0.14f, y * 0.14f, 61u, 2);
+        float fis = fbm2(x * 0.075f + wob * 0.9f, y * 0.048f - wob * 0.7f, 60u, 3);
+        float band = fabsf(fis - 0.5f);
+        if (band < 0.030f) v *= 0.84f + 0.16f * (band / 0.030f);     // the groove
+        else if (band < 0.055f) v *= 1.0f + 0.03f * (1.0f - band / 0.055f);   // its lit lip
+        // pinholes, punched in a loose scatter the way the real board is
+        uint32_t ph = ih(x >> 2, y >> 2, 62u);
+        if ((ph & 63u) == 0u) {
+            int cxp = (x >> 2 << 2) + 1 + (int)((ph >> 8) & 1u), cyp = (y >> 2 << 2) + 1 + (int)((ph >> 9) & 1u);
+            float dd = (float)((x - cxp) * (x - cxp) + (y - cyp) * (y - cyp));
+            if (dd < 2.2f) v *= 0.52f;
+        }
         float r = 208 * v, g = 202 * v, b = 179 * v;
         float stain = fbm2(x * 0.01f, y * 0.01f, 55u, 3);
         if (stain > 0.64f) {
             float t = std::min(0.6f, (stain - 0.64f) * 2.2f);
             r = r * (1 - t) + 172 * t; g = g * (1 - t) + 150 * t; b = b * (1 - t) + 96 * t;
         }
+        // Tile edges: a shadowed groove where two boards meet, then the chamfer
+        // on each board catching light. A single flat dark line read as a grid
+        // painted on one continuous sheet; the light side is what lifts each
+        // board off its neighbour and makes the grid look laid-in.
         int bx = x % 256, by = y % 256;
-        if (bx < 4 || bx > 251 || by < 4 || by > 251) { r *= 0.62f; g *= 0.62f; b *= 0.62f; }
+        int ex = std::min(bx, 255 - bx), ey = std::min(by, 255 - by), ed = std::min(ex, ey);
+        if (ed < 2) { r *= 0.50f; g *= 0.50f; b *= 0.50f; }
+        else if (ed < 7) { float t = (ed - 2) / 5.0f; float m = 0.74f + 0.34f * t; r *= m; g *= m; b *= m; }
         p[y * W + x] = { cl8(r), cl8(g), cl8(b), 255 };
     }
     return finishTexture(img, true);
@@ -321,10 +374,32 @@ Texture2D makeConcreteWallTex() {
         float v = 1.0f + (fbm2(x * 0.02f, y * 0.02f, 81u, 4) - 0.5f) * 0.28f;
         float drip = fbm2(x * 0.06f, y * 0.006f, 82u, 3);
         if (drip > 0.60f) v *= 1.0f - (drip - 0.60f) * 0.9f;          // water streaks
+        // Hairline cracks, as a level set of a noise field. Sparser and lighter
+        // than they were: a level set closes on itself, so at the old width and
+        // depth the wall came out ruled with dark loops that read as a contour map
+        // rather than as cracking. Thin enough and they read as hairlines again.
         float crack = fbm2(x * 0.015f, y * 0.015f, 83u, 4);
-        if (fabsf(crack - 0.5f) < 0.005f) v *= 0.55f;                  // hairline cracks
-        v *= 1.0f - 0.14f * vy;
-        p[y * W + x] = { cl8(119 * v), cl8(117 * v), cl8(111 * v), 255 };
+        if (fabsf(crack - 0.5f) < 0.0026f) v *= 0.66f;
+        // exposed aggregate — the stones in the mix, lighter and harder-edged
+        // than the paste around them. Poured concrete without them is plaster.
+        float agg = lat(x >> 1, y >> 1, 89u);
+        if (agg > 0.965f) v *= 1.16f; else if (agg > 0.93f) v *= 1.07f;
+        else if (agg < 0.035f) v *= 0.86f;                             // blowholes
+        // Form-tie holes on the shutter grid, rust bleeding down from each.
+        // The grid pitch has to divide the texture width or the pattern breaks at
+        // the wrap and every tile boundary gets a row of half-holes; 128 does,
+        // and staggering alternate rows keeps it from reading as a checkerboard.
+        int hrow = y / 128;
+        int hx = (x + 64 + (hrow & 1) * 64) % 128, hy = y % 128;
+        float hd = sqrtf((float)((hx - 64) * (hx - 64) + (hy - 64) * (hy - 64)));
+        float r = 119 * v, g = 117 * v, b = 111 * v;
+        if (hd < 6.0f) { float t = 1.0f - hd / 6.0f; float m = 1.0f - 0.55f * t * t; r *= m; g *= m; b *= m; }
+        else if (hd < 22.0f && hy > 64) {                              // the rust streak below it
+            float t = (1.0f - (hd - 6.0f) / 16.0f) * 0.30f;
+            r = r * (1 - t) + 120 * t; g = g * (1 - t) + 82 * t; b = b * (1 - t) + 52 * t;
+        }
+        float fall = 1.0f - 0.14f * vy;                                // darker toward the floor
+        p[y * W + x] = { cl8(r * fall), cl8(g * fall), cl8(b * fall), 255 };
     }
     return finishTexture(img, true);
 }
@@ -335,6 +410,12 @@ Texture2D makeConcreteFloorTex() {
     Color *p = (Color *)img.data;
     for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
         float v = 1.0f + (lat(x, y, 84u) - 0.5f) * 0.10f + (fbm2(x * 0.03f, y * 0.03f, 85u, 3) - 0.5f) * 0.2f;
+        // power-float sweeps: long shallow arcs the trowel left behind, plus the
+        // aggregate showing through where the slab has been walked bare
+        float sweep = vnoise2(x * 0.004f + y * 0.0015f, y * 0.012f, 78u);
+        v *= 1.0f + (sweep - 0.5f) * 0.10f;
+        float agg = lat(x >> 1, y >> 1, 79u);
+        if (agg > 0.972f) v *= 1.13f; else if (agg < 0.028f) v *= 0.88f;
         float r = 93 * v, g = 91 * v, b = 87 * v;
         float oil = fbm2(x * 0.009f, y * 0.009f, 86u, 4);
         if (oil > 0.60f) {                                             // old oil stains
@@ -365,13 +446,44 @@ Texture2D makeRedBrickTex() {
     Image img = GenImageColor(W, H, BLANK);
     Color *p = (Color *)img.data;
     for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
-        int row = y / 42;
+        // 12 courses to the texture, as a float: at a flat `y / 42` the twelfth
+        // course is only 8 pixels tall before the texture wraps, so a wall shows a
+        // squashed line of half-bricks at every vertical repeat. It was always
+        // there — giving each brick its own tone off its course index is what made
+        // it visible, because the mismatch stopped being a mismatch of nothing.
+        const float CH = 512.0f / 12.0f;
+        int row = (int)(y / CH);
+        int by = (int)(y - row * CH);
         int bx = (x + (row % 2) * 64) % 128;
-        float v = 1.0f + (fbm2(x * 0.04f, y * 0.04f, 96u, 3) - 0.5f) * 0.35f;
+        // Every brick fired differently, so no two are the same colour. One noise
+        // field for the whole wall gave a single sheet of red with lines ruled on
+        // it; keying the tone off the brick's own index is what breaks the wall
+        // back up into bricks.
+        int bi = (x + (row % 2) * 64) / 128;
+        float bh = lat(bi, row, 99u);
+        float v = 1.0f + (fbm2(x * 0.04f, y * 0.04f, 96u, 3) - 0.5f) * 0.35f + (bh - 0.5f) * 0.30f;
         float r = 118 * v, g = 26 * v, b = 20 * v;
-        if (y % 42 < 4 || bx < 5) { r = 38; g = 12; b = 10; }          // mortar
+        if (bh > 0.93f) { r *= 0.72f; g *= 0.80f; b *= 0.88f; }        // the odd blue-burnt header
+        // Mortar is raked back behind the brick face, so the joint is not a flat
+        // dark stripe: it is a shadow at the top of the course and a lit ledge at
+        // the bottom. That one gradient is what gives a brick wall its depth.
+        int em = std::min(std::min(by, (int)CH - 1 - by), std::min(bx, 127 - bx));
+        if (em < 4) {
+            float mv = 1.0f + (lat(x, y, 100u) - 0.5f) * 0.22f;
+            mv *= (by < 4) ? 0.68f : (by > (int)CH - 5 ? 1.22f : 0.95f);   // shadow above, ledge below
+            r = 40 * mv; g = 13 * mv; b = 11 * mv;
+        } else if (em < 8) {                                           // the brick's own arris
+            float t = (em - 4) / 4.0f;
+            float m = (by < (int)CH / 2 ? 1.10f : 0.90f);
+            float mm = 1.0f + (m - 1.0f) * (1.0f - t);
+            r *= mm; g *= mm; b *= mm;
+        }
         float rot = fbm2(x * 0.008f, y * 0.008f, 97u, 4);
         if (rot > 0.60f) { float t = (rot - 0.60f) * 1.8f; r *= 1 - t * 0.7f; g *= 1 - t * 0.5f; b *= 1 - t * 0.5f; }
+        // efflorescence: salt bloomed out of the wet brick in pale patches
+        float eff = fbm2(x * 0.012f + 7.0f, y * 0.012f, 101u, 3);
+        if (eff > 0.68f) { float t = std::min(0.40f, (eff - 0.68f) * 1.5f);
+                           r = r * (1 - t) + 150 * t; g = g * (1 - t) + 138 * t; b = b * (1 - t) + 128 * t; }
         p[y * W + x] = { cl8(r), cl8(g), cl8(b), 255 };
     }
     return finishTexture(img, true);
@@ -386,16 +498,42 @@ Texture2D makeTileTex() {
         int gx = x % 64, gy = y % 64;
         int tx = x / 64, ty = y / 64;
         float r, g, b;
-        if (gx < 3 || gx > 60 || gy < 3 || gy > 60) {                  // grout
-            float gv = 1.0f + (lat(x, y, 90u) - 0.5f) * 0.12f;
-            r = 166 * gv; g = 172 * gv; b = 176 * gv;
+        int ex = std::min(gx, 63 - gx), ey = std::min(gy, 63 - gy), ed = std::min(ex, ey);
+        if (ed < 3) {                                                  // grout
+            // Grout sits in a recess and collects everything that lands on it, so
+            // it is the dirtiest thing in the room, not — as it was — a clean band
+            // lighter than the tile. Making it darker and mottled is most of why
+            // the poolroom walls stopped reading as graph paper.
+            float gv = 1.0f + (lat(x, y, 90u) - 0.5f) * 0.14f;
+            float mould = fbm2(x * 0.05f, y * 0.05f, 95u, 3);
+            gv *= 1.0f - 0.30f * std::max(0.0f, mould - 0.45f);
+            r = 150 * gv; g = 152 * gv; b = 148 * gv;
         } else {
             float tv = 1.0f + (lat(tx, ty, 91u) - 0.5f) * 0.09f       // per-tile variation
                      + (lat(x, y, 92u) - 0.5f) * 0.035f;
+            // Each tile is a slightly pillowed square with a rounded edge. The
+            // ceramic is glossy enough that the edge always carries a highlight
+            // on one side and a turn-away on the other; baking that in is what
+            // gives a flat wall of tiles any depth at all, and it costs nothing
+            // at runtime. Light is taken as coming from up-left, which matches
+            // where the ceiling fittings are in every room that has one.
+            float t = (ed - 3) / 6.0f;
+            if (t < 1.0f) {
+                float lift = (gx < 32 ? 1.0f : -1.0f) * (ex <= ey ? 1.0f : 0.0f)
+                           + (gy < 32 ? 1.0f : -1.0f) * (ey <  ex ? 1.0f : 0.0f);
+                tv *= 1.0f + lift * 0.085f * (1.0f - t) * (1.0f - t);
+            }
             r = 221 * tv; g = 226 * tv; b = 229 * tv;
             if (lat(tx, ty, 93u) > 0.94f) { r *= 0.90f; g *= 0.92f; b *= 0.86f; }  // aged tile
             float gl = fbm2(x * 0.01f, y * 0.01f, 94u, 3);             // faint sheen variation
             if (gl > 0.62f) { r *= 1.04f; g *= 1.04f; b *= 1.05f; }
+            uint32_t ck = ih(tx, ty, 98u);                             // the odd chipped corner
+            if ((ck & 31u) == 0u) {
+                int cxp = (ck & 32u) ? tx * 64 + 60 : tx * 64 + 3;
+                int cyp = (ck & 64u) ? ty * 64 + 60 : ty * 64 + 3;
+                float dd = sqrtf((float)((x - cxp) * (x - cxp) + (y - cyp) * (y - cyp)));
+                if (dd < 3.5f + ((ck >> 7) & 3u)) { r *= 0.72f; g *= 0.73f; b *= 0.72f; }
+            }
         }
         p[y * W + x] = { cl8(r), cl8(g), cl8(b), 255 };
     }
