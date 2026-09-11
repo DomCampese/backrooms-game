@@ -128,10 +128,14 @@ struct Game {
     double entStepAcc = 0;                    // spacing of the thing's audible footfalls
     float muzzleSmoke = 0;                    // powder haze lingering after a shot
 
-    // flare weapon: thrown, burns orange, Pirate Clark won't go near one
+    // flare weapon: thrown, burns orange, Pirate Clark won't go near one.
+    // `flares` is the count in your coat; `litFlares` is what is burning out
+    // there. One slot per flare you can carry: this was a single FlareProj
+    // once, so throwing a second one overwrote the first mid-burn and that
+    // fire simply ceased to exist — no light, no hiss, no smoke.
     int flares = MAXFLARES;
     double nextFlareRegen = 0;
-    FlareProj flare;
+    FlareProj litFlares[MAXFLARES];
 
     // the tape player: a voice for your grip, or a noise to send them somewhere else
     TapeDeck deck;
@@ -255,6 +259,12 @@ struct Game {
     void updateDevKeys(double now);
     void updateWeapons(float dt, double now);
     void updateFlare(float dt, double now);
+    // The two questions the rest of the game asks about burning flares. The
+    // shader carries exactly one point light and Clark only runs from one fire
+    // at a time, so everything downstream wants either "is anything lit?" or
+    // "which fire is nearest to this point?" rather than the whole array.
+    bool anyFlareLit() const;
+    const FlareProj *nearestLitFlare(float x, float z) const;   // null if none are burning
     void updateInteraction();
     void updateAmbience(float dt, double now);
     void updateEntity(float dt, double now);

@@ -321,6 +321,14 @@ which reads as straight diagonal lines drawn across the floor.
 `lightAtCPU` in `levels.cpp` mirrors this maths on the CPU for billboard
 tinting. **Change one, change the other**, or sprites stop matching the room.
 
+The shader has exactly **one** flare point light (`uFlarePos` / `uFlareInt`),
+and the muzzle flash borrows the same one when nothing is burning. You can have
+up to `MAXFLARES` alight at once, so `renderScene` picks the one nearest the
+player to feed it; every other fire still burns, wards Clark and the pack, and
+hisses, it just doesn't light the room on its own. Each flare's halo spheres are
+drawn from *its* own burn, not from the uniform — share the uniform's intensity
+between them and the far ones pulse with the near one's flicker.
+
 ### Viewmodels
 
 The drink can and the tape player are real 3D geometry drawn inside the 3D
