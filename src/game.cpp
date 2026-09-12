@@ -685,19 +685,34 @@ void Game::updateMovement(float dt) {
     float fovT = sprinting ? 79.0f : 70.0f;
     fov += (fovT - fov) * fminf(1, 6 * dt);
 
-    // hiding: crouched and close enough to real cover — checked after collision
-    // settles px/pz, so this frame's position is final
-    hidden = false;
+    // hiding: crouched, close enough to real cover, and *still* — checked after
+    // collision settles px/pz, so this frame's position is final.
+    //
+    // The stillness is the whole of it. Hiding blinds the hunt, blocks both the
+    // catch and the dogs, and lets ent.unseen run at 2.4x, which ends a chase in
+    // about 2.5 s; without a speed test the strongest play in the game was to
+    // hold crouch and keep walking at 1.9 m/s, untouchable, while the HUD said
+    // "hold still". You now have to have stopped to tuck in (HIDE_ENTER), and
+    // walking off breaks it (HIDE_BREAK) — but only after HIDE_GRACE, so
+    // shifting your weight or getting nudged by the furniture doesn't throw you
+    // out of a spot you are plainly still in.
+    nearCover = false;
     if (crouchCur > 0.75f) {
         int hci = cellOf(px), hck = cellOf(pz);
-        for (int dx = -1; dx <= 1 && !hidden; dx++) for (int dz = -1; dz <= 1 && !hidden; dz++) {
+        for (int dx = -1; dx <= 1 && !nearCover; dx++) for (int dz = -1; dz <= 1 && !nearCover; dz++) {
             int a = hci + dx, b = hck + dz;
             if (!hideSpotAt(a, b)) continue;
             float hx = a * CELL + 1.0f, hz = b * CELL + 1.0f;
             float ddx = px - hx, ddz = pz - hz;
-            if (ddx * ddx + ddz * ddz < 1.35f * 1.35f) hidden = true;
+            if (ddx * ddx + ddz * ddz < 1.35f * 1.35f) nearCover = true;
         }
     }
+    if (!nearCover) { hidden = false; hideBreakT = 0; }          // stood up, or walked out of it
+    else if (!hidden) { if (spd < HIDE_ENTER) hidden = true; hideBreakT = 0; }
+    else if (spd > HIDE_BREAK) {
+        hideBreakT += dt;
+        if (hideBreakT > HIDE_GRACE) { hidden = false; hideBreakT = 0; }
+    } else hideBreakT = 0;
 }
 
 void Game::updateDevKeys(double now) {

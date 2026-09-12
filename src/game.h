@@ -69,6 +69,12 @@ struct Game {
     static constexpr float FLAREFADE = 1.5f;  // seconds of guttering at the end of a burn
     static constexpr float FLAREFALL = 0.05f; // how fast a fire's presence drops off with distance
     static constexpr int   MAXAMMO = 6;
+    // Hiding is worth a lot — it blinds the hunt, blocks the catch, and runs
+    // ent.unseen at 2.4x — so it is priced in stillness. Two thresholds, not
+    // one, so the spot doesn't flicker on and off while you settle into it.
+    static constexpr float HIDE_ENTER = 0.4f;   // m/s you must be under to tuck in
+    static constexpr float HIDE_BREAK = 1.2f;   // m/s that gives you away again
+    static constexpr float HIDE_GRACE = 0.35f;  // s above that before it costs you the spot
     static constexpr float TAPE_RUN = 26.0f;    // one side of a tape, as far as you'll listen
     static constexpr float TAPE_NOISE = 32.0f;  // how far a playing deck carries, in metres
     static constexpr int   ESCAPE_COST = 12;  // doubloons that buy your way out for good
@@ -197,7 +203,9 @@ struct Game {
     float drinkT = 0;               // counts DOWN from DRINK_TIME while the can is up
     bool drinkLanded = false;       // the swallow already paid out this time
     double nextWhisper = 0;
-    bool hidden = false;                      // crouched and tucked beside cover — the hunt can't find you
+    bool hidden = false;                      // crouched, tucked beside cover and still — the hunt can't find you
+    bool nearCover = false;                   // cover is right there; whether you are using it is a question of speed
+    float hideBreakT = 0;                     // how long you have been moving too fast to hold the spot
     float closeCallT = 0, tapeFoundT = 0;      // brief overlays: it stood right there / a tape found
     const char *tapeLine = "";                 // which recovered-tape line to show
     char bestPath[512] = {};
