@@ -839,15 +839,40 @@ const FlareProj *Game::nearestLitFlare(float x, float z) const {
     return best;
 }
 
+float Game::flarePresence(const FlareProj &f, float x, float z) {
+    if (!f.active) return 0.0f;
+    float dx = f.x - x, dz = f.z - z;
+    return clampf(f.burn / FLAREFADE, 0, 1) / (1.0f + FLAREFALL * (dx * dx + dz * dz));
+}
+
+// Which fire is doing the lighting here — not merely which is closest. A flare
+// with a second left guttering at your feet would otherwise hold the one point
+// light while a fresh one further up the hall did the actual lighting, and then
+// hand it over in a single frame when it died: one wall goes dark, another
+// lights up. Weighted this way the two fires are equally present at the moment
+// they swap, so there is nothing left to jump.
+const FlareProj *Game::dominantFlare(float x, float z) const {
+    const FlareProj *best = nullptr;
+    float bestP = 0.0f;
+    for (const FlareProj &f : litFlares) {
+        float p = flarePresence(f, x, z);
+        if (p > bestP) { bestP = p; best = &f; }
+    }
+    return best;
+}
+
 void Game::updateFlare(float dt, double now) {
     // ---- flare weapon
     if (IsCursorHidden() && caughtT <= 0 && flares > 0 && drinkT <= 0 &&
         (IsKeyPressed(KEY_Q) || (weapon == WEAPON_FLARE && !captureClick && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)))) {
         flares--;
-        // A free slot if there is one. There are as many slots as flares you
-        // can hold, so the only way to run out is to scavenge a fresh one
-        // while every slot is still alight — then the fire with the least left
-        // to give is the one that gets cut short.
+        // A free slot if there is one. There are as many slots as flares you can
+        // carry, so running out needs a fresh flare in your coat while all of
+        // them are still alight — which today only the F3 `G` refill can do:
+        // the regen timer is 75 s against a 9 s burn, and nothing in the world
+        // hands you one. The fallback is here so that a cheaper regen, or a
+        // flare you pick up, cannot silently resurrect the overwrite bug —
+        // then the fire with the least left to give is the one cut short.
         FlareProj *slot = nullptr;
         for (FlareProj &f : litFlares) {
             if (!f.active) { slot = &f; break; }
@@ -887,9 +912,10 @@ void Game::updateFlare(float dt, double now) {
         flare.burn -= dt;
         if (flare.burn <= 0) { flare.active = false; continue; }
         // The synth has one hiss channel, so whichever fire is loudest at your
-        // ear takes it, rather than all of them summing into a roar.
-        float fdx = flare.x - px, fdz = flare.z - pz;
-        hiss = fmaxf(hiss, clampf(flare.burn / 1.5f, 0, 1) / (1.0f + 0.05f * (fdx * fdx + fdz * fdz)));
+        // ear takes it, rather than all of them summing into a roar. Same
+        // weighting the renderer picks the point light by, so the fire you can
+        // hear is the fire you can see by.
+        hiss = fmaxf(hiss, flarePresence(flare, px, pz));
     }
     synth.hissTarget = hiss;
     if (flares >= MAXFLARES) nextFlareRegen = now + 75;   // scavenge a fresh flare over time

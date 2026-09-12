@@ -7,7 +7,7 @@
 // the point light and the halo spheres read it, so a flare that is nearly out
 // dims in the room and in its own glow together.
 static float flareGlow(const FlareProj &f, float flick) {
-    return clampf((Game::FLAREBURN - f.burn) * 6.0f, 0, 1) * clampf(f.burn / 1.5f, 0, 1) * flick;
+    return clampf((Game::FLAREBURN - f.burn) * 6.0f, 0, 1) * clampf(f.burn / Game::FLAREFADE, 0, 1) * flick;
 }
 
 void Game::renderScene(double now) {
@@ -38,9 +38,11 @@ void Game::renderScene(double now) {
     SetShaderValue(worldShader, locFlashDir, &fwd, SHADER_UNIFORM_VEC3);
     float flick = 0.91f + 0.09f * sinf(timeF * 31.0f) * sinf(timeF * 47.3f + 1.3f);
     // The shader carries one flare point light, so several fires on the floor
-    // become the one nearest you — the others still burn, ward and hiss, they
-    // just don't each get a light of their own.
-    const FlareProj *lead = nearestLitFlare(px, pz);
+    // become the one with the most presence at your feet — the others still
+    // burn, ward and hiss, they just don't each get a light of their own.
+    // Presence rather than distance: a guttering flare underfoot must not hold
+    // the light off a fresh one up the hall. See Game::dominantFlare.
+    const FlareProj *lead = dominantFlare(px, pz);
     float flareInt = lead ? flareGlow(*lead, flick) : 0.0f;
     Vector3 flarePos = lead ? Vector3{ lead->x, lead->y + 0.06f, lead->z }
                             : Vector3{ px, eyeY, pz };
