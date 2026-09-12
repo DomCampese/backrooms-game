@@ -1,5 +1,5 @@
 // THE BACKROOMS — Level 0
-// Native game on raylib + OpenGL 3.3. All textures and sounds are procedural.
+// Native game on raylib + OpenGL 3.3. Procedural content plus embedded CC0 object materials.
 //
 // Module map:
 //   util      hashes, RNG, value noise, shared palette

@@ -3,9 +3,22 @@
 Disclaimer: just for fun, mostly generated with Claude models
 
 A native, procedurally-infinite backrooms horror game in a small C++ codebase.
-No assets — every texture and every sound is synthesized at startup.
+Procedural worlds, meshes, and sound, with three compact CC0 texture tiles embedded at build time.
 
 ![screenshot](docs/screenshot.png)
+
+## Object realism pass
+
+The revolver now has a chamfered frame, shaped wooden grip, open oval trigger
+guard, rear sight notch, chamber faces, and a separate cylinder that swings out
+on reload and indexes as rounds are spent. Wood and fabric furniture has softened
+edges. Scanned metal, wood, and upholstery feed the existing shared prop atlas;
+object gloss is independent of each level's floor gloss.
+
+The external tiles add about 45 KB compressed, are embedded in the executable,
+and need no runtime downloads. [Sources and licensing](assets/materials/README.md).
+Python 3 is required at build time to embed them; no additional Python libraries
+are needed. See [validation](docs/object-realism-pass-two.md).
 
 ## Graphics update
 

@@ -91,7 +91,7 @@ struct Game {
     // resources
     Texture2D texEntity{}, texPartygoer{}, texProps{}, texScrawl{}, texAO{}, texOcc{}, texDog{},
               texAlmondWrap{}, texDeck{}, texParticle{};
-    Mesh revolverMesh{}, flareMesh{};
+    Mesh revolverMesh{}, revolverCylinderMesh{}, flareMesh{};
     Mesh canMesh{};                            // the almond water can, real geometry
     Mesh deckMesh{}, reelMesh{}, deckLampMesh{};   // the tape player, its reels, its record lamp
     // light-occlusion grid: the floorplan around you, uploaded for the shader to
@@ -104,7 +104,7 @@ struct Game {
     Texture2D floorTexs[NLEVELS]{}, ceilTexs[NLEVELS]{}, wallTexs[NLEVELS]{};   // per-level surface sets
     Texture2D floorDetails[NLEVELS]{}, ceilDetails[NLEVELS]{}, wallDetails[NLEVELS]{};
     std::vector<Texture2D> surfaceDetails; // owns unique maps; levels may share them
-    Texture2D neutralDetail{};
+    Texture2D neutralDetail{}, propDetail{};
     Shader worldShader{}, postShader{};
     int locTime = -1, locBlackout = -1, locViewPos = -1, locFlash = -1, locFlashDir = -1,
         locAmb = -1, locFogCol = -1, locFogDen = -1, locLightCol = -1, locLS = -1, locLY = -1,

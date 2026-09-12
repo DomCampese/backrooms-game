@@ -394,6 +394,7 @@ void main(){
     } else {
         vec4 texel = texture(texture0, fragUV);
         vec4 detail = texture(texture1, fragUV);
+        gGloss = detail.a < 0.75 ? detail.b : uGloss * detail.b;
         vec3 Nb = normalize(fragN);
         // Detail is tied to material UVs and mipmaps, so it stays attached to
         // the surface and filters away at distance instead of crawling. Alpha
@@ -401,7 +402,7 @@ void main(){
         if (fragC.a > 0.998) {
             vec2 slope = (detail.rg * 255.0 - 128.0) / 127.0;
             Nb = detailNormal(Nb, slope, dpdx, dpdy, duvdx, duvdy);
-            gGloss *= detail.b;
+
         }
         col = texel.rgb * fragC.rgb * roomLight(fragPos, Nb);
         aOut = fragC.a * texel.a;                    // translucent contact shadows + scrawl decals

@@ -1,5 +1,5 @@
 #pragma once
-// Procedural textures — every surface in the game is synthesized at startup.
+// Procedural textures — surfaces are composed at startup, including embedded CC0 object tiles.
 #include "raylib.h"
 
 Texture2D makeWallpaperTex();      // Level 0: yellowed stripes, stains, baseboard
@@ -26,3 +26,5 @@ Texture2D makeDeckTex();           // the tape player: top / body / front / reel
 Texture2D makeSurfaceDetail(Texture2D albedo, bool ceramic, float strength);
 
 Texture2D makeParticleTex(); // soft procedural disc for smoke and muzzle flash
+
+Texture2D makePropDetail(Texture2D albedo);

@@ -45,6 +45,7 @@ void Game::init() {
     texAlmondWrap = makeAlmondWrapTex();
     canMesh = buildCanMesh();
     revolverMesh = buildRevolverMesh();
+    revolverCylinderMesh = buildRevolverCylinderMesh();
     flareMesh = buildFlareMesh();
     texDeck = makeDeckTex();
     deckMesh = buildDeckMesh();
@@ -134,6 +135,8 @@ void Game::init() {
     }
     // The floor, ceiling and wall diffuse maps change per level — applyLevel sets those.
     mats[MAT_PROPS].maps[MATERIAL_MAP_DIFFUSE].texture = texProps;
+    propDetail=makePropDetail(texProps);
+    mats[MAT_PROPS].maps[MATERIAL_MAP_SPECULAR].texture=propDetail;
     mats[MAT_SCRAWL].maps[MATERIAL_MAP_DIFFUSE].texture = texScrawl;   // wall scrawl decals
     mats[MAT_AO].maps[MATERIAL_MAP_DIFFUSE].texture = texAO;           // baked contact-shadow gradients
     mats[MAT_CAN].maps[MATERIAL_MAP_DIFFUSE].texture = texAlmondWrap;
@@ -218,6 +221,8 @@ void Game::shutdown() {
     saveBest();
     UnloadTexture(texParticle);
     UnloadMesh(revolverMesh);
+    UnloadMesh(revolverCylinderMesh);
+    UnloadTexture(propDetail);
     UnloadMesh(flareMesh);
     for (Texture2D map : surfaceDetails) UnloadTexture(map);
     UnloadTexture(neutralDetail);

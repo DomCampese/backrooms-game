@@ -6,3 +6,5 @@
 /rlshim/
 /.rlwheel/
 /shots/
+
+/src/object_materials.generated.h

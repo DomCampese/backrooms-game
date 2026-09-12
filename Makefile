@@ -1,3 +1,4 @@
+.DEFAULT_GOAL := backrooms
 UNAME_S := $(shell uname -s)
 RAYLIB_PREFIX := $(shell brew --prefix raylib 2>/dev/null)
 
@@ -16,7 +17,10 @@ endif
 SRCS := $(wildcard src/*.cpp)
 HDRS := $(wildcard src/*.h)
 
-backrooms: $(SRCS) $(HDRS)
+src/object_materials.generated.h: tools/embed-materials.py $(wildcard assets/materials/*.jpg)
+	python3 tools/embed-materials.py
+
+backrooms: $(SRCS) $(HDRS) src/object_materials.generated.h
 	c++ -std=c++17 -O2 -Wall -Wno-missing-field-initializers $(CFLAGS_RL) $(SRCS) -o backrooms $(LIBS_RL)
 
 run: backrooms
@@ -28,7 +32,7 @@ clean:
 .PHONY: run clean
 
 # Uses the same native renderer as the game; run from shots/regression for captures.
-regression: tools/regression.cpp $(filter-out src/main.cpp,$(SRCS)) $(HDRS)
+regression: src/object_materials.generated.h tools/regression.cpp $(filter-out src/main.cpp,$(SRCS)) $(HDRS)
 	c++ -std=c++17 -O2 -Wall -Wno-missing-field-initializers $(CFLAGS_RL) -Isrc tools/regression.cpp $(filter-out src/main.cpp,$(SRCS)) -o /tmp/backrooms-regression $(LIBS_RL)
 	mkdir -p shots/regression
 	cd shots/regression && /tmp/backrooms-regression
