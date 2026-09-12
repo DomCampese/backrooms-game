@@ -66,6 +66,8 @@ struct Game {
     static constexpr float PR = 0.34f;        // player radius
     static constexpr int   MAXFLARES = 3;
     static constexpr float FLAREBURN = 9.0f;  // seconds
+    static constexpr float FLAREFADE = 1.5f;  // seconds of guttering at the end of a burn
+    static constexpr float FLAREFALL = 0.05f; // how fast a fire's presence drops off with distance
     static constexpr int   MAXAMMO = 6;
     static constexpr float TAPE_RUN = 26.0f;    // one side of a tape, as far as you'll listen
     static constexpr float TAPE_NOISE = 32.0f;  // how far a playing deck carries, in metres
@@ -128,10 +130,14 @@ struct Game {
     double entStepAcc = 0;                    // spacing of the thing's audible footfalls
     float muzzleSmoke = 0;                    // powder haze lingering after a shot
 
-    // flare weapon: thrown, burns orange, Pirate Clark won't go near one
+    // flare weapon: thrown, burns orange, Pirate Clark won't go near one.
+    // `flares` is the count in your coat; `litFlares` is what is burning out
+    // there. One slot per flare you can carry: this was a single FlareProj
+    // once, so throwing a second one overwrote the first mid-burn and that
+    // fire simply ceased to exist — no light, no hiss, no smoke.
     int flares = MAXFLARES;
     double nextFlareRegen = 0;
-    FlareProj flare;
+    FlareProj litFlares[MAXFLARES];
 
     // the tape player: a voice for your grip, or a noise to send them somewhere else
     TapeDeck deck;
@@ -255,6 +261,19 @@ struct Game {
     void updateDevKeys(double now);
     void updateWeapons(float dt, double now);
     void updateFlare(float dt, double now);
+    // The questions the rest of the game asks about burning flares, rather than
+    // the whole array. Clark and the pack want plain distance — they turn at a
+    // radius, and a fire two metres away is two metres away however low it has
+    // burned. The one point light and the one hiss channel instead want the
+    // fire that is actually doing the lighting, which is `flarePresence`.
+    bool anyFlareLit() const;
+    const FlareProj *nearestLitFlare(float x, float z) const;   // null if none are burning
+    // How much of a fire reaches a point on the floor: how hard it is still
+    // burning, against how far off it is. The hiss scales its volume by this
+    // and the renderer picks the point light by it, so the loudest flare and
+    // the one lighting the room are always the same flare.
+    static float flarePresence(const FlareProj &f, float x, float z);
+    const FlareProj *dominantFlare(float x, float z) const;     // null if none are burning
     void updateInteraction();
     void updateAmbience(float dt, double now);
     void updateEntity(float dt, double now);

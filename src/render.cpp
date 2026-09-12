@@ -2,6 +2,14 @@
 #include "raymath.h"
 #include <cmath>
 
+// How hard one flare is burning right now: a fast flare-up as the cap comes
+// off, a fade over the last second and a half, and the flicker on top. Both
+// the point light and the halo spheres read it, so a flare that is nearly out
+// dims in the room and in its own glow together.
+static float flareGlow(const FlareProj &f, float flick) {
+    return clampf((Game::FLAREBURN - f.burn) * 6.0f, 0, 1) * clampf(f.burn / Game::FLAREFADE, 0, 1) * flick;
+}
+
 void Game::renderScene(double now) {
     // ---- render 3D scene into rt
     int pcx = fdiv(cellOf(px), CCELLS), pcz = fdiv(cellOf(pz), CCELLS);
@@ -29,11 +37,16 @@ void Game::renderScene(double now) {
     SetShaderValue(worldShader, locFlash, &flashSend, SHADER_UNIFORM_FLOAT);
     SetShaderValue(worldShader, locFlashDir, &fwd, SHADER_UNIFORM_VEC3);
     float flick = 0.91f + 0.09f * sinf(timeF * 31.0f) * sinf(timeF * 47.3f + 1.3f);
-    float flareInt = flare.active
-        ? clampf((FLAREBURN - flare.burn) * 6.0f, 0, 1) * clampf(flare.burn / 1.5f, 0, 1) * flick
-        : 0.0f;
-    Vector3 flarePos = { flare.x, flare.y + 0.06f, flare.z };
-    if (!flare.active && muzzleT > 0) {   // muzzle flash borrows the flare point light
+    // The shader carries one flare point light, so several fires on the floor
+    // become the one with the most presence at your feet — the others still
+    // burn, ward and hiss, they just don't each get a light of their own.
+    // Presence rather than distance: a guttering flare underfoot must not hold
+    // the light off a fresh one up the hall. See Game::dominantFlare.
+    const FlareProj *lead = dominantFlare(px, pz);
+    float flareInt = lead ? flareGlow(*lead, flick) : 0.0f;
+    Vector3 flarePos = lead ? Vector3{ lead->x, lead->y + 0.06f, lead->z }
+                            : Vector3{ px, eyeY, pz };
+    if (!lead && muzzleT > 0) {   // muzzle flash borrows the flare point light
         flareInt = muzzleT / 0.09f * 1.3f;
         flarePos = { px + f2x * 0.6f, eyeY - 0.05f, pz + f2z * 0.6f };
     }
@@ -250,12 +263,16 @@ void Game::renderScene(double now) {
         DrawBillboardRec(cam, texDog, { 0, 0, 192, 128 },
                          { d.x, d.dispY + 0.46f, d.z }, { 1.45f, 0.97f }, { l8, l8, l8, al });
     }
-    if (flare.active) {   // the flare itself: hot core, orange halo, stub of a body
-        Vector3 fp = { flare.x, flare.y + 0.05f, flare.z };
-        DrawCylinder({ flare.x, flare.y - 0.03f, flare.z }, 0.018f, 0.022f, 0.09f, 8, { 130, 30, 22, 255 });
+    for (const FlareProj &f : litFlares) {   // each flare: hot core, orange halo, stub of a body
+        if (!f.active) continue;
+        // its own glow, not the point light's — that one belongs to whichever
+        // flare is nearest you, and would size every other halo wrongly
+        float glow = flareGlow(f, flick);
+        Vector3 fp = { f.x, f.y + 0.05f, f.z };
+        DrawCylinder({ f.x, f.y - 0.03f, f.z }, 0.018f, 0.022f, 0.09f, 8, { 130, 30, 22, 255 });
         DrawSphere(fp, 0.035f + 0.012f * flick, { 255, 240, 208, 255 });
-        DrawSphere(fp, 0.13f, { 255, 120, 40, (unsigned char)(90 * flareInt) });
-        DrawSphere(fp, 0.30f, { 255, 70, 20, (unsigned char)(28 * flareInt) });
+        DrawSphere(fp, 0.13f, { 255, 120, 40, (unsigned char)(90 * glow) });
+        DrawSphere(fp, 0.30f, { 255, 70, 20, (unsigned char)(28 * glow) });
     }
     if (ent.st != EState::Hidden && entDist < 45) {
         const LevelCfg &c = LEVELS[level];

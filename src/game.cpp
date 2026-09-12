@@ -266,6 +266,10 @@ void Game::applyLevel(int lv) {
     // you wouldn't step through a door without picking your own kit back up —
     // and a deck left behind on the last floor would be gone for the whole run
     deck.carried = true; deck.flying = false; deck.playing = false; deck.t = 0;
+    // a flare burning on the last floor's carpet is not burning on this one —
+    // it would otherwise hang in the new maze at the old coordinates, lighting
+    // and warding a room it was never thrown into
+    for (FlareProj &f : litFlares) f.active = f.flying = false;
     if (IsSoundPlaying(sndVoice)) StopSound(sndVoice);
     const LevelCfg &c = LEVELS[lv];
     world.unloadAll();
@@ -822,18 +826,74 @@ void Game::updateWeapons(float dt, double now) {
     }
 }
 
+bool Game::anyFlareLit() const {
+    for (const FlareProj &f : litFlares) if (f.active) return true;
+    return false;
+}
+
+// Nearest by squared distance on the floor plane: height never separates two
+// flares by enough to matter, and everything that calls this is reasoning
+// about a hall, not a stairwell.
+const FlareProj *Game::nearestLitFlare(float x, float z) const {
+    const FlareProj *best = nullptr;
+    float bestD2 = 1e30f;
+    for (const FlareProj &f : litFlares) {
+        if (!f.active) continue;
+        float dx = f.x - x, dz = f.z - z, d2 = dx * dx + dz * dz;
+        if (d2 < bestD2) { bestD2 = d2; best = &f; }
+    }
+    return best;
+}
+
+float Game::flarePresence(const FlareProj &f, float x, float z) {
+    if (!f.active) return 0.0f;
+    float dx = f.x - x, dz = f.z - z;
+    return clampf(f.burn / FLAREFADE, 0, 1) / (1.0f + FLAREFALL * (dx * dx + dz * dz));
+}
+
+// Which fire is doing the lighting here — not merely which is closest. A flare
+// with a second left guttering at your feet would otherwise hold the one point
+// light while a fresh one further up the hall did the actual lighting, and then
+// hand it over in a single frame when it died: one wall goes dark, another
+// lights up. Weighted this way the two fires are equally present at the moment
+// they swap, so there is nothing left to jump.
+const FlareProj *Game::dominantFlare(float x, float z) const {
+    const FlareProj *best = nullptr;
+    float bestP = 0.0f;
+    for (const FlareProj &f : litFlares) {
+        float p = flarePresence(f, x, z);
+        if (p > bestP) { bestP = p; best = &f; }
+    }
+    return best;
+}
+
 void Game::updateFlare(float dt, double now) {
     // ---- flare weapon
     if (IsCursorHidden() && caughtT <= 0 && flares > 0 && drinkT <= 0 &&
         (IsKeyPressed(KEY_Q) || (weapon == WEAPON_FLARE && !captureClick && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)))) {
         flares--;
-        flare.active = true; flare.flying = true; flare.burn = FLAREBURN;
-        flare.x = px + fwd.x * 0.4f; flare.y = eyeY - 0.15f; flare.z = pz + fwd.z * 0.4f;
-        flare.vx = fwd.x * 10.5f; flare.vz = fwd.z * 10.5f; flare.vy = fwd.y * 10.5f + 2.4f;
+        // A free slot if there is one. There are as many slots as flares you can
+        // carry, so running out needs a fresh flare in your coat while all of
+        // them are still alight — which today only the F3 `G` refill can do:
+        // the regen timer is 75 s against a 9 s burn, and nothing in the world
+        // hands you one. The fallback is here so that a cheaper regen, or a
+        // flare you pick up, cannot silently resurrect the overwrite bug —
+        // then the fire with the least left to give is the one cut short.
+        FlareProj *slot = nullptr;
+        for (FlareProj &f : litFlares) {
+            if (!f.active) { slot = &f; break; }
+            if (!slot || f.burn < slot->burn) slot = &f;
+        }
+        FlareProj &fl = *slot;
+        fl.active = true; fl.flying = true; fl.burn = FLAREBURN;
+        fl.x = px + fwd.x * 0.4f; fl.y = eyeY - 0.15f; fl.z = pz + fwd.z * 0.4f;
+        fl.vx = fwd.x * 10.5f; fl.vz = fwd.z * 10.5f; fl.vy = fwd.y * 10.5f + 2.4f;
         PlaySound(sndFlare);
         if (ent.st == EState::Hidden) ent.nextSpawn = fmin(ent.nextSpawn, now + 12 + grng.f01() * 10);  // he hears the strike
     }
-    if (flare.active) {
+    float hiss = 0;
+    for (FlareProj &flare : litFlares) {
+        if (!flare.active) continue;
         if (flare.flying) {
             flare.vy -= 18.0f * dt;
             flare.x += flare.vx * dt; flare.y += flare.vy * dt; flare.z += flare.vz * dt;
@@ -852,17 +912,20 @@ void Game::updateFlare(float dt, double now) {
                 SetSoundPitch(s, 1.1f); SetSoundVolume(s, 0.8f);
                 PlaySound(s);
                 flare.active = false;
+                continue;
             }
         }
         flare.burn -= dt;
-        if (flare.burn <= 0) flare.active = false;
+        if (flare.burn <= 0) { flare.active = false; continue; }
+        // The synth has one hiss channel, so whichever fire is loudest at your
+        // ear takes it, rather than all of them summing into a roar. Same
+        // weighting the renderer picks the point light by, so the fire you can
+        // hear is the fire you can see by.
+        hiss = fmaxf(hiss, flarePresence(flare, px, pz));
     }
+    synth.hissTarget = hiss;
     if (flares >= MAXFLARES) nextFlareRegen = now + 75;   // scavenge a fresh flare over time
     else if (now > nextFlareRegen) { flares++; nextFlareRegen = now + 75; }
-    if (flare.active) {
-        float fdx = flare.x - px, fdz = flare.z - pz;
-        synth.hissTarget = clampf(flare.burn / 1.5f, 0, 1) / (1.0f + 0.05f * (fdx * fdx + fdz * fdz));
-    } else synth.hissTarget = 0;
 }
 
 // ---- the tape player. What the cassettes are for.
@@ -1104,7 +1167,7 @@ void Game::updateAmbience(float dt, double now) {
     // ---- your grip on the place. It only ever goes one way on its own.
     float drain = sanityDrain(level);
     if (blackout) drain *= 2.2f;                              // the dark works much faster
-    else if (!flashOn && !(flare.active && flare.burn > 0)) drain *= 1.35f;
+    else if (!flashOn && !anyFlareLit()) drain *= 1.35f;
     if (ent.st == EState::Chase) drain *= 2.6f;               // actively being run down
     else if (ent.st != EState::Hidden) drain *= 1.5f;         // or just knowing it's out
     if (hidden) drain *= 0.45f;                               // tucked in, breathing slow
@@ -1181,10 +1244,15 @@ void Game::updateEntity(float dt, double now) {
         entVisible = entDist < 36 && dirDot > 0.86f && world.lineOfSight(px, pz, ent.x, ent.z);
         if (crouchCur > 0.7f && entDist > 7) entVisible = false;   // low and quiet: hard to pick out
         if (hidden) entVisible = false;                            // tucked away — it can walk right past you
-        if (flare.active && (ent.st == EState::Stalk || ent.st == EState::Chase)) {
-            float fx = ent.x - flare.x, fz = ent.z - flare.z;
-            if (fx * fx + fz * fz < 6.0f * 6.0f) {   // fire is the one thing he remembers
-                ent.st = EState::Flee; ent.life = 0; ent.gaze = 0;
+        if (ent.st == EState::Stalk || ent.st == EState::Chase) {
+            // any fire will do it — walk him past the second flare and he turns
+            // from that one, not only from the one you threw first
+            const FlareProj *fire = nearestLitFlare(ent.x, ent.z);
+            if (fire) {
+                float fx = ent.x - fire->x, fz = ent.z - fire->z;
+                if (fx * fx + fz * fz < 6.0f * 6.0f) {   // fire is the one thing he remembers
+                    ent.st = EState::Flee; ent.life = 0; ent.gaze = 0;
+                }
             }
         }
         if (ent.st == EState::Stalk) {
@@ -1251,7 +1319,10 @@ void Game::updateEntity(float dt, double now) {
         if (ent.st == EState::Flee) {   // bolts away from the burning flare
             fearT = 0.18f;
             ent.life += dt;
-            float rx = ent.x - (flare.active ? flare.x : px), rz = ent.z - (flare.active ? flare.z : pz);
+            // away from whichever fire is closest to him now; if they have all
+            // burned out mid-bolt he settles for putting distance between us
+            const FlareProj *from = nearestLitFlare(ent.x, ent.z);
+            float rx = ent.x - (from ? from->x : px), rz = ent.z - (from ? from->z : pz);
             float rl = sqrtf(rx * rx + rz * rz);
             if (rl > 0.01f) { ent.x += rx / rl * 6.5f * dt; ent.z += rz / rl * 6.5f * dt; }
             world.collideCircle(ent.x, ent.z, 0.38f);
@@ -1307,7 +1378,9 @@ void Game::updateDogs(float dt, double now) {
         nsz = deck.carried ? pz : deck.z;
     }
     if (muzzleT > 0 || gunCd > 0.35f) { noise = 45.0f; nsx = px; nsz = pz; }   // a shot in here carries
-    if (flare.active && flare.burn > FLAREBURN - 0.6f) { noise = 30.0f; nsx = px; nsz = pz; }   // struck in your hand
+    bool justStruck = false;   // the strike itself carries, whichever flare it was
+    for (const FlareProj &f : litFlares) if (f.active && f.burn > FLAREBURN - 0.6f) justStruck = true;
+    if (justStruck) { noise = 30.0f; nsx = px; nsz = pz; }
 
     if (now > nextHowl && caughtT <= 0) {    // the pack calling across the halls
         nextHowl = now + 26 + grng.f01() * 34;
@@ -1345,8 +1418,9 @@ void Game::updateDogs(float dt, double now) {
             if (d.life > 2.6f) d.st = DState::Gone;
         } else {
             // fire is the one thing that turns them, same as it turns Clark
-            if (flare.active) {
-                float fx = d.x - flare.x, fz = d.z - flare.z;
+            const FlareProj *nearest = nearestLitFlare(d.x, d.z);
+            if (nearest) {
+                float fx = d.x - nearest->x, fz = d.z - nearest->z;
                 if (fx * fx + fz * fz < 5.5f * 5.5f) {
                     d.st = DState::Yelp; d.life = 0;
                     SetSoundPitch(sndBarks[i % 3], 1.5f); PlaySound(sndBarks[i % 3]);

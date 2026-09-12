@@ -271,6 +271,26 @@ crossfaded, or the join clicks audibly.
 `ModuleNotFoundError: No module named 'PIL'` — after the sweep you just waited
 fifteen minutes for.
 
+**A cross-run pixel diff is only meaningful if both runs hit the same frame
+rate.** The light flicker is `sin(t*31)*sin(t*47.3)` on wall-clock `GetTime()`,
+so by frame 80 a 3 fps run and a 4 fps run are at different points in that
+phase, and the diff between them lands around 0.04% of pixels concentrated in
+the upper bands — which reads exactly like "you moved the ceiling lighting".
+The *same* binary shot twice at 3 and at 4 fps produced that 0.044%; the same
+binary against a changed one, both at 4 fps, produced 4 pixels out of 1.22 M.
+`tools/shot.sh` prints `fps=` on every run: check it matches before you believe
+a diff, and re-shoot rather than reason about a mismatched pair. The frame rate
+varies with what else is running on the box, so this is not something you set —
+it is something you check.
+
+**Game time is not wall-clock time.** `dt` is clamped, so each headless frame
+advances the simulation about 0.05 s while the wall clock advances ~0.25-0.3 s.
+Anything driven by `dt` — a flare's 9 s burn, reload timers — needs roughly 20
+frames per simulated second, so `BACKROOMS_SHOTFRAME=80` is only ~4 s into a
+burn. Anything scheduled off `GetTime()` — blackouts, the flicker above — runs
+on the wall clock instead. A test that needs a flare to reach the end of its
+burn needs ~180 frames and will therefore also cross the blackout window.
+
 **Screenshots are not byte-reproducible, so `md5sum` is not a regression test.**
 Light flicker and the menu camera drift are driven by `GetTime()`, and the
 software rasteriser's frame rate varies run to run, so the same binary
@@ -431,6 +451,33 @@ compensation *and the tone curve itself* — props and billboards draw with
 raylib's unlit shader and never go through the world pass, so the estimate has
 to come out of the same curve or every sprite in the game sits at a different
 exposure from the room it is standing in.
+
+The shader has exactly **one** flare point light (`uFlarePos` / `uFlareInt`),
+and the muzzle flash borrows the same one when nothing is burning. You can have
+up to `MAXFLARES` alight at once, so one of them has to be chosen to feed it;
+every other fire still burns, wards Clark and the pack, and hisses, it just
+doesn't light the room on its own.
+
+**Choose it by `Game::flarePresence`, not by distance.** Presence is
+`burn-fraction / (1 + FLAREFALL·d²)` — how much of a fire actually reaches a
+point — and both `dominantFlare` (the point light) and the hiss in
+`updateFlare` go through it, so the fire you hear is always the fire you see
+by. Picking the *nearest* instead looks right and is wrong at the end of a
+burn: a flare with half a second left lying a few centimetres nearer than a
+fresh one holds the light while `flareGlow` fades it to nothing, and then the
+light jumps across the room the frame it dies — one wall goes dark, another
+lights up. An instrumented two-flare run had the nearest-flare pick naming the
+guttering one for 13 frames at a presence of 0.008 against the fresh one's
+0.248. Presence hands it over while both are still bright, so there is nothing
+left to jump.
+
+What presence cannot fix is two *equally* fresh flares either side of you: the
+light still belongs to one of them, and walking across the midpoint swaps which
+wall it lights. That is the one-light budget itself, not the picker.
+
+Each flare's halo spheres are drawn from *its* own burn, not from the uniform —
+share the uniform's intensity between them and the far ones pulse with the near
+one's flicker.
 
 ### Viewmodels
 
