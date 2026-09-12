@@ -1,5 +1,6 @@
 #include "textures.h"
 #include "util.h"
+#include "object_materials.generated.h"
 #include <cmath>
 #include <algorithm>
 #include <cstring>
@@ -634,6 +635,24 @@ Texture2D makePropsTex() {
     }
     for (int x=72;x<136;++x) if ((ih(x/2,0,613u)&3)!=0)
         for (int y=352;y<377;++y) p[y*W+x]={72,65,52,255};
+    // Scanned CC0 tiles replace only neutral material regions. Labels and
+    // cabinet fronts retain their authored layout; existing prop tints survive.
+    auto stamp = [&](const unsigned char *bytes,int size,int x0,int y0,int w,int h,float contrast) {
+        Image source=LoadImageFromMemory(".jpg",bytes,size);
+        Color *sample=LoadImageColors(source);
+        for (int y=0;y<h;++y) for (int x=0;x<w;++x) {
+            const Color &c=sample[(y*source.height/h)*source.width+x*source.width/w];
+            float lum=(c.r*0.30f+c.g*0.59f+c.b*0.11f)/255;
+            float v=clampf(0.75f+(lum-0.45f)*contrast,0.35f,1);
+            // Leave a padded edge so atlas mip levels do not borrow neighbours.
+            float edge=(x<4 || x>=w-4 || y<4 || y>=h-4) ? 0.90f : 1;
+            p[(y0+y)*W+x0+x]={cl8(245*v*edge),cl8(242*v*edge),cl8(235*v*edge),255};
+        }
+        UnloadImageColors(sample);UnloadImage(source);
+    };
+    stamp(object_wood,sizeof(object_wood),512,0,512,256,0.75f);
+    stamp(object_fabric,sizeof(object_fabric),512,256,512,256,0.90f);
+    stamp(object_metal,sizeof(object_metal),256,256,256,256,0.55f);
     return finishTexture(img, true);
 }
 
@@ -1199,4 +1218,17 @@ Texture2D makeParticleTex() {
         p[y*32+x]={255,255,255,cl8(255*a*a)};
     }
     return finishTexture(img,false);
+}
+
+Texture2D makePropDetail(Texture2D albedo) {
+    Texture2D detail=makeSurfaceDetail(albedo,false,0.55f);
+    Image img=LoadImageFromTexture(detail);
+    Color *p=(Color *)img.data;
+    for (int y=0;y<img.height;++y) for(int x=0;x<img.width;++x) {
+        // Alpha marks an absolute object gloss, independent of the level's floor.
+        p[y*img.width+x].b=x<256 ? 12 : x<512 ? 108 : y<256 ? 48 : 8;
+        p[y*img.width+x].a=128;
+    }
+    UnloadTexture(detail);
+    return finishTexture(img,true);
 }

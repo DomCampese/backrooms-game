@@ -2,6 +2,20 @@
 
 ## Current graphics implementation (September 2026)
 
+- Object detail maps use alpha 128 to identify an absolute gloss value in B;
+  world maps and neutral maps use alpha 255 and retain level-relative gloss.
+  This lets cloth remain matte and metal reflect in carpeted levels. Vertex
+  alpha 254 still disables normal relief independently of material gloss.
+- Revolver frame and cylinder are separate meshes. The cylinder indexes with
+  ammo and swings left on reload. Keep bounds inside the existing held-item envelope.
+- `make` and sandbox-build.sh run tools/embed-materials.py before compilation.
+  Do not commit object_materials.generated.h; commit the licensed source JPEGs.
+- Regression captures must stream all 25 visible chunks after relocating. The
+  previous three render-only frames left missing black rooms in some screenshots.
+- Can caps must map their triangle fan center to the atlas disc center. Mapping
+  that vertex to angle zero stretched the lid detail into triangular wedges.
+
+
 - `texture1` / MATERIAL_MAP_SPECULAR carries packed tangent slopes in RG and a
   gloss mask in B. The neutral map is (128,128,255). `texture2` remains occupancy.
 - The old six-noise world-space bump is replaced by startup-generated material
@@ -26,9 +40,10 @@
 ## What this is
 
 A first-person backrooms horror game in C++17 on raylib + OpenGL 3.3.
-**There are no asset files.** Every texture, sound and mesh is synthesized at
-startup from code. If you are tempted to add a `.png` or a `.wav`, that is a
-departure from the whole design — generate it instead.
+World generation, meshes, and sound remain procedural. The user authorized compact
+external textures for realism: assets/materials contains three CC0 source tiles.
+Keep provenance and license information alongside additions; embed assets at build
+time so the executable remains independent of its working directory.
 
 ### Module map
 
@@ -552,7 +567,7 @@ pass, and both obey the same three rules, learned the hard way:
   all three, or you get furniture you fall through or cartons floating.
 - Comments explain *why*, not *what*. Several in here record a bug that a
   reasonable-looking change would reintroduce; keep those.
-- No asset files. Everything procedural.
+- Prefer procedural content; compact licensed external textures are permitted. Record provenance in assets/materials/README.md.
 - The game is deterministic given a seed — preserve that. It is the only
   reason A/B screenshot comparison works.
 - When fixing something visual, prove it: capture the same frame before and

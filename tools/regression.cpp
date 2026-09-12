@@ -7,7 +7,11 @@
 #include <cmath>
 
 static void capture(Game &g, const char *name) {
-    g.updateLook(); g.streamChunks(); g.updateOccupancy();
+    g.updateLook();
+    // Fill the complete visible ring; three calls previously left black holes
+    // in shots after moving the camera or changing level.
+    for (int i=0;i<7;++i) g.streamChunks();
+    g.updateOccupancy();
     for (int i=0;i<3;++i) { g.renderScene(4); g.renderUI(4); }
     TakeScreenshot(name);
 }
@@ -62,6 +66,21 @@ int main() {
     g.applyLevel(2);g.px=95;g.pz=79;g.yaw=1.2f;g.pitch=-0.2f;g.weapon=WEAPON_DECK;
     g.deck.carried=false;g.deck.playing=true;g.deck.x=96;g.deck.z=81;g.deck.y=g.world.floorY(cellOf(96),cellOf(81));
     capture(g,"deck-world.png");
-    printf("PASS sprint recovery, crouch/stationary gating, restart reset, battery retention; 9 visual captures\n");
+    // Inspect several real prop sites rather than relying on the empty spawn room.
+    g.deck.carried=true;g.weapon=WEAPON_REVOLVER;g.applyLevel(0);
+    const int kinds[]={PROP_COUCH,PROP_DESK,PROP_ARMOIRE,PROP_CABINET};
+    for(int kind:kinds) {
+        bool found=false;
+        for(int x=0;x<70 && !found;++x) for(int z=0;z<70 && !found;++z) {
+            if(g.world.propAt(x,z)!=kind) continue;
+            g.px=x*CELL+1;g.pz=z*CELL+3.4f;g.py=g.world.floorY(x,z);g.eyeY=g.py+1.35f;
+            g.yaw=-PI/2;g.pitch=-0.20f;
+            char name[48];snprintf(name,sizeof(name),"prop-%d.png",kind);capture(g,name);found=true;
+        }
+        assert(found);
+    }
+    for(const auto &entry:g.world.chunks) for(const auto &mesh:entry.second.meshes)
+        assert(mesh.vertexCount<=65535);
+    printf("PASS sprint recovery, crouch/stationary gating, restart reset, battery retention; 13 visual captures\n");
     g.shutdown();
 }

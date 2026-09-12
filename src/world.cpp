@@ -237,9 +237,29 @@ static const Color AO_TINT = { 10, 9, 9, 255 };
 // rotated prop box: 4 sides + top, one UV region for sides, another for the top
 static void addPropBox(MB &mb, float cx, float cz, float yaw, float hx, float hz, float y0, float y1,
                        float u0, float v0, float u1, float v1,
-                       float tu0, float tv0, float tu1, float tv1, Color tint = WHITE) {
+                       float tu0, float tv0, float tu1, float tv1, Color tint = WHITE, float bevel = 0) {
     float ca = cosf(yaw), sa = sinf(yaw);
     auto pt = [&](float lx, float lz) { return Vector3{ cx + lx * ca - lz * sa, 0, cz + lx * sa + lz * ca }; };
+    bevel=std::min(bevel,std::min(std::min(hx,hz)*0.25f,(y1-y0)*0.25f));
+    if (bevel>0.0001f) {
+        Vector2 outline[8]={{-hx+bevel,-hz},{hx-bevel,-hz},{hx,-hz+bevel},{hx,hz-bevel},
+                            {hx-bevel,hz},{-hx+bevel,hz},{-hx,hz-bevel},{-hx,-hz+bevel}};
+        auto topUV=[&](Vector2 p) {return Vector2{tu0+(p.x/hx+1)*0.5f*(tu1-tu0),tv0+(p.y/hz+1)*0.5f*(tv1-tv0)};};
+        for(int i=0;i<8;++i) {
+            Vector2 a=outline[i],b=outline[(i+1)%8];
+            Vector3 aa=pt(a.x,a.y),bb=pt(b.x,b.y);
+            Vector3 n{bb.z-aa.z,0,aa.x-bb.x};float len=sqrtf(n.x*n.x+n.z*n.z);n.x/=len;n.z/=len;
+            Vector3 at=pt(a.x*(hx-bevel)/hx,a.y*(hz-bevel)/hz);
+            Vector3 bt=pt(b.x*(hx-bevel)/hx,b.y*(hz-bevel)/hz);
+            mb.quad({aa.x,y0,aa.z},{bb.x,y0,bb.z},{bb.x,y1-bevel,bb.z},{aa.x,y1-bevel,aa.z},n,
+                    {u0,v1},{u1,v1},{u1,v0},{u0,v0},tint);
+            mb.quad({aa.x,y1-bevel,aa.z},{bb.x,y1-bevel,bb.z},{bt.x,y1,bt.z},{at.x,y1,at.z},
+                    {n.x*0.7071f,0.7071f,n.z*0.7071f},topUV(a),topUV(b),topUV(b),topUV(a),tint);
+            mb.tri({cx,y1,cz},{at.x,y1,at.z},{bt.x,y1,bt.z},{0,1,0},
+                   {(tu0+tu1)*0.5f,(tv0+tv1)*0.5f},topUV(a),topUV(b),tint);
+        }
+        return;
+    }
     Vector3 corners[5] = { pt(-hx, -hz), pt(hx, -hz), pt(hx, hz), pt(-hx, hz), pt(-hx, -hz) };
     for (int f = 0; f < 4; f++) {
         Vector3 a = corners[f], b = corners[f + 1];
@@ -323,7 +343,8 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
         if (surface==Surface::Fabric) {u0=0.51f;v0=0.52f;u1=0.99f;v1=0.98f;}
         if (surface==Surface::Cardboard) {u0=CU0;v0=CV0;u1=CU1;v1=CV1;}
         addPropBox(pr, pcx+ox*ca-oz*sa, pcz+ox*sa+oz*ca, rot, hx2,hz2,y0,y1,
-                   u0,v0,u1,v1,u0,v0,u1,v1,tint);
+                   u0,v0,u1,v1,u0,v0,u1,v1,tint,
+                   surface==Surface::Fabric ? 0.016f : surface==Surface::Wood ? 0.006f : 0.0f);
     };
     auto roundPart = [&](float ox,float oz,float r0,float r1,float y0,float y1,Color tint) {
         const Vector2 uv{0.375f,0.75f};
@@ -544,8 +565,8 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
         part(0.08f, -0.22f, 0.19f, 0.035f, ey + 0.76f, ey + 1.08f, Surface::Metal, Color{ 30, 30, 34, 255 }); // monitor
         part(0.08f, -0.14f, 0.06f, 0.06f, ey + 0.74f, ey + 0.77f, Surface::Metal, Color{ 38, 38, 42, 255 });  // its foot
         part(-0.30f, -0.14f, 0.11f, 0.08f, ey + 0.74f, ey + 0.765f, Surface::Metal, Color{ 200, 196, 186, 255 }); // papers
-        part(0.02f + r1 * 0.1f, 0.44f, 0.20f, 0.20f, ey + 0.40f, ey + 0.46f, Surface::Metal, Color{ 52, 50, 54, 255 }); // chair seat
-        part(0.02f + r1 * 0.1f, 0.62f, 0.20f, 0.04f, ey + 0.46f, ey + 0.96f, Surface::Metal, Color{ 52, 50, 54, 255 }); // backrest
+        part(0.02f + r1 * 0.1f, 0.44f, 0.20f, 0.20f, ey + 0.40f, ey + 0.46f, Surface::Fabric, Color{ 52, 50, 54, 255 }); // chair seat
+        part(0.02f + r1 * 0.1f, 0.62f, 0.20f, 0.04f, ey + 0.46f, ey + 0.96f, Surface::Fabric, Color{ 52, 50, 54, 255 }); // backrest
         part(0.02f + r1 * 0.1f, 0.44f, 0.035f, 0.035f, ey, ey + 0.40f, Surface::Metal, Color{ 72, 72, 76, 255 });        // post
         break;
     }
@@ -1209,18 +1230,17 @@ Mesh buildCanMesh() {
             Vector3 p10 = { c1 * rr[k],     ry[k],     s1 * rr[k] };
             Vector3 p11 = { c1 * rr[k + 1], ry[k + 1], s1 * rr[k + 1] };
             Vector3 p01 = { c0 * rr[k + 1], ry[k + 1], s0 * rr[k + 1] };
-            // Radial normals are the honest answer and they read badly here: a
-            // half-lambert falloff wrapped round a barrel only 20 pixels wide
-            // puts most of the can inside its own terminator, so it goes dark
-            // next to the flat-faced furniture it sits on. Cant them upward so
-            // the barrel catches the ceiling panels and the falloff is gentler
-            // — the same trick small round props usually get.
-            float mx = (c0 + c1) * 0.5f, mz = (s0 + s1) * 0.5f;
-            float ny = 1.05f;   // well past honest: readability wins on a 20px object
-            float nl = sqrtf(mx * mx + mz * mz + ny * ny);
-            Vector3 nm = { mx / nl, ny / nl, mz / nl };
-            b.quad(p00, p10, p11, p01, nm,
-                   { u0, rv[k] }, { u1, rv[k] }, { u1, rv[k + 1] }, { u0, rv[k + 1] }, w);
+            // Smooth geometric normals, including the shoulder slope. The old
+            // upward cant made the barrel glow like a flat label in side light.
+            float ny=(rr[k]-rr[k+1])/(ry[k+1]-ry[k]);
+            float inv=1/sqrtf(1+ny*ny);
+            b.quad(p00,p10,p11,p01,{c0*inv,ny*inv,s0*inv},
+                   {u0,rv[k]},{u1,rv[k]},{u1,rv[k+1]},{u0,rv[k+1]},w);
+            Vector3 normals[4]={{c0*inv,ny*inv,s0*inv},{c1*inv,ny*inv,s1*inv},
+                                {c1*inv,ny*inv,s1*inv},{c0*inv,ny*inv,s0*inv}};
+            size_t start=b.n.size()-12;
+            for(int j=0;j<4;++j) {b.n[start+j*3]=normals[j].x;b.n[start+j*3+1]=normals[j].y;b.n[start+j*3+2]=normals[j].z;}
+
         }
     }
     // caps. Inset the UVs a touch so bilinear can't drag one square into the next.
@@ -1235,11 +1255,11 @@ Mesh buildCanMesh() {
         // lid, facing up: the first square in the atlas
         b.tri({ 0, H, 0 }, { cosf(a1) * rr[3], H, sinf(a1) * rr[3] },
               { cosf(a0) * rr[3], H, sinf(a0) * rr[3] }, { 0, 1, 0 },
-              capUV(0.0f, 0.0f), capUV(0.0f, a1), capUV(0.0f, a0), w);
+              Vector2{32.0f/192.0f,160.0f/192.0f}, capUV(0.0f, a1), capUV(0.0f, a0), w);
         // base, facing down: wound the other way, and the second square
         b.tri({ 0, 0, 0 }, { cosf(a0) * rr[0], 0, sinf(a0) * rr[0] },
               { cosf(a1) * rr[0], 0, sinf(a1) * rr[0] }, { 0, -1, 0 },
-              capUV(64.0f / 192.0f, 0.0f), capUV(64.0f / 192.0f, a0),
+              Vector2{96.0f/192.0f,160.0f/192.0f}, capUV(64.0f / 192.0f, a0),
               capUV(64.0f / 192.0f, a1), w);
     }
     return b.bake();
@@ -1376,26 +1396,104 @@ static void weaponTube(MB &b, float y, float z0, float z1, float radius,
     }
 }
 
+// Convex side profile with a chamfered perimeter. The bevel catches narrow
+// highlights without subdividing the broad faces or adding another draw call.
+static void weaponProfile(MB &b, const std::vector<Vector2> &outline, float halfWidth,
+                          float bevel, Color color, bool wood=false) {
+    Vector2 center{};
+    for (auto p:outline) {center.x+=p.x;center.y+=p.y;}
+    center.x/=outline.size();center.y/=outline.size();
+    auto uv=[&](Vector2 p) { return wood ? Vector2{0.52f+(p.y+0.1f)*2.8f,0.05f+(p.x+0.15f)*2.2f}
+                                             : Vector2{0.27f+(p.y+0.1f)*0.7f,0.54f+(p.x+0.15f)*1.5f}; };
+    auto point=[&](Vector2 p,float side,float shrink) {
+        return Vector3{side,center.x+(p.x-center.x)*shrink,center.y+(p.y-center.y)*shrink};
+    };
+    for (size_t i=0;i<outline.size();++i) {
+        Vector2 a=outline[i],c=outline[(i+1)%outline.size()];
+        float dy=c.x-a.x,dz=c.y-a.y;
+        float ny=dz,nz=-dy;
+        if(ny*((a.x+c.x)/2-center.x)+nz*((a.y+c.y)/2-center.y)<0) {ny=-ny;nz=-nz;}
+        float inv=1/sqrtf(ny*ny+nz*nz);ny*=inv;nz*=inv;
+        b.quad(point(a,-halfWidth+bevel,1),point(c,-halfWidth+bevel,1),
+               point(c,halfWidth-bevel,1),point(a,halfWidth-bevel,1),{0,ny,nz},uv(a),uv(c),uv(c),uv(a),color);
+        for (int side=-1;side<=1;side+=2) {
+            Vector3 aa=point(a,side*halfWidth,0.90f),cc=point(c,side*halfWidth,0.90f);
+            b.quad(point(a,side*(halfWidth-bevel),1),point(c,side*(halfWidth-bevel),1),cc,aa,
+                   {side*0.7071f,ny*0.7071f,nz*0.7071f},uv(a),uv(c),uv(c),uv(a),color);
+            b.tri(point(center,side*halfWidth,1),aa,cc,{(float)side,0,0},uv(center),uv(a),uv(c),color);
+        }
+    }
+}
+
 Mesh buildRevolverMesh() {
     MB b;
-    Color steel{92,96,103,254}, edge{133,138,144,254}, dark{37,40,45,254};
-    Color wood{105,62,31,254};
-    addSolidBox(b,-0.027f,-0.030f,-0.045f,0.027f,0.023f,0.075f,steel);
-    addSolidBox(b,-0.020f,-0.120f,-0.064f,0.020f,-0.023f,-0.010f,wood);
-    // Inlaid grip strips and a pin catch enough light to establish scale.
-    for (int i=0;i<6;++i)
-        addSolidBox(b,0.020f,-0.107f+i*0.011f,-0.058f,0.0215f,-0.104f+i*0.011f,-0.015f,dark);
-    weaponTube(b,0.025f,-0.027f,0.057f,0.037f,0,steel,24);
-    weaponTube(b,0.040f,0.054f,0.238f,0.018f,0.009f,edge,16);
-    weaponTube(b,0.010f,0.070f,0.182f,0.007f,0,steel,10);
-    addSolidBox(b,-0.022f,0.058f,-0.043f,0.022f,0.069f,0.070f,edge);
-    addSolidBox(b,-0.004f,0.055f,0.213f,0.004f,0.070f,0.230f,dark);
-    addSolidBox(b,-0.016f,0.069f,-0.036f,0.016f,0.075f,-0.023f,dark);
-    addSolidBox(b,-0.007f,0.020f,-0.061f,0.007f,0.055f,-0.043f,steel);
-    // Open trigger guard, with a separate trigger suspended inside it.
-    addSolidBox(b,-0.008f,-0.069f,-0.010f,0.008f,-0.061f,0.055f,steel);
-    addSolidBox(b,-0.008f,-0.061f,0.047f,0.008f,-0.025f,0.055f,steel);
-    addSolidBox(b,-0.004f,-0.052f,0.012f,0.004f,-0.029f,0.019f,dark);
+    Color steel{101,111,123,254}, edge{155,160,168,254}, dark{39,44,51,254};
+    // Open frame around the cylinder, with a swept backstrap and rounded butt.
+    weaponProfile(b,{{-0.032f,-0.047f},{0.023f,-0.052f},{0.052f,-0.026f},
+                     {0.040f,-0.016f},{-0.015f,-0.015f},{-0.035f,0.013f}},0.024f,0.004f,steel);
+    weaponProfile(b,{{0.059f,-0.037f},{0.068f,-0.025f},{0.067f,0.064f},
+                     {0.057f,0.073f}},0.021f,0.0025f,steel);
+    weaponProfile(b,{{-0.030f,-0.029f},{-0.023f,0.065f},{0.050f,0.077f},
+                     {0.054f,0.060f},{-0.010f,0.047f}},0.019f,0.003f,steel);
+    weaponProfile(b,{{-0.026f,-0.047f},{-0.032f,-0.017f},{-0.113f,-0.019f},
+                     {-0.129f,-0.037f},{-0.124f,-0.076f},{-0.100f,-0.082f}},0.021f,0.004f,dark);
+    weaponProfile(b,{{-0.039f,-0.046f},{-0.041f,-0.023f},{-0.111f,-0.025f},
+                     {-0.120f,-0.039f},{-0.117f,-0.069f},{-0.100f,-0.075f}},0.022f,0.003f,{169,113,67,254},true);
+    weaponTube(b,0.040f,0.071f,0.238f,0.015f,0.008f,steel,32);
+    weaponTube(b,0.015f,0.073f,0.178f,0.006f,0,edge,12);
+    weaponProfile(b,{{0.051f,0.083f},{0.058f,0.083f},{0.058f,0.224f},{0.051f,0.235f}},0.009f,0.0015f,steel);
+    addSolidBox(b,-0.003f,0.057f,0.213f,0.003f,0.068f,0.227f,dark);
+    // Rear notch has an actual gap to align with the front blade.
+    addSolidBox(b,-0.014f,0.068f,-0.025f,-0.004f,0.075f,-0.016f,dark);
+    addSolidBox(b,0.004f,0.068f,-0.025f,0.014f,0.075f,-0.016f,dark);
+    weaponProfile(b,{{0.018f,-0.054f},{0.042f,-0.061f},{0.056f,-0.072f},
+                     {0.061f,-0.064f},{0.050f,-0.047f},{0.024f,-0.042f}},0.005f,0.001f,dark);
+    // Oval guard: an open ring instead of an angular U made from boxes.
+    Vector2 uv{0.36f,0.70f};
+    for(int i=0;i<24;++i) {
+        float a=TAU*i/24,c=TAU*(i+1)/24;
+        Vector3 p[4]={{-0.006f,-0.044f+cosf(a)*0.026f,0.017f+sinf(a)*0.035f},
+                      {-0.006f,-0.044f+cosf(c)*0.026f,0.017f+sinf(c)*0.035f},
+                      {0.006f,-0.044f+cosf(c)*0.026f,0.017f+sinf(c)*0.035f},
+                      {0.006f,-0.044f+cosf(a)*0.026f,0.017f+sinf(a)*0.035f}};
+        b.quad(p[0],p[1],p[2],p[3],{0,cosf((a+c)/2),sinf((a+c)/2)},uv,uv,uv,uv,steel);
+        for(int side=-1;side<=1;side+=2)
+            b.quad({side*0.006f,p[0].y,p[0].z},{side*0.006f,p[1].y,p[1].z},
+                   {side*0.006f,-0.044f+cosf(c)*0.020f,0.017f+sinf(c)*0.029f},
+                   {side*0.006f,-0.044f+cosf(a)*0.020f,0.017f+sinf(a)*0.029f},
+                   {(float)side,0,0},uv,uv,uv,uv,steel);
+    }
+    weaponProfile(b,{{-0.023f,0.018f},{-0.038f,0.012f},{-0.054f,0.014f},
+                     {-0.050f,0.020f},{-0.030f,0.025f}},0.003f,0.0008f,edge);
+    return b.bake();
+}
+
+Mesh buildRevolverCylinderMesh() {
+    MB b;
+    weaponTube(b,0,-0.042f,0.042f,0.035f,0,{108,118,130,254},48);
+    // Six recessed chamber mouths and six longitudinal dark flute channels.
+    for(int i=0;i<6;++i) {
+        float a=TAU*i/6;
+        MB chamber;
+        weaponTube(chamber,0,-0.043f,0.043f,0.0075f,0.0062f,{68,74,82,254},12);
+        float x=cosf(a)*0.022f,y=sinf(a)*0.022f;
+        for(size_t j=0;j<chamber.v.size();j+=3) {chamber.v[j]+=x;chamber.v[j+1]+=y;}
+        unsigned short base=(unsigned short)(b.v.size()/3);
+        b.v.insert(b.v.end(),chamber.v.begin(),chamber.v.end());
+        b.n.insert(b.n.end(),chamber.n.begin(),chamber.n.end());
+        b.uv.insert(b.uv.end(),chamber.uv.begin(),chamber.uv.end());
+        b.c.insert(b.c.end(),chamber.c.begin(),chamber.c.end());
+        for(auto index:chamber.idx) b.idx.push_back(base+index);
+        for(int j=0;j<6;++j) {
+            float aa=a-0.12f+j*0.04f,bb=aa+0.04f;
+            Vector2 t{0.35f,0.76f};
+            b.quad({cosf(aa)*0.0352f,sinf(aa)*0.0352f,-0.025f},
+                   {cosf(bb)*0.0352f,sinf(bb)*0.0352f,-0.025f},
+                   {cosf(bb)*0.0352f,sinf(bb)*0.0352f,0.028f},
+                   {cosf(aa)*0.0352f,sinf(aa)*0.0352f,0.028f},
+                   {cosf(a),sinf(a),0},t,t,t,t,{48,54,63,254});
+        }
+    }
     return b.bake();
 }
 

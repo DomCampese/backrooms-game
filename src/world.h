@@ -153,3 +153,5 @@ struct World {
 
 Mesh buildRevolverMesh();
 Mesh buildFlareMesh();
+
+Mesh buildRevolverCylinderMesh();
