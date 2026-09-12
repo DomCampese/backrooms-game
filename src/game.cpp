@@ -451,7 +451,7 @@ void Game::popBalloonsAlongAim() {
                 float ex = bp.x - wx, ey = bp.y - wy, ez = bp.z - wz;
                 if (ex * ex + ey * ey + ez * ez <= 0.24f * 0.24f) {
                     poppedBalloons.insert(cellKey2(ca, cb));
-                    SetSoundPitch(sndPop, 0.9f + grng.f01() * 0.3f); SetSoundPan(sndPop, 0.5f); PlaySound(sndPop);
+                    SetSoundPitch(sndPop, 0.9f + grng.f01() * 0.3f); SetSoundPan(sndPop, panFor(0)); PlaySound(sndPop);
                     burst(bp, PARTY[(ih(ca, cb, (uint32_t)world.seed ^ 0xBA11u) >> 10) % 5], 16);
                     return;
                 }
@@ -463,7 +463,7 @@ void Game::popBalloonsAlongAim() {
                     float ex = bpos[k].x - wx, ey = bpos[k].y - wy, ez = bpos[k].z - wz;
                     if (ex * ex + ey * ey + ez * ez > 0.26f * 0.26f) continue;
                     poppedTableBunches.insert(cellKey2(ca, cb));
-                    SetSoundPitch(sndPop, 0.95f + grng.f01() * 0.3f); SetSoundPan(sndPop, 0.5f); PlaySound(sndPop);
+                    SetSoundPitch(sndPop, 0.95f + grng.f01() * 0.3f); SetSoundPan(sndPop, panFor(0)); PlaySound(sndPop);
                     for (int j = 0; j < nb; j++) burst(bpos[j], bcol[j], 11);
                     return;
                 }
@@ -1011,7 +1011,7 @@ void Game::updateTapeDeck(float dt, double now) {
         float ddx = sx - px, ddz = sz - pz;
         float dist = sqrtf(ddx * ddx + ddz * ddz);
         float pan = dist > 0.25f ? clampf((ddx / dist) * r2x + (ddz / dist) * r2z, -1.0f, 1.0f) : 0.0f;
-        SetSoundPan(sndVoice, 0.5f + pan * 0.5f);             // + is to your right; pan 0 = right
+        SetSoundPan(sndVoice, panFor(pan));
         SetSoundVolume(sndVoice, clampf(1.0f / (1.0f + 0.05f * dist * dist), 0.0f, 0.9f));
 
         // You have to be able to hear it for it to do you any good, so the
@@ -1294,7 +1294,7 @@ void Game::updateEntity(float dt, double now) {
                 float inv = entDist > 0.01f ? 1.0f / entDist : 0.0f;
                 float sd = clampf((ex * inv) * r2x + (ez * inv) * r2z, -1.0f, 1.0f);   // + = to your right
                 Sound &s = entSteps[grng.ri(0, 3)];
-                SetSoundPan(s, 0.5f - sd * 0.5f);   // raylib pan: 0 right .. 1 left, 0.5 centre
+                SetSoundPan(s, panFor(sd));
                 SetSoundPitch(s, 0.66f + grng.f01() * 0.08f);   // heavy, unhurried
                 SetSoundVolume(s, clampf(1.4f / (1.0f + 0.07f * entDist * entDist), 0.0f, 0.9f));
                 PlaySound(s);
@@ -1386,7 +1386,7 @@ void Game::updateDogs(float dt, double now) {
         nextHowl = now + 26 + grng.f01() * 34;
         int live = 0;
         for (auto &d : dogs) if (d.st != DState::Gone) live++;
-        if (live > 0) { SetSoundPan(sndHowl, 0.5f); PlaySound(sndHowl); }
+        if (live > 0) { SetSoundPan(sndHowl, panFor(0)); PlaySound(sndHowl); }
     }
     // send them in one at a time so the hall fills up rather than swarming
     if (now > nextPack) {
@@ -1472,7 +1472,7 @@ void Game::updateDogs(float dt, double now) {
                                                           : 3.5 + grng.f01() * 4.0);
                 Sound &s = sndBarks[i % 3];
                 float sd = clampf((ddx / dist) * r2x + (ddz / dist) * r2z, -1.0f, 1.0f);
-                SetSoundPan(s, 0.5f + sd * 0.5f);   // + is to your right; pan 0 = right
+                SetSoundPan(s, panFor(sd));
                 SetSoundPitch(s, 0.92f + grng.f01() * 0.2f);
                 SetSoundVolume(s, clampf(1.5f / (1.0f + 0.05f * dist * dist), 0.0f, 0.95f));
                 PlaySound(s);
