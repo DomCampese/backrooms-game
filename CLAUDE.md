@@ -260,6 +260,18 @@ Writing the usual `noise * 0.5 + 0.5` on it silently gives you half the range
 sitting in the top half of it, which reads as a flat, washed-out texture
 rather than an obviously broken one. `fbm2` is the same.
 
+**raylib 6.0 redefined `SetSoundPan`'s argument without renaming it.** 5.5 took
+0..1 with **0 = hard right**; 6.0 takes -1..1 with **-1 = hard left**. The
+signature is identical and the mixer accepts any float, so old values keep
+"working": on 6.0 a 5.5-era 0.5 "centre" plays 75% right, hard left plays hard
+right, and nothing ever reaches the left channel. It reads as a mix that was
+always a bit odd rather than as a bug. Go through `panFor(bearing)` in
+`sfx.h` — bearing is -1 left, 0 centre, +1 right — and never call `SetSoundPan`
+directly. The sandbox links 6.0.1 while `brew install raylib` still gives 5.5,
+so the two builds genuinely need different numbers. `tools/sandbox-setup.sh`
+puts `RAYLIB_VERSION_*` back into `rlshim/` (cffi strips it with every other
+`#define`) so that branch is real rather than assumed.
+
 **raylib `Sound` has no loop flag.** `PlaySound` is one-shot. To sustain
 something — the tape player's voice runs for 26 s off a 7.5 s clip — retrigger
 it on `!IsSoundPlaying(snd)` each frame. There is a one-frame gap at the seam,
