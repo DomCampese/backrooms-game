@@ -632,11 +632,25 @@ void Game::renderUI(double now) {
         DrawRectangle(x - 1, y - 1, w + 2, 8, { 0, 0, 0, 120 });
         DrawRectangle(x, y, (int)(w * stamina), 6, { 200, 180, 120, 160 });
     }
-    if (hidden)
-        DrawText("[ hidden · hold still ]", sw / 2 - MeasureText("[ hidden · hold still ]", 14) / 2, sh - 62, 14,
-                 { 140, 210, 165, 160 });
-    else if (crouchCur > 0.5f)
-        DrawText("[ crouched ]", sw / 2 - MeasureText("[ crouched ]", 14) / 2, sh - 62, 14, { 180, 170, 140, 120 });
+    // Say which of the three states you are actually in. This line used to read
+    // "hold still" whether or not stillness did anything, which was the one
+    // instruction the game gave you and it was not true.
+    const char *coverLine = nullptr;
+    Color coverCol = { 140, 210, 165, 160 };
+    if (hidden && hideBreakT > 0) {   // moving, and about to lose it
+        coverLine = "[ hidden · you're giving it away ]";
+        coverCol = { 228, 196, 128, 200 };
+    } else if (hidden) {
+        coverLine = "[ hidden · hold still ]";
+    } else if (nearCover) {           // cover is right there, you are just too quick for it
+        coverLine = "[ cover · stop to hide ]";
+        coverCol = { 190, 180, 150, 140 };
+    } else if (crouchCur > 0.5f) {
+        coverLine = "[ crouched ]";
+        coverCol = { 180, 170, 140, 120 };
+    }
+    if (coverLine)
+        DrawText(coverLine, sw / 2 - MeasureText(coverLine, 14) / 2, sh - 62, 14, coverCol);
     if (level == 3 && valveT > 0) {   // just closed one
         float a = clampf(valveT / 1.6f, 0, 1);
         if (pipesShut) {
