@@ -609,10 +609,10 @@ void Game::renderUI(double now) {
                      wayOpen() ? Color{ 120, 230, 140, 210 } : Color{ 214, 178, 92, 170 });
         DrawText(TextFormat("3  almond water  ×%d", almond), 16, sh - 94, 16,
                  almond > 0 ? Color{ 150, 190, 235, 170 } : dimc);
-        DrawText(TextFormat("1  flare  ×%d", flares), 16, sh - 72, 16, weapon == WEAPON_FLARE ? selc : dimc);
-        DrawText(reloadT > 0 ? "2  revolver  [reloading]"
-                             : TextFormat("2  revolver  %d/%d%s", ammo, MAXAMMO, ammo == 0 ? "  · R" : ""),
-                 16, sh - 50, 16, weapon == WEAPON_REVOLVER ? selc : dimc);
+        DrawText(reloadT > 0 ? "1  revolver  [reloading]"
+                    : TextFormat("1  revolver  %d/%d%s", ammo, MAXAMMO, ammo == 0 ? "  · R" : ""),
+                    16, sh - 50, 16, weapon == WEAPON_REVOLVER ? selc : dimc);
+        DrawText(TextFormat("2  flare  ×%d", flares), 16, sh - 72, 16, weapon == WEAPON_FLARE ? selc : dimc);
         DrawText(!deck.carried
                      ? (deck.playing ? "4  tape player  [running · left behind]"
                                      : "4  tape player  [left behind · E]")

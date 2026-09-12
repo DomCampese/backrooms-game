@@ -279,7 +279,7 @@ Details that reward paying attention:
 | CTRL | crouch |
 | SPACE | jump |
 | F / right click | flashlight |
-| 1 / 2 / 4 / wheel | select item (flare / revolver / tape player) |
+| 1 / 2 / 4 / wheel | select item (revolver / flare / tape player) |
 | left click | use selected weapon |
 | Q | throw flare (always) |
 | R | reload revolver |
