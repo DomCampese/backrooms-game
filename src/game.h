@@ -35,8 +35,8 @@ struct TapeDeck {
 // Which of the three things you can hold is in your hands. Keys 1/2/4 pick one
 // directly; the mouse wheel cycles through them in this order.
 enum Weapon {
-    WEAPON_FLARE = 0,
-    WEAPON_REVOLVER,
+    WEAPON_REVOLVER = 0,
+    WEAPON_FLARE,
     WEAPON_DECK,
     WEAPON_COUNT,
 };
@@ -145,7 +145,7 @@ struct Game {
     const char *deckNote = "";
 
     // revolver: hitscan, six rounds, three hits put Clark down
-    int weapon = WEAPON_FLARE;                // see enum Weapon — keys 1/2/4, or the wheel
+    int weapon = WEAPON_REVOLVER;                // see enum Weapon — keys 1/2/4, or the wheel
     int ammo = MAXAMMO;
     float reloadT = 0, gunCd = 0, muzzleT = 0, recoil = 0, wheelCd = 0;
 

@@ -736,8 +736,8 @@ void Game::updateDevKeys(double now) {
 void Game::updateWeapons(float dt, double now) {
     // ---- weapons: keys 1/2/4 pick one directly, the wheel cycles, left click
     // uses whichever is in your hands
-    if (IsKeyPressed(KEY_ONE)) weapon = WEAPON_FLARE;
-    if (IsKeyPressed(KEY_TWO)) weapon = WEAPON_REVOLVER;
+    if (IsKeyPressed(KEY_ONE)) weapon = WEAPON_REVOLVER;
+    if (IsKeyPressed(KEY_TWO)) weapon = WEAPON_FLARE;
     if (IsKeyPressed(KEY_FOUR)) weapon = WEAPON_DECK;
     wheelCd = fmaxf(0, wheelCd - dt);
     {   // the wheel runs the loop both ways: +1 forward, -1 as +(N-1) to stay positive
@@ -802,11 +802,6 @@ void Game::updateWeapons(float dt, double now) {
                         saveBest();
                     } else {             // hurt, and now it knows exactly where you are
                         PlaySound(sndHit);
-                        // A round used to send him running, which meant a single
-                        // shot bought you distance and the fight was over before
-                        // it started. It rocks him back a step and costs him a
-                        // moment's speed, and then he comes on. Fire is still
-                        // the one thing that turns him.
                         float dd = sqrtf(ex * ex + ez * ez);
                         if (dd > 0.01f) { ent.x += ex / dd * 0.5f; ent.z += ez / dd * 0.5f; }
                         world.collideCircle(ent.x, ent.z, 0.38f);
