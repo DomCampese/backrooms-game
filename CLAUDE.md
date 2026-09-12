@@ -1,5 +1,28 @@
 # CLAUDE.md
 
+## Current graphics implementation (September 2026)
+
+- `texture1` / MATERIAL_MAP_SPECULAR carries packed tangent slopes in RG and a
+  gloss mask in B. The neutral map is (128,128,255). `texture2` remains occupancy.
+- The old six-noise world-space bump is replaced by startup-generated material
+  maps. Alpha 254 still opts out of relief. Historical bump notes below describe
+  the earlier implementation and why that opt-out must survive.
+- WORLD_VS must transform positions with matModel and normals with matNormal.
+  Previously moved cans/decks were shaded at their mesh origin, making their
+  brightness unrelated to where they actually stood.
+- The prop atlas is 1024x512: original cardboard/metal occupies the left half;
+  veneer and fabric occupy the right. Flat metal UV is (0.375,0.75).
+- Fluorescent emissive geometry is at wallH-0.12, matching the light height.
+- Revolver and flare are now 3D; their geometry shares the viewmodel shadow and
+  ambient handling. Preserve depth testing and wall clearance.
+- Native macOS captures need WindowServer access; a sandboxed executable can
+  hang with an XPC connection error. Linux still uses Xvfb.
+- Use BACKROOMS_CLEAN=1 to remove the intro fade/HUD when judging exposure;
+  frame 80 on a fast native GPU otherwise captures the opening black fade.
+  BACKROOMS_TIME fixes rendering time only. See README for benchmark controls.
+- Run `make regression`, the five-level/menu sweep, pool and flashlight shots.
+  The regression harness needs a native display or an existing Xvfb display.
+
 ## What this is
 
 A first-person backrooms horror game in C++17 on raylib + OpenGL 3.3.

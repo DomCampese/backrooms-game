@@ -21,3 +21,8 @@ Texture2D makeAOStripTex();        // gradient strip for baked contact-shadow de
 Texture2D makeDogTex();            // THE RED HALLS: whatever the pack is, seen side-on
 Texture2D makeAlmondWrapTex();     // almond water can, unwrapped: label strip + lid + base
 Texture2D makeDeckTex();           // the tape player: top / body / front / reel, in one atlas
+
+// Packed tangent slopes (RG), gloss mask (B). Generated once, mipmapped, no assets.
+Texture2D makeSurfaceDetail(Texture2D albedo, bool ceramic, float strength);
+
+Texture2D makeParticleTex(); // soft procedural disc for smoke and muzzle flash

@@ -259,7 +259,7 @@ static void addPropBox(MB &mb, float cx, float cz, float yaw, float hx, float hz
 // A plain axis-aligned solid in a flat colour. Samples the props atlas' blank
 // metal corner, so the tint is the whole look — pipework, collars, standpipes.
 static void addSolidBox(MB &mb, float x0, float y0, float z0, float x1, float y1, float z1, Color t) {
-    const Vector2 u = { 0.75f, 0.75f };
+    const Vector2 u = { 0.375f, 0.75f };
     mb.quad({x0,y0,z0},{x1,y0,z0},{x1,y1,z0},{x0,y1,z0},{0,0,-1},u,u,u,u,t);
     mb.quad({x1,y0,z1},{x0,y0,z1},{x0,y1,z1},{x1,y1,z1},{0,0,1},u,u,u,u,t);
     mb.quad({x0,y0,z1},{x0,y0,z0},{x0,y1,z0},{x0,y1,z1},{-1,0,0},u,u,u,u,t);
@@ -310,16 +310,32 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
     uint32_t h = ih(site.gi, site.gk, seed ^ 0xB0B5u);
     float r1 = (h & 0xFF) / 255.0f, r2 = ((h >> 8) & 0xFF) / 255.0f, r3 = ((h >> 16) & 0xFF) / 255.0f;
     // UV regions of the prop atlas
-    const float CU0=0.02f, CV0=0.02f, CU1=0.48f, CV1=0.98f;       // cardboard
-    const float FU0=0.52f, FV0=0.02f, FU1=0.98f, FV1=0.48f;       // cabinet front
-    const float MU0=0.52f, MV0=0.52f, MU1=0.98f, MV1=0.98f;       // plain metal
+    const float CU0=0.01f, CV0=0.02f, CU1=0.24f, CV1=0.98f;       // cardboard
+    const float FU0=0.26f, FV0=0.02f, FU1=0.49f, FV1=0.48f;       // cabinet front
+    const float MU0=0.26f, MV0=0.52f, MU1=0.49f, MV1=0.98f;       // plain metal
+    enum class Surface { Metal, Wood, Fabric, Cardboard };
     float ca = cosf(rot), sa = sinf(rot);
     // rotated sub-box placed relative to the prop centre
     auto part = [&](float ox, float oz, float hx2, float hz2, float y0, float y1,
-                    bool wood, Color tint) {
-        addPropBox(pr, pcx + ox * ca - oz * sa, pcz + ox * sa + oz * ca, rot, hx2, hz2, y0, y1,
-                   wood ? CU0 : MU0, wood ? CV0 : MV0, wood ? CU1 : MU1, wood ? CV1 : MV1,
-                   wood ? CU0 : MU0, wood ? CV0 : MV0, wood ? CU1 : MU1, wood ? CV1 : MV1, tint);
+                    Surface surface, Color tint) {
+        float u0=MU0,v0=MV0,u1=MU1,v1=MV1;
+        if (surface==Surface::Wood) {u0=0.51f;v0=0.02f;u1=0.99f;v1=0.48f;}
+        if (surface==Surface::Fabric) {u0=0.51f;v0=0.52f;u1=0.99f;v1=0.98f;}
+        if (surface==Surface::Cardboard) {u0=CU0;v0=CV0;u1=CU1;v1=CV1;}
+        addPropBox(pr, pcx+ox*ca-oz*sa, pcz+ox*sa+oz*ca, rot, hx2,hz2,y0,y1,
+                   u0,v0,u1,v1,u0,v0,u1,v1,tint);
+    };
+    auto roundPart = [&](float ox,float oz,float r0,float r1,float y0,float y1,Color tint) {
+        const Vector2 uv{0.375f,0.75f};
+        float cx=pcx+ox*ca-oz*sa,cz=pcz+ox*sa+oz*ca;
+        for (int i=0;i<16;++i) {
+            float a=TAU*i/16,b=TAU*(i+1)/16;
+            Vector3 p0{cx+r0*cosf(a),y0,cz+r0*sinf(a)},p1{cx+r0*cosf(b),y0,cz+r0*sinf(b)};
+            Vector3 p2{cx+r1*cosf(b),y1,cz+r1*sinf(b)},p3{cx+r1*cosf(a),y1,cz+r1*sinf(a)};
+            float ny=(r0-r1)/std::max(0.001f,y1-y0),inv=1/sqrtf(1+ny*ny);
+            pr.quad(p0,p1,p2,p3,{cosf((a+b)/2)*inv,ny*inv,sinf((a+b)/2)*inv},uv,uv,uv,uv,tint);
+            pr.tri({cx,y1,cz},p3,p2,{0,1,0},uv,uv,uv,tint);
+        }
     };
     // Contact shadow under the piece. This used to be one flat quad with
     // all four UVs pinned to a single texel, so it had no gradient at
@@ -390,6 +406,8 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
         blob(0.34f, 0.42f);
         addPropBox(pr, pcx, pcz, rot, 0.26f, 0.34f, ey, ey + 1.32f,
                    FU0, FV0, FU1, FV1, MU0, MV0, MU1, MV1);
+        for (int i=0;i<3;++i)
+            part(0,0.343f,0.075f,0.008f,ey+0.23f+i*0.40f,ey+0.25f+i*0.40f,Surface::Metal,{187,191,186,254});
         break;
     case PROP_TABLE: {   // folding table
         blob(0.58f, 0.40f);
@@ -430,37 +448,43 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
     case PROP_COUCH: {   // couch: mustard upholstery gone grey, facing nothing in particular
         blob(0.74f, 0.48f);
         Color uph = { 172, 152, 96, 255 };
-        part(0, 0.10f, 0.78f, 0.42f, ey + 0.16f, ey + 0.44f, false, uph);   // seat
-        part(0, -0.36f, 0.78f, 0.14f, ey + 0.16f, ey + 0.92f, false, uph);  // backrest
-        part(-0.64f, 0.06f, 0.14f, 0.46f, ey, ey + 0.62f, false, uph);      // arms
-        part( 0.64f, 0.06f, 0.14f, 0.46f, ey, ey + 0.62f, false, uph);
-        part(0, 0.10f, 0.74f, 0.38f, ey, ey + 0.16f, false, Color{ 120, 106, 70, 255 });
+        part(0, 0.10f, 0.78f, 0.42f, ey + 0.16f, ey + 0.44f, Surface::Fabric, uph);   // seat
+        part(0, -0.36f, 0.78f, 0.14f, ey + 0.16f, ey + 0.92f, Surface::Fabric, uph);  // backrest
+        part(-0.64f, 0.06f, 0.14f, 0.46f, ey, ey + 0.62f, Surface::Fabric, uph);      // arms
+        part( 0.64f, 0.06f, 0.14f, 0.46f, ey, ey + 0.62f, Surface::Fabric, uph);
+        part(0, 0.10f, 0.74f, 0.38f, ey, ey + 0.16f, Surface::Fabric, Color{ 120, 106, 70, 255 });
+        // Three separate seat cushions and piping, inside the same collision box.
+        for (int i=-1;i<=1;++i) {
+            part(i*0.41f,0.12f,0.196f,0.34f,ey+0.44f,ey+0.49f,Surface::Fabric,uph);
+            part(i*0.41f,0.454f,0.192f,0.006f,ey+0.452f,ey+0.461f,Surface::Fabric,{213,191,131,255});
+        }
         break;
     }
     case PROP_ARMOIRE:     // armoire: a wardrobe looming where no bedroom is
         blob(0.54f, 0.46f);
-        part(0, 0, 0.44f, 0.36f, ey, ey + 1.78f, true, Color{ 118, 82, 58, 255 });
-        part(0, 0, 0.48f, 0.40f, ey + 1.78f, ey + 1.90f, true, Color{ 92, 63, 44, 255 });  // cornice
-        part(0, 0.37f, 0.015f, 0.015f, ey + 0.85f, ey + 1.0f, false, Color{ 190, 170, 110, 255 }); // handles
+        part(0, 0, 0.44f, 0.36f, ey, ey + 1.78f, Surface::Wood, Color{ 118, 82, 58, 255 });
+        part(0, 0, 0.48f, 0.40f, ey + 1.78f, ey + 1.90f, Surface::Wood, Color{ 92, 63, 44, 255 });  // cornice
+        part(0, 0.37f, 0.015f, 0.015f, ey + 0.85f, ey + 1.0f, Surface::Metal, Color{ 190, 170, 110, 255 }); // handles
+        for (int i=-1;i<=1;i+=2)
+            part(i*0.218f,0.362f,0.193f,0.003f,ey+0.15f,ey+1.67f,Surface::Wood,{155,113,79,255});
         break;
     case PROP_LAMP:     // floor lamp, shade askew, never lit
         blob(0.22f, 0.22f);
-        part(0, 0, 0.14f, 0.14f, ey, ey + 0.05f, false, Color{ 66, 62, 60, 255 });
-        part(0, 0, 0.025f, 0.025f, ey, ey + 1.34f, false, Color{ 66, 62, 60, 255 });
-        addPropBox(pr, pcx + 0.05f, pcz, rot + 0.3f, 0.17f, 0.17f, ey + 1.30f, ey + 1.60f,
-                   CU0, CV0, CU1, CV1, CU0, CV0, CU1, CV1, Color{ 214, 190, 142, 255 });
+        part(0, 0, 0.14f, 0.14f, ey, ey + 0.05f, Surface::Metal, Color{ 66, 62, 60, 255 });
+        part(0, 0, 0.025f, 0.025f, ey, ey + 1.34f, Surface::Metal, Color{ 66, 62, 60, 255 });
+        roundPart(0.05f,0,0.17f,0.10f,ey+1.30f,ey+1.60f,{214,190,142,254});
         break;
     case PROP_NIGHTSTAND:     // nightstand, nowhere near a bed. usually.
         blob(0.36f, 0.36f);
-        part(0, 0, 0.26f, 0.26f, ey, ey + 0.55f, true, Color{ 126, 90, 62, 255 });
-        part(0, 0, 0.30f, 0.30f, ey + 0.55f, ey + 0.60f, true, Color{ 104, 74, 50, 255 });
+        part(0, 0, 0.26f, 0.26f, ey, ey + 0.55f, Surface::Wood, Color{ 126, 90, 62, 255 });
+        part(0, 0, 0.30f, 0.30f, ey + 0.55f, ey + 0.60f, Surface::Wood, Color{ 104, 74, 50, 255 });
         break;
     case PROP_BED: {   // bed: bare stained mattress, headboard against nothing
         blob(0.60f, 1.02f);
         Color wd = { 110, 78, 54, 255 };
-        part(0, 0, 0.52f, 0.92f, ey + 0.12f, ey + 0.26f, true, wd);          // frame
-        part(0, 0.04f, 0.48f, 0.86f, ey + 0.26f, ey + 0.46f, true, Color{ 216, 208, 188, 255 }); // mattress
-        part(0, -0.97f, 0.52f, 0.05f, ey, ey + 0.95f, true, wd);             // headboard
+        part(0, 0, 0.52f, 0.92f, ey + 0.12f, ey + 0.26f, Surface::Wood, wd);          // frame
+        part(0, 0.04f, 0.48f, 0.86f, ey + 0.26f, ey + 0.46f, Surface::Fabric, Color{ 216, 208, 188, 255 }); // mattress
+        part(0, -0.97f, 0.52f, 0.05f, ey, ey + 0.95f, Surface::Wood, wd);             // headboard
         break;
     }
     case PROP_PARTY_TABLE: {  // party table: paper cloth, a cake nobody cut, cups nobody drank
@@ -468,13 +492,13 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
         float ty = 0.74f;
         uint32_t th = ih(site.gi, site.gk, seed ^ 0xCAFEu);
         Color cloth = PARTY[th % 5];
-        part(0, 0, 0.55f, 0.55f, ey + ty - 0.05f, ey + ty, false, cloth);
+        part(0, 0, 0.55f, 0.55f, ey + ty - 0.05f, ey + ty, Surface::Fabric, cloth);
         for (int lx = -1; lx <= 1; lx += 2) for (int lz = -1; lz <= 1; lz += 2)
             part(lx * 0.44f, lz * 0.44f, 0.035f, 0.035f, ey, ey + ty - 0.05f,
-                 false, Color{ 120, 118, 112, 255 });
-        part(0, 0, 0.17f, 0.17f, ey + ty, ey + ty + 0.16f, false, Color{ 238, 232, 220, 255 });   // cake
-        part(0, 0, 0.11f, 0.11f, ey + ty + 0.16f, ey + ty + 0.26f, false, Color{ 232, 152, 172, 255 });
-        part(0, 0, 0.013f, 0.013f, ey + ty + 0.26f, ey + ty + 0.37f, false, Color{ 240, 226, 172, 255 }); // candle
+                 Surface::Metal, Color{ 120, 118, 112, 255 });
+        part(0, 0, 0.17f, 0.17f, ey + ty, ey + ty + 0.16f, Surface::Metal, Color{ 238, 232, 220, 255 });   // cake
+        part(0, 0, 0.11f, 0.11f, ey + ty + 0.16f, ey + ty + 0.26f, Surface::Metal, Color{ 232, 152, 172, 255 });
+        part(0, 0, 0.013f, 0.013f, ey + ty + 0.26f, ey + ty + 0.37f, Surface::Metal, Color{ 240, 226, 172, 255 }); // candle
         {   // paper cups set out around the cake, in party colours
             int ncup = 3 + (th % 4);
             for (int c = 0; c < ncup; c++) {
@@ -482,7 +506,7 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
                 float ang = (ch & 0xFFFF) / 65535.0f * TAU;
                 float rad = 0.30f + ((ch >> 16) & 0xFF) / 255.0f * 0.15f;
                 part(cosf(ang) * rad, sinf(ang) * rad, 0.04f, 0.04f,
-                     ey + ty, ey + ty + 0.09f, false, PARTY[(ch >> 5) % 5]);
+                     ey + ty, ey + ty + 0.09f, Surface::Metal, PARTY[(ch >> 5) % 5]);
             }
         }
         {   // ...and the candle is still lit. nobody lit it. two crossed
@@ -501,7 +525,7 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
     }
     case PROP_VENDING: {  // vending machine: still stocked, still humming, takes doubloons
         blob(0.52f, 0.44f);
-        part(0, 0, 0.44f, 0.36f, ey, ey + 1.85f, false, Color{ 148, 152, 158, 255 });
+        part(0, 0, 0.44f, 0.36f, ey, ey + 1.85f, Surface::Metal, Color{ 148, 152, 158, 255 });
         auto ptv2 = [&](float lx, float ly2, float lz) {
             return Vector3{ pcx + lx * ca - lz * sa, ly2, pcz + lx * sa + lz * ca };
         };
@@ -514,47 +538,56 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
     case PROP_DESK: {  // office desk: chair shoved back, monitor long dead. someone worked here
         blob(0.72f, 0.52f);
         Color wd = { 104, 80, 56, 255 };
-        part(0, -0.12f, 0.62f, 0.34f, ey + 0.70f, ey + 0.74f, true, wd);      // desktop
-        part(-0.46f, -0.12f, 0.14f, 0.30f, ey, ey + 0.70f, true, wd);         // pedestals
-        part( 0.46f, -0.12f, 0.14f, 0.30f, ey, ey + 0.70f, true, wd);
-        part(0.08f, -0.22f, 0.19f, 0.035f, ey + 0.76f, ey + 1.08f, false, Color{ 30, 30, 34, 255 }); // monitor
-        part(0.08f, -0.14f, 0.06f, 0.06f, ey + 0.74f, ey + 0.77f, false, Color{ 38, 38, 42, 255 });  // its foot
-        part(-0.30f, -0.14f, 0.11f, 0.08f, ey + 0.74f, ey + 0.765f, false, Color{ 200, 196, 186, 255 }); // papers
-        part(0.02f + r1 * 0.1f, 0.44f, 0.20f, 0.20f, ey + 0.40f, ey + 0.46f, false, Color{ 52, 50, 54, 255 }); // chair seat
-        part(0.02f + r1 * 0.1f, 0.62f, 0.20f, 0.04f, ey + 0.46f, ey + 0.96f, false, Color{ 52, 50, 54, 255 }); // backrest
-        part(0.02f + r1 * 0.1f, 0.44f, 0.035f, 0.035f, ey, ey + 0.40f, false, Color{ 72, 72, 76, 255 });        // post
+        part(0, -0.12f, 0.62f, 0.34f, ey + 0.70f, ey + 0.74f, Surface::Wood, wd);      // desktop
+        part(-0.46f, -0.12f, 0.14f, 0.30f, ey, ey + 0.70f, Surface::Wood, wd);         // pedestals
+        part( 0.46f, -0.12f, 0.14f, 0.30f, ey, ey + 0.70f, Surface::Wood, wd);
+        part(0.08f, -0.22f, 0.19f, 0.035f, ey + 0.76f, ey + 1.08f, Surface::Metal, Color{ 30, 30, 34, 255 }); // monitor
+        part(0.08f, -0.14f, 0.06f, 0.06f, ey + 0.74f, ey + 0.77f, Surface::Metal, Color{ 38, 38, 42, 255 });  // its foot
+        part(-0.30f, -0.14f, 0.11f, 0.08f, ey + 0.74f, ey + 0.765f, Surface::Metal, Color{ 200, 196, 186, 255 }); // papers
+        part(0.02f + r1 * 0.1f, 0.44f, 0.20f, 0.20f, ey + 0.40f, ey + 0.46f, Surface::Metal, Color{ 52, 50, 54, 255 }); // chair seat
+        part(0.02f + r1 * 0.1f, 0.62f, 0.20f, 0.04f, ey + 0.46f, ey + 0.96f, Surface::Metal, Color{ 52, 50, 54, 255 }); // backrest
+        part(0.02f + r1 * 0.1f, 0.44f, 0.035f, 0.035f, ey, ey + 0.40f, Surface::Metal, Color{ 72, 72, 76, 255 });        // post
         break;
     }
     case PROP_SHELVING: {  // steel shelving, half-emptied in a hurry
         blob(0.68f, 0.32f);
         Color mt = { 132, 136, 142, 255 };
         for (int s2 = 0; s2 <= 3; s2++)
-            part(0, 0, 0.60f, 0.24f, ey + 0.08f + s2 * 0.55f, ey + 0.12f + s2 * 0.55f, false, mt);
+            part(0, 0, 0.60f, 0.24f, ey + 0.08f + s2 * 0.55f, ey + 0.12f + s2 * 0.55f, Surface::Metal, mt);
         // corner posts, not full-depth panels — side-on you see *through* the rack
         for (int ux = -1; ux <= 1; ux += 2) for (int uz = -1; uz <= 1; uz += 2)
-            part(ux * 0.575f, uz * 0.215f, 0.03f, 0.03f, ey, ey + 1.80f, false, mt);
-        part(-0.25f, 0.0f, 0.16f, 0.16f, ey + 0.12f, ey + 0.44f, true, Color{ 168, 138, 100, 255 });  // what's left
-        part( 0.30f, 0.02f, 0.14f, 0.14f, ey + 0.67f, ey + 0.94f, true, Color{ 150, 122, 88, 255 });
+            part(ux * 0.575f, uz * 0.215f, 0.03f, 0.03f, ey, ey + 1.80f, Surface::Metal, mt);
+        part(-0.25f, 0.0f, 0.16f, 0.16f, ey + 0.12f, ey + 0.44f, Surface::Cardboard, Color{ 168, 138, 100, 255 });  // what's left
+        part( 0.30f, 0.02f, 0.14f, 0.14f, ey + 0.67f, ey + 0.94f, Surface::Cardboard, Color{ 150, 122, 88, 255 });
         if (r2 > 0.4f)
-            part(-0.06f, -0.02f, 0.12f, 0.12f, ey + 1.22f, ey + 1.44f, true, Color{ 174, 146, 106, 255 });
+            part(-0.06f, -0.02f, 0.12f, 0.12f, ey + 1.22f, ey + 1.44f, Surface::Cardboard, Color{ 174, 146, 106, 255 });
         break;
     }
     case PROP_COOLER: {  // water cooler. the water is not almond
         blob(0.30f, 0.30f);
-        part(0, 0, 0.19f, 0.19f, ey, ey + 0.94f, false, Color{ 204, 206, 210, 255 });   // body
-        part(0, 0, 0.125f, 0.125f, ey + 0.94f, ey + 1.28f, false, Color{ 150, 186, 214, 255 });  // bottle
-        part(0, 0.205f, 0.05f, 0.02f, ey + 0.58f, ey + 0.66f, false, Color{ 88, 90, 94, 255 });  // tap
+        part(0, 0, 0.19f, 0.19f, ey, ey + 0.94f, Surface::Metal, Color{ 204, 206, 210, 255 });   // body
+        roundPart(0,0,0.10f,0.125f,ey+0.94f,ey+1.24f,{150,186,214,254});
+        roundPart(0,0,0.125f,0.10f,ey+1.24f,ey+1.28f,{150,186,214,254});
+        for (int i=0;i<3;++i) roundPart(0,0,0.128f,0.128f,ey+1.01f+i*0.07f,ey+1.025f+i*0.07f,{179,206,223,254});
+        part(0, 0.205f, 0.05f, 0.02f, ey + 0.58f, ey + 0.66f, Surface::Metal, Color{ 88, 90, 94, 255 });  // tap
         break;
     }
     case PROP_PLANT: {  // potted plant. still green. nobody waters it
         blob(0.26f, 0.26f);
-        part(0, 0, 0.17f, 0.17f, ey, ey + 0.09f, false, Color{ 120, 70, 48, 255 });    // saucer
-        part(0, 0, 0.145f, 0.145f, ey + 0.02f, ey + 0.32f, false, Color{ 146, 88, 58, 255 });  // pot
-        part(0, 0, 0.032f, 0.032f, ey + 0.32f, ey + 0.88f, false, Color{ 76, 66, 44, 255 });   // stem
-        addPropBox(pr, pcx, pcz, rot + 0.6f, 0.30f, 0.06f, ey + 0.55f, ey + 1.06f,
-                   MU0, MV0, MU1, MV1, MU0, MV0, MU1, MV1, Color{ 56, 96, 50, 255 });          // fronds
-        addPropBox(pr, pcx, pcz, rot + 2.1f, 0.06f, 0.30f, ey + 0.64f, ey + 1.14f,
-                   MU0, MV0, MU1, MV1, MU0, MV0, MU1, MV1, Color{ 64, 108, 56, 255 });
+        part(0, 0, 0.17f, 0.17f, ey, ey + 0.09f, Surface::Metal, Color{ 120, 70, 48, 255 });    // saucer
+        roundPart(0,0,0.105f,0.145f,ey+0.02f,ey+0.30f,{146,88,58,254});
+        roundPart(0,0,0.153f,0.153f,ey+0.285f,ey+0.32f,{172,104,70,254});
+        part(0, 0, 0.032f, 0.032f, ey + 0.32f, ey + 0.88f, Surface::Metal, Color{ 76, 66, 44, 255 });   // stem
+        for (int i=0;i<10;++i) {
+            float angle=rot+i*2.39996f,yy=ey+0.58f+(i%4)*0.13f;
+            float dx=cosf(angle)*0.28f,dz=sinf(angle)*0.28f;
+            Vector3 base{pcx,yy,pcz},tip{pcx+dx,yy+0.17f,pcz+dz};
+            Vector3 left{pcx+dx*0.55f-dz*0.20f,yy+0.14f,pcz+dz*0.55f+dx*0.20f};
+            Vector3 right{pcx+dx*0.55f+dz*0.20f,yy+0.14f,pcz+dz*0.55f-dx*0.20f};
+            Vector2 uv{0.375f,0.75f};
+            pr.tri(base,left,tip,{0,1,0},uv,uv,uv,{64,111,53,254});
+            pr.tri(base,tip,right,{0,1,0},uv,uv,uv,{48,88,39,254});
+        }
         break;
     }
     }
@@ -673,8 +706,16 @@ void World::ensureMesh(int cx, int cz) {
     int g0z = (int)floorf(wz / ls), g1z = (int)floorf((wz + CHUNK) / ls);
     for (int gx = g0x; gx <= g1x; gx++)
         for (int gz = g0z; gz <= g1z; gz++) {
-            float lx = gx * ls + ls * 0.5f, lz = gz * ls + ls * 0.5f, hp = 0.62f, yq = wallH - 0.02f;
+            float lx = gx * ls + ls * 0.5f, lz = gz * ls + ls * 0.5f, hp = 0.62f, yq = wallH - 0.12f;
             if (lx < wx || lx >= wx + CHUNK || lz < wz || lz >= wz + CHUNK) continue;
+            // Recessed diffuser inside a real metal tray. The luminous plane
+            // now matches uLY instead of floating 10 cm above its own light.
+            Color rim = {156, 153, 140, 254};
+            const float outer = 0.69f, lip = 0.035f;
+            addSolidBox(pr, lx-outer, yq-lip, lz-outer, lx-hp, wallH, lz+outer, rim);
+            addSolidBox(pr, lx+hp, yq-lip, lz-outer, lx+outer, wallH, lz+outer, rim);
+            addSolidBox(pr, lx-hp, yq-lip, lz-outer, lx+hp, wallH, lz-hp, rim);
+            addSolidBox(pr, lx-hp, yq-lip, lz+hp, lx+hp, wallH, lz+outer, rim);
             ce.quad({lx-hp,yq,lz-hp},{lx-hp,yq,lz+hp},{lx+hp,yq,lz+hp},{lx+hp,yq,lz-hp},{0,-1,0},
                     {0,0},{0,1},{1,1},{1,0},panel);
         }
@@ -734,6 +775,19 @@ void World::ensureMesh(int cx, int cz) {
             Color glow = crs ? Color{ 255, 60, 40, 70 } : Color{ 255, 248, 225, 70 };
             wa.quad({gx,0,gz+0.35f},{gx,0,gz+1.65f},{gx,2.3f,gz+1.65f},{gx,2.3f,gz+0.35f},{1,0,0},
                     {0,1},{1,1},{1,0},{0,0},glow);
+        }
+        if (level == 0 || level == 4) {
+            // Thin timber trim catches grazing light. Keep the extrusion within
+            // the collision clearance; no separate obstacle or draw call.
+            Color trim = level == 0 ? Color{91, 71, 39, 254} : Color{67, 41, 34, 254};
+            if (nv == WALL_SOLID) {
+                addSolidBox(pr, gx, 0, gz-WT-0.025f, gx+CELL, 0.13f, gz-WT, trim);
+                addSolidBox(pr, gx, 0, gz+WT, gx+CELL, 0.13f, gz+WT+0.025f, trim);
+            }
+            if (wv == WALL_SOLID) {
+                addSolidBox(pr, gx-WT-0.025f, 0, gz, gx-WT, 0.13f, gz+CELL, trim);
+                addSolidBox(pr, gx+WT, 0, gz, gx+WT+0.025f, 0.13f, gz+CELL, trim);
+            }
         }
         // baked AO around this cell's walls: floor strip, ceiling strip, and a
         // wall-face strip on both sides (solid walls and windows; doorways stay clean)
@@ -884,7 +938,7 @@ void World::ensureMesh(int cx, int cz) {
             Color sc = PARTY[srng.ri(0, 4)];
             float dx2 = bx2 - ax, dz2 = bz2 - az, dl = sqrtf(dx2 * dx2 + dz2 * dz2) + 1e-4f;
             Vector3 nrm = { dz2 / dl, 0, -dx2 / dl };
-            Vector2 uvp = { 0.75f, 0.75f };   // plain-metal corner of the prop atlas: flat colour
+            Vector2 uvp = { 0.375f, 0.75f };   // plain-metal corner of the prop atlas: flat colour
             pr.quad({ ax, ytop, az }, { mx2, ymid + 0.06f, mz2 }, { mx2, ymid, mz2 }, { ax, ytop - 0.06f, az },
                     nrm, uvp, uvp, uvp, uvp, sc);
             pr.quad({ mx2, ymid + 0.06f, mz2 }, { bx2, ytop, bz2 }, { bx2, ytop - 0.06f, bz2 }, { mx2, ymid, mz2 },
@@ -1262,5 +1316,65 @@ Mesh buildDeckLampMesh() {
     b.quad({ x0, y, z0 }, { x1, y, z0 }, { x1, y, z1 }, { x0, y, z1 }, { 0, 1, 0 }, t, t, t, t, glow);
     b.quad({ x0, 0.044f, 0.0395f }, { x1, 0.044f, 0.0395f },
            { x1, y, 0.0395f }, { x0, y, 0.0395f }, { 0, 0, 1 }, t, t, t, t, glow);
+    return b.bake();
+}
+
+// Axial tube with genuinely round sides. Ring end faces leave a bore, so the
+// muzzle is a recess rather than a black sticker on a solid cylinder.
+static void weaponTube(MB &b, float y, float z0, float z1, float radius,
+                       float bore, Color metal, int sides = 24) {
+    Vector2 uv{0.375f, 0.75f};
+    for (int i = 0; i < sides; ++i) {
+        float a = TAU * i / sides, c = TAU * (i + 1) / sides;
+        Vector3 n0{cosf(a), sinf(a), 0}, n1{cosf(c), sinf(c), 0};
+        Vector3 p0{radius*n0.x, y+radius*n0.y, z0}, p1{radius*n1.x, y+radius*n1.y, z0};
+        Vector3 p2{p1.x, p1.y, z1}, p3{p0.x, p0.y, z1};
+        Vector3 normal{cosf((a+c)*0.5f), sinf((a+c)*0.5f), 0};
+        b.quad(p0,p1,p2,p3,normal,uv,uv,uv,uv,metal);
+        // Interpolated radial normals keep a low-poly cylinder looking round.
+        const Vector3 radial[4] = {n0,n1,n1,n0};
+        size_t start = b.n.size()-12;
+        for (int j=0;j<4;++j) {
+            b.n[start+j*3]=radial[j].x; b.n[start+j*3+1]=radial[j].y; b.n[start+j*3+2]=0;
+        }
+        Vector3 q0{bore*n0.x,y+bore*n0.y,z1}, q1{bore*n1.x,y+bore*n1.y,z1};
+        b.quad(p3,p2,q1,q0,{0,0,1},uv,uv,uv,uv,metal);
+        Color inside{12,12,13,254};
+        b.quad(q0,q1,{q1.x,q1.y,z0},{q0.x,q0.y,z0},
+               {-normal.x,-normal.y,0},uv,uv,uv,uv,inside);
+        b.tri({0,y,z0},p1,p0,{0,0,-1},uv,uv,uv,metal);
+    }
+}
+
+Mesh buildRevolverMesh() {
+    MB b;
+    Color steel{92,96,103,254}, edge{133,138,144,254}, dark{37,40,45,254};
+    Color wood{105,62,31,254};
+    addSolidBox(b,-0.027f,-0.030f,-0.045f,0.027f,0.023f,0.075f,steel);
+    addSolidBox(b,-0.020f,-0.120f,-0.064f,0.020f,-0.023f,-0.010f,wood);
+    // Inlaid grip strips and a pin catch enough light to establish scale.
+    for (int i=0;i<6;++i)
+        addSolidBox(b,0.020f,-0.107f+i*0.011f,-0.058f,0.0215f,-0.104f+i*0.011f,-0.015f,dark);
+    weaponTube(b,0.025f,-0.027f,0.057f,0.037f,0,steel,24);
+    weaponTube(b,0.040f,0.054f,0.238f,0.018f,0.009f,edge,16);
+    weaponTube(b,0.010f,0.070f,0.182f,0.007f,0,steel,10);
+    addSolidBox(b,-0.022f,0.058f,-0.043f,0.022f,0.069f,0.070f,edge);
+    addSolidBox(b,-0.004f,0.055f,0.213f,0.004f,0.070f,0.230f,dark);
+    addSolidBox(b,-0.016f,0.069f,-0.036f,0.016f,0.075f,-0.023f,dark);
+    addSolidBox(b,-0.007f,0.020f,-0.061f,0.007f,0.055f,-0.043f,steel);
+    // Open trigger guard, with a separate trigger suspended inside it.
+    addSolidBox(b,-0.008f,-0.069f,-0.010f,0.008f,-0.061f,0.055f,steel);
+    addSolidBox(b,-0.008f,-0.061f,0.047f,0.008f,-0.025f,0.055f,steel);
+    addSolidBox(b,-0.004f,-0.052f,0.012f,0.004f,-0.029f,0.019f,dark);
+    return b.bake();
+}
+
+Mesh buildFlareMesh() {
+    MB b;
+    weaponTube(b,0,-0.075f,0.105f,0.016f,0,{177,43,26,254},16);
+    weaponTube(b,0,0.072f,0.094f,0.017f,0,{216,204,173,254},16);
+    weaponTube(b,0,0.105f,0.125f,0.0165f,0,{55,34,24,254},16);
+    // Printed safety bands, attached to the tube instead of screen-space boxes.
+    weaponTube(b,0,-0.059f,-0.044f,0.0164f,0,{209,191,148,254},16);
     return b.bake();
 }

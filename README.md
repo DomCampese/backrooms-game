@@ -7,6 +7,26 @@ No assets — every texture and every sound is synthesized at startup.
 
 ![screenshot](docs/screenshot.png)
 
+## Graphics update
+
+The renderer now uses generated, mipmapped surface-detail maps, recessed fluorescent
+housings, and physical baseboard trim. Tile grout reduces gloss independently of the
+glaze. The revolver and flare are 3D, including recoil, reload dip, and muzzle effects;
+held almond water sits lower and is smaller. Model transforms now also transform lighting
+positions and normals, correcting misplaced lighting on cans and tape decks.
+
+Furniture has separate wood and fabric atlas regions, cushion seams, cabinet handles,
+wardrobe panels, round lampshades and cooler bottles, and leaf geometry. Post-processing
+uses less grain and chromatic aberration, with 12 bloom taps instead of 20. Visible chunks
+are culled against the camera and opaque chunks draw near-first.
+
+Chalk marks are directional arrows. Exhausted sprinting waits for recovery instead of
+oscillating between running and walking; a new run restores stamina. Footsteps and distance
+records follow actual travel. Full batteries remain available to collect later.
+
+See [validation and limitations](docs/graphics-update.md).
+
+
 ## The levels
 
 Five procedurally-generated levels, each with its own palette, lighting,
@@ -225,16 +245,14 @@ make run
   the birthday song half a semitone flat, forever.
 
   <p align="center"><img src="docs/party_table.png" width="440" alt="A LEVEL FUN party table"></p>
-- **Surface relief** — walls, carpet, and concrete get a procedural bump in the
-  shader, so flat planes catch the room light with a little texture instead of
-  reading as dead polygons. Scaled down on the glossy poolroom tile, which
-  stays clean.
+- **Surface relief** — generated mipmapped maps follow material UVs. Ceramic
+  joints have recessed relief and reduced gloss; smooth objects opt out.
 - **Baked ambient occlusion** — soft contact shadows are baked into every
   chunk's geometry as gradient decals: along each wall's base and ceiling
   crease, creeping up the skirting, around every pillar's feet and head. Walls
   sit *in* the room instead of on top of it, and it costs nothing per frame.
 - **Post** — threshold bloom that makes the fluorescents actually glow, a gentle
-  filmic contrast + saturation lift, dust motes drifting through the light, plus
+  filmic contrast + saturation lift, plus
   film grain, vignette, chromatic aberration, and a mains-frequency luma
   shimmer — the fear-driven ones scale as the fear does.
 - **Title screen** — a drifting camera pans across a fresh hall behind the card:
@@ -285,7 +303,7 @@ Details that reward paying attention:
 | R | reload revolver |
 | 3 | drink almond water |
 | 4 | tape player (click to play a tape; click again to set it down running) |
-| M | chalk a floor mark |
+| M | chalk a directional floor arrow |
 | E | vending machine, or pick the tape player back up |
 | F11 | borderless fullscreen |
 | P | pause |
@@ -306,3 +324,19 @@ With the F3 debug HUD open, dev hotkeys are live: `B` force blackout,
 - `BACKROOMS_POS="x,z,yaw"` — start at a specific spot (visual testing).
 - `BACKROOMS_LEVEL=n` — start on level n (visual testing).
 - `BACKROOMS_SEED=n` — fix the world seed (repeatable maze).
+
+### Native regression tools
+
+`tools/shot.sh` and `tools/sweep.sh` run natively on macOS and use Xvfb on Linux.
+Capture logs are retained and shader failures stop the scripts.
+
+- `BACKROOMS_CLEAN=1`: omit gameplay HUD and introductory fade in captures.
+- `BACKROOMS_TIME=4`: fix rendering time (does not freeze gameplay or menu movement).
+- `BACKROOMS_BENCH=1`: disable vsync and report mean, median and p95 frame times
+  after 60 warmup frames; skip the forced screenshot-test enemy spawn.
+- `BACKROOMS_BIN=/absolute/path`: select a binary for `tools/shot.sh`.
+
+`make regression` checks sprint recovery, restart reset, and battery retention, then
+captures nine held-item and navigation views in `shots/regression`. It needs a display.
+`tools/bench.sh /absolute/baseline /absolute/new 2 3` interleaves runs and retains logs;
+legacy binaries report total runtime only. Automated captures do not save player records.
