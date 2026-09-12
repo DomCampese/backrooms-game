@@ -8,6 +8,12 @@
 
 constexpr float CELL = 2.0f;           // metres per grid cell
 constexpr int   CCELLS = 16;           // cells per chunk side
+// How rare a phrase on a wall is, and how many there are to find. The rate is
+// per solid wall edge and applies to both orientations, so a corridor of ten
+// cells offers about twenty chances. SCRAWL_PHRASES must match the atlas built
+// by makeScrawlTex (4 columns x 8 rows) — change one and change the other.
+constexpr uint32_t SCRAWL_RATE = 40;
+constexpr uint32_t SCRAWL_PHRASES = 32;
 constexpr float CHUNK = CELL * CCELLS;
 constexpr float WT = 0.11f;            // wall half-thickness
 
