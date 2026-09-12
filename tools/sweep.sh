@@ -6,7 +6,7 @@
 #
 # Takes a few minutes headless. Do not run two sweeps at once — every run
 # shares one Xvfb display.
-set -uo pipefail
+set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 FRAME=${BACKROOMS_SHOTFRAME:-80}
 for LV in 0 1 2 3 4; do

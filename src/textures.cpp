@@ -330,14 +330,32 @@ Texture2D makeScrawlTex() {
 
 // prop atlas: left half cardboard, right-top cabinet front (drawers), right-bottom plain metal
 Texture2D makePropsTex() {
-    const int W = 512, H = 512;
+    const int W = 1024, H = 512;
     Image img = GenImageColor(W, H, BLANK);
     Color *p = (Color *)img.data;
     for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
         float r, g, b;
-        if (x < 256) {                               // cardboard
+        if (x >= 512) {
+            int xx = x-512;
+            if (y < 256) { // lacquered veneer: long grain, pores, rubbed edges
+                float warp = vnoise2(xx*0.018f,y*0.008f,621u)*13;
+                float grain = sinf(xx*0.30f+warp) * 0.065f;
+                float pore = lat(xx,y/4,622u) < 0.06f ? 0.12f : 0;
+                float v=0.86f+grain-pore+(fbm2(xx*0.012f,y*0.04f,623u,2)-0.5f)*0.16f;
+                if (xx<5 || xx>506 || y<5 || y>250) v*=0.78f;
+                r=228*v;g=207*v;b=173*v;
+            } else { // woven upholstery; neutral so each prop keeps its own tint
+                int yy=y-256;
+                float weave = ((xx&3)<2 ? 0.035f : -0.035f) + ((yy&3)<2 ? 0.025f : -0.025f);
+                float stain=fbm2(xx*0.013f,yy*0.020f,624u,3);
+                float v=0.88f+weave-std::max(0.0f,stain-0.5f)*0.35f;
+                if (xx<7 || xx>504 || yy<7 || yy>248) v*=0.70f;
+                r=232*v;g=228*v;b=215*v;
+            }
+        } else if (x < 256) {                               // cardboard
             float n = (fbm2(x * 0.03f, y * 0.03f, 61u, 3) - 0.5f) * 0.18f;
-            float v = 1.0f + n;
+            float v = 1.0f + n + (lat(x,y,611u)-0.5f)*0.055f;
+            if (x%64 < 2) v*=0.91f; // compressed fold fibres
             if (x < 18 || x > 238 || y < 18 || y > 494) v *= 0.80f;   // box edges
             r = 166 * v; g = 128 * v; b = 84 * v;
             if (y > 238 && y < 274) {                // packing tape
@@ -359,8 +377,21 @@ Texture2D makePropsTex() {
             }
             if (x < 262 + 4 || x > 506 || (y % 256) < 6 || (y % 256) > 250) { r *= 0.78f; g *= 0.78f; b *= 0.78f; }
         }
+        if (x>256 && x<512 && y<256) {
+            // Enamel worn through at drawer corners, with tiny fastener heads.
+            int dy=(y-10+78)%78;
+            if ((x<279 || x>493) && (dy<12 || dy>70) && lat(x,y,612u)>0.70f) {
+                r=112;g=96;b=72;
+            }
+            if ((abs(x-281)<3 || abs(x-487)<3) && abs(dy-14)<3) {
+                r=185;g=188;b=181;
+                if (dy==14) { r=65;g=67;b=65; }
+            }
+        }
         p[y * W + x] = { cl8(r), cl8(g), cl8(b), 255 };
     }
+    for (int x=72;x<136;++x) if ((ih(x/2,0,613u)&3)!=0)
+        for (int y=352;y<377;++y) p[y*W+x]={72,65,52,255};
     return finishTexture(img, true);
 }
 
@@ -883,4 +914,47 @@ Texture2D makeDeckTex() {
     UnloadImage(img);
     SetTextureFilter(t, TEXTURE_FILTER_BILINEAR);
     return t;
+}
+
+Texture2D makeSurfaceDetail(Texture2D albedo, bool ceramic, float strength) {
+    Image source = LoadImageFromTexture(albedo);
+    Color *pixels = LoadImageColors(source);
+    const int w = source.width, h = source.height;
+    Image detail = GenImageColor(w, h, BLANK);
+    Color *out = (Color *)detail.data;
+    auto height = [&](int x, int y) {
+        x = (x + w) % w; y = (y + h) % h;
+        if (ceramic) {
+            // A pillowed glaze above recessed grout. Derive geometry from the
+            // joint, never from printed colour or a baked highlight.
+            int ex = std::min(x % 64, 63 - x % 64);
+            int ey = std::min(y % 64, 63 - y % 64);
+            float t = clampf((std::min(ex, ey) - 2.0f) / 7.0f, 0, 1);
+            return t * t * (3 - 2 * t);
+        }
+        Color c = pixels[y * w + x];
+        return (c.r * 0.30f + c.g * 0.59f + c.b * 0.11f) / 255.0f;
+    };
+    for (int y = 0; y < h; ++y) for (int x = 0; x < w; ++x) {
+        float sx = (height(x + 1, y) - height(x - 1, y)) * strength;
+        float sy = (height(x, y + 1) - height(x, y - 1)) * strength;
+        float mask = ceramic ? 0.08f + 0.92f * height(x, y)
+                             : 0.65f + 0.35f * height(x, y);
+        out[y * w + x] = {cl8(128 + 127 * clampf(sx, -1, 1)),
+                          cl8(128 + 127 * clampf(sy, -1, 1)), cl8(255 * mask), 255};
+    }
+    UnloadImageColors(pixels);
+    UnloadImage(source);
+    return finishTexture(detail, true);
+}
+
+Texture2D makeParticleTex() {
+    Image img = GenImageColor(32,32,BLANK);
+    Color *p = (Color *)img.data;
+    for (int y=0;y<32;++y) for (int x=0;x<32;++x) {
+        float dx=(x-15.5f)/15.5f, dy=(y-15.5f)/15.5f;
+        float a=clampf(1-dx*dx-dy*dy,0,1);
+        p[y*32+x]={255,255,255,cl8(255*a*a)};
+    }
+    return finishTexture(img,false);
 }

@@ -144,3 +144,6 @@ struct World {
     void unloadFar(int pcx, int pcz, int radius);
     void unloadAll();
 };
+
+Mesh buildRevolverMesh();
+Mesh buildFlareMesh();

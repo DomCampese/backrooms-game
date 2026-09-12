@@ -24,15 +24,19 @@ static constexpr int TAPE_LINE_COUNT = sizeof(TAPE_LINES) / sizeof(TAPE_LINES[0]
 
 void Game::init() {
     shotPath = getenv("BACKROOMS_SHOT");
+    benchmark = getenv("BACKROOMS_BENCH") != nullptr;
+    cleanShot = getenv("BACKROOMS_CLEAN") != nullptr;
+    if (const char *t = getenv("BACKROOMS_TIME")) captureTime = (float)atof(t);
     if (const char *sf = getenv("BACKROOMS_SHOTFRAME")) shotFrame = atoi(sf);   // testing
     SetTraceLogLevel(LOG_WARNING);
-    SetConfigFlags(FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
+    SetConfigFlags((benchmark ? 0 : FLAG_VSYNC_HINT) | FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
     InitWindow(1440, 850, "THE BACKROOMS — Level 0");
     SetExitKey(KEY_NULL);
     SetWindowMinSize(640, 400);
     InitAudioDevice();
     rlDisableBackfaceCulling();
 
+    texParticle = makeParticleTex();
     texEntity = makeEntityTex();
     texPartygoer = makePartygoerTex();
     texProps = makePropsTex();
@@ -40,6 +44,8 @@ void Game::init() {
     texDog = makeDogTex();
     texAlmondWrap = makeAlmondWrapTex();
     canMesh = buildCanMesh();
+    revolverMesh = buildRevolverMesh();
+    flareMesh = buildFlareMesh();
     texDeck = makeDeckTex();
     deckMesh = buildDeckMesh();
     reelMesh = buildReelMesh();
@@ -54,6 +60,25 @@ void Game::init() {
     floorTexs[3] = floorTexs[1];   // red halls reuse the concrete floor/ceiling in red light
     ceilTexs[3] = ceilTexs[1];
     ceilTexs[4] = makePartyCeilTex();   // the party hall's ceiling has gone dark
+
+    // Reused albedos share detail maps too (pool tile serves three surfaces).
+    std::unordered_map<unsigned, Texture2D> details;
+    auto surface = [&](Texture2D tex, bool tile, float strength) {
+        auto it = details.find(tex.id);
+        if (it != details.end()) return it->second;
+        Texture2D map = makeSurfaceDetail(tex, tile, strength);
+        details[tex.id] = map;
+        surfaceDetails.push_back(map);
+        return map;
+    };
+    for (int lv = 0; lv < NLEVELS; ++lv) {
+        floorDetails[lv] = surface(floorTexs[lv], lv == 2, lv == 2 ? 1.0f : 1.3f);
+        ceilDetails[lv] = surface(ceilTexs[lv], lv == 2, 0.45f);
+        wallDetails[lv] = surface(wallTexs[lv], lv == 2, lv == 3 ? 1.4f : 0.9f);
+    }
+    Image neutral = GenImageColor(1, 1, {128, 128, 255, 255});
+    neutralDetail = LoadTextureFromImage(neutral);
+    UnloadImage(neutral);
 
     worldShader = LoadShaderFromMemory(WORLD_VS, WORLD_FS);
     // A failed compile silently falls back to raylib's default shader, which
@@ -82,6 +107,8 @@ void Game::init() {
     locEntBlock = GetShaderLocation(worldShader, "uEntBlock");
     locGloss = GetShaderLocation(worldShader, "uGloss");
     postShader = LoadShaderFromMemory(NULL, POST_FS);
+    if (postShader.id == rlGetShaderIdDefault())
+        TraceLog(LOG_ERROR, "post shader failed to compile - see the SHADER lines above");
     locPTime = GetShaderLocation(postShader, "uTime");
     locPFear = GetShaderLocation(postShader, "uFear");
 
@@ -102,6 +129,8 @@ void Game::init() {
         mats[i].shader = worldShader;
         // rides the normal-map slot, which DrawMesh binds as "texture2"
         mats[i].maps[MATERIAL_MAP_NORMAL].texture = texOcc;
+        // texture1 is free; texture2 must remain the occupancy grid.
+        mats[i].maps[MATERIAL_MAP_SPECULAR].texture = neutralDetail;
     }
     // The floor, ceiling and wall diffuse maps change per level — applyLevel sets those.
     mats[MAT_PROPS].maps[MATERIAL_MAP_DIFFUSE].texture = texProps;
@@ -178,12 +207,26 @@ void Game::init() {
 }
 
 void Game::shutdown() {
+    if (benchmark && !frameSamples.empty()) {
+        std::sort(frameSamples.begin(), frameSamples.end());
+        double sum = 0;
+        for (float ms : frameSamples) sum += ms;
+        printf("BENCH frames=%zu mean_ms=%.3f median_ms=%.3f p95_ms=%.3f\n",
+               frameSamples.size(), sum / frameSamples.size(), frameSamples[frameSamples.size()/2],
+               frameSamples[(frameSamples.size()-1)*95/100]);
+    }
     saveBest();
+    UnloadTexture(texParticle);
+    UnloadMesh(revolverMesh);
+    UnloadMesh(flareMesh);
+    for (Texture2D map : surfaceDetails) UnloadTexture(map);
+    UnloadTexture(neutralDetail);
     CloseAudioDevice();
     CloseWindow();
 }
 
 void Game::saveBest() {
+    if (shotPath || benchmark) return; // automated runs must not change player records
     bool up = false;
     if (escapeCount > bestEsc) { bestEsc = escapeCount; up = true; }
     if (killCount > bestKill) { bestKill = killCount; up = true; }
@@ -251,6 +294,7 @@ void Game::beginDescent(double now) {
     deck = TapeDeck{}; if (IsSoundPlaying(sndVoice)) StopSound(sndVoice);
     caughtCount = 0; escapeCount = 0; killCount = 0; distWalked = 0;
     fear = 0; boostT = 0;
+    stamina = 1; sprintExhausted = false;
     sanity = 1.0f; sanityStage = 0; sanityWarnT = 0; sanityLine = "";
     drinkT = 0; drinkLanded = false; nextHeartbeat = now + 20;
     ent.st = EState::Hidden; ent.nextSpawn = now + 30;
@@ -278,6 +322,9 @@ void Game::applyLevel(int lv) {
     mats[MAT_FLOOR].maps[MATERIAL_MAP_DIFFUSE].texture = floorTexs[lv];
     mats[MAT_CEILING].maps[MATERIAL_MAP_DIFFUSE].texture = ceilTexs[lv];
     mats[MAT_WALLS].maps[MATERIAL_MAP_DIFFUSE].texture = wallTexs[lv];
+    mats[MAT_FLOOR].maps[MATERIAL_MAP_SPECULAR].texture = floorDetails[lv];
+    mats[MAT_CEILING].maps[MATERIAL_MAP_SPECULAR].texture = ceilDetails[lv];
+    mats[MAT_WALLS].maps[MATERIAL_MAP_SPECULAR].texture = wallDetails[lv];
     float ly = c.wallH - 0.12f;
     SetShaderValue(worldShader, locAmb, &c.amb, SHADER_UNIFORM_VEC3);
     SetShaderValue(worldShader, locFogCol, &c.fogCol, SHADER_UNIFORM_VEC3);
@@ -478,6 +525,7 @@ bool Game::tick() {
     float dt = fminf(GetFrameTime(), 0.05f);
     double now = GetTime();
     frame++;
+    if (benchmark && frame > 60) frameSamples.push_back(GetFrameTime() * 1000.0f);
 
     if (IsWindowResized()) {
         UnloadRenderTexture(rt);
@@ -595,6 +643,14 @@ void Game::updateLook() {
     r2x = -sinf(yaw); r2z = cosf(yaw);
 }
 
+void Game::updateSprint(bool requested, bool moving, bool crouched, float dt) {
+    // Hysteresis prevents rapid run/walk oscillation while holding shift empty.
+    if (stamina <= 0.02f) sprintExhausted = true;
+    if (stamina >= 0.25f) sprintExhausted = false;
+    sprinting = moving && requested && !sprintExhausted && !crouched;
+    stamina = clampf(stamina + (sprinting ? -dt / 10.0f : dt / 6.0f), 0, 1);
+}
+
 void Game::updateMovement(float dt) {
     // ---- move
     float ix = 0, iz = 0;
@@ -607,8 +663,7 @@ void Game::updateMovement(float dt) {
     if (moving) { ix /= il; iz /= il; }
     bool crouched = IsKeyDown(KEY_LEFT_CONTROL);
     crouchCur += ((crouched ? 1.0f : 0.0f) - crouchCur) * fminf(1, 10 * dt);
-    sprinting = moving && IsKeyDown(KEY_LEFT_SHIFT) && stamina > 0.02f && !crouched;
-    stamina = clampf(stamina + (sprinting ? -dt / 10.0f : dt / 6.0f), 0, 1);
+    updateSprint(IsKeyDown(KEY_LEFT_SHIFT), moving, crouched, dt);
     boostT = fmaxf(0, boostT - dt);
     float groundY = world.groundAt(px, pz, py);
     bool inWater = grounded && py < -0.1f && world.poolAt(cellOf(px), cellOf(pz));
@@ -618,9 +673,12 @@ void Game::updateMovement(float dt) {
     float accel = moving ? 12.0f : 9.0f;
     velx += (tvx - velx) * fminf(1, accel * dt);
     velz += (tvz - velz) * fminf(1, accel * dt);
+    float oldX = px, oldZ = pz;
     px += velx * dt; pz += velz * dt;
     world.collideCircle(px, pz, PR, py);
-    float spd = sqrtf(velx * velx + velz * velz);
+    // Actual travel drives footsteps, bob and records. Running into a wall
+    // should not sound like a sprint or bank metres toward the record.
+    float spd = hypotf(px - oldX, pz - oldZ) / fmaxf(dt, 0.0001f);
     distWalked += spd * dt;
 
     // camera feel: lean into the direction you strafe, ease back when you don't
@@ -1043,8 +1101,10 @@ void Game::updateInteraction() {
         float gr = onShelf ? 1.35f : 0.8f;
         // ...but not through a wall. lineOfSight ignores props, so the piece the
         // carton is standing on doesn't block your own reach across it.
-        if (gr > 1.0f && !world.lineOfSight(px, pz, bxx, bzz)) continue;
         if (ddx * ddx + ddz * ddz >= gr * gr) continue;
+        if (!world.lineOfSight(px, pz, bxx, bzz)) continue;
+        if (fabsf(py - (world.floorY(a, b) + (onShelf ? bottleShelfY(a, b) : 0))) > 1.5f) continue;
+        if (kind == Pickup::Battery && battery > 0.98f) continue;
         taken.insert(ky);
         switch (kind) {
         case Pickup::AlmondWater:
@@ -1137,8 +1197,9 @@ void Game::updateInteraction() {
         }
     }
     if (IsKeyPressed(KEY_M)) {   // chalk mark: the only map you get
-        chalk.push_back({ px + f2x * 0.5f, world.groundAt(px + f2x * 0.5f, pz + f2z * 0.5f, py) + 0.012f,
-                          pz + f2z * 0.5f });
+        float x = px + f2x * 0.5f, z = pz + f2z * 0.5f;
+        if (!grounded || !world.lineOfSight(px, pz, x, z)) return;
+        chalk.push_back({{x, world.groundAt(x, z, py) + 0.016f, z}, yaw});
         if (chalk.size() > 128) chalk.erase(chalk.begin());
     }
 }
@@ -1218,7 +1279,7 @@ void Game::updateAmbience(float dt, double now) {
 
 void Game::updateEntity(float dt, double now) {
     // ---- entity
-    if (shotPath && frame == 300 && ent.st == EState::Hidden) {   // autotest: force a visible spawn
+    if (shotPath && !benchmark && frame == 300 && ent.st == EState::Hidden) {   // autotest: force a visible spawn
         Vector2 spot = world.findOpenSpot(px + fwd.x * 8, pz + fwd.z * 8);
         ent.x = spot.x; ent.z = spot.y;
         ent.st = EState::Stalk; ent.gaze = -100; ent.life = 0; ent.unseen = 0; ent.hp = 3; ent.stagger = 0;

@@ -1,6 +1,7 @@
 #include "game.h"
 #include "raymath.h"
 #include <cmath>
+#include <algorithm>
 
 // How hard one flare is burning right now: a fast flare-up as the cap comes
 // off, a fade over the last second and a half, and the flicker on top. Both
@@ -11,6 +12,7 @@ static float flareGlow(const FlareProj &f, float flick) {
 }
 
 void Game::renderScene(double now) {
+    if (captureTime >= 0) now = captureTime;
     // ---- render 3D scene into rt
     int pcx = fdiv(cellOf(px), CCELLS), pcz = fdiv(cellOf(pz), CCELLS);
     int pci = cellOf(px), pck = cellOf(pz);
@@ -69,31 +71,48 @@ void Game::renderScene(double now) {
     ClearBackground(BLACK);
     BeginMode3D(cam);
     Matrix ident = MatrixIdentity();
-    for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) {
-        int cx = pcx + dx, cz = pcz + dz;
+    struct VisibleChunk { ChunkData *data; float distance2; };
+    VisibleChunk visible[25];
+    int visibleCount = 0;
+    Vector3 cameraRight = Vector3Normalize(Vector3CrossProduct(fwd, cam.up));
+    Vector3 cameraUp = Vector3Normalize(Vector3CrossProduct(cameraRight, fwd));
+    float tanV = tanf(cam.fovy * DEG2RAD * 0.5f);
+    float tanH = tanV * rt.texture.width / rt.texture.height;
+    // Bounds include the deepest atrium, ceiling and slight wall overlap.
+    float halfY = (LEVELS[level].wallH + 2.5f) * 0.5f;
+    float radius = sqrtf(CHUNK*CHUNK*0.5f + halfY*halfY) + 0.5f;
+    for (int dx=-2; dx<=2; ++dx) for (int dz=-2; dz<=2; ++dz) {
+        int cx=pcx+dx, cz=pcz+dz;
         auto it = world.chunks.find(World::key(cx, cz));
         if (it == world.chunks.end() || !it->second.built) continue;
-        float ccx = cx * CHUNK + CHUNK / 2 - px, ccz = cz * CHUNK + CHUNK / 2 - pz;
-        if (ccx * f2x + ccz * f2z < -24.0f && (ccx * ccx + ccz * ccz) > 24 * 24) continue;
-        // the first four mesh slots and the first four material slots are the
-        // same four surfaces in the same order, which is what lets this be a loop
-        for (int m = MESH_FLOOR; m <= MESH_PROPS; m++)
-            if (it->second.meshes[m].vertexCount > 0)
-                DrawMesh(it->second.meshes[m], mats[m], ident);
-        if (it->second.meshes[MESH_SCRAWL].vertexCount > 0)   // graffiti, over the walls
-            DrawMesh(it->second.meshes[MESH_SCRAWL], mats[MAT_SCRAWL], ident);
+        Vector3 delta{cx*CHUNK+CHUNK*0.5f-px, halfY-2.5f-eyeY, cz*CHUNK+CHUNK*0.5f-pz};
+        float depth = Vector3DotProduct(delta, fwd);
+        if (depth < -radius ||
+            fabsf(Vector3DotProduct(delta, cameraRight)) > depth*tanH + radius*sqrtf(1+tanH*tanH) ||
+            fabsf(Vector3DotProduct(delta, cameraUp)) > depth*tanV + radius*sqrtf(1+tanV*tanV)) continue;
+        visible[visibleCount++] = {&it->second, Vector3LengthSqr(delta)};
     }
-    for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) {   // blended passes last, over the opaque room
-        auto it = world.chunks.find(World::key(pcx + dx, pcz + dz));
-        if (it == world.chunks.end() || !it->second.built) continue;
-        // water and glass are shaded from their vertex alpha, not from a texture,
-        // so they can borrow the floor material rather than needing their own
-        if (it->second.meshes[MESH_AO].vertexCount > 0)
-            DrawMesh(it->second.meshes[MESH_AO], mats[MAT_AO], ident);
-        if (it->second.meshes[MESH_WATER].vertexCount > 0)
-            DrawMesh(it->second.meshes[MESH_WATER], mats[MAT_FLOOR], ident);
-        if (it->second.meshes[MESH_GLASS].vertexCount > 0)
-            DrawMesh(it->second.meshes[MESH_GLASS], mats[MAT_FLOOR], ident);
+    std::sort(visible, visible+visibleCount, [](const VisibleChunk &a, const VisibleChunk &b) {
+        return a.distance2 < b.distance2;
+    });
+    // Front to back lets depth rejection avoid expensive lighting on hidden rooms.
+    for (int i=0; i<visibleCount; ++i) {
+        ChunkData &chunk = *visible[i].data;
+        for (int m=MESH_FLOOR; m<=MESH_PROPS; ++m)
+            if (chunk.meshes[m].vertexCount > 0) DrawMesh(chunk.meshes[m], mats[m], ident);
+        if (chunk.meshes[MESH_SCRAWL].vertexCount > 0)
+            DrawMesh(chunk.meshes[MESH_SCRAWL], mats[MAT_SCRAWL], ident);
+    }
+    // Share the frustum test with transparent geometry, and blend distant chunks
+    // first. Within a chunk, the existing AO / water / glass order is retained.
+    for (int i=visibleCount-1; i>=0; --i) {
+        ChunkData &chunk = *visible[i].data;
+        if (chunk.meshes[MESH_AO].vertexCount > 0)
+            DrawMesh(chunk.meshes[MESH_AO], mats[MAT_AO], ident);
+        if (chunk.meshes[MESH_WATER].vertexCount > 0)
+            DrawMesh(chunk.meshes[MESH_WATER], mats[MAT_FLOOR], ident);
+        if (chunk.meshes[MESH_GLASS].vertexCount > 0)
+            DrawMesh(chunk.meshes[MESH_GLASS], mats[MAT_FLOOR], ident);
     }
     // small props draw with raylib's unlit default shader, so estimate the room
     // light at each one (plus flare/muzzle glow) — no more balloons shining
@@ -197,14 +216,18 @@ void Game::renderScene(double now) {
             DrawCube(c.pos, 0.05f, 0.05f, 0.05f, cc);
         }
     }
-    for (auto &cm : chalk)
-        if (fabsf(cm.x - px) < 30 && fabsf(cm.z - pz) < 30) {
-            Color cc = lit({ 228, 228, 218, 200 }, propLum(cm.x, cm.y + 0.1f, cm.z));
-            DrawCylinderEx({ cm.x - 0.18f, cm.y, cm.z - 0.18f }, { cm.x + 0.18f, cm.y, cm.z + 0.18f },
-                           0.014f, 0.014f, 5, cc);
-            DrawCylinderEx({ cm.x - 0.18f, cm.y, cm.z + 0.18f }, { cm.x + 0.18f, cm.y, cm.z - 0.18f },
-                           0.014f, 0.014f, 5, cc);
-        }
+    for (const auto &mark : chalk) {
+        const Vector3 &cm = mark.pos;
+        if (fabsf(cm.x-px) > 30 || fabsf(cm.z-pz) > 30) continue;
+        Color cc = lit({228,228,218,210}, propLum(cm.x,cm.y+0.1f,cm.z));
+        Vector3 along{cosf(mark.yaw),0,sinf(mark.yaw)}, side{-along.z,0,along.x};
+        Vector3 tip = Vector3Add(cm,Vector3Scale(along,0.25f));
+        Vector3 tail = Vector3Subtract(cm,Vector3Scale(along,0.25f));
+        Vector3 shoulder = Vector3Add(cm,Vector3Scale(along,0.04f));
+        DrawCylinderEx(tail,tip,0.011f,0.011f,4,cc);
+        DrawCylinderEx(tip,Vector3Add(shoulder,Vector3Scale(side,0.17f)),0.011f,0.011f,4,cc);
+        DrawCylinderEx(tip,Vector3Subtract(shoulder,Vector3Scale(side,0.17f)),0.011f,0.011f,4,cc);
+    }
     if (wayOpen()) {   // enough doubloons: real exits burn green — the way out
         float pulse = 0.7f + 0.3f * sinf((float)now * 3.0f);
         for (int dx = -6; dx <= 6; dx++) for (int dz = -6; dz <= 6; dz++) {
@@ -304,7 +327,8 @@ void Game::renderScene(double now) {
         DrawBillboardRec(cam, spr, { 0, 0, 128, 256 },
                          { ent.x, eg + 0.98f - sink, ent.z }, { 0.98f, 1.96f }, { lum8, lum8, lum8, al });
     }
-    if (drinkT > 0 || (weapon == WEAPON_DECK && deck.carried)) {
+    if (!inMenu && (drinkT > 0 || (weapon == WEAPON_DECK && deck.carried) ||
+                    weapon == WEAPON_REVOLVER || (weapon == WEAPON_FLARE && flares > 0))) {
         // Held against a wall, the can falls inside that wall's shadow and goes
         // black in your hands. A viewmodel shouldn't be shadowed by the room it
         // is being held in, so switch the occlusion grid off for this one draw
@@ -319,7 +343,8 @@ void Game::renderScene(double now) {
         Vector3 vmAmb = { fmaxf(la.x, 0.150f), fmaxf(la.y, 0.142f), fmaxf(la.z, 0.128f) };
         SetShaderValue(worldShader, locAmb, &vmAmb, SHADER_UNIFORM_VEC3);
         if (drinkT > 0) drawDrinkCan(cam);        // both hands are busy — the deck goes away
-        else drawHeldDeck(cam);
+        else if (weapon == WEAPON_DECK) drawHeldDeck(cam);
+        else drawHeldWeapon(cam);
         SetShaderValue(worldShader, locOccN, &occN, SHADER_UNIFORM_FLOAT);   // both as they were
         SetShaderValue(worldShader, locAmb, &la, SHADER_UNIFORM_VEC3);
     }
@@ -327,92 +352,54 @@ void Game::renderScene(double now) {
     EndTextureMode();
 }
 
-// The gun (or the flare) in the bottom-right corner, drawn flat in 2D over the
-// finished 3D frame. Both are built from a handful of boxes in a "gun-local"
-// frame: t runs along the barrel, s runs up toward the sights, so the whole
-// thing can be swung by recoil or dipped for a reload by rotating one angle.
-//
-// The tape player is not here — it is real geometry, drawn in the 3D pass by
-// drawHeldDeck, because a flat drawing could not show the reels turning.
-void Game::drawWeaponViewmodel(int sw, int sh, double now) {
-    // reload: the muzzle dips while the cylinder is out, then comes back up
-    float dip = (weapon == WEAPON_REVOLVER && reloadT > 0)
-              ? sinf(clampf(1.0f - reloadT / 1.8f, 0.0f, 1.0f) * 3.14159f) : 0.0f;
-    float deg = (weapon == WEAPON_REVOLVER ? 210.0f + recoil * 16.0f - dip * 26.0f : 236.0f);
-    float rad = deg * DEG2RAD;
-    float dirx = cosf(rad), diry = sinf(rad);   // along the barrel
-    float nx = -diry, ny = dirx;                // toward the top of the gun
-    float bobX = sinf(bobPhase * 3.14159f) * 3.0f * bobAmt;
-    Vector2 piv = weapon == WEAPON_REVOLVER
-        ? Vector2{ sw - 165.0f + bobX - dirx * recoil * 22.0f,
-                   sh - 30.0f + fabsf(bobX) * 0.6f - diry * recoil * 22.0f + dip * 16.0f }
-        : Vector2{ sw - 130.0f + bobX, sh - 12.0f + fabsf(bobX) * 0.6f };
-    // gun-local frame: t along the barrel, s toward the sights
-    const float k = 1.25f;   // overall viewmodel scale
-    auto pt = [&](float t, float s) {
-        return Vector2{ piv.x + (dirx * t + nx * s) * k, piv.y + (diry * t + ny * s) * k };
-    };
-    auto quad = [&](Vector2 a, Vector2 b, Vector2 c2, Vector2 d2, Color col) {
-        DrawTriangle(a, b, c2, col); DrawTriangle(a, c2, d2, col);
-    };
-    auto box = [&](float t0, float t1, float s0, float s1, Color col) {
-        quad(pt(t0, s1), pt(t0, s0), pt(t1, s0), pt(t1, s1), col);
-    };
-    if (weapon == WEAPON_REVOLVER) {   // revolver, kicks with recoil
-        Color steel = { 40, 38, 44, 255 }, steel2 = { 57, 54, 62, 255 };
-        Color dark = { 21, 20, 24, 255 }, wood = { 88, 58, 38, 255 };
-        Color glint = { 86, 84, 96, 255 };
-        // grip rakes back and down off the bottom of the screen
-        Vector2 gv = { (-dirx * 0.42f - nx * 0.91f) * 70.0f * k, (-diry * 0.42f - ny * 0.91f) * 70.0f * k };
-        Vector2 g0 = pt(-14, -8), g1 = pt(12, -8);
-        quad(g0, g1, { g1.x + gv.x, g1.y + gv.y },
-             { g0.x + gv.x - dirx * 8 * k, g0.y + gv.y - diry * 8 * k }, wood);
-        box(-16, 34, -10, 8, steel);                    // frame rear + recoil shield
-        box(-6, 90, 8, 13, steel);                      // top strap over the cylinder
-        box(30, 76, -14, 13, steel2);                   // cylinder bulge
-        box(43, 46, -12, 11, dark);                     // cylinder flutes
-        box(59, 62, -12, 11, dark);
-        box(82, 168, -3, 11, steel);                    // barrel
-        box(88, 138, -8, -3, steel2);                   // ejector rod shroud under it
-        box(163, 168, -3, 11, dark);                    // muzzle band
-        box(-26, -14, 9, 19, steel2);                   // hammer spur
-        box(-10, -2, 13, 17, steel);                    // rear sight
-        box(156, 163, 11, 17, steel);                   // front sight
-        box(82, 163, 9, 11, glint);                     // ceiling light rides the barrel
-        box(30, 76, 11, 13, glint);                     // and the cylinder
-        DrawRing(pt(24, -15), 7.5f * k, 10.5f * k, 0, 360, 24, steel);   // trigger guard
-        box(20, 24, -16, -9, dark);                     // trigger
-        if (muzzleSmoke > 0.02f) {   // powder haze curling off the muzzle, drifting up
-            Vector2 tip = pt(178, 4);
-            float s = muzzleSmoke;
-            for (int i = 0; i < 4; i++) {
-                float t = (float)now * 1.4f + i * 1.9f;
-                float rise = (1.0f - s) * 26.0f + i * 7.0f;
-                Vector2 pv = { tip.x + sinf(t) * (5 + i * 3) + dirx * i * 5,
-                               tip.y - rise + diry * i * 5 };
-                unsigned char al = (unsigned char)(clampf(s * 0.5f - i * 0.06f, 0, 1) * 90);
-                DrawCircleV(pv, (11 + i * 6) * (1.4f - s * 0.4f), { 150, 148, 150, al });
+// Held geometry belongs to the scene pass: perspective, room lighting and
+// post-processing all affect it just as they affect the can and the deck.
+void Game::drawHeldWeapon(const Camera3D &cam) {
+    Vector3 right{r2x, 0, r2z};
+    Vector3 up = Vector3Normalize(Vector3CrossProduct(right, fwd));
+    float dip = weapon == WEAPON_REVOLVER && reloadT > 0
+        ? sinf(clampf(1 - reloadT / 1.8f, 0, 1) * PI) : 0;
+    float kick = weapon == WEAPON_REVOLVER ? recoil : 0;
+    float tilt = weapon == WEAPON_REVOLVER ? 0.06f + kick * 0.30f - dip * 0.65f : 0.85f;
+    Vector3 forward = Vector3Normalize(Vector3Add(fwd,
+        Vector3Add(Vector3Scale(right, -0.20f), Vector3Scale(up, tilt))));
+    Vector3 axisUp = Vector3Normalize(Vector3CrossProduct(right, forward));
+    Vector3 axisRight = Vector3Normalize(Vector3CrossProduct(forward, axisUp));
+    float sway = sinf(bobPhase * PI) * 0.003f * bobAmt;
+    Vector3 pos = Vector3Add(cam.position, Vector3Add(Vector3Scale(fwd, 0.155f-kick*0.012f),
+        Vector3Add(Vector3Scale(right, 0.077f+sway), Vector3Scale(up, -0.072f-dip*0.024f))));
+    // Farthest vertex is <0.33 m from the eye, even during recoil/reload.
+    float scale = weapon == WEAPON_REVOLVER ? 0.48f : 0.64f;
+    Matrix m{};
+    m.m0=axisRight.x*scale; m.m1=axisRight.y*scale; m.m2=axisRight.z*scale;
+    m.m4=axisUp.x*scale; m.m5=axisUp.y*scale; m.m6=axisUp.z*scale;
+    m.m8=forward.x*scale; m.m9=forward.y*scale; m.m10=forward.z*scale;
+    m.m12=pos.x; m.m13=pos.y; m.m14=pos.z; m.m15=1;
+    float gloss = weapon == WEAPON_REVOLVER ? 0.48f : 0.12f;
+    SetShaderValue(worldShader, locGloss, &gloss, SHADER_UNIFORM_FLOAT);
+    DrawMesh(weapon == WEAPON_REVOLVER ? revolverMesh : flareMesh, mats[MAT_PROPS], m);
+    SetShaderValue(worldShader, locGloss, &LEVELS[level].gloss, SHADER_UNIFORM_FLOAT);
+    if (weapon == WEAPON_REVOLVER) {
+        Vector3 muzzle = Vector3Transform({0,0.04f,0.24f},m);
+        if (muzzleT > 0) {
+            float life = muzzleT/0.09f;
+            BeginBlendMode(BLEND_ADDITIVE);
+            DrawBillboard(cam,texParticle,muzzle,0.07f*life,{255,175,70,230});
+            DrawBillboard(cam,texParticle,muzzle,0.025f*life,{255,245,190,255});
+            EndBlendMode();
+        }
+        if (muzzleSmoke > 0.02f) {
+            for (int i=0;i<3;++i) {
+                Vector3 puff=Vector3Add(muzzle,Vector3Scale(up,(1-muzzleSmoke)*0.025f+i*0.009f));
+                DrawBillboard(cam,texParticle,puff,0.022f+i*0.011f,
+                              {155,151,142,cl8(muzzleSmoke*(55-i*12))});
             }
         }
-        if (muzzleT > 0) {
-            float mt = muzzleT / 0.09f;
-            Vector2 tip = pt(180, 4);
-            DrawCircleV(tip, 46 * mt, { 255, 150, 60, (unsigned char)(90 * mt) });
-            DrawCircleV(tip, 24 * mt, { 255, 225, 140, (unsigned char)(210 * mt) });
-        }
-    } else {   // road flare in hand, cap out, ready to strike and throw
-        Color body = { 168, 42, 32, 255 }, edge = { 206, 74, 56, 255 };
-        Color capc = { 56, 26, 22, 255 }, band = { 216, 204, 184, 255 };
-        box(0, 96, -11, 11, body);                      // red tube
-        box(0, 90, 7, 11, edge);                        // light along the top
-        box(-4, 2, -9, 9, capc);                        // butt end
-        box(78, 90, -12, 12, band);                     // striker band
-        box(90, 100, -9, 9, capc);                      // cap
     }
-    DrawCircle(sw / 2, sh / 2, 2.0f, { 230, 220, 190, 110 });   // aiming dot
 }
 
 void Game::renderUI(double now) {
+    if (captureTime >= 0) now = captureTime;
     // ---- post + UI
     float timeF = (float)now;
     double elapsed = now - runStart;
@@ -423,6 +410,7 @@ void Game::renderUI(double now) {
     BeginShaderMode(postShader);
     DrawTextureRec(rt.texture, { 0, 0, (float)rt.texture.width, -(float)rt.texture.height }, { 0, 0 }, WHITE);
     EndShaderMode();
+    if (cleanShot && !inMenu) { EndDrawing(); return; }
 
     int sw = GetScreenWidth(), sh = GetScreenHeight();
 
@@ -458,9 +446,8 @@ void Game::renderUI(double now) {
         return;
     }
 
-    // the viewmodel, over the world but under every overlay (the deck draws in 3D)
     if (drinkT <= 0 && (weapon == WEAPON_REVOLVER || (weapon == WEAPON_FLARE && flares > 0)))
-        drawWeaponViewmodel(sw, sh, now);
+        DrawCircle(sw / 2, sh / 2, 1.5f, {230,220,190,110});
 
     if (elapsed < 9.0 && winT <= 0) {   // intro (suppressed while the escape screen is up)
         float a = 1.0f - clampf((float)elapsed / 3.0f, 0, 1);
@@ -630,7 +617,9 @@ void Game::renderUI(double now) {
     if (stamina < 0.98f) {   // sprint bar, bottom centre
         const int w = 220, x = sw / 2 - w / 2, y = sh - 42;
         DrawRectangle(x - 1, y - 1, w + 2, 8, { 0, 0, 0, 120 });
-        DrawRectangle(x, y, (int)(w * stamina), 6, { 200, 180, 120, 160 });
+        DrawRectangle(x, y, (int)(w * stamina), 6,
+                      sprintExhausted ? Color{190,100,66,180} : Color{200,180,120,160});
+        if (sprintExhausted) DrawText("catch your breath", x+48, y+11, 12, {195,156,119,180});
     }
     if (hidden)
         DrawText("[ hidden · hold still ]", sw / 2 - MeasureText("[ hidden · hold still ]", 14) / 2, sh - 62, 14,
@@ -765,22 +754,12 @@ void Game::drawDrinkCan(const Camera3D &cam) {
     Vector3 Rt = { r2x, 0, r2z };
     Vector3 Up = Vector3Normalize(Vector3CrossProduct(Rt, F));
 
-    // where the base of the can sits, relative to your eye. It comes in from
-    // below and to the right, then draws in toward the middle as you tilt it.
-    // It has to come AT you, so it tracks in toward the middle of the view and
-    // closes most of the gap to your face while it does.
-    // It also has to finish at eye level. Held low, you look down onto the lid
-    // and the labelled face tips away underneath it — which is how you end up
-    // staring at a metal disc with the wordmark nowhere in sight.
-    //
-    // And it has to be held close. Collision never lets you within 0.34 m of
-    // anything solid, so a can inside that radius can't be cut into by the wall
-    // you're standing at — which is what made it disappear in corridors. The
-    // scale below is reduced by the same factor the distance was, so it covers
-    // exactly as much of the screen as before.
-    float dist = 0.34f - tip * 0.12f;
-    float side = 0.124f - tip * 0.065f;
-    float vert = -0.358f + up * 0.345f + tip * 0.013f + bob * 0.004f;
+    // Keep the can below the centre of the view and bring the lid toward the
+    // mouth, rather than lifting the entire label up across the player's eyes.
+    // Its horizontal reach remains within the player's wall clearance.
+    float dist = 0.265f - tip * 0.055f;
+    float side = 0.112f - tip * 0.028f;
+    float vert = -0.255f + up * 0.145f + tip * 0.018f + bob * 0.003f;
     float bx4 = sinf(bobPhase * 3.14159f) * 0.008f * bobAmt;
     Vector3 pos = Vector3Add(cam.position,
                   Vector3Add(Vector3Scale(F, dist),
@@ -788,7 +767,7 @@ void Game::drawDrinkCan(const Camera3D &cam) {
 
     // Held items are drawn bigger than life or they read as toys at arm's
     // length; this is the usual viewmodel cheat, not a modelling error.
-    const float SCALE = 0.84f;
+    const float SCALE = 0.70f;
     // Pitch is the main move: the can's axis swings over toward the camera so the
     // lid comes to your mouth, which is what drinking actually looks like from
     // behind your own eyes. Rolling it in the screen plane instead just reads as
