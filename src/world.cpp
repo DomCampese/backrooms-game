@@ -765,37 +765,67 @@ void World::ensureMesh(int cx, int cz) {
             aoStrip({ gx + WT + 0.006f, wallH, z1 }, { gx + WT + 0.006f, wallH, z0 }, { 0, -AOH, 0 }, { 1, 0, 0 }, AOC);
         }
         // wall scrawl: rarely, a solid wall carries a phrase left by an earlier
-        // wanderer. one of eight, from the 2x4 scrawl atlas, drawn as a decal
-        // pressed just off the wall face (level 2 is pristine tile — no scrawl)
+        // wanderer. one of thirty-two, from the 4x8 scrawl atlas, drawn as a
+        // decal pressed just off the wall face (level 2 is pristine tile — no
+        // scrawl).
+        //
+        // SCRAWL_RATE is a rarity, not a decoration: at the old one-in-seven
+        // every corridor had writing on it and the same eight phrases came back
+        // within sight of each other, which reads as wallpaper. One in forty,
+        // across thirty-two phrases, means seeing one is an event and seeing the
+        // same one twice means something.
         if (level != 2) {
             uint32_t gi = cx * CCELLS + i, gk = cz * CCELLS + kk;
             auto uvOf = [](int ph, float &u0, float &v0, float &u1, float &v1) {
-                u0 = (ph & 1) * 0.5f; v0 = (ph >> 1) * 0.25f; u1 = u0 + 0.5f; v1 = v0 + 0.25f;
+                u0 = (ph & 3) * 0.25f; v0 = (ph >> 2) * 0.125f; u1 = u0 + 0.25f; v1 = v0 + 0.125f;
             };
+            // Nobody writes on a wall straight, and no two people picked up the
+            // same pen. A small rotation and a tint per instance, so the same
+            // atlas cell twice does not read as the same decal twice.
+            auto tintOf = [](uint32_t hs) {
+                static const Color T[4] = { { 255, 255, 255, 255 }, { 236, 228, 214, 255 },
+                                            { 216, 210, 212, 255 }, { 248, 234, 208, 255 } };
+                return T[(hs >> 17) & 3];   // alpha stays 255: see the shader's alpha coding
+            };
+            auto tiltOf = [](uint32_t hs) { return ((int)((hs >> 12) & 15) - 7.5f) * 0.0085f; };
             if (nv == WALL_SOLID) {
                 uint32_t hs = ih(gi, gk, seed ^ 0x5C1Bu);
-                if (hs % 7 == 0) {
-                    float u0, v0, u1, v1; uvOf((hs >> 5) % 8, u0, v0, u1, v1);
+                if (hs % SCRAWL_RATE == 0) {
+                    float u0, v0, u1, v1; uvOf((hs >> 5) % SCRAWL_PHRASES, u0, v0, u1, v1);
                     float y0 = 0.95f + ((hs >> 9) & 3) * 0.12f, y1 = y0 + 0.66f;
                     float x0 = gx + 0.28f, x1 = gx + 1.72f;
                     float zf = (hs & 8) ? gz + WT + 0.006f : gz - WT - 0.006f;
-                    if (hs & 8) scr.quad({x0,y0,zf},{x1,y0,zf},{x1,y1,zf},{x0,y1,zf},{0,0,1},
-                                        {u0,v1},{u1,v1},{u1,v0},{u0,v0}, WHITE);
-                    else        scr.quad({x1,y0,zf},{x0,y0,zf},{x0,y1,zf},{x1,y1,zf},{0,0,-1},
-                                        {u0,v1},{u1,v1},{u1,v0},{u0,v0}, WHITE);
+                    float mx = (x0 + x1) * 0.5f, my = (y0 + y1) * 0.5f;
+                    float hw = (x1 - x0) * 0.5f, hh = (y1 - y0) * 0.5f;
+                    float an = tiltOf(hs), cq = cosf(an), sq = sinf(an);
+                    auto co = [&](float sx, float sy) {
+                        return Vector3{ mx + sx * hw * cq - sy * hh * sq, my + sx * hw * sq + sy * hh * cq, zf };
+                    };
+                    Color tc = tintOf(hs);
+                    if (hs & 8) scr.quad(co(-1,-1), co(1,-1), co(1,1), co(-1,1), {0,0,1},
+                                        {u0,v1},{u1,v1},{u1,v0},{u0,v0}, tc);
+                    else        scr.quad(co(1,-1), co(-1,-1), co(-1,1), co(1,1), {0,0,-1},
+                                        {u0,v1},{u1,v1},{u1,v0},{u0,v0}, tc);
                 }
             }
             if (wv == WALL_SOLID) {
                 uint32_t hs = ih(gi, gk, seed ^ 0x5C2Du);
-                if (hs % 7 == 0) {
-                    float u0, v0, u1, v1; uvOf((hs >> 5) % 8, u0, v0, u1, v1);
+                if (hs % SCRAWL_RATE == 0) {
+                    float u0, v0, u1, v1; uvOf((hs >> 5) % SCRAWL_PHRASES, u0, v0, u1, v1);
                     float y0 = 0.95f + ((hs >> 9) & 3) * 0.12f, y1 = y0 + 0.66f;
                     float z0 = gz + 0.28f, z1 = gz + 1.72f;
                     float xf = (hs & 8) ? gx + WT + 0.006f : gx - WT - 0.006f;
-                    if (hs & 8) scr.quad({xf,y0,z1},{xf,y0,z0},{xf,y1,z0},{xf,y1,z1},{1,0,0},
-                                        {u0,v1},{u1,v1},{u1,v0},{u0,v0}, WHITE);
-                    else        scr.quad({xf,y0,z0},{xf,y0,z1},{xf,y1,z1},{xf,y1,z0},{-1,0,0},
-                                        {u0,v1},{u1,v1},{u1,v0},{u0,v0}, WHITE);
+                    float mz = (z0 + z1) * 0.5f, my = (y0 + y1) * 0.5f;
+                    float hd = (z1 - z0) * 0.5f, hh = (y1 - y0) * 0.5f;
+                    float an = tiltOf(hs), cq = cosf(an), sq = sinf(an);
+                    auto co = [&](float sz, float sy) {
+                        return Vector3{ xf, my + sz * hd * sq + sy * hh * cq, mz + sz * hd * cq - sy * hh * sq };
+                    };
+                    Color tc = tintOf(hs);
+                    if (hs & 8) scr.quad(co(1,-1), co(-1,-1), co(-1,1), co(1,1), {1,0,0},
+                                        {u0,v1},{u1,v1},{u1,v0},{u0,v0}, tc);
+                    else        scr.quad(co(-1,-1), co(1,-1), co(1,1), co(-1,1), {-1,0,0},
+                                        {u0,v1},{u1,v1},{u1,v0},{u0,v0}, tc);
                 }
             }
         }

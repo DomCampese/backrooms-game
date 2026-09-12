@@ -2,6 +2,7 @@
 #include "util.h"
 #include <cmath>
 #include <algorithm>
+#include <cstring>
 
 // ---------------------------------------------------------------- textures
 static Texture2D finishTexture(Image img, bool tiled) {
@@ -306,24 +307,265 @@ Texture2D makePartygoerTex() {
     return finishTexture(img, false);
 }
 
-// wall scrawl atlas: eight phrases in a shaky triple-struck hand, 2 x 4 cells
+// ---------------------------------------------------------------- wall scrawl
+//
+// What an earlier wanderer wrote on the wall, drawn stroke by stroke rather
+// than blitted from a font. Everything else in this project is synthesized;
+// this was the one surface that fell back to raylib's bitmap font, and it
+// showed — blocky digital type on a wall that is supposed to carry somebody's
+// handwriting.
+//
+// A glyph is a handful of control points in a unit box, which is far too few
+// to look like writing on its own. Three things turn them into a hand:
+// Catmull-Rom through the control points, so coarse points give smooth curves
+// rather than a polygon; a wobble that pulls the path off course at low
+// frequency, so no two letters are drawn quite alike; and a pen whose width
+// varies along the stroke, so the line thins where the hand moved fast and
+// pools where it slowed or turned.
+//
+// Points are two digits each, x then y, '0'-'9' over the glyph box with y
+// running down. That resolution is deliberately coarse — the spline and the
+// wobble carry the detail, and a table of exact coordinates would be both
+// unreadable and a false promise of precision in something meant to be shaky.
+struct Glyph { char ch; const char *stroke[3]; };
+static const Glyph GLYPHS[] = {
+    { 'A', { "0924406499", "2676", nullptr } },
+    { 'B', { "0009", "0060722540", "0475876909" } },
+    { 'C', { "91602215286998", nullptr, nullptr } },
+    { 'D', { "0009", "0051845809", nullptr } },
+    { 'E', { "90000999", "0565", nullptr } },
+    { 'F', { "900009", "0555", nullptr } },
+    { 'G', { "91602215286998", "985595", nullptr } },
+    { 'H', { "0009", "9099", "0595" } },
+    { 'I', { "5059", nullptr, nullptr } },
+    { 'J', { "80876928", nullptr, nullptr } },
+    { 'K', { "0009", "9005", "2599" } },
+    { 'L', { "101999", nullptr, nullptr } },
+    { 'M', { "0910569099", nullptr, nullptr } },
+    { 'N', { "09009990", nullptr, nullptr } },
+    { 'O', { "508194875927142150", nullptr, nullptr } },
+    { 'P', { "0009", "0061735505", nullptr } },
+    { 'Q', { "508194875927142150", "6799", nullptr } },
+    { 'R', { "0009", "0061735505", "4599" } },
+    { 'S', { "9160212375875918", nullptr, nullptr } },
+    { 'T', { "0090", "5059", nullptr } },
+    { 'U', { "0016498790", nullptr, nullptr } },
+    { 'V', { "005990", nullptr, nullptr } },
+    { 'W', { "0029548990", nullptr, nullptr } },
+    { 'X', { "0099", "9009", nullptr } },
+    { 'Y', { "005590", "5559", nullptr } },
+    { 'Z', { "0090", "9009", "0999" } },
+    { '0', { "508194875927142150", "8128", nullptr } },
+    { '1', { "325059", nullptr, nullptr } },
+    { '2', { "12306082751999", nullptr, nullptr } },
+    { '3', { "11507244", "44857829", nullptr } },
+    { '4', { "701696", "7279", nullptr } },
+    { '5', { "90202464867829", nullptr, nullptr } },
+    { '6', { "80332759875526", nullptr, nullptr } },
+    { '7', { "0090", "9049", nullptr } },
+    { '8', { "50213365774927457350", nullptr, nullptr } },
+    { '9', { "798461323575", nullptr, nullptr } },
+    { '.', { "4849", nullptr, nullptr } },
+    { ',', { "5839", nullptr, nullptr } },
+    { '\'', { "5052", nullptr, nullptr } },
+    { '!', { "5056", "5859", nullptr } },
+    { '?', { "114071735556", "5859", nullptr } },
+    { '-', { "1585", nullptr, nullptr } },
+    { '=', { "1484", "1686", nullptr } },
+    { ')', { "30636639", nullptr, nullptr } },
+    { '(', { "60333669", nullptr, nullptr } },
+    { '/', { "8019", nullptr, nullptr } },
+    { ':', { "4344", "4647", nullptr } },
+};
+
+
+// One dab of the pen. Ink pools rather than stacking: overlapping dabs take the
+// darker alpha instead of summing, or every junction and turn would blow out to
+// a solid blob while the straights stayed thin.
+static void inkDab(Color *p, int W, int H, float cx, float cy, float rad, Color ink, float strength,
+                   int cl, int ct, int cr, int cb) {
+    int x0 = (int)(cx - rad) - 1, x1 = (int)(cx + rad) + 1;
+    int y0 = (int)(cy - rad) - 1, y1 = (int)(cy + rad) + 1;
+    if (x0 < cl) x0 = cl;
+    if (y0 < ct) y0 = ct;
+    if (x1 > cr) x1 = cr;
+    if (y1 > cb) y1 = cb;
+    if (x1 > W - 1) x1 = W - 1;
+    if (y1 > H - 1) y1 = H - 1;
+    float soft = rad * 0.62f < 0.7f ? 0.7f : rad * 0.62f;
+    for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++) {
+        float dx = x + 0.5f - cx, dy = y + 0.5f - cy;
+        float d = sqrtf(dx * dx + dy * dy);
+        if (d > rad) continue;
+        float a = strength * clampf((rad - d) / soft, 0, 1) * (ink.a / 255.0f);
+        Color &c = p[y * W + x];
+        float ca = c.a / 255.0f;
+        if (a <= ca) continue;
+        float t = (a - ca) / (1.0f - ca + 1e-4f);   // how much new ink shows here
+        c.r = cl8(c.r + (ink.r - c.r) * t);
+        c.g = cl8(c.g + (ink.g - c.g) * t);
+        c.b = cl8(c.b + (ink.b - c.b) * t);
+        c.a = cl8(a * 255.0f);
+    }
+}
+
+// Catmull-Rom through the control points, so four coarse points make a curve
+// and not a bent wire.
+static void splineAt(const float *px, const float *py, int n, float t, float &ox, float &oy) {
+    if (n == 1) { ox = px[0]; oy = py[0]; return; }
+    float u = t * (n - 1);
+    int i = (int)u; if (i > n - 2) i = n - 2;
+    float f = u - i;
+    int i0 = i - 1 < 0 ? 0 : i - 1, i1 = i, i2 = i + 1, i3 = i + 2 > n - 1 ? n - 1 : i + 2;
+    float f2 = f * f, f3 = f2 * f;
+    float b0 = -0.5f * f3 + f2 - 0.5f * f, b1 = 1.5f * f3 - 2.5f * f2 + 1.0f;
+    float b2 = -1.5f * f3 + 2.0f * f2 + 0.5f * f, b3 = 0.5f * f3 - 0.5f * f2;
+    ox = px[i0] * b0 + px[i1] * b1 + px[i2] * b2 + px[i3] * b3;
+    oy = py[i0] * b0 + py[i1] * b1 + py[i2] * b2 + py[i3] * b3;
+}
+
+// One stroke of the pen, wobbling off course and varying its pressure. Returns
+// the lowest point it reached, which is where a drip would start if this stroke
+// is the one that gets one.
+static void penStroke(Color *p, int W, int H, const float *cxs, const float *cys, int n,
+                      Color ink, float wid, Rng &r, float &lowX, float &lowY,
+                      int cl, int ct, int cr, int cb) {
+    float ph1 = r.f01() * TAU, ph2 = r.f01() * TAU, ph3 = r.f01() * TAU;
+    float wob = wid * (0.55f + r.f01() * 0.7f);     // how far this stroke strays
+    float lean = (r.f01() - 0.5f) * 0.10f;          // and which way it drifts overall
+    int steps = 12 + (int)(n * 9);
+    lowY = -1e9f; lowX = 0;
+    for (int s = 0; s <= steps; s++) {
+        float t = (float)s / steps;
+        float x, y; splineAt(cxs, cys, n, t, x, y);
+        x += sinf(t * 5.3f + ph1) * wob + sinf(t * 11.7f + ph2) * wob * 0.35f + lean * wid * t * 3.0f;
+        y += cosf(t * 4.1f + ph2) * wob * 0.8f + sinf(t * 13.1f + ph3) * wob * 0.25f;
+        // pressure: thin where the hand ran, heavier at the ends and on the
+        // slow parts, plus a little grain so no two strokes weigh the same
+        float ends = 0.55f + 0.45f * sinf(t * 3.14159f);
+        float press = ends * (0.72f + 0.5f * (0.5f + 0.5f * sinf(t * 7.9f + ph3)));
+        float rad = wid * clampf(press, 0.30f, 1.5f);
+        float a = clampf(0.55f + 0.45f * press, 0.25f, 1.0f);
+        inkDab(p, W, H, x, y, rad, ink, a, cl, ct, cr, cb);
+        if (y > lowY) { lowY = y; lowX = x; }
+    }
+}
+
+// Paint ran. One or two per phrase, from the bottom of a stroke, thinning and
+// fading as gravity takes it — the thing that most says "wet paint on a wall"
+// rather than "text drawn on a wall".
+static void inkDrip(Color *p, int W, int H, float x, float y, float wid, Color ink, Rng &r,
+                    int cl, int ct, int cr, int cb) {
+    int len = 6 + r.ri(0, 34);
+    float drift = (r.f01() - 0.5f) * 0.6f;
+    for (int i = 0; i < len; i++) {
+        float t = (float)i / len;
+        float yy = y + i * 0.9f;
+        if (yy > cb) break;
+        inkDab(p, W, H, x + drift * i, yy, wid * (0.62f - 0.42f * t), ink, (1.0f - t) * 0.75f, cl, ct, cr, cb);
+    }
+    if (y + len * 0.9f < cb)   // the bead that gathered at the end and dried there
+        inkDab(p, W, H, x + drift * len, y + len * 0.9f, wid * 0.42f, ink, 0.5f, cl, ct, cr, cb);
+}
+
+// How much room each character takes. Letters are drawn at a jittered height,
+// so the advance has to leave slack or a wide letter runs into its neighbour —
+// "NO CLIP" came out as "NO QIP" before this. A space is nearly a full letter:
+// below that the words stop reading as separate words.
+static float glyphAdvance(char ch) {
+    if (ch == ' ') return 0.92f;
+    if (ch == '.' || ch == ',' || ch == '\'' || ch == ':' || ch == '!') return 0.52f;
+    if (ch == 'I' || ch == '1') return 0.62f;
+    return 1.10f;
+}
+
+// One phrase, laid out left to right on a baseline that is not quite level.
+static void drawScrawl(Color *p, int W, int H, const char *text, float x, float y,
+                       float h, Color ink, Rng &r, int cl, int ct, int cr, int cb) {
+    float pen = x, tilt = (r.f01() - 0.5f) * 0.09f;   // the whole line runs slightly downhill
+    float wid = h * (0.055f + r.f01() * 0.03f);
+    int dripsLeft = r.ri(1, 2);
+    int glyphs = 0;
+    for (const char *c = text; *c; c++) if (*c != ' ') glyphs++;
+    int dripEvery = glyphs > 0 ? glyphs / (dripsLeft + 1) + 1 : 1;
+    int seen = 0;
+    for (const char *c = text; *c; c++) {
+        char ch = *c >= 'a' && *c <= 'z' ? (char)(*c - 32) : *c;   // one shaky case, as on a wall
+        float adv = glyphAdvance(ch) * h * 0.62f;
+        if (ch == ' ') { pen += adv; continue; }
+        const Glyph *g = nullptr;
+        for (const Glyph &cand : GLYPHS) if (cand.ch == ch) { g = &cand; break; }
+        if (!g) { pen += adv; continue; }
+        // every letter its own size and slant — a hand does not repeat itself
+        float gh = h * (0.88f + r.f01() * 0.24f);
+        float slant = (r.f01() - 0.5f) * 0.22f;
+        float base = y + tilt * (pen - x) + (r.f01() - 0.5f) * h * 0.10f;
+        float lowX = 0, lowY = 0, bestLowX = 0, bestLowY = -1e9f;
+        for (int si = 0; si < 3 && g->stroke[si]; si++) {
+            const char *sp = g->stroke[si];
+            int n = (int)(strlen(sp) / 2); if (n < 1) continue;
+            float cxs[16], cys[16];
+            for (int k = 0; k < n && k < 16; k++) {
+                float gx = (sp[k * 2] - '0') / 9.0f, gy = (sp[k * 2 + 1] - '0') / 9.0f;
+                cys[k] = base + gy * gh;
+                cxs[k] = pen + gx * gh * 0.55f - (gy - 0.5f) * slant * gh;   // slant leans the top
+            }
+            penStroke(p, W, H, cxs, cys, n < 16 ? n : 16, ink, wid, r, lowX, lowY, cl, ct, cr, cb);
+            if (lowY > bestLowY) { bestLowY = lowY; bestLowX = lowX; }
+        }
+        seen++;
+        if (dripsLeft > 0 && seen % dripEvery == 0 && r.f01() < 0.75f) {
+            inkDrip(p, W, H, bestLowX, bestLowY, wid, ink, r, cl, ct, cr, cb);
+            dripsLeft--;
+        }
+        pen += adv;
+    }
+}
+
+static float scrawlWidth(const char *text, float h) {
+    float w = 0;
+    for (const char *c = text; *c; c++) {
+        char ch = *c >= 'a' && *c <= 'z' ? (char)(*c - 32) : *c;
+        w += glyphAdvance(ch) * h * 0.62f;
+    }
+    return w;
+}
+
+// wall scrawl atlas: 32 phrases in 32 different hands, 4 x 8 cells of 256x128
 Texture2D makeScrawlTex() {
-    const int W = 512, H = 512;
+    const int W = 1024, H = 1024, CW = W / 4, CH = H / 8;
     Image img = GenImageColor(W, H, BLANK);
-    const char *lines[8] = { "NO CLIP", "dont stare", "day 407", "the exit lies",
-                             "he hears the flares", "keep walking", "it hums at night", "wrong door =)" };
+    Color *p = (Color *)img.data;
+    // Thirty-two of them, so that seeing the same line twice in one run means
+    // something rather than meaning the pool is small. They are all somebody
+    // trying to leave a fact behind: a count, a warning, a rule they worked out.
+    static const char *LINES[32] = {
+        "NO CLIP",              "dont stare",           "day 407",              "the exit lies",
+        "he hears the flares",  "keep walking",         "it hums at night",     "wrong door =)",
+        "i counted 12 doors",   "none of them out",     "turn left. always",    "dont sleep here",
+        "the lights know",      "day 1 again",          "it wears a coat",      "smells like almond",
+        "i was here. was i",    "same room twice",      "no stairs go up",      "hold still :(",
+        "water is a floor",     "dont say your name",   "fire moves it",        "it is taller today",
+        "421 and counting",     "my watch stopped",     "listen for dogs",      "the party never ends",
+        "i can hear the hum",   "there is no 13th",     "follow the pipes",     "help",
+    };
     Rng r(0x5C12ULL);
-    for (int i = 0; i < 8; i++) {
-        int cx = (i % 2) * 256, cy = (i / 2) * 128;
-        Color ink = (i % 3 == 0) ? Color{ 104, 32, 26, 215 } : Color{ 54, 46, 40, 205 };
-        int fs = 36, tw = MeasureText(lines[i], fs);
-        while (tw > 228 && fs > 18) { fs -= 2; tw = MeasureText(lines[i], fs); }
-        int x0 = cx + 128 - tw / 2, y0 = cy + 64 - fs / 2;
-        ImageDrawText(&img, lines[i], x0, y0, fs, ink);
-        ImageDrawText(&img, lines[i], x0 + r.ri(-2, 2), y0 + r.ri(-2, 2), fs,
-                      { ink.r, ink.g, ink.b, 80 });
-        ImageDrawText(&img, lines[i], x0 + r.ri(-2, 2), y0 + r.ri(-2, 2), fs,
-                      { ink.r, ink.g, ink.b, 60 });
+    for (int i = 0; i < 32; i++) {
+        int cx = (i % 4) * CW, cy = (i / 4) * CH;
+        // whoever wrote it used whatever was to hand: dried blood-brown,
+        // charcoal, marker, chalk, a rust-coloured smear
+        static const Color INKS[5] = {
+            { 104, 32, 26, 218 }, { 54, 46, 40, 208 }, { 32, 34, 52, 200 },
+            { 122, 96, 44, 196 }, { 178, 170, 158, 176 },
+        };
+        Color ink = INKS[r.ri(0, 4)];
+        float h = CH * (0.44f + r.f01() * 0.14f);
+        float w = scrawlWidth(LINES[i], h);
+        while (w > CW * 0.86f && h > CH * 0.085f) { h *= 0.92f; w = scrawlWidth(LINES[i], h); }
+        float x0 = cx + (CW - w) * 0.5f + (r.f01() - 0.5f) * CW * 0.04f;
+        float y0 = cy + (CH - h) * 0.5f + (r.f01() - 0.5f) * CH * 0.08f;
+        if (x0 < cx + 3) x0 = cx + 3;
+        drawScrawl(p, W, H, LINES[i], x0, y0, h, ink, r, cx + 2, cy + 2, cx + CW - 3, cy + CH - 3);
     }
     return finishTexture(img, false);
 }

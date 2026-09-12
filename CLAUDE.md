@@ -504,6 +504,13 @@ pass, and both obey the same three rules, learned the hard way:
   edge" test that collision, pathfinding, line of sight and the mesher share.
   Light does not use it: `buildOccupancy` tests `WALL_SOLID` alone, because
   glass stops you but not a fluorescent. Don't reintroduce bare `== 1` / `== 3`.
+- **The scrawl atlas grid lives in two places and they must agree**:
+  `makeScrawlTex` (textures.cpp) lays the phrases out 4 across and 8 down, and
+  `SCRAWL_PHRASES` / the `uvOf` lambda in world.cpp cut the UVs to match. Add a
+  phrase without changing both and walls start showing you half of one line and
+  half of another. The pen clips every dab to its own cell for the same reason —
+  an atlas cell that bleeds puts a stray stroke from a neighbouring phrase on a
+  wall, and bilinear filtering makes one pixel of bleed visible.
 - **A prop's height lives in three places and they must agree**: `addProp`
   builds it (world.cpp), `gatherCellAABBs` gives it a collision box, and
   `Game::bottleShelfY` says how high a carton stands on it. Change one, change
