@@ -21,6 +21,19 @@ fi
 
 echo "==> building rlshim/ from the wheel's cffi headers"
 mkdir -p "$ROOT/rlshim"
+
+# cffi strips the version macros along with every other #define, and the game
+# has to branch on them: raylib 6.0 redefined what SetSoundPan's argument means
+# without renaming it, so a build that cannot tell 5.5 from 6.0 pans every sound
+# to the wrong side and says nothing. Recover the version from the wheel that
+# was just unpacked rather than hardcoding one here — the wheel's first three
+# version components are the raylib release it carries (6.0.1.0 -> 6.0.1).
+RLVER=$(basename "$WHEEL"/raylib-*.dist-info .dist-info | sed 's/^raylib-//')
+RLMAJ=$(echo "$RLVER" | cut -d. -f1)
+RLMIN=$(echo "$RLVER" | cut -d. -f2)
+RLPAT=$(echo "$RLVER" | cut -d. -f3)
+[ -n "$RLMAJ" ] && [ -n "$RLMIN" ] && [ -n "$RLPAT" ] || { echo "cannot read raylib version from $WHEEL"; exit 1; }
+echo "==> wheel carries raylib $RLMAJ.$RLMIN.$RLPAT"
 for h in raylib raymath rlgl; do
     src=$WHEEL/raylib/$h.h.modified
     [ -f "$src" ] || { echo "missing $src"; exit 1; }
@@ -47,6 +60,14 @@ for h in raylib raymath rlgl; do
 #define SHADER_LOC_MAP_DIFFUSE SHADER_LOC_MAP_ALBEDO
 #endif
 DEFS
+        cat <<DEFSVER
+#ifndef RAYLIB_VERSION_MAJOR
+#define RAYLIB_VERSION_MAJOR $RLMAJ
+#define RAYLIB_VERSION_MINOR $RLMIN
+#define RAYLIB_VERSION_PATCH $RLPAT
+#define RAYLIB_VERSION "$RLMAJ.$RLMIN.$RLPAT"
+#endif
+DEFSVER
         echo 'extern "C" {'
         cat "$src"
         # raylib.h.modified's last line is a declaration with a trailing "//"
