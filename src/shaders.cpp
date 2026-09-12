@@ -4,10 +4,11 @@
 const char *WORLD_VS = R"GLSL(
 #version 330
 in vec3 vertexPosition; in vec2 vertexTexCoord; in vec3 vertexNormal; in vec4 vertexColor;
-uniform mat4 mvp;
+uniform mat4 mvp; uniform mat4 matModel; uniform mat4 matNormal;
 out vec3 fragPos; out vec2 fragUV; out vec3 fragN; out vec4 fragC;
 void main(){
-    fragPos = vertexPosition; fragUV = vertexTexCoord; fragN = vertexNormal; fragC = vertexColor;
+    fragPos = (matModel * vec4(vertexPosition, 1.0)).xyz;
+    fragUV = vertexTexCoord; fragN = (matNormal * vec4(vertexNormal, 0.0)).xyz; fragC = vertexColor;
     gl_Position = mvp*vec4(vertexPosition,1.0);
 }
 )GLSL";
@@ -23,6 +24,8 @@ uniform vec3 uEntPos; uniform float uEntDark;      // the hunter kills the light
 uniform vec3 uAmb; uniform vec3 uFogCol; uniform float uFogDen;
 uniform vec3 uLightCol; uniform float uLS; uniform float uLY; uniform float uDead; uniform float uLightMul;
 uniform float uGloss;
+uniform sampler2D texture1; // packed material slopes / gloss mask
+float gGloss;
 uniform sampler2D texture2;      // occupancy grid (material normal-map slot)
 uniform vec2 uOccOrigin;         // world cell coords of texel (0,0)
 uniform float uOccN;             // grid side in cells; 0 = no grid, everything lit
@@ -46,18 +49,15 @@ float vnoise(vec2 p){
     float a = lhash(i), b = lhash(i+vec2(1,0)), c = lhash(i+vec2(0,1)), d = lhash(i+vec2(1,1));
     return mix(mix(a,b,f.x), mix(c,d,f.x), f.y);
 }
-// perturb an axis-aligned face normal with a little procedural surface relief,
-// so flat walls/floors catch the room light instead of reading as dead planes
-vec3 bumpNormal(vec3 P, vec3 N, float scale, float strength){
-    vec3 up = abs(N.y) < 0.9 ? vec3(0.0,1.0,0.0) : vec3(1.0,0.0,0.0);
-    vec3 T = normalize(cross(up, N));
-    vec3 B = cross(N, T);
-    vec2 uvp = vec2(dot(P,T), dot(P,B)) * scale;
-    float e = 0.4;
-    float h0 = vnoise(uvp)        + 0.5*vnoise(uvp*2.7);
-    float hx = vnoise(uvp+vec2(e,0.0)) + 0.5*vnoise(uvp*2.7+vec2(e,0.0));
-    float hy = vnoise(uvp+vec2(0.0,e)) + 0.5*vnoise(uvp*2.7+vec2(0.0,e));
-    return normalize(N - (T*(hx-h0) + B*(hy-h0)) * strength);
+// Reconstruct a tangent frame from the actual UV mapping. This supports both
+// wall orientations, mirrored UVs and steps without adding mesh tangents.
+// Derivatives are evaluated before material branches (GLSL quad coherence).
+vec3 detailNormal(vec3 N, vec2 slope, vec3 dpdx, vec3 dpdy, vec2 duvdx, vec2 duvdy){
+    vec3 q1 = cross(dpdy, N), q2 = cross(N, dpdx);
+    vec3 T = q1 * duvdx.x + q2 * duvdy.x;
+    vec3 B = q1 * duvdx.y + q2 * duvdy.y;
+    float inv = inversesqrt(max(max(dot(T,T), dot(B,B)), 1e-12));
+    return normalize(N - (T * slope.x + B * slope.y) * inv);
 }
 float lightState(vec2 g){
     float h = lhash(g);
@@ -145,7 +145,7 @@ vec3 roomLight(vec3 P, vec3 N){
     vec2 base = floor((P.xz - uLS*0.5)/uLS + 0.5);
     vec3 light = vec3(0.0);
     vec3 V = normalize(uViewPos - P);
-    float shin = mix(20.0, 210.0, uGloss);
+    float shin = mix(20.0, 210.0, gGloss);
     // reflection ray, for picking the point on a panel this surface can actually
     // see a highlight from — see the representative-point note below
     vec3 R = reflect(-V, N);
@@ -235,7 +235,7 @@ vec3 roomLight(vec3 P, vec3 N){
     // 0.10 not 0.005: below about a tenth the lobe is worth a thousandth of the
     // room light and you cannot see it at any exposure, but the levels that are
     // nearly matte were still paying a shadow march per fragment to compute it.
-    if (uGloss > 0.10 && R.y > 0.02){
+    if (gGloss > 0.10 && R.y > 0.02){
         float t = (uLY - P.y) / R.y;
         if (t > 0.0){
             vec3 hit = P + R * t;
@@ -250,7 +250,7 @@ vec3 roomLight(vec3 P, vec3 N){
                 vec3 ld = sp - P;
                 float d2 = dot(ld, ld);
                 float lobe = sheen(N, V, ld*inversesqrt(max(d2,1e-6)), shin)
-                             *uGloss*st*2.6/(1.0 + 0.22*d2);
+                             *gGloss*st*2.6/(1.0 + 0.22*d2);
                 // Work out the lobe before tracing whether the panel is visible,
                 // not after. It is a sharp highlight, so on any given frame it is
                 // nonzero over a small band of the screen — and the trace is a
@@ -294,7 +294,7 @@ vec3 roomLight(vec3 P, vec3 N){
         vec3 fcol = vec3(1.0,0.97,0.86) * fl;
         light += fcol * clamp(dot(N, -fn)*0.7 + 0.3, 0.0, 1.0);
         // the beam skims off wet tile and polished floors too, not just walls
-        if (uGloss > 0.10) light += fcol * (sheen(N, V, -fn, shin) * uGloss * 0.55);
+        if (gGloss > 0.10) light += fcol * (sheen(N, V, -fn, shin) * gGloss * 0.55);
     }
     if (uFlareInt > 0.01){                            // burning flare: orange point light
         vec3 lv2 = uFlarePos - P;
@@ -305,7 +305,7 @@ vec3 roomLight(vec3 P, vec3 N){
         float ndl = clamp(dot(N, Lf)*0.7 + 0.3, 0.0, 1.0);
         vec3 fcol = vec3(1.0,0.42,0.15) * fi;
         light += fcol * ndl;
-        if (uGloss > 0.10) light += fcol * (sheen(N, V, Lf, shin) * uGloss * 0.55);
+        if (gGloss > 0.10) light += fcol * (sheen(N, V, Lf, shin) * gGloss * 0.55);
     }
     gLightLum = dot(light, vec3(0.30,0.59,0.11));
     return light;
@@ -350,6 +350,9 @@ vec3 tonemap(vec3 x){
     return clamp((x*(2.51*x + 0.03))/(x*(2.43*x + 0.59) + 0.14), 0.0, 1.0);
 }
 void main(){
+    vec3 dpdx = dFdx(fragPos), dpdy = dFdy(fragPos);
+    vec2 duvdx = dFdx(fragUV), duvdy = dFdy(fragUV);
+    gGloss = uGloss;
     vec3 col;
     float aOut = 1.0;
     float dist = distance(fragPos, uViewPos);
@@ -390,20 +393,16 @@ void main(){
         }
     } else {
         vec4 texel = texture(texture0, fragUV);
-        // relief on matte surfaces (grimy walls, carpet, concrete); glossy tile
-        // stays smooth, flat decals / contact-shadows don't bump at all
-        // Relief is a world-space bump, which is right for grimy walls and carpet
-        // and wrong for small curved objects — and badly wrong for anything that
-        // moves, because the noise field is fixed in the world and the surface
-        // swims through it. Alpha 254 means "textured, opaque, leave it smooth".
-        float relief = (fragC.a > 0.998 ? 0.45 : 0.0) * clamp(1.0 - uGloss*1.6, 0.0, 1.0);
-        // Past a few metres the bump is finer than a pixel, so it stops reading as
-        // surface and starts reading as crawling noise — and it is six value-noise
-        // taps a fragment to produce it. Fading it out over distance is both the
-        // better picture and the cheaper one; most of the frame is far away.
-        relief *= 1.0 - smoothstep(5.0, 14.0, dist);
+        vec4 detail = texture(texture1, fragUV);
         vec3 Nb = normalize(fragN);
-        if (relief > 0.004) Nb = bumpNormal(fragPos, Nb, 3.3, relief);
+        // Detail is tied to material UVs and mipmaps, so it stays attached to
+        // the surface and filters away at distance instead of crawling. Alpha
+        // 254 still opts out: held objects and flat decals remain smooth.
+        if (fragC.a > 0.998) {
+            vec2 slope = (detail.rg * 255.0 - 128.0) / 127.0;
+            Nb = detailNormal(Nb, slope, dpdx, dpdy, duvdx, duvdy);
+            gGloss *= detail.b;
+        }
         col = texel.rgb * fragC.rgb * roomLight(fragPos, Nb);
         aOut = fragC.a * texel.a;                    // translucent contact shadows + scrawl decals
     }
@@ -436,43 +435,31 @@ float hh(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)))*43758.5453); }
 void main(){
     vec2 uv = fragTexCoord;
     vec2 dir = uv - 0.5;
-    float ca = 0.0012 + uFear*0.0035;               // chromatic aberration
+    float ca = 0.00015 + uFear*0.0025;               // chromatic aberration
     vec3 c;
     c.r = texture(texture0, uv + dir*ca).r;
     c.g = texture(texture0, uv).g;
     c.b = texture(texture0, uv - dir*ca).b;
-    // Three-ring threshold bloom off the fluorescents, warm-tinted. The wide ring
-    // is the one that reads as a fitting glowing into the room rather than a
-    // bright rectangle with a rim; it is cheap because it shares the same 8 angles.
+    // Threshold each sample before filtering: averaging the room first erased
+    // isolated lights while making whole bright walls glow. Twelve fixed taps,
+    // down from twenty, keep the glow restrained and the image readable.
     vec2 pxs = 1.0/vec2(textureSize(texture0, 0));
+    const vec2 offsets[4] = vec2[4](vec2(1,0), vec2(-1,0), vec2(0,1), vec2(0,-1));
     vec3 bl = vec3(0.0);
-    for (int i = 0; i < 8; i++){
-        float a = float(i)*0.7853982;
-        vec2 o = vec2(cos(a), sin(a));
-        bl += texture(texture0, uv + o*pxs*3.5).rgb;
-        bl += texture(texture0, uv + o*pxs*9.0).rgb * 0.6;
-        // The wide ring runs on every other angle. It is the one that reads as a
-        // fitting glowing into the room rather than a bright rectangle with a rim,
-        // but it is also full-screen taps on a software rasteriser, and at this
-        // radius the halo is broad enough that four directions look the same as
-        // eight.
-        if ((i & 1) == 0) bl += texture(texture0, uv + o*pxs*21.0).rgb * 0.64;
+    for (int i = 0; i < 4; i++) {
+        vec2 o = offsets[i] * pxs;
+        bl += max(texture(texture0, uv + o*2.0).rgb - 0.78, 0.0) * 0.50;
+        bl += max(texture(texture0, uv + o*6.0).rgb - 0.78, 0.0) * 0.32;
+        bl += max(texture(texture0, uv + o*15.0).rgb - 0.78, 0.0) * 0.18;
     }
-    bl /= 15.4;
-    vec3 bloom = max(bl - 0.62, 0.0) * vec3(1.10, 1.03, 0.88);   // only the true highlights, faint warm glow
-    c += bloom * 1.15;
+    c += bl * vec3(1.10, 1.03, 0.88) * 0.34;
     // gentle filmic contrast + a touch of saturation, so it's less flat
     vec3 s = c*c*(3.0 - 2.0*c);
     c = mix(c, s, 0.16);
     float lum0 = dot(c, vec3(0.299,0.587,0.114));
     c = mix(vec3(lum0), c, 1.08);
-    // dust motes drifting through the light, brighter where the scene is lit
-    vec2 gp = uv*vec2(48.0, 27.0) + vec2(uTime*0.5, uTime*0.22);
-    vec2 ci = floor(gp), cf = fract(gp) - vec2(hh(ci+0.13), hh(ci+0.27));
-    float mote = smoothstep(0.08, 0.0, length(cf)) * step(0.972, hh(ci));
-    c += vec3(0.95,0.92,0.82) * mote * (0.08 + 0.3*lum0) * (0.7 + 0.3*sin(uTime*3.0 + hh(ci)*40.0));
     float g = hh(uv*vec2(1287.0,721.0) + vec2(fract(uTime*13.71)*61.0, fract(uTime*7.31)*83.0)) - 0.5;
-    c += g * (0.032 + 0.08*uFear);                   // film grain
+    c += g * (0.012 + 0.055*uFear);                   // film grain
     float d = length(dir);
     c *= 1.0 - smoothstep(0.34, 0.95, d)*(0.42 + 0.34*uFear); // vignette
     c *= 0.994 + 0.006*sin(uTime*377.0);             // mains-hum luma shimmer

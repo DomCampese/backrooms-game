@@ -26,3 +26,11 @@ clean:
 	rm -f backrooms
 
 .PHONY: run clean
+
+# Uses the same native renderer as the game; run from shots/regression for captures.
+regression: tools/regression.cpp $(filter-out src/main.cpp,$(SRCS)) $(HDRS)
+	c++ -std=c++17 -O2 -Wall -Wno-missing-field-initializers $(CFLAGS_RL) -Isrc tools/regression.cpp $(filter-out src/main.cpp,$(SRCS)) -o /tmp/backrooms-regression $(LIBS_RL)
+	mkdir -p shots/regression
+	cd shots/regression && /tmp/backrooms-regression
+
+.PHONY: regression

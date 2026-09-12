@@ -61,6 +61,8 @@ enum MatSlot {
     MAT_COUNT,
 };
 
+struct ChalkMark { Vector3 pos; float yaw; };
+
 struct Game {
     // tuning
     static constexpr float PR = 0.34f;        // player radius
@@ -74,12 +76,16 @@ struct Game {
     static constexpr int   ESCAPE_COST = 12;  // doubloons that buy your way out for good
 
     // env/test knobs (BACKROOMS_* — see README)
+    bool benchmark = false, cleanShot = false;
+    float captureTime = -1;
+    std::vector<float> frameSamples;
     const char *shotPath = nullptr;
     int shotFrame = 600;                      // BACKROOMS_SHOTFRAME: capture earlier, for quick looks
 
     // resources
     Texture2D texEntity{}, texPartygoer{}, texProps{}, texScrawl{}, texAO{}, texOcc{}, texDog{},
-              texAlmondWrap{}, texDeck{};
+              texAlmondWrap{}, texDeck{}, texParticle{};
+    Mesh revolverMesh{}, flareMesh{};
     Mesh canMesh{};                            // the almond water can, real geometry
     Mesh deckMesh{}, reelMesh{}, deckLampMesh{};   // the tape player, its reels, its record lamp
     // light-occlusion grid: the floorplan around you, uploaded for the shader to
@@ -90,6 +96,9 @@ struct Game {
     int occOriginI = 0, occOriginK = 0;
     bool occValid = false;
     Texture2D floorTexs[NLEVELS]{}, ceilTexs[NLEVELS]{}, wallTexs[NLEVELS]{};   // per-level surface sets
+    Texture2D floorDetails[NLEVELS]{}, ceilDetails[NLEVELS]{}, wallDetails[NLEVELS]{};
+    std::vector<Texture2D> surfaceDetails; // owns unique maps; levels may share them
+    Texture2D neutralDetail{};
     Shader worldShader{}, postShader{};
     int locTime = -1, locBlackout = -1, locViewPos = -1, locFlash = -1, locFlashDir = -1,
         locAmb = -1, locFogCol = -1, locFogDen = -1, locLightCol = -1, locLS = -1, locLY = -1,
@@ -122,7 +131,7 @@ struct Game {
     // per-frame derived (look/movement feeds weapons, entity, and render)
     Vector3 fwd{ 1, 0, 0 };
     float f2x = 1, f2z = 0, r2x = 0, r2z = 1;
-    bool sprinting = false;
+    bool sprinting = false, sprintExhausted = false;
     float bobAmt = 0, eyeY = 1.62f;
     bool captureClick = false;                // this click grabbed the mouse; don't also fire
     float leanCur = 0, landDip = 0;           // camera feel: strafe lean + landing dip
@@ -173,7 +182,7 @@ struct Game {
     // pickups, currency, chalk, ambient events, records
     std::unordered_set<uint64_t> taken;       // world pickups already grabbed (reset per level)
     std::vector<Vector3> coinsWorld;          // doubloons Clark spills when he goes down
-    std::vector<Vector3> chalk;               // navigation marks
+    std::vector<ChalkMark> chalk;               // navigation marks
     std::unordered_set<uint64_t> poppedBalloons;     // LEVEL FUN ceiling balloons already shot
     std::unordered_set<uint64_t> poppedTableBunches; // and party-table balloon bunches
     struct Confetti { Vector3 pos, vel; float life; Color col; };
@@ -240,6 +249,7 @@ struct Game {
     // drink down on. Shared by the mesher-side render and the pickup test.
     float bottleShelfY(int a, int b);
     void updateDrink(float dt, double now); // run the drinking animation
+    void drawHeldWeapon(const Camera3D &cam);
     void drawCan(Matrix xf);                // one can, lit by the room like anything else
     void drawDrinkCan(const Camera3D &cam); // the can in your hand, mid-drink
     void updateTapeDeck(float dt, double now);       // thread a tape, set the deck down, run the reels
@@ -258,6 +268,7 @@ struct Game {
     // update, in frame order (game.cpp)
     void updateLook();
     void updateMovement(float dt);
+    void updateSprint(bool requested, bool moving, bool crouched, float dt);
     void updateDevKeys(double now);
     void updateWeapons(float dt, double now);
     void updateFlare(float dt, double now);
@@ -285,5 +296,4 @@ struct Game {
     // render (render.cpp)
     void renderScene(double now);             // 3D world into the offscreen target
     void renderUI(double now);                // post pass, viewmodel, HUD, overlays
-    void drawWeaponViewmodel(int sw, int sh, double now);   // the revolver or flare, drawn flat in 2D
 };
