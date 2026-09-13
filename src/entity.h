@@ -21,6 +21,7 @@ struct Dog {
     int hp = 2;
 };
 struct Entity {
+    float vx = 0, vz = 0;        // world velocity, for the lean — he tips into where he is going
     EState st = EState::Hidden;
     float x = 0, z = 0;
     double nextSpawn = 12.0;

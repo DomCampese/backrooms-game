@@ -1417,6 +1417,13 @@ void Game::updateEntity(float dt, double now) {
             if (ent.life > 1.2f) { ent.st = EState::Hidden; ent.nextSpawn = now + 90 + grng.f01() * 60; }
         }
     }
+    // What he is actually doing, measured rather than assumed: states move him in
+    // three different places and each would have to remember to report it.
+    if (dt > 1e-5f) {
+        ent.vx = (ent.x - entPrevX) / dt;
+        ent.vz = (ent.z - entPrevZ) / dt;
+    }
+    entPrevX = ent.x; entPrevZ = ent.z;
     if (ent.st != EState::Hidden) {   // he takes the stairs too, smoothly
         float egt = world.floorY(cellOf(ent.x), cellOf(ent.z));
         ent.dispY += (egt - ent.dispY) * fminf(1, 10 * dt);

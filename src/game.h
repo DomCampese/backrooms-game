@@ -148,6 +148,7 @@ struct Game {
     // long and needs to know. Flipped on every wrap, including the ones that are
     // too far away to be heard.
     int entStepPar = 0;
+    float entPrevX = 0, entPrevZ = 0;         // last frame's position, to derive his velocity
     static constexpr float ENT_STRIDE = 1.05f;   // metres per step — also the footfall spacing
     static constexpr float DOG_STRIDE = 0.85f;   // the pack's, which is quicker and shorter
     float muzzleSmoke = 0;                    // powder haze lingering after a shot
