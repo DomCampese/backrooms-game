@@ -11,9 +11,10 @@ static Wave makeWaveBuf(int frames) {
 }
 static float clampf1(float v) { return v < -1 ? -1 : (v > 1 ? 1 : v); }
 
-Sound makeFootstep(uint32_t seed)
+Sound makeFootstep(uint32_t seed, bool through)
 {
     const int n = (int)(0.22f * SAMPLE_RATE);
+    float wallA = 0, wallB = 0;   // two poles, for the through-a-wall variant
 
     Wave w = makeWaveBuf(n);
     short *d = (short *)w.data;
@@ -60,6 +61,15 @@ Sound makeFootstep(uint32_t seed)
 
         // Soft saturation for punch
         sample = tanhf(sample * 1.45f);
+
+        // Through a wall the transient goes first and everything above a few
+        // hundred Hz goes with it. What is left is the thump, which is exactly
+        // what you hear through a plasterboard partition.
+        if (through) {
+            wallA += 0.055f * (sample - wallA);
+            wallB += 0.055f * (wallA - wallB);
+            sample = wallB * 0.62f;
+        }
 
         d[i] = (short)(clampf1(sample) * 32000.0f);
     }
@@ -264,8 +274,9 @@ Sound makeValveTurn() {
 }
 
 // A bark: a hard glottal burst, a shout of noise-driven formants, a snap shut.
-Sound makeDogBark(uint32_t seed) {
+Sound makeDogBark(uint32_t seed, bool through) {
     int n = (int)(0.42f * SAMPLE_RATE);
+    float wallA = 0, wallB = 0;
     Wave w = makeWaveBuf(n);
     short *d = (short *)w.data;
     Rng r((uint64_t)seed * 7919u + 13u);
@@ -283,6 +294,11 @@ Sound makeDogBark(uint32_t seed) {
         bp += 0.45f * (lp - bp);             // a rough vocal-tract band
         float env = (1.0f - expf(-t * 700.0f)) * expf(-t * 13.0f);
         float s = (voice * (0.75f + 0.25f * bp) + bp * 0.8f) * env;
+        if (through) {   // through the red brick it stops being a bark and becomes a thud
+            wallA += 0.048f * (s - wallA);
+            wallB += 0.048f * (wallA - wallB);
+            s = wallB * 0.70f;
+        }
         d[i] = (short)(clampf1(tanhf(s * 2.1f)) * 31000);
     }
     Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;

@@ -500,7 +500,7 @@ void Game::renderUI(double now) {
     if (inMenu && deathT > 0) {   // the run just ended; the card holds the title screen
         DrawRectangle(0, 0, sw, sh, Fade(Color{ 10, 3, 3, 255 }, 0.88f));
         float a = clampf(deathT > DEATH_CARD - 0.6f ? (DEATH_CARD - deathT) / 0.6f : deathT / 1.0f, 0, 1);
-        hudTextC("YOU DID NOT GET OUT", sw / 2, sh / 3, hud(54), Fade({ 178, 34, 24, 255 }, a));
+        hudTextC(deathTitle, sw / 2, sh / 3, hud(54), Fade({ 178, 34, 24, 255 }, a));
         hudTextC(TextFormat("%s took you on %s", deathBy, LEVELS[deathLevel].name),
                  sw / 2, sh / 3 + hud(74), hud(20), Fade({ 176, 132, 122, 255 }, a * 0.95f));
         hudTextC(TextFormat("%02d:%02d   ·   %d m wandered   ·   %d clark%s put down",

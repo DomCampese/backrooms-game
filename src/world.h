@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cmath>
 #include <unordered_map>
+#include <unordered_set>
 
 constexpr float CELL = 2.0f;           // metres per grid cell
 constexpr int   CCELLS = 16;           // cells per chunk side
@@ -165,6 +166,25 @@ struct World {
     Vector2 findOpenSpot(float x, float z);
     void unloadFar(int pcx, int pcz, int radius);
     void unloadAll();
+    // ---- PAC-03: the place does not stay where you left it.
+    //
+    // The Backrooms is canonically non-Euclidean and this was a fixed grid that
+    // was perfectly, deterministically consistent — the one thing the world
+    // model actively worked against. `shifted` is an overlay of edges that have
+    // become walls since you last looked at them: a doorway you walked through
+    // is a blank wall when you turn round.
+    //
+    // It lands in wallNVal/wallWVal deliberately. Occupancy (and therefore the
+    // lighting), the pathfinder, collision and the mesher all read the walls
+    // through those two functions, so putting it anywhere else would have Clark
+    // and the shadows disagreeing with the geometry. Game::shiftAWall is what
+    // decides when, and only ever picks an edge you cannot currently see.
+    std::unordered_set<uint64_t> shifted;
+    static uint64_t edgeKey(int ci, int ck, bool west) {
+        return (key(ci, ck) << 1) | (west ? 1ull : 0ull);
+    }
+    void shiftEdge(int ci, int ck, bool west);   // wall it off, and rebake the chunk that owns it
+    void rebuildChunk(int cx, int cz);           // drop its meshes so streamChunks bakes it again
 };
 
 Mesh buildRevolverMesh();

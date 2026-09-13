@@ -477,6 +477,50 @@ dead-level shot goes over a dog's back at any range — you have to put the
 crosshair on it, which is the point. `popBalloonsAlongAim` had no sight test at
 all and popped the party through walls; it gates on `lineOfSight` per balloon.
 
+**An `osc()` index is an ownership claim, not a scratch slot.** `AudioSynth::ph[]`
+is one running phase per oscillator, and two signals sharing an index advance it
+at *both* their frequencies — so each one gets the other's detune folded in and
+both come out subtly wrong rather than obviously broken. The hum's new beat
+frequency and the blackout ring were written against 9-12 first, which the L1
+drone and the poolroom water already owned. The header now lists the owners; add
+slots to `ph[]` rather than borrowing one.
+
+**The actors' sprites are sheets now, and the frame count lives in two files.**
+`ENT_FRAMES` / `ENT_ROWS` / `DOG_FRAMES` (textures.h) size the atlas in
+textures.cpp and index the source rect in render.cpp. Disagree and you get a
+sliver of the neighbouring frame down one edge of every sprite, which reads as a
+texture-bleed bug rather than as a count bug. One row is a *full* stride, not
+half of one mirrored: Clark has a real leg and a peg leg, so the halves of his
+gait genuinely differ.
+
+**`DrawBillboardRec` is `DrawBillboardPro` with `origin = size*0.5`.** So any
+draw that wants rotation has to pass exactly that to stay where it was. Both
+`{0,0}` and the obvious "pivot about his boots" of `{0, -size.y/2}` slide the
+sprite most of a body height up the screen and leave it hanging off the ceiling,
+perfectly upright — which reads as a height or a lighting bug and sends you
+looking in the wrong file. Rotation is then about the sprite's middle; on a
+1.96 m billboard at 7 degrees the feet swing about 12 cm, which is not worth
+fighting the API over.
+
+**An actor's gait must come from distance travelled, not from intended speed.**
+`Entity::gait` and `Dog::gait` count footfalls the way the player's `bobPhase`
+does — 1 per stride, an integer is a foot landing — and they drive the walk-cycle
+frame and the footfall sound off the same number, so the frame his boot lands on
+is the frame you hear it. The old `entStepAcc` accumulated `chaseSpd * dt`, so a
+Clark grinding against a wall still sounded like one crossing the room; and it
+lived inside the Chase block, so nothing could animate him in any other state.
+
+**Walls are read through `wallNVal` / `wallWVal`, and that is where the
+non-Euclidean overlay has to land.** `World::shifted` is the set of doorways the
+building has closed behind you (PAC-03). Collision, the pathfinder, line of
+sight, the occupancy grid the shader marches, and the mesher all come through
+those two accessors — put the overlay anywhere else and the lighting and Clark
+disagree with the geometry the player can see. Two consequences to keep: shifting
+an edge must rebake *both* chunks that touch it (`World::shiftEdge` does), and it
+must set `occValid = false`, because `updateOccupancy` only rebuilds after you
+have walked six cells and a wall that appears in between lights as though it
+were not there.
+
 **A pattern inside a tiling texture must have a period that divides its size.**
 The textures are 512 square and repeat. A feature grid at any other pitch —
 form-tie holes every 171 px, brick courses every 42 — is fine inside one copy

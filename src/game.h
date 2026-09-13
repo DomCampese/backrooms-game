@@ -133,6 +133,13 @@ struct Game {
     static constexpr int NBARKS = 3;
     Sound sndBarks[NBARKS]{};                   // the pack, panned to whichever one spoke
     Sound entSteps[4]{};                        // the thing's own footfalls, panned + attenuated
+    // The same two sets again, as heard through geometry. Picked on
+    // lineOfSight at the moment of playback — see AUD-02. Knowing a thing is
+    // near is worth much less than knowing where it is, and a game that plays
+    // the open-corridor sample through two walls is telling you the second
+    // thing when it only knows the first.
+    Sound sndBarksThrough[NBARKS]{};
+    Sound entStepsThrough[4]{};
     AudioSynth synth;
     World world;
     Rng grng{1};
@@ -163,6 +170,18 @@ struct Game {
     // same distance or his legs and his boots disagree.
     static constexpr float ENT_STRIDE = 1.05f;
     static constexpr float DOG_STRIDE = 0.85f;   // shorter and quicker; they are bounding, not walking
+    // How far the reverb's room-size probe marches in each of four directions.
+    // 10 cells is 20 m, which is past anything Level 0 has and short of the
+    // Level 1 halls — so a corridor reads near 0 and a warehouse near 1.
+    static constexpr int ROOM_PROBE = 10;
+    // STK-03: the fraction of the grip meter that is the terminal slide.
+    static constexpr float SLIDE_FROM = 0.10f;
+    // PAC-03: how far out the building is allowed to rearrange itself, and how
+    // often. The gap shortens as the slide deepens, so it starts as something
+    // you are not sure happened and ends as something you cannot keep up with.
+    static constexpr int   SHIFT_RING = 8;
+    static constexpr double SHIFT_GAP_MIN = 9.0;
+    static constexpr double SHIFT_GAP_SPAN = 22.0;
     float muzzleSmoke = 0;                    // powder haze lingering after a shot
 
     // flare weapon: thrown, burns orange, Pirate Clark won't go near one.
@@ -204,10 +223,14 @@ struct Game {
     // in the game that could be lost, which is most of why none of it was
     // frightening. Now it ends the run, and the card says what took you.
     const char *deathBy = "";
+    const char *deathTitle = "YOU DID NOT GET OUT";
     float deathTime = 0; int deathM = 0, deathLevel = 0, deathKills = 0;
     float softTimer = 0;                      // how long you've stood on a soft patch
     int deathCount = 0, escapeCount = 0, killCount = 0, winCount = 0;
     int deepest = 0;                          // deepest level this descent reached
+    bool still = false;                       // under HIDE_ENTER this frame — what the pack listens for
+    float slide = 0;                          // STK-03: how far into the terminal slide, 0..1
+    double nextShift = 0;                     // PAC-03: when the building next moves on you
     int visits[NLEVELS] = { 0 };              // how many times this descent has entered each level
     // Shutting the standpipes pays out a cache of doubloons. That used to be
     // per visit, and the cursed exit (1 in 6) drops you straight back into the
@@ -268,7 +291,12 @@ struct Game {
     bool pipesShut = false;                   // all three closed on this descent
 
     void winRun(double now);                  // stepped through the true way out — reset the descent
-    void dieRun(double now, const char *by);  // something got you: end the run and go back to the title
+    // Something got you: end the run and go back to the title. `title` is the
+    // card's headline — the place taking you is not the same ending as being
+    // caught, and it should not use the same words.
+    void dieRun(double now, const char *by, const char *title = "YOU DID NOT GET OUT");
+    bool shiftAWall();                        // PAC-03: wall off one doorway you cannot see
+    bool packDeaf() const;                    // ENT-04: are you quiet enough for the pack to lose you
     void updateMenu(double now);              // drift the title-screen camera; any key begins
     void startRun(double now);                // leave the menu and start a fresh descent
     // Throw away the current descent and set up a fresh one from Level 0: a new

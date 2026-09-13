@@ -222,13 +222,46 @@ void World::generate(ChunkData &d, int cx, int cz) {
     }
 }
 
+// Both wall lookups consult the shifted-edge overlay first, because every
+// system that cares about walls — collision, the pathfinder, line of sight, the
+// occupancy grid the shader marches, and the mesher — comes through here. Put
+// the overlay anywhere else and the lighting and Clark end up disagreeing with
+// the geometry the player can see. An empty set is the overwhelmingly common
+// case and costs one hash lookup.
 uint8_t World::wallNVal(int ci, int ck) {
+    if (!shifted.empty() && shifted.count(edgeKey(ci, ck, false))) return WALL_SOLID;
     int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
     return data(cx, cz).wallN[ci - cx * CCELLS][ck - cz * CCELLS];
 }
 uint8_t World::wallWVal(int ci, int ck) {
+    if (!shifted.empty() && shifted.count(edgeKey(ci, ck, true))) return WALL_SOLID;
     int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
     return data(cx, cz).wallW[ci - cx * CCELLS][ck - cz * CCELLS];
+}
+
+// Drop a chunk's baked meshes so streamChunks rebuilds it from the current
+// wall values. Everything else about the chunk — its cells, its props — is
+// untouched; only the geometry is stale.
+void World::rebuildChunk(int cx, int cz) {
+    auto it = chunks.find(key(cx, cz));
+    if (it == chunks.end()) return;
+    for (int i = 0; i < MESH_COUNT; i++)
+        if (it->second.meshes[i].vertexCount > 0) {
+            UnloadMesh(it->second.meshes[i]);
+            it->second.meshes[i] = Mesh{};
+        }
+    it->second.built = false;
+}
+
+void World::shiftEdge(int ci, int ck, bool west) {
+    if (!shifted.insert(edgeKey(ci, ck, west)).second) return;   // already shifted
+    // The edge sits on the boundary of its own chunk, so the neighbour on the
+    // far side draws its half of it too — rebake both or you get a wall that
+    // exists from one room and not from the other.
+    int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
+    rebuildChunk(cx, cz);
+    int nx = fdiv(west ? ci - 1 : ci, CCELLS), nz = fdiv(west ? ck : ck - 1, CCELLS);
+    if (nx != cx || nz != cz) rebuildChunk(nx, nz);
 }
 bool World::pillarAt(int ci, int ck) {
     int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
@@ -1268,6 +1301,7 @@ void World::unloadFar(int pcx, int pcz, int radius) {
 }
 
 void World::unloadAll() {
+    shifted.clear();   // a different floor is a different building; it has not moved on you yet
     for (auto &kv : chunks)
         if (kv.second.built)
             for (int i = 0; i < MESH_COUNT; i++)

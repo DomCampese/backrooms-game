@@ -207,11 +207,94 @@ int main() {
         g.dogs[0].st=DState::Gone;
     }
 
+    // ---- he no longer always walks out of the fog (ENT-03). Measured, not
+    // asserted by eye: the claim "sometimes he is already round the corner"
+    // needs a number behind it.
+    {
+        g.applyLevel(0); g.beginDescent(0); g.inMenu=false; g.deathT=0;
+        g.px=40; g.pz=40; g.yaw=0.8f; g.pitch=0; g.updateLook();
+        int near=0, unseen=0, nearUnseen=0, total=400;
+        float dmin=1e9f, dmax=0;
+        for (int i=0;i<total;++i) {
+            g.ent.st=EState::Hidden; g.ent.nextSpawn=0;
+            g.updateEntity(0.001f, 100.0);
+            float dx=g.ent.x-g.px, dz=g.ent.z-g.pz;
+            float d=sqrtf(dx*dx+dz*dz);
+            dmin=fminf(dmin,d); dmax=fmaxf(dmax,d);
+            bool los = g.world.lineOfSight(g.px,g.pz,g.ent.x,g.ent.z);
+            if (d < Game::SPAWN_FAR_MIN) near++;
+            if (!los) unseen++;
+            if (d < Game::SPAWN_FAR_MIN && !los) nearUnseen++;
+        }
+        printf("  ENT-03 arrivals: %d%% inside %.0fm, %d%% out of sight, %d%% BOTH, range %.1f-%.1f m\n",
+               near*100/total, (double)Game::SPAWN_FAR_MIN, unseen*100/total,
+               nearUnseen*100/total, dmin, dmax);
+        // The frightening case — close, and already behind something — has to be
+        // a real share of arrivals, and the old walk-out-of-the-fog one has to
+        // survive alongside it: replacing one fixed ritual with another buys
+        // nothing.
+        assert(nearUnseen > total/5 && near < total*9/10);
+        assert(dmax >= Game::SPAWN_FAR_MIN);
+        g.ent.st=EState::Hidden;
+    }
+
+    // ---- the pack hunts by sound, not by what you are standing behind (ENT-04)
+    {
+        g.still=true;  g.deck.playing=false; g.deck.carried=true;
+        assert(g.packDeaf());                    // dead still: they lose you, cover or not
+        g.still=false; assert(!g.packDeaf());    // moving: they have you
+        g.still=true;  g.deck.playing=true;      // still, but the tape is running in your coat
+        assert(!g.packDeaf());
+        g.deck.carried=false; assert(g.packDeaf());   // ...set it down and it is the deck they want
+        g.deck.playing=false; g.deck.carried=true;
+    }
+
+    // ---- the building moves when you are not looking (PAC-03)
+    {
+        g.applyLevel(0); g.beginDescent(0); g.inMenu=false;
+        g.px=40; g.pz=40; g.py=0; g.eyeY=1.62f; g.updateLook();
+        size_t before = g.world.shifted.size();
+        int moved=0;
+        for (int i=0;i<40;++i) if (g.shiftAWall()) moved++;
+        assert(moved > 0 && g.world.shifted.size() == before + (size_t)moved);
+        // every edge it shifted must now read as a wall through the same
+        // accessors collision, the pathfinder and the mesher all use...
+        for (uint64_t k : g.world.shifted) {
+            bool west = (k & 1ull) != 0;
+            int a = (int)(uint32_t)((k >> 1) >> 32), b = (int)(uint32_t)((k >> 1) & 0xFFFFFFFFull);
+            assert(blocksEdge(west ? g.world.wallWVal(a,b) : g.world.wallNVal(a,b)));
+            // ...and it must not have been one you could see it happen to
+            float cx=a*CELL+1.0f, cz=b*CELL+1.0f;
+            assert(!g.world.lineOfSight(g.px,g.pz,cx,cz));
+        }
+        printf("  PAC-03: %d doorways walled off out of sight, all opaque to wallNVal/wallWVal\n", moved);
+        g.world.shifted.clear();
+    }
+
+    // ---- and the grip meter is an ending now, not a difficulty setting (STK-03)
+    {
+        g.applyLevel(0); g.beginDescent(0); g.inMenu=false; g.deathT=0; g.deathCount=0;
+        g.sanity=0.0f;
+        g.updateAmbience(0.001f, 200.0);
+        assert(g.inMenu && g.deathT>0);
+        assert(strcmp(g.deathBy,"THE PLACE ITSELF")==0);
+        assert(strcmp(g.deathTitle,"YOU STOPPED KEEPING TRACK")==0);   // its own card, not the catch's
+        assert(g.sanity>0.9f);   // beginDescent gave it back
+        g.deathT=0; g.inMenu=false;
+        // and the last tenth is a slide you can feel, not a cliff
+        g.sanity=0.05f; g.updateAmbience(0.001f, 300.0);
+        assert(g.slide>0.4f && g.slide<1.0f);
+        g.sanity=0.5f; g.updateAmbience(0.001f, 300.0);
+        assert(g.slide==0.0f);
+    }
+
     // ---- headless captures must not be able to black out (BUG-08)
     assert(g.noBlackout && g.nextBlackout >= Game::BLACKOUT_NEVER);
 
     printf("PASS sprint recovery, crouch/stationary gating, restart reset, battery retention,\n"
            "     step-height blocking, pitch-aware hit tests, the catch ending the run only out of\n"
-           "     a committed lunge, deterministic captures; 14 visual captures\n");
+           "     a committed lunge, arrivals that are not all from the fog, a pack that hunts by\n"
+           "     sound, a building that moves out of sight, the grip meter as an ending,\n"
+           "     deterministic captures; 21 visual captures\n");
     g.shutdown();
 }
