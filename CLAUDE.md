@@ -561,6 +561,13 @@ pass, and both obey the same three rules, learned the hard way:
   half of another. The pen clips every dab to its own cell for the same reason —
   an atlas cell that bleeds puts a stray stroke from a neighbouring phrase on a
   wall, and bilinear filtering makes one pixel of bleed visible.
+- **A passable edge and an edge with no geometry are different things.**
+  `WALL_DOOR` is passable — `blocksEdge` says no, so pathfinding, line of sight
+  and `buildOccupancy` all let it through, exactly as the bare gap it replaced
+  did — but its jambs are solid and `gatherCellAABBs` gives them their own
+  boxes. Skip that and you walk through the door frame, which reads worse than
+  the gap did. `WALL_EXIT` still has no collision at all, so its jambs are
+  phantom; that is pre-existing, not a pattern to copy.
 - **A prop's height lives in three places and they must agree**: `addProp`
   builds it (world.cpp), `gatherCellAABBs` gives it a collision box, and
   `Game::bottleShelfY` says how high a carton stands on it. Change one, change

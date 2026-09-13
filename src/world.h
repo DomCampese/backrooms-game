@@ -24,6 +24,13 @@ enum WallKind : uint8_t {
     WALL_SOLID  = 1,
     WALL_EXIT   = 2,   // a doorway out of this level
     WALL_WINDOW = 3,   // glass, with nothing behind it
+    // A doorway between two spaces: a 1.3 m opening under a 2.3 m header, with
+    // a frame and a threshold. The generator used to leave these edges simply
+    // absent, which is indistinguishable from open floor — one marked doorway
+    // turned up in 33,282 edges on Level 0, and that one was an exit. Passable,
+    // so blocksEdge() says no; but its jambs are solid, so gatherCellAABBs
+    // gives them boxes and you have to go through the opening.
+    WALL_DOOR   = 4,
 };
 
 // Which piece of furniture, if any, stands in a cell. The generator picks these
