@@ -1,5 +1,6 @@
 #include "world.h"
 #include "util.h"
+#include "textures.h"   // FIXTURES: where each fitting sits in the atlas, and how big it is
 #include <cstring>
 #include <cmath>
 #include <vector>
@@ -617,7 +618,7 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
 void World::ensureMesh(int cx, int cz) {
     ChunkData &d = data(cx, cz);
     if (d.built) return;
-    MB fl, ce, wa, pr, wt, scr, gl, ao;
+    MB fl, ce, wa, pr, wt, scr, gl, ao, fx;
     float wx = cx * CHUNK, wz = cz * CHUNK;
     Color wcol = WHITE;
     // The ceiling gets no world-space relief (alpha 254, not 255). It hangs level
@@ -839,6 +840,122 @@ void World::ensureMesh(int cx, int cz) {
             aoStrip({ gx - WT - 0.006f, wallH, z0 }, { gx - WT - 0.006f, wallH, z1 }, { 0, -AOH, 0 }, { -1, 0, 0 }, AOC);
             aoStrip({ gx + WT + 0.006f, wallH, z1 }, { gx + WT + 0.006f, wallH, z0 }, { 0, -AOH, 0 }, { 1, 0, 0 }, AOC);
         }
+        // ---- the building's fittings. Decals pressed off the wall and ceiling
+        // faces, plus real (if tiny) geometry for the conduit and sprinklers.
+        //
+        // All of it is alpha 254: textured and opaque, but below the relief
+        // threshold. A faceplate is flat moulded plastic — giving it the
+        // world-space relief bump would ripple it like the wall behind it.
+        //
+        // These sit in their own mesh rather than in the props mesh, which is
+        // already the biggest one in a chunk and is indexed with 16-bit indices
+        // that nothing checks for overflow.
+        {
+            uint32_t gi = cx * CCELLS + i, gk = cz * CCELLS + kk;
+            const Color FIXC = { 255, 255, 255, 254 };
+            // A decal on an x-running (north) wall, and on a z-running (west)
+            // one. `plus` picks which of the two faces it hangs on; the UVs
+            // mirror with it, so signage reads the right way round from the
+            // room that can actually see it. Size comes from FIXTURES, which is
+            // also what drew the cell — see textures.h.
+            auto decalN = [&](float xc, float yc, float zf, bool plus, int id) {
+                const FixtureRect &f = FIXTURES[id];
+                float x0 = xc - f.halfW, x1 = xc + f.halfW, y0 = yc - f.halfH, y1 = yc + f.halfH;
+                if (plus) fx.quad({x0,y0,zf},{x1,y0,zf},{x1,y1,zf},{x0,y1,zf},{0,0,1},
+                                  {f.u0,f.v1},{f.u1,f.v1},{f.u1,f.v0},{f.u0,f.v0}, FIXC);
+                else      fx.quad({x1,y0,zf},{x0,y0,zf},{x0,y1,zf},{x1,y1,zf},{0,0,-1},
+                                  {f.u0,f.v1},{f.u1,f.v1},{f.u1,f.v0},{f.u0,f.v0}, FIXC);
+            };
+            auto decalW = [&](float zc, float yc, float xf, bool plus, int id) {
+                const FixtureRect &f = FIXTURES[id];
+                float z0 = zc - f.halfW, z1 = zc + f.halfW, y0 = yc - f.halfH, y1 = yc + f.halfH;
+                if (plus) fx.quad({xf,y0,z1},{xf,y0,z0},{xf,y1,z0},{xf,y1,z1},{1,0,0},
+                                  {f.u0,f.v1},{f.u1,f.v1},{f.u1,f.v0},{f.u0,f.v0}, FIXC);
+                else      fx.quad({xf,y0,z0},{xf,y0,z1},{xf,y1,z1},{xf,y1,z0},{-1,0,0},
+                                  {f.u0,f.v1},{f.u1,f.v1},{f.u1,f.v0},{f.u0,f.v0}, FIXC);
+            };
+            // Which fitting this wall edge carries, if any. Checked in order of
+            // rarity, so a wall that qualifies for two gets the rarer one — an
+            // exit sign beats a grille beats a switch beats an outlet, rather
+            // than a pile of fittings on the one unlucky wall. The heights are
+            // the ones a building actually uses: outlets at the skirting, a
+            // switch at the handle, a return grille up near the ceiling.
+            auto pick = [&](uint32_t h, float &yc, int &id) {
+                if (h % EXITSIGN_RATE == 0) { yc = 2.44f; id = FIX_SIGN;   return true; }
+                if (h % GRILLE_RATE == 0)   { yc = 2.10f; id = FIX_GRILLE; return true; }
+                if (h % SWITCH_RATE == 0)   { yc = 1.22f; id = FIX_SWITCH; return true; }
+                // A pool hall does not have mains sockets at ankle height, and
+                // Level 2 is the one level meant to read as still maintained.
+                if (level != 2 && h % OUTLET_RATE == 0) {
+                    yc = 0.32f;
+                    id = ((h >> 11) % OUTLET_BROKEN == 0) ? FIX_OUTLET_BROKEN : FIX_OUTLET;
+                    return true;
+                }
+                return false;
+            };
+            if (nv == WALL_SOLID) {
+                uint32_t h = ih(gi, gk, seed ^ 0x71F0u);
+                float yc; int id;
+                if (pick(h, yc, id)) {
+                    bool plus = (h & 16) != 0;
+                    float zf = plus ? gz + WT + 0.006f : gz - WT - 0.006f;
+                    decalN(gx + 0.45f + ((h >> 7) & 7) * 0.155f, yc, zf, plus, id);
+                }
+            }
+            if (wv == WALL_SOLID) {
+                uint32_t h = ih(gi, gk, seed ^ 0x71F9u);
+                float yc; int id;
+                if (pick(h, yc, id)) {
+                    bool plus = (h & 16) != 0;
+                    float xf = plus ? gx + WT + 0.006f : gx - WT - 0.006f;
+                    decalW(gz + 0.45f + ((h >> 7) & 7) * 0.155f, yc, xf, plus, id);
+                }
+            }
+            // Ceiling: a supply diffuser lies flat in the tile grid, while a
+            // sprinkler hangs below it on a dropper — flat-on-the-ceiling is
+            // exactly wrong for a sprinkler, which you almost always see from
+            // underneath and off to one side.
+            uint32_t hc = ih(gi, gk, seed ^ 0x71E3u);
+            float ccx = gx + CELL * 0.5f, ccz = gz + CELL * 0.5f;
+            if (hc % DIFFUSER_RATE == 0) {
+                const FixtureRect &f = FIXTURES[FIX_DIFFUSER];
+                float yq = wallH - 0.008f;
+                fx.quad({ccx-f.halfW,yq,ccz-f.halfH},{ccx-f.halfW,yq,ccz+f.halfH},
+                        {ccx+f.halfW,yq,ccz+f.halfH},{ccx+f.halfW,yq,ccz-f.halfH},{0,-1,0},
+                        {f.u0,f.v0},{f.u0,f.v1},{f.u1,f.v1},{f.u1,f.v0}, FIXC);
+            } else if (hc % SPRINK_RATE == 0) {
+                const Color BRASS = { 158, 126, 66, 254 };
+                addSolidBox(fx, ccx-0.016f, wallH-0.085f, ccz-0.016f, ccx+0.016f, wallH, ccz+0.016f, BRASS);
+                addSolidBox(fx, ccx-0.033f, wallH-0.085f, ccz-0.033f, ccx+0.033f, wallH-0.070f, ccz+0.033f, BRASS);
+                addSolidBox(fx, ccx-0.045f, wallH-0.100f, ccz-0.045f, ccx+0.045f, wallH-0.090f, ccz+0.045f, BRASS);
+            }
+            // Conduit runs along the top of a wall. Keyed on a bucket of cells
+            // rather than a single one, so it comes out as a run of six with a
+            // beginning and an end instead of a dotted line of stubs.
+            // Conduit stands on a wall *face*, not inside the wall. The first
+            // version ran it about the wall centreline, ±28 mm on a wall whose
+            // half-thickness is 110, so every run in the building was sealed
+            // inside the plasterboard and nothing was ever drawn. The run hash
+            // picks the face as well as the run, so a run does not change sides
+            // halfway along.
+            const Color STEEL = { 138, 136, 130, 254 };
+            const float CDY = 0.052f;          // how far it stands off the wall
+            float cy = wallH - 0.155f;
+            if (nv == WALL_SOLID) {
+                uint32_t hr = ih(gi / CONDUIT_RUN, gk, seed ^ 0x71C5u);
+                if (hr % 7 == 0) {
+                    float z0 = (hr & 32) ? gz + WT : gz - WT - CDY;
+                    addSolidBox(fx, gx - WT, cy, z0, gx + CELL + WT, cy + 0.046f, z0 + CDY, STEEL);
+                }
+            }
+            if (wv == WALL_SOLID) {
+                uint32_t hr = ih(gi, gk / CONDUIT_RUN, seed ^ 0x71CBu);
+                if (hr % 7 == 0) {
+                    float x0 = (hr & 32) ? gx + WT : gx - WT - CDY;
+                    addSolidBox(fx, x0, cy, gz - WT, x0 + CDY, cy + 0.046f, gz + CELL + WT, STEEL);
+                }
+            }
+        }
         // wall scrawl: rarely, a solid wall carries a phrase left by an earlier
         // wanderer. one of thirty-two, from the 4x8 scrawl atlas, drawn as a
         // decal pressed just off the wall face (level 2 is pristine tile — no
@@ -1002,6 +1119,7 @@ void World::ensureMesh(int cx, int cz) {
     d.meshes[MESH_PROPS]   = pr.bake();
     d.meshes[MESH_WATER]   = wt.bake();
     d.meshes[MESH_SCRAWL]  = scr.bake();
+    d.meshes[MESH_FIXTURES] = fx.bake();
     d.meshes[MESH_GLASS]   = gl.bake();
     d.meshes[MESH_AO]      = ao.bake();
     d.built = true;

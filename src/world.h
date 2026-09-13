@@ -12,6 +12,20 @@ constexpr int   CCELLS = 16;           // cells per chunk side
 // per solid wall edge and applies to both orientations, so a corridor of ten
 // cells offers about twenty chances. SCRAWL_PHRASES must match the atlas built
 // by makeScrawlTex (4 columns x 8 rows) — change one and change the other.
+// How often the building's fittings turn up. These are rarities in the same
+// sense the scrawl is, except an outlet is meant to be ordinary: canon names
+// "scattered electrical outlets" and the eye needs something of known size to
+// measure a corridor against, so they are common and everything else is not.
+// All are per solid wall edge, both orientations.
+constexpr uint32_t OUTLET_RATE   = 5;
+constexpr uint32_t OUTLET_BROKEN = 4;    // one outlet in this many has lost its cover
+constexpr uint32_t SWITCH_RATE   = 23;
+constexpr uint32_t GRILLE_RATE   = 27;
+constexpr uint32_t EXITSIGN_RATE = 97;
+constexpr uint32_t SPRINK_RATE   = 11;   // per ceiling cell
+constexpr uint32_t DIFFUSER_RATE = 13;   // per ceiling cell
+constexpr uint32_t CONDUIT_RUN   = 6;    // cells per conduit run, so runs are runs
+
 constexpr uint32_t SCRAWL_RATE = 40;
 constexpr uint32_t SCRAWL_PHRASES = 32;
 constexpr float CHUNK = CELL * CCELLS;
@@ -57,6 +71,7 @@ enum ChunkMesh {
     MESH_PROPS,
     MESH_WATER,
     MESH_SCRAWL,      // graffiti decals, pressed just off the wall faces
+    MESH_FIXTURES,    // outlets, grilles, diffusers, signs — and the conduit/sprinkler bodies
     MESH_GLASS,       // window panes
     MESH_AO,          // baked contact-shadow gradients in every crease
     MESH_COUNT,

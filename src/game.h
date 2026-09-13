@@ -55,6 +55,7 @@ enum MatSlot {
     MAT_WALLS,
     MAT_PROPS,
     MAT_SCRAWL,
+    MAT_FIXTURES,
     MAT_AO,
     MAT_CAN,
     MAT_DECK,
@@ -89,7 +90,7 @@ struct Game {
     int shotFrame = 600;                      // BACKROOMS_SHOTFRAME: capture earlier, for quick looks
 
     // resources
-    Texture2D texEntity{}, texPartygoer{}, texProps{}, texScrawl{}, texAO{}, texOcc{}, texDog{},
+    Texture2D texEntity{}, texPartygoer{}, texProps{}, texScrawl{}, texFixtures{}, texAO{}, texOcc{}, texDog{},
               texAlmondWrap{}, texDeck{}, texParticle{};
     Mesh revolverMesh{}, revolverCylinderMesh{}, flareMesh{};
     Mesh canMesh{};                            // the almond water can, real geometry

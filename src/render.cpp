@@ -102,6 +102,8 @@ void Game::renderScene(double now) {
             if (chunk.meshes[m].vertexCount > 0) DrawMesh(chunk.meshes[m], mats[m], ident);
         if (chunk.meshes[MESH_SCRAWL].vertexCount > 0)
             DrawMesh(chunk.meshes[MESH_SCRAWL], mats[MAT_SCRAWL], ident);
+        if (chunk.meshes[MESH_FIXTURES].vertexCount > 0)
+            DrawMesh(chunk.meshes[MESH_FIXTURES], mats[MAT_FIXTURES], ident);
     }
     // Share the frustum test with transparent geometry, and blend distant chunks
     // first. Within a chunk, the existing AO / water / glass order is retained.
