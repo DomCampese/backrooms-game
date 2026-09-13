@@ -347,6 +347,8 @@ void Game::beginDescent(double now) {
     deck = TapeDeck{}; if (IsSoundPlaying(sndVoice)) StopSound(sndVoice);
     escapeCount = 0; killCount = 0; distWalked = 0;
     deepest = level;
+    for (int &v : visits) v = 0;   // a new descent gets the levels back as they were authored
+    pipesPaid = false;
     // deathCount is deliberately NOT reset here: a death *is* the end of a
     // descent, so a per-descent count of them is always 0 or 1. It tallies the
     // runs this session has cost you, which is what the death card reports —
@@ -363,6 +365,12 @@ void Game::beginDescent(double now) {
 void Game::applyLevel(int lv) {
     level = lv;
     if (lv > deepest) deepest = lv;   // how far down this descent got, for the records
+    // Which time this is, this descent. Read before the increment, so the first
+    // arrival is visit 0 and a fresh descent at a given seed still generates
+    // exactly the maze it always did — which is what keeps the regression
+    // captures comparable across this change.
+    world.visit = (unsigned)visits[lv];
+    visits[lv]++;
     // no carton carries through a doorway — but one already raised has been paid
     // for, so settle it before dropping the animation rather than eating it
     if (drinkT > 0 && !drinkLanded) sanity = clampf(sanity + 0.34f + 0.04f * level, 0.0f, 1.0f);
@@ -431,9 +439,9 @@ bool Game::bottleAt(int a, int b) {
         // left standing on the furniture. Far likelier than on bare floor,
         // because a table is where a person puts a drink down.
         if (bottleShelfY(a, b) < 0) return false;
-        return ih(a, b, (uint32_t)world.seed ^ 0xA1A2u) % 4 == 0;
+        return ih(a, b, pickupSalt() ^ 0xA1A2u) % 4 == 0;
     }
-    return ih(a, b, (uint32_t)world.seed ^ 0xA1A1u) % 137 == 0;
+    return ih(a, b, pickupSalt() ^ 0xA1A1u) % 137 == 0;
 }
 
 // How fast each place works on you: meter fraction per second, standing still in
@@ -475,19 +483,29 @@ Pickup Game::pickupAt(int a, int b) {
     return Pickup::None;
 }
 
+// The loose-item hashes keyed on world.seed alone — no level, no visit — so
+// Level 0 and the Red Halls laid their pickups in the same cells as each
+// other, and walking the exit loop back round found every one of them exactly
+// where it had been. Level 0 on its first visit still hashes to the bare seed,
+// so the world a fresh descent opens on is unchanged.
+uint32_t Game::pickupSalt() const {
+    return (uint32_t)world.seed ^ ((uint32_t)level * 0x9E3779B9u)
+                                ^ (world.visit * 0x85EBCA6Bu);
+}
+
 bool Game::coinAt(int a, int b) {
     if (world.pillarAt(a, b) || world.propAt(a, b) || world.poolAt(a, b)) return false;
-    return ih(a, b, (uint32_t)world.seed ^ 0xC01Du) % 449 == 0;
+    return ih(a, b, pickupSalt() ^ 0xC01Du) % 449 == 0;
 }
 
 bool Game::batteryAt(int a, int b) {
     if (world.pillarAt(a, b) || world.propAt(a, b) || world.poolAt(a, b)) return false;
-    return ih(a, b, (uint32_t)world.seed ^ 0xBA77u) % 379 == 0;
+    return ih(a, b, pickupSalt() ^ 0xBA77u) % 379 == 0;
 }
 
 bool Game::tapeAt(int a, int b) {
     if (world.pillarAt(a, b) || world.propAt(a, b) || world.poolAt(a, b)) return false;
-    return ih(a, b, (uint32_t)world.seed ^ 0x7A9Eu) % 401 == 0;
+    return ih(a, b, pickupSalt() ^ 0x7A9Eu) % 401 == 0;
 }
 
 // Furniture with enough bulk to tuck in beside: crouch within reach of one of
@@ -507,7 +525,7 @@ bool Game::hideSpotAt(int a, int b) {
 bool Game::balloonAt(int a, int b, Vector3 &out) {
     if (level != 4) return false;
     if (poppedBalloons.count(cellKey2(a, b))) return false;
-    uint32_t h = ih(a, b, (uint32_t)world.seed ^ 0xBA11u);
+    uint32_t h = ih(a, b, pickupSalt() ^ 0xBA11u);
     if (h % 17 != 0 || world.pillarAt(a, b)) return false;
     out = { a * CELL + 1.0f + (((h >> 4) & 7) / 7.0f - 0.5f) * 0.9f,
             world.wallH - 0.21f,
@@ -519,7 +537,7 @@ bool Game::balloonAt(int a, int b, Vector3 &out) {
 // adds is left off — it's tiny next to the hit radius, so aim stays honest).
 int Game::tableBalloonBunch(int a, int b, Vector3 *pos, Color *cols, Vector3 &tie) {
     if (level != 4 || world.propAt(a, b) != PROP_PARTY_TABLE) return 0;
-    uint32_t h = ih(a, b, (uint32_t)world.seed ^ 0x8A11u);
+    uint32_t h = ih(a, b, pickupSalt() ^ 0x8A11u);
     if (h % 3 != 0) return 0;                       // most tables, not all
     float tx = a * CELL + 1.0f, tz = b * CELL + 1.0f;
     float ty = world.floorY(a, b) + 0.74f;          // knotted at the tabletop
@@ -584,7 +602,7 @@ void Game::popBalloonsAlongAim() {
                     if (!world.lineOfSight(px, pz, bp.x, bp.z)) continue;
                     poppedBalloons.insert(cellKey2(ca, cb));
                     SetSoundPitch(sndPop, 0.9f + grng.f01() * 0.3f); SetSoundPan(sndPop, panFor(0)); PlaySound(sndPop);
-                    burst(bp, PARTY[(ih(ca, cb, (uint32_t)world.seed ^ 0xBA11u) >> 10) % 5], 16);
+                    burst(bp, PARTY[(ih(ca, cb, pickupSalt() ^ 0xBA11u) >> 10) % 5], 16);
                     return;
                 }
             }
@@ -1288,10 +1306,21 @@ void Game::updateInteraction() {
                 if ((int)valvesTurned.size() >= VALVES_NEEDED && !pipesShut) {
                     pipesShut = true;
                     PlaySound(sndWin);
-                    for (int c2 = 0; c2 < 9; c2++) {   // the pipes give up their cache
-                        float aa = c2 * 0.698f + grng.f01();
-                        float rr = 1.2f + grng.f01() * 1.1f;
-                        coinsWorld.push_back({ px + cosf(aa) * rr, 0, pz + sinf(aa) * rr });
+                    // The cache is there once a descent, not once a visit. It
+                    // pays 9 against an ESCAPE_COST of 12, and a cursed exit
+                    // (1 in 6) drops you straight back into the Red Halls — so
+                    // paying per visit let you bank your way out on laps of the
+                    // exit loop without ever meeting Clark, which is the exact
+                    // opposite of having to fight him to earn the way out. The
+                    // pipes still go quiet on a later visit; they just have
+                    // nothing left in them.
+                    if (!pipesPaid) {
+                        pipesPaid = true;
+                        for (int c2 = 0; c2 < 9; c2++) {   // the pipes give up their cache
+                            float aa = c2 * 0.698f + grng.f01();
+                            float rr = 1.2f + grng.f01() * 1.1f;
+                            coinsWorld.push_back({ px + cosf(aa) * rr, 0, pz + sinf(aa) * rr });
+                        }
                     }
                 }
             }

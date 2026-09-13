@@ -115,6 +115,14 @@ Mesh buildDeckLampMesh();
 struct World {
     unsigned seed = 1337;
     int level = 0;           // 0 = Level 0, 1 = Level 1 (garage), 2 = Poolrooms, 3 = Red Halls, 4 = LEVEL FUN
+    // Which visit to this level, this descent — 0 the first time you arrive.
+    // Mixed into the chunk seed so coming back gives you a genuinely different
+    // maze rather than the one you already stripped. The chunk seed was
+    // seed + level*K alone, so Level 0 regenerated identically every time you
+    // returned to it and the exit loop 0 -> 1 -> 2 -> 4 -> 0 put every pickup
+    // back where it was. At visit 0 the mix is a no-op, so a fresh descent at a
+    // given seed still produces exactly the maze it always did.
+    unsigned visit = 0;
     float wallH = 3.0f;
     bool exitTest = false;   // BACKROOMS_EXITS env: exits everywhere, for visual testing
     std::unordered_map<uint64_t, ChunkData> chunks;

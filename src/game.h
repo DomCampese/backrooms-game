@@ -197,6 +197,12 @@ struct Game {
     float softTimer = 0;                      // how long you've stood on a soft patch
     int deathCount = 0, escapeCount = 0, killCount = 0, winCount = 0;
     int deepest = 0;                          // deepest level this descent reached
+    int visits[NLEVELS] = { 0 };              // how many times this descent has entered each level
+    // Shutting the standpipes pays out a cache of doubloons. That used to be
+    // per visit, and the cursed exit (1 in 6) drops you straight back into the
+    // Red Halls — 9 doubloons a lap against an ESCAPE_COST of 12, so you could
+    // bank your way out without ever meeting Clark. Once per descent.
+    bool pipesPaid = false;
     float winTime = 0; int winM = 0, winKills = 0;   // stats frozen for the escape screen
     float distWalked = 0;
     double runStart = 0;
@@ -258,6 +264,10 @@ struct Game {
     // maze, you back at the start of it, gear and tallies reset. Records and the
     // win count survive, because those belong to the player rather than the run.
     void beginDescent(double now);
+    // Salt for the loose-item hashes: the seed, plus which level and which
+    // visit. It was world.seed alone, so every level put its cartons and
+    // doubloons in the same cells and every revisit put them all back.
+    uint32_t pickupSalt() const;
     double blackoutIn(double now, double lead, double span);   // next blackout, or never
 
     void init();

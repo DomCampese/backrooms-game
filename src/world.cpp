@@ -73,8 +73,12 @@ void World::generate(ChunkData &d, int cx, int cz) {
     memset(d.pool, 0, sizeof(d.pool));
     memset(d.elev, 0, sizeof(d.elev));
     uint64_t k = key(cx, cz);
-    Rng rng(hash64(k ^ ((uint64_t)seed + (uint64_t)level * 0x51ED270Bu) * 0x9E3779B97F4A7C15ULL));
-    bool openChunk = (hash64(k ^ 0xA11CEULL ^ (uint64_t)seed) & 7) == 0;   // occasional open plaza
+    Rng rng(hash64(k ^ ((uint64_t)seed + (uint64_t)level * 0x51ED270Bu
+                        + (uint64_t)visit * 0x2545F4914F6CDD1DULL) * 0x9E3779B97F4A7C15ULL));
+    // the plazas have to move with the rest of it, or every revisit has its
+    // open rooms in the same places and the maze still feels like the old one
+    bool openChunk = (hash64(k ^ 0xA11CEULL ^ (uint64_t)seed
+                             ^ ((uint64_t)visit * 0xD1B54A32D192ED03ULL)) & 7) == 0;   // occasional open plaza
     int nseg = level == 0 ? 12 + rng.ri(0, 5) : level == 1 ? 7 + rng.ri(0, 4)
              : level == 4 ? 9 + rng.ri(0, 4) : 5 + rng.ri(0, 3);
     if (openChunk) nseg = 2 + rng.ri(0, 2);
