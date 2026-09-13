@@ -131,179 +131,260 @@ Texture2D makeCeilingTex() {
 }
 
 // PIRATE CLARK: tricorn hat, eyepatch strap, one glowing eye, hook hand, peg leg
+// PIRATE CLARK, as a sprite sheet rather than a single cel.
+//
+// He used to be one fixed 128x256 image drawn at a fixed size, so a thing that
+// glides at you at 3.3 m/s never moved its legs — a cardboard cutout on a
+// trolley, which undid the work the state machine, the corner-routing BFS, the
+// travelling pool of dead light and the panned footfalls were all doing.
+//
+// The sheet is ENT_FRAMES across by ENT_ROWS down:
+//   columns: one full stride. Not half of one mirrored — he has a real left leg
+//            and a peg right leg, so the two halves of his gait genuinely differ
+//            and mirroring would read as a limp in the wrong foot.
+//   rows:    0 = head down the corridor, 1 = head come round onto you. Row 1 is
+//            selected off ent.gaze, which is the timer about to tip him into a
+//            chase, so the moment his face turns is an honest tell rather than
+//            decoration.
 Texture2D makeEntityTex() {
-    const int W = 128, H = 256;
+    const int FW = 128, FH = 256, W = FW * ENT_FRAMES, H = FH * ENT_ROWS;
     Image img = GenImageColor(W, H, BLANK);
     Color *p = (Color *)img.data;
-    auto put = [&](int x, int y, Color c) { if (x >= 0 && x < W && y >= 0 && y < H) p[y * W + x] = c; };
+    int ox = 0, oy = 0;   // origin of the cel being drawn
+    auto put = [&](int x, int y, Color c) {
+        x += ox; y += oy;
+        if (x >= ox && x < ox + FW && y >= oy && y < oy + FH) p[y * W + x] = c;
+    };
     auto hspan = [&](int y, float cx, float halfw, Color c) {
         for (int x = (int)(cx - halfw); x <= (int)(cx + halfw); x++) put(x, y, c);
+    };
+    auto putIf = [&](int x, int y, Color c) {
+        x += ox; y += oy;
+        if (x >= ox && x < ox + FW && y >= oy && y < oy + FH && p[y * W + x].a) p[y * W + x] = c;
     };
     Color body = { 13, 11, 10, 255 };
     Color hat  = { 18, 15, 13, 255 };
     Color wood = { 62, 48, 33, 255 };
-    for (int y = 2; y < 252; y++) {
-        float wob = (vnoise2(0.05f * y, 3.7f, 77u) - 0.5f) * 7.0f;
-        float rag = (vnoise2(0.35f * y, 9.1f, 88u) - 0.5f) * 2.5f;
-        float cx = 64 + wob * 0.35f;
-        if (y >= 2 && y < 16) hspan(y, cx, 10 + (y - 2) * 0.35f + rag * 0.5f, hat);   // hat crown
-        if (y >= 10 && y < 16) {                                                     // upturned brim corners
-            for (int s = -1; s <= 1; s += 2)
-                for (int x = (int)(cx + s * 20); x != (int)(cx + s * 28); x += s) put(x, y, hat);
-        }
-        if (y >= 16 && y < 22) hspan(y, cx, 27 + rag * 0.5f, hat);                   // brim
-        if (y >= 22 && y <= 52) {                                                    // head
-            float dy = (y - 36) / 17.0f;
-            if (dy * dy < 1.0f) hspan(y, cx, 15.0f * sqrtf(1 - dy * dy) + rag, body);
-        }
-        if (y >= 44 && y <= 74) {                                                    // long ragged beard
-            float br = vnoise2(0.4f * y, 17.3f, 91u);
-            if (br > 0.30f) hspan(y, cx, 13.0f * (1.0f - (y - 44) / 34.0f) + rag, body);
-        }
-        if (y > 56 && y <= 66) hspan(y, cx, 7 + rag, body);                          // neck
-        if (y > 62 && y <= 165) {                                                    // long coat, flared hem
-            float t = (y - 62) / 103.0f;
-            float halfw = (t < 0.10f) ? 12 + t * 110 : (y < 150 ? 23 - 5 * t : 22 + (y - 150) * 0.35f);
-            float hem = (y > 158) ? (vnoise2(0.6f * y, 5.5f, 71u) - 0.5f) * 4 : 0;
-            hspan(y, cx, halfw + rag + hem, body);
-        }
-        if (y > 68 && y <= 190) {                                                    // arms
-            float t = (y - 68) / 122.0f;
-            float off = 24 + 7 * t;
-            hspan(y, cx - off, 3.6f + rag * 0.5f, body);
-            if (y <= 184) hspan(y, cx + off, 3.6f + rag * 0.5f, body);
-        }
-        if (y > 165 && y < 252) {                                                    // legs: boot + peg
-            float t = (y - 165) / 87.0f;
-            hspan(y, cx - 10 + wob * 0.2f, 5.8f - 1.2f * t + rag * 0.5f, body);      // left: real leg
-            if (y > 244) hspan(y, cx - 10 + wob * 0.2f, 8, body);                    // boot
-            if (y <= 185) hspan(y, cx + 10 + wob * 0.2f, 5.8f + rag * 0.5f, body);   // right: stump...
-            else hspan(y, cx + 10 + wob * 0.2f, 2.4f, wood);                         // ...then peg leg
-        }
-    }
-    // eyepatch strap across the face
-    for (int x = 46; x <= 82; x++) {
-        int y = 30 + (x - 46) / 9;
-        if (p[y * W + x].a) { p[y * W + x] = { 58, 52, 46, 255 }; p[(y + 1) * W + x] = { 48, 43, 38, 255 }; }
-    }
-    // single glowing eye (right side; left is under the patch) — brighter for the close-ups
-    {
-        float ex = 64 + 7.5f, ey = 36;
-        for (int dy = -7; dy <= 7; dy++) for (int dx = -7; dx <= 7; dx++) {
-            float d = sqrtf((float)(dx * dx + dy * dy));
-            int x = (int)(ex + dx), y = (int)(ey + dy);
-            if (x < 0 || x >= W || y < 0 || y >= H || p[y * W + x].a == 0) continue;
-            if (d < 3.0f) p[y * W + x] = { 244, 238, 214, 255 };
-            else if (d < 7.0f) {
-                float t = expf(-(d - 3.0f) * 1.0f) * 0.6f;
-                Color &c = p[y * W + x];
-                c.r = cl8(c.r + 205 * t); c.g = cl8(c.g + 195 * t); c.b = cl8(c.b + 160 * t);
+
+    for (int row = 0; row < ENT_ROWS; row++)
+    for (int f = 0; f < ENT_FRAMES; f++) {
+        ox = f * FW; oy = row * FH;
+        bool facing = (row == 1);                       // head come round onto you
+        float ph = (float)f / ENT_FRAMES;               // 0..1 through one stride
+        float sw = sinf(ph * 6.2831853f);               // +1 = real leg forward
+        // The body dips at each footfall, so twice per stride, and the low point
+        // sits on the integer gait phase — the same place updateEntity fires his
+        // footfall sound. Animation and audio are then locked by construction.
+        float dip = -cosf(ph * 2.0f * 6.2831853f);      // -1 at each plant
+        int bob = (int)(dip * 1.5f + 0.5f);
+        float legL = sw * 5.0f, legR = -sw * 5.0f;      // real leg / peg leg swing
+        float armL = -sw * 3.0f, armR = sw * 3.0f;      // arms counter-swing
+        float hunch = facing ? 2.0f : 0.0f;             // shoulders come up when he looks
+
+        for (int y = 2; y < 252; y++) {
+            int yy = y + bob;
+            float wob = (vnoise2(0.05f * y, 3.7f, 77u) - 0.5f) * 7.0f;
+            float rag = (vnoise2(0.35f * y, 9.1f, 88u) - 0.5f) * 2.5f;
+            float cx = 64 + wob * 0.35f;
+            if (y >= 2 && y < 16) hspan(yy, cx, 10 + (y - 2) * 0.35f + rag * 0.5f, hat);   // hat crown
+            if (y >= 10 && y < 16) {                                                       // upturned brim corners
+                for (int s = -1; s <= 1; s += 2)
+                    for (int x = (int)(cx + s * 20); x != (int)(cx + s * 28); x += s) put(x, yy, hat);
+            }
+            if (y >= 16 && y < 22) hspan(yy, cx, 27 + rag * 0.5f, hat);                    // brim
+            if (y >= 22 && y <= 52) {                                                      // head
+                float dy = (y - 36) / 17.0f;
+                // Turned onto you the head reads narrower and squarer than it does
+                // in profile; that alone is most of the "it has noticed me".
+                float hw = facing ? 13.5f : 15.0f;
+                if (dy * dy < 1.0f) hspan(yy, cx, hw * sqrtf(1 - dy * dy) + rag, body);
+            }
+            if (y >= 44 && y <= 74) {                                                      // long ragged beard
+                float br = vnoise2(0.4f * y, 17.3f, 91u);
+                if (br > 0.30f) hspan(yy, cx, 13.0f * (1.0f - (y - 44) / 34.0f) + rag, body);
+            }
+            if (y > 56 && y <= 66) hspan(yy, cx, 7 + rag, body);                           // neck
+            if (y > 62 && y <= 165) {                                                      // long coat, flared hem
+                float t = (y - 62) / 103.0f;
+                float halfw = (t < 0.10f) ? 12 + t * 110 : (y < 150 ? 23 - 5 * t : 22 + (y - 150) * 0.35f);
+                float hem = (y > 158) ? (vnoise2(0.6f * y, 5.5f, 71u) - 0.5f) * 4 : 0;
+                // the hem trails the legs rather than leading them
+                float sway = (y > 140) ? sw * 2.2f * ((y - 140) / 25.0f) : 0.0f;
+                hspan(yy, cx + sway, halfw + hunch * (t < 0.15f ? 1.0f : 0.0f) + rag + hem, body);
+            }
+            if (y > 68 && y <= 190) {                                                      // arms
+                float t = (y - 68) / 122.0f;
+                float off = 24 + 7 * t;
+                hspan(yy, cx - off + armL * t, 3.6f + rag * 0.5f, body);
+                if (y <= 184) hspan(yy, cx + off + armR * t, 3.6f + rag * 0.5f, body);
+            }
+            if (y > 165 && y < 252) {                                                      // legs: boot + peg
+                float t = (y - 165) / 87.0f;
+                float sL = legL * t, sR = legR * t;    // swing from the hip, not the ankle
+                hspan(yy, cx - 10 + wob * 0.2f + sL, 5.8f - 1.2f * t + rag * 0.5f, body);  // left: real leg
+                if (y > 244) hspan(yy, cx - 10 + wob * 0.2f + sL, 8, body);                // boot
+                if (y <= 185) hspan(yy, cx + 10 + wob * 0.2f + sR, 5.8f + rag * 0.5f, body);// right: stump...
+                else hspan(yy, cx + 10 + wob * 0.2f + sR, 2.4f, wood);                     // ...then peg leg
             }
         }
-    }
-    // hook where the right hand should be
-    {
-        float hx = 64 + 31, hy = 194;
-        for (int dy = -6; dy <= 8; dy++) for (int dx = -7; dx <= 7; dx++) {
-            float d = sqrtf((float)(dx * dx + dy * dy));
-            if (fabsf(d - 5.0f) < 1.4f && dy > -3) put((int)(hx + dx), (int)(hy + dy), { 150, 150, 158, 255 });
+        // eyepatch strap across the face
+        for (int x = 46; x <= 82; x++) {
+            int y = 30 + (x - 46) / 9 + bob;
+            if (p[(y + oy) * W + x + ox].a) {
+                p[(y + oy) * W + x + ox] = { 58, 52, 46, 255 };
+                p[(y + 1 + oy) * W + x + ox] = { 48, 43, 38, 255 };
+            }
         }
-        for (int y = 186; y < 191; y++) hspan(y, hx, 2, { 120, 120, 126, 255 });     // hook base
-        for (int q = -1; q <= 1; q++) put((int)(hx + 4), (int)(hy + q), { 224, 226, 234, 255 }); // glint
-    }
-    // the movie-poster details: skull on the hat, bandolier, brass buttons
-    auto putIf = [&](int x, int y, Color c) {
-        if (x >= 0 && x < W && y >= 0 && y < H && p[y * W + x].a) p[y * W + x] = c;
-    };
-    {   // bone-white skull emblem, crossbones behind
-        for (int s = -1; s <= 1; s += 2)
-            for (int t = 2; t <= 7; t++) { putIf(64 + s * t, 7 + t, { 188, 180, 156, 255 }); putIf(64 + s * t, 8 + t, { 172, 164, 140, 255 }); }
-        for (int dy = -3; dy <= 3; dy++) for (int dx = -3; dx <= 3; dx++)
-            if (dx * dx + dy * dy * 1.6f < 10.5f) putIf(64 + dx, 8 + dy, { 208, 199, 172, 255 });
-        putIf(62, 7, { 25, 20, 16, 255 }); putIf(63, 7, { 25, 20, 16, 255 });   // sockets
-        putIf(65, 7, { 25, 20, 16, 255 }); putIf(66, 7, { 25, 20, 16, 255 });
-        for (int x = 62; x <= 66; x++) putIf(x, 11, (x & 1) ? Color{ 30, 24, 18, 255 } : Color{ 196, 188, 162, 255 }); // teeth
-    }
-    {   // bandolier slung shoulder to hip, brass studs
-        for (int y = 68; y <= 128; y++) {
-            int xc = 54 + (y - 68) * 22 / 60;
-            for (int dx = -2; dx <= 2; dx++)
-                putIf(xc + dx, y, dx == 0 && (y % 9) < 2 ? Color{ 172, 136, 66, 255 } : Color{ 54, 43, 34, 255 });
+        {   // The single glowing eye. In profile it sits off to the side, looking
+            // down the corridor; turned onto you it comes to the centre of the
+            // face and burns harder. That is the whole head-turn tell.
+            float ex = facing ? 64.0f : 64 + 7.5f, ey = 36 + bob;
+            float core = facing ? 3.6f : 3.0f, halo = facing ? 8.5f : 7.0f;
+            float lift = facing ? 1.35f : 1.0f;
+            for (int dy = -9; dy <= 9; dy++) for (int dx = -9; dx <= 9; dx++) {
+                float d = sqrtf((float)(dx * dx + dy * dy));
+                int x = (int)(ex + dx), y = (int)(ey + dy);
+                if (x < 0 || x >= FW || y < 0 || y >= FH) continue;
+                Color &c = p[(y + oy) * W + x + ox];
+                if (c.a == 0) continue;
+                if (d < core) c = { 244, 238, 214, 255 };
+                else if (d < halo) {
+                    float t = expf(-(d - core) * 1.0f) * 0.6f * lift;
+                    c.r = cl8(c.r + 205 * t); c.g = cl8(c.g + 195 * t); c.b = cl8(c.b + 160 * t);
+                }
+            }
         }
-        for (int y = 82; y <= 152; y += 14) { putIf(59, y, { 158, 124, 58, 255 }); putIf(60, y, { 182, 148, 74, 255 }); } // buttons
+        {   // hook where the right hand should be — rides the arm swing
+            float hx = 64 + 31 + armR, hy = 194 + bob;
+            for (int dy = -6; dy <= 8; dy++) for (int dx = -7; dx <= 7; dx++) {
+                float d = sqrtf((float)(dx * dx + dy * dy));
+                if (fabsf(d - 5.0f) < 1.4f && dy > -3) put((int)(hx + dx), (int)(hy + dy), { 150, 150, 158, 255 });
+            }
+            for (int y = 186; y < 191; y++) hspan(y + bob, hx, 2, { 120, 120, 126, 255 });   // hook base
+            for (int q = -1; q <= 1; q++) put((int)(hx + 4), (int)(hy + q), { 224, 226, 234, 255 }); // glint
+        }
+        {   // bone-white skull emblem, crossbones behind
+            for (int s = -1; s <= 1; s += 2)
+                for (int t = 2; t <= 7; t++) { putIf(64 + s * t, 7 + t + bob, { 188, 180, 156, 255 }); putIf(64 + s * t, 8 + t + bob, { 172, 164, 140, 255 }); }
+            for (int dy = -3; dy <= 3; dy++) for (int dx = -3; dx <= 3; dx++)
+                if (dx * dx + dy * dy * 1.6f < 10.5f) putIf(64 + dx, 8 + dy + bob, { 208, 199, 172, 255 });
+            putIf(62, 7 + bob, { 25, 20, 16, 255 }); putIf(63, 7 + bob, { 25, 20, 16, 255 });   // sockets
+            putIf(65, 7 + bob, { 25, 20, 16, 255 }); putIf(66, 7 + bob, { 25, 20, 16, 255 });
+            for (int x = 62; x <= 66; x++) putIf(x, 11 + bob, (x & 1) ? Color{ 30, 24, 18, 255 } : Color{ 196, 188, 162, 255 }); // teeth
+        }
+        {   // bandolier slung shoulder to hip, brass studs
+            for (int y = 68; y <= 128; y++) {
+                int xc = 54 + (y - 68) * 22 / 60;
+                for (int dx = -2; dx <= 2; dx++)
+                    putIf(xc + dx, y + bob, dx == 0 && (y % 9) < 2 ? Color{ 172, 136, 66, 255 } : Color{ 54, 43, 34, 255 });
+            }
+            for (int y = 82; y <= 152; y += 14) { putIf(59, y + bob, { 158, 124, 58, 255 }); putIf(60, y + bob, { 182, 148, 74, 255 }); } // buttons
+        }
     }
     return finishTexture(img, false);
 }
 
 // THE PARTYGOER =): pale yellow, painted-on smile, striped party hat. It was
 // here before the bunting went up. It will be here after.
+// The thing that lives at LEVEL FUN, on the same sheet layout as Clark: a full
+// stride across, and a second row where it has noticed you. Its arms hang "a
+// little too still" on purpose — the swing here is deliberately smaller than
+// his, because a body that walks wrong is worse than one that walks.
 Texture2D makePartygoerTex() {
-    const int W = 128, H = 256;
+    const int FW = 128, FH = 256, W = FW * ENT_FRAMES, H = FH * ENT_ROWS;
     Image img = GenImageColor(W, H, BLANK);
     Color *p = (Color *)img.data;
-    auto put = [&](int x, int y, Color c) { if (x >= 0 && x < W && y >= 0 && y < H) p[y * W + x] = c; };
+    int ox = 0, oy = 0;
+    auto put = [&](int x, int y, Color c) {
+        x += ox; y += oy;
+        if (x >= ox && x < ox + FW && y >= oy && y < oy + FH) p[y * W + x] = c;
+    };
     auto hspan = [&](int y, float cx, float halfw, Color c) {
         for (int x = (int)(cx - halfw); x <= (int)(cx + halfw); x++) put(x, y, c);
     };
+    auto putIf = [&](int x, int y, Color c) {
+        x += ox; y += oy;
+        if (x >= ox && x < ox + FW && y >= oy && y < oy + FH && p[y * W + x].a) p[y * W + x] = c;
+    };
     Color skin = { 208, 182, 84, 255 };
     Color skin2 = { 176, 150, 62, 255 };
-    for (int y = 24; y < 252; y++) {
-        float wob = (vnoise2(0.05f * y, 8.2f, 177u) - 0.5f) * 6.0f;
-        float rag = (vnoise2(0.35f * y, 4.4f, 188u) - 0.5f) * 2.2f;
-        float cx = 64 + wob * 0.3f;
-        if (y >= 24 && y <= 62) {   // round head
-            float dy = (y - 43) / 20.0f;
-            if (dy * dy < 1.0f) hspan(y, cx, 19.0f * sqrtf(1 - dy * dy) + rag * 0.5f, skin);
-        }
-        if (y > 58 && y <= 68) hspan(y, cx, 6 + rag, skin2);              // neck
-        if (y > 64 && y <= 200) {   // soft drippy body, widening as it goes
-            float t = (y - 64) / 136.0f;
-            float halfw = 11 + 15 * t;
-            float hem = (y > 190) ? (vnoise2(0.6f * y, 2.5f, 171u) - 0.5f) * 5 : 0;
-            hspan(y, cx, halfw + rag + hem, skin);
-        }
-        if (y > 78 && y <= 178) {   // arms, hanging a little too still
-            float t = (y - 78) / 100.0f;
-            float off = 21 + 8 * t;
-            hspan(y, cx - off, 3.4f + rag * 0.4f, skin2);
-            hspan(y, cx + off, 3.4f + rag * 0.4f, skin2);
-        }
-        if (y > 200 && y < 252) {   // legs
-            hspan(y, cx - 9 + wob * 0.2f, 5.2f + rag * 0.4f, skin2);
-            hspan(y, cx + 9 + wob * 0.2f, 5.2f + rag * 0.4f, skin2);
-            if (y > 246) { hspan(y, cx - 9, 7, skin2); hspan(y, cx + 9, 7, skin2); }
-        }
-    }
-    // something sweet dripped down it once and never dried
-    for (int x = 0; x < W; x++) {
-        if (lat(x, 7, 191u) < 0.82f) continue;
-        int len = 30 + (int)(lat(x, 9, 192u) * 90);
-        for (int y = 70; y < 70 + len && y < 250; y++)
-            if (p[y * W + x].a) {
-                Color &c = p[y * W + x];
-                c.r = cl8(c.r * 0.82f); c.g = cl8(c.g * 0.80f); c.b = cl8(c.b * 0.72f);
+
+    for (int row = 0; row < ENT_ROWS; row++)
+    for (int f = 0; f < ENT_FRAMES; f++) {
+        ox = f * FW; oy = row * FH;
+        bool facing = (row == 1);
+        float ph = (float)f / ENT_FRAMES;
+        float sw = sinf(ph * 6.2831853f);
+        float dip = -cosf(ph * 2.0f * 6.2831853f);
+        int bob = (int)(dip * 1.5f + 0.5f);
+        float legL = sw * 4.5f, legR = -sw * 4.5f;
+        float armSwing = sw * 1.2f;              // barely moves, and that is the point
+        float tilt = facing ? 3.0f : 0.0f;       // the head cants over when it looks at you
+
+        for (int y = 24; y < 252; y++) {
+            int yy = y + bob;
+            float wob = (vnoise2(0.05f * y, 8.2f, 177u) - 0.5f) * 6.0f;
+            float rag = (vnoise2(0.35f * y, 4.4f, 188u) - 0.5f) * 2.2f;
+            float cx = 64 + wob * 0.3f;
+            float headX = cx + tilt;
+            if (y >= 24 && y <= 62) {   // round head
+                float dy = (y - 43) / 20.0f;
+                if (dy * dy < 1.0f) hspan(yy, headX, 19.0f * sqrtf(1 - dy * dy) + rag * 0.5f, skin);
             }
-    }
-    // the face: two dot eyes and a smile that was painted on, not grown
-    auto putIf = [&](int x, int y, Color c) {
-        if (x >= 0 && x < W && y >= 0 && y < H && p[y * W + x].a) p[y * W + x] = c;
-    };
-    Color ink = { 34, 26, 20, 255 };
-    for (int dy = -12; dy <= 12; dy++) for (int dx = -14; dx <= 14; dx++) {
-        float d = sqrtf((float)(dx * dx + dy * dy));
-        if (fabsf(d - 11.0f) < 1.8f && dy > 3) putIf(64 + dx, 42 + dy, ink);   // wide smile
-    }
-    for (int s = -1; s <= 1; s += 2)
-        for (int dy = -3; dy <= 3; dy++) for (int dx = -3; dx <= 3; dx++)
-            if (dx * dx + dy * dy < 7) putIf(64 + s * 7 + dx, 36 + dy, ink);   // eyes
-    {   // striped cone hat, slightly askew; nobody remembers putting it on
-        Color ha = { 196, 60, 54, 255 }, hb = { 84, 138, 192, 255 };
-        for (int y = 2; y <= 26; y++) {
-            float t = (y - 2) / 24.0f;
-            hspan(y, 60 + t * 4, 1.0f + 11.0f * t, ((y / 5) & 1) ? ha : hb);
+            if (y > 58 && y <= 68) hspan(yy, cx + tilt * 0.4f, 6 + rag, skin2);   // neck
+            if (y > 64 && y <= 200) {   // soft drippy body, widening as it goes
+                float t = (y - 64) / 136.0f;
+                float halfw = 11 + 15 * t;
+                float hem = (y > 190) ? (vnoise2(0.6f * y, 2.5f, 171u) - 0.5f) * 5 : 0;
+                float sway = (y > 180) ? sw * 1.8f * ((y - 180) / 20.0f) : 0.0f;
+                hspan(yy, cx + sway, halfw + rag + hem, skin);
+            }
+            if (y > 78 && y <= 178) {   // arms, hanging a little too still
+                float t = (y - 78) / 100.0f;
+                float off = 21 + 8 * t;
+                hspan(yy, cx - off - armSwing * t, 3.4f + rag * 0.4f, skin2);
+                hspan(yy, cx + off + armSwing * t, 3.4f + rag * 0.4f, skin2);
+            }
+            if (y > 200 && y < 252) {   // legs
+                float t = (y - 200) / 52.0f;
+                float sL = legL * t, sR = legR * t;
+                hspan(yy, cx - 9 + wob * 0.2f + sL, 5.2f + rag * 0.4f, skin2);
+                hspan(yy, cx + 9 + wob * 0.2f + sR, 5.2f + rag * 0.4f, skin2);
+                if (y > 246) { hspan(yy, cx - 9 + sL, 7, skin2); hspan(yy, cx + 9 + sR, 7, skin2); }
+            }
         }
-        for (int dy = -2; dy <= 2; dy++) for (int dx = -2; dx <= 2; dx++)
-            if (dx * dx + dy * dy < 5) put(60 + dx, 2 + dy, { 226, 218, 200, 255 });   // pompom
+        // something sweet dripped down it once and never dried
+        for (int x = 0; x < FW; x++) {
+            if (lat(x, 7, 191u) < 0.82f) continue;
+            int len = 30 + (int)(lat(x, 9, 192u) * 90);
+            for (int y = 70; y < 70 + len && y < 250; y++)
+                if (p[(y + oy) * W + x + ox].a) {
+                    Color &c = p[(y + oy) * W + x + ox];
+                    c.r = cl8(c.r * 0.82f); c.g = cl8(c.g * 0.80f); c.b = cl8(c.b * 0.72f);
+                }
+        }
+        // the face: two dot eyes and a smile that was painted on, not grown.
+        // Looking at you the smile widens and the eyes open — same trick as
+        // Clark's eye coming to the centre of his face, in a different key.
+        Color ink = { 34, 26, 20, 255 };
+        float sr = facing ? 12.5f : 11.0f;
+        int er = facing ? 10 : 7;
+        for (int dy = -14; dy <= 14; dy++) for (int dx = -16; dx <= 16; dx++) {
+            float d = sqrtf((float)(dx * dx + dy * dy));
+            if (fabsf(d - sr) < 1.8f && dy > 3) putIf((int)(64 + tilt) + dx, 42 + dy + bob, ink);   // wide smile
+        }
+        for (int s = -1; s <= 1; s += 2)
+            for (int dy = -4; dy <= 4; dy++) for (int dx = -4; dx <= 4; dx++)
+                if (dx * dx + dy * dy < er) putIf((int)(64 + tilt) + s * 7 + dx, 36 + dy + bob, ink);   // eyes
+        {   // striped cone hat, slightly askew; nobody remembers putting it on
+            Color ha = { 196, 60, 54, 255 }, hb = { 84, 138, 192, 255 };
+            for (int y = 2; y <= 26; y++) {
+                float t = (y - 2) / 24.0f;
+                hspan(y + bob, 60 + tilt + t * 4, 1.0f + 11.0f * t, ((y / 5) & 1) ? ha : hb);
+            }
+            for (int dy = -2; dy <= 2; dy++) for (int dx = -2; dx <= 2; dx++)
+                if (dx * dx + dy * dy < 5) put((int)(60 + tilt) + dx, 2 + dy + bob, { 226, 218, 200, 255 });   // pompom
+        }
     }
     return finishTexture(img, false);
 }
@@ -951,40 +1032,65 @@ Texture2D makeAOStripTex() {
 // The pack, seen side-on: a low, long-backed quadruped with too much leg and a
 // head that hangs. Drawn wide rather than tall — it reads as an animal from the
 // silhouette alone, which is all you get before it reaches you.
+// The pack, seen side-on, as DOG_FRAMES of a run rather than one held pose.
+// Four legs on two diagonal pairs — a bound, not a walk, because what these
+// are doing when you see them is closing.
 Texture2D makeDogTex() {
-    const int W = 192, H = 128;
+    const int FW = 192, FH = 128, W = FW * DOG_FRAMES, H = FH;
     Image img = GenImageColor(W, H, BLANK);
     Color *p = (Color *)img.data;
-    auto put = [&](int x, int y, Color c) { if (x >= 0 && x < W && y >= 0 && y < H) p[y * W + x] = c; };
+    int ox = 0;
+    auto put = [&](int x, int y, Color c) {
+        x += ox;
+        if (x >= ox && x < ox + FW && y >= 0 && y < H) p[y * W + x] = c;
+    };
     auto vspan = [&](int x, int y0, int y1, Color c) { for (int y = y0; y <= y1; y++) put(x, y, c); };
     Color hide  = { 44, 28, 26, 255 };
     Color hide2 = { 62, 38, 32, 255 };
-    for (int x = 22; x < 170; x++) {
-        float u = (x - 22) / 148.0f;
-        float mange = vnoise2(x * 0.22f, 3.1f, 921u);
-        Color c = (mange > 0.56f) ? hide2 : hide;
-        // body: deepest over the shoulders, tucked at the waist, rump lifted
-        float top = 46.0f + 5.0f * sinf(u * 3.14159f) - 4.0f * expf(-powf((u - 0.22f) * 5.0f, 2.0f));
-        float bot = 78.0f - 4.0f * expf(-powf((u - 0.55f) * 6.0f, 2.0f));
-        if (u > 0.06f && u < 0.94f) vspan(x, (int)top, (int)bot, c);
-        // neck and hanging head, forward of the shoulders
-        if (u < 0.20f) {
-            float t = u / 0.20f;
-            vspan(x, (int)(52 + 16 * t), (int)(70 + 14 * t), c);
+
+    for (int f = 0; f < DOG_FRAMES; f++) {
+        ox = f * FW;
+        float ph = (float)f / DOG_FRAMES;
+        float sw = sinf(ph * 6.2831853f);
+        // the spine compresses and extends through the bound; the whole body
+        // rides up on the push-off, which is what sells it at a distance
+        float dip = -cosf(ph * 2.0f * 6.2831853f);
+        int bob = (int)(dip * 2.0f + 0.5f);
+        for (int x = 22; x < 170; x++) {
+            float u = (x - 22) / 148.0f;
+            float mange = vnoise2(x * 0.22f, 3.1f, 921u);
+            Color c = (mange > 0.56f) ? hide2 : hide;
+            // body: deepest over the shoulders, tucked at the waist, rump lifted
+            float top = 46.0f + 5.0f * sinf(u * 3.14159f) - 4.0f * expf(-powf((u - 0.22f) * 5.0f, 2.0f));
+            float bot = 78.0f - 4.0f * expf(-powf((u - 0.55f) * 6.0f, 2.0f));
+            if (u > 0.06f && u < 0.94f) vspan(x, (int)top + bob, (int)bot + bob, c);
+            // neck and hanging head, forward of the shoulders — it lifts as it drives
+            if (u < 0.20f) {
+                float t = u / 0.20f;
+                int lift = (int)(sw * 2.5f);
+                vspan(x, (int)(52 + 16 * t) + bob - lift, (int)(70 + 14 * t) + bob - lift, c);
+            }
+            // four legs, thin and a little too long. Diagonal pairs swing
+            // together: 0 and 3 against 1 and 2.
+            for (int L = 0; L < 4; L++) {
+                float lu = 0.16f + L * 0.22f;
+                float pairSw = ((L == 0 || L == 3) ? sw : -sw) * 0.030f;
+                if (fabsf(u - (lu + pairSw)) < 0.022f)
+                    vspan(x, (int)bot - 2 + bob, 116, (L & 1) ? hide : hide2);
+            }
+            // tail, low and straight, streaming behind
+            if (u > 0.90f) {
+                int tr = (int)(sw * 3.0f);
+                vspan(x, (int)(58 + (u - 0.90f) * 120.0f) + bob + tr, (int)(64 + (u - 0.90f) * 130.0f) + bob + tr, hide);
+            }
         }
-        // four legs, thin and a little too long
-        for (int L = 0; L < 4; L++) {
-            float lu = 0.16f + L * 0.22f;
-            if (fabsf(u - lu) < 0.022f) vspan(x, (int)bot - 2, 116, (L & 1) ? hide : hide2);
-        }
-        // tail, low and straight
-        if (u > 0.90f) vspan(x, (int)(58 + (u - 0.90f) * 120.0f), (int)(64 + (u - 0.90f) * 130.0f), hide);
+        // the muzzle, and the two pale eyes that find you before you find them
+        int hl = (int)(sw * 2.5f);
+        for (int x = 12; x < 30; x++) vspan(x, 66 + bob - hl, 78 + bob - hl, hide);
+        for (int e = 0; e < 2; e++)
+            for (int dx = 0; dx < 4; dx++) for (int dy = 0; dy < 3; dy++)
+                put(26 + dx + e * 7, 60 + dy + bob - hl, Color{ 226, 216, 176, 255 });
     }
-    // the muzzle, and the two pale eyes that find you before you find them
-    for (int x = 12; x < 30; x++) vspan(x, 66, 78, hide);
-    for (int e = 0; e < 2; e++)
-        for (int dx = 0; dx < 4; dx++) for (int dy = 0; dy < 3; dy++)
-            put(26 + dx + e * 7, 60 + dy, Color{ 226, 216, 176, 255 });
     return finishTexture(img, false);
 }
 

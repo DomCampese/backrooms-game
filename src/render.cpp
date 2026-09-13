@@ -1,4 +1,5 @@
 #include "game.h"
+#include "textures.h"   // ENT_FRAMES / ENT_ROWS / DOG_FRAMES: the sprite-sheet layout
 #include "raymath.h"
 #include <cmath>
 #include <algorithm>
@@ -317,8 +318,12 @@ void Game::renderScene(double now) {
         float fade = d.st == DState::Yelp ? clampf(1.0f - d.life / 2.6f, 0, 1) : 1.0f;
         unsigned char l8 = cl8(40 + 215 * lum);
         unsigned char al = cl8(255 * clampf(expf(-dd * c.fogDen) * 1.6f, 0, 1) * fade);
-        // shoulder height ~0.75 m, and a long body — drawn wide, not tall
-        DrawBillboardRec(cam, texDog, { 0, 0, 192, 128 },
+        // shoulder height ~0.75 m, and a long body — drawn wide, not tall.
+        // d.gait counts paw-falls, so the fraction of it walks the run cycle;
+        // a Gone or Yelping dog is not running, so hold it on the first cel.
+        int df = (d.st == DState::Yelp) ? 0
+               : ((int)(d.gait * DOG_FRAMES) % DOG_FRAMES + DOG_FRAMES) % DOG_FRAMES;
+        DrawBillboardRec(cam, texDog, { df * 192.0f, 0, 192, 128 },
                          { d.x, d.dispY + 0.46f, d.z }, { 1.45f, 0.97f }, { l8, l8, l8, al });
     }
     for (const FlareProj &f : litFlares) {   // each flare: hot core, orange halo, stub of a body
@@ -359,8 +364,44 @@ void Game::renderScene(double now) {
         unsigned char al = cl8(255 * clampf(fogf * 1.6f, 0, 1) * dieA);
         // LEVEL FUN has its own resident; everywhere else it's Pirate Clark
         Texture2D &spr = (level == 4) ? texPartygoer : texEntity;
-        DrawBillboardRec(cam, spr, { 0, 0, 128, 256 },
-                         { ent.x, eg + 0.98f - sink, ent.z }, { 0.98f, 1.96f }, { lum8, lum8, lum8, al });
+        // Which cel. ent.gait counts footfalls and one row of the sheet is a
+        // full stride, so two gait units span the row — he has a real leg and a
+        // peg leg and the halves of his gait differ, which is exactly why the
+        // sheet is not half a cycle mirrored.
+        float cyc = fmodf(ent.gait * 0.5f, 1.0f);
+        if (cyc < 0) cyc += 1.0f;
+        int ef = (int)(cyc * ENT_FRAMES) % ENT_FRAMES;
+        // Which row. ent.gaze is the timer that tips him into a chase, so his
+        // head coming round is the tell that it is about to — an honest one,
+        // not decoration. Once he is actually chasing he is looking at nothing
+        // else, so that row is locked on.
+        bool facing = (ent.st == EState::Chase) || (ent.st == EState::Stalk && ent.gaze > 0.55f);
+        int er = facing ? 1 : 0;
+        // and he leans into a chase. DrawBillboardPro takes the rotation a
+        // DrawBillboardRec cannot.
+        //
+        // origin MUST be size*0.5 to keep him where DrawBillboardRec put him:
+        // that is literally what DrawBillboardRec passes through, so rotation 0
+        // is then the identical draw. Neither {0,0} nor the obvious
+        // "pivot on his boots" of {0, -size.y/2} does that — origin is the
+        // anchor point inside the quad, so both of those slide him up the
+        // screen by most of a body height and leave him hanging off the ceiling,
+        // still perfectly upright, which reads as a lighting or a height bug
+        // rather than as a billboard-origin one. He therefore pivots about his
+        // middle; at 7 degrees on a 1.96 m sprite his boots swing about 12 cm,
+        // which is not worth fighting the API over.
+        float leanDeg = 0.0f;
+        if (ent.st == EState::Chase) leanDeg = 7.0f + (ent.lunge > 0 ? 6.0f : 0.0f);
+        else if (ent.st == EState::Flee) leanDeg = -6.0f;
+        Vector2 sz = { 0.98f, 1.96f };
+        Rectangle src = { ef * 128.0f, er * 256.0f, 128, 256 };
+        Vector3 at = { ent.x, eg + 0.98f - sink, ent.z };
+        if (fabsf(leanDeg) < 0.01f) {
+            DrawBillboardRec(cam, spr, src, at, sz, { lum8, lum8, lum8, al });
+        } else {
+            DrawBillboardPro(cam, spr, src, at, { 0, 1, 0 }, sz,
+                             { sz.x * 0.5f, sz.y * 0.5f }, leanDeg, { lum8, lum8, lum8, al });
+        }
     }
     if (!inMenu && (drinkT > 0 || (weapon == WEAPON_DECK && deck.carried) ||
                     weapon == WEAPON_REVOLVER || (weapon == WEAPON_FLARE && flares > 0))) {

@@ -87,6 +87,13 @@ struct Game {
     static constexpr float LUNGE_TIME = 0.6f;
     static constexpr float CATCH_REACH = 1.25f;
     static constexpr float DEATH_CARD = 7.0f;   // seconds the death card holds the title screen
+    // Where he arrives from. The near band is inside the fog and close enough
+    // to matter; the far band is the old behaviour, kept in the mix because
+    // replacing one fixed ritual with another buys nothing.
+    static constexpr float SPAWN_NEAR_MIN = 6.0f;
+    static constexpr float SPAWN_NEAR_MAX = 17.0f;
+    static constexpr float SPAWN_FAR_MIN = 20.0f;
+    static constexpr float SPAWN_FAR_SPAN = 10.0f;
 
     // env/test knobs (BACKROOMS_* — see README)
     bool benchmark = false, cleanShot = false;
@@ -151,7 +158,11 @@ struct Game {
     bool captureClick = false;                // this click grabbed the mouse; don't also fire
     float leanCur = 0, landDip = 0;           // camera feel: strafe lean + landing dip
     float strafeInput = 0;                    // -1..1, set by movement, read by render lean
-    double entStepAcc = 0;                    // spacing of the thing's audible footfalls
+    // How far he covers per footfall. Was the bare 1.05 inside the old
+    // entStepAcc test; named because the sprite sheet's stride has to be the
+    // same distance or his legs and his boots disagree.
+    static constexpr float ENT_STRIDE = 1.05f;
+    static constexpr float DOG_STRIDE = 0.85f;   // shorter and quicker; they are bounding, not walking
     float muzzleSmoke = 0;                    // powder haze lingering after a shot
 
     // flare weapon: thrown, burns orange, Pirate Clark won't go near one.

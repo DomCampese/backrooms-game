@@ -173,6 +173,40 @@ int main() {
         g.deathT=0; g.inMenu=false;
     }
 
+    // ---- the hunter actually moves now (ENT-01/ENT-02). Look at these: a
+    // walk cycle that does not read as a walk is worse than no walk cycle.
+    {
+        g.applyLevel(0);
+        g.px=40; g.pz=40; g.py=0; g.eyeY=1.62f; g.pitch=0; g.deathT=0; g.inMenu=false;
+        g.ent.x=g.px+7.0f; g.ent.z=g.pz; g.ent.dispY=0; g.ent.hp=3; g.ent.stagger=0;
+        g.yaw=0; g.updateLook();
+        // stalking, head still down the corridor, mid-stride at four phases
+        g.ent.st=EState::Stalk; g.ent.gaze=0;
+        for (int i=0;i<4;++i) {
+            g.ent.gait = i * 0.5f;
+            char n[48]; snprintf(n,sizeof(n),"clark-walk-%d.png",i);
+            capture(g,n);
+        }
+        // gaze tips over: his head comes round, which is the tell
+        g.ent.gaze=1.2f; g.ent.gait=0.5f; capture(g,"clark-noticed.png");
+        // and the chase lean, and the harder lean of a committed lunge
+        g.ent.st=EState::Chase; g.ent.lunge=0; capture(g,"clark-chase.png");
+        g.ent.lunge=Game::LUNGE_TIME; capture(g,"clark-lunge.png");
+        g.ent.st=EState::Hidden; g.ent.lunge=0;
+        // The pack, mid-bound. Captured on Level 0 rather than in the Red Halls
+        // they actually live in: the Red Halls sit at mean luma 12 and a black
+        // dog against it is unreviewable. This shot is for the run cycle only.
+        g.px=40; g.pz=40; g.yaw=0; g.updateLook();
+        g.dogs[0].st=DState::Charge; g.dogs[0].x=g.px+5.0f; g.dogs[0].z=g.pz;
+        g.dogs[0].dispY=0; g.dogs[0].hp=2; g.dogs[0].gait=0.5f;
+        for (int i=0;i<2;++i) {
+            g.dogs[0].gait = i * 0.5f;
+            char n[48]; snprintf(n,sizeof(n),"pack-bound-%d.png",i);
+            capture(g,n);
+        }
+        g.dogs[0].st=DState::Gone;
+    }
+
     // ---- headless captures must not be able to black out (BUG-08)
     assert(g.noBlackout && g.nextBlackout >= Game::BLACKOUT_NEVER);
 

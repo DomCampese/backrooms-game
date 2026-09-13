@@ -5,7 +5,17 @@
 Texture2D makeWallpaperTex();      // Level 0: yellowed stripes, stains, baseboard
 Texture2D makeCarpetTex();         // Level 0: moist mustard carpet
 Texture2D makeCeilingTex();        // office ceiling tiles (Level 0 + LEVEL FUN)
-Texture2D makeEntityTex();         // PIRATE CLARK billboard sprite
+// Sprite-sheet geometry for the two humanoids and for the pack. The billboard
+// draws in render.cpp index these, so a frame count that disagrees with the
+// generator shows up as a sliver of the neighbouring frame down one edge.
+//   ENT_FRAMES: one full stride, NOT half of one mirrored — Clark has a real
+//   leg and a peg leg, so the halves of his gait genuinely differ.
+//   ENT_ROWS:   0 = head down the corridor, 1 = head come round onto you.
+constexpr int ENT_FRAMES = 6;
+constexpr int ENT_ROWS   = 2;
+constexpr int DOG_FRAMES = 4;
+
+Texture2D makeEntityTex();         // PIRATE CLARK billboard sprite sheet
 Texture2D makePartygoerTex();      // the thing that lives at the party
 Texture2D makeScrawlTex();         // graffiti atlas: what earlier wanderers wrote
 Texture2D makePropsTex();          // prop atlas: cardboard / cabinet / metal

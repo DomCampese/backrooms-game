@@ -15,9 +15,18 @@ if [[ $(uname -s) == Linux ]]; then
     # but ALSA warnings in the log to go on. pgrep -f is read-only, so unlike
     # the pkill -f trap in CLAUDE.md it cannot match and kill this shell.
     if ! pgrep -f "Xvfb ${DISPLAY} " >/dev/null; then
+        # A dead Xvfb leaves its socket behind, and a stale socket is
+        # indistinguishable from a live one by existence alone — so waiting for
+        # the socket to appear returns instantly and the capture then dies at
+        # "GLFW: Failed to detect any supported platform" (and the regression
+        # harness, which has no such check, segfaults on the null window).
+        # Nothing owns this display right now, so clear the socket first and the
+        # wait below means what it says.
+        rm -f "/tmp/.X11-unix/X${DISPLAY#:}"
         Xvfb "$DISPLAY" -screen 0 1440x850x24 >/dev/null 2>&1 &
+        XVFB_PID=$!
         for _ in $(seq 1 40); do
-            [ -e "/tmp/.X11-unix/X${DISPLAY#:}" ] && break
+            [ -e "/tmp/.X11-unix/X${DISPLAY#:}" ] && kill -0 "$XVFB_PID" 2>/dev/null && break
             sleep 0.25
         done
     fi

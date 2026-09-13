@@ -1442,14 +1442,68 @@ void Game::updateEntity(float dt, double now) {
     if (ent.st == EState::Hidden) {
         if (sprinting) ent.nextSpawn -= 1.5 * dt;   // running feet echo a long way
         if (now > ent.nextSpawn) {
-            float a = grng.f01() * TAU;
-            float d = 20 + grng.f01() * 10;
-            Vector2 spot = world.findOpenSpot(px + cosf(a) * d, pz + sinf(a) * d);
-            ent.x = spot.x; ent.z = spot.y;
+            // Where he arrives from. This was one draw — 20-30 m out on a random
+            // bearing — so every encounter in the game opened the same way: a
+            // shape resolving out of the fog while you watched it come. The
+            // version that is actually frightening, already standing at the end
+            // of the corridor you have just decided to walk down, could not
+            // happen at all. So there are three arrivals now, and the far one
+            // stays in the mix: replacing one fixed ritual with another fixed
+            // ritual buys nothing.
+            //
+            // Both near arrivals demand the cell fail lineOfSight from where you
+            // are standing. That is the whole trick — inside the fog, close
+            // enough to matter, and behind something, so the first you know of
+            // him is when you turn the corner he is already round.
+            auto unseenSpot = [&](float wx, float wz, float &ox, float &oz) {
+                Vector2 s = world.findOpenSpot(wx, wz);
+                float dx = s.x - px, dz = s.y - pz, d = sqrtf(dx * dx + dz * dz);
+                if (d < SPAWN_NEAR_MIN || d > SPAWN_NEAR_MAX) return false;
+                if (world.lineOfSight(px, pz, s.x, s.y)) return false;
+                ox = s.x; oz = s.y; return true;
+            };
+            float sx = 0, sz = 0;
+            bool placed = false;
+            float roll = grng.f01();
+            if (roll < 0.40f) {
+                // Down the way you are heading: walk the BFS along your own
+                // heading a cell at a time and take the first cell past the
+                // point where the route bends out of sight. pathStep is the
+                // same router the hunt uses, so the cell is one you could have
+                // walked to yourself — not a spot across a wall.
+                int ci = cellOf(px), ck = cellOf(pz);
+                int ti = cellOf(px + f2x * 26.0f), tk = cellOf(pz + f2z * 26.0f);
+                for (int step = 0; step < 20 && !placed; step++) {
+                    int oi, ok;
+                    if (!world.pathStep(ci, ck, ti, tk, oi, ok)) break;
+                    ci = oi; ck = ok;
+                    float cx = ci * CELL + 1.0f, cz = ck * CELL + 1.0f;
+                    float dx = cx - px, dz = cz - pz;
+                    if (dx * dx + dz * dz > SPAWN_NEAR_MAX * SPAWN_NEAR_MAX) break;   // walked out of the fog
+                    placed = unseenSpot(cx, cz, sx, sz);
+                }
+            } else if (roll < 0.70f) {
+                // Just around a corner, any bearing: the median sightline here
+                // is about 7 m, so a handful of tries almost always finds one.
+                for (int tries = 0; tries < 6 && !placed; tries++) {
+                    float a = grng.f01() * TAU;
+                    float d = SPAWN_NEAR_MIN + grng.f01() * (SPAWN_NEAR_MAX - SPAWN_NEAR_MIN);
+                    placed = unseenSpot(px + cosf(a) * d, pz + sinf(a) * d, sx, sz);
+                }
+            }
+            if (!placed) {   // and the original: out in the fog, coming to find you
+                float a = grng.f01() * TAU;
+                float d = SPAWN_FAR_MIN + grng.f01() * SPAWN_FAR_SPAN;
+                Vector2 spot = world.findOpenSpot(px + cosf(a) * d, pz + sinf(a) * d);
+                sx = spot.x; sz = spot.y;
+            }
+            ent.x = sx; ent.z = sz;
             ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.hp = 3; ent.stagger = 0;
+            ent.gait = 0;   // he is standing still when you first see him; stand him in the neutral cel
             ent.dispY = world.floorY(cellOf(ent.x), cellOf(ent.z));
         }
     } else {
+        float entPrevX = ent.x, entPrevZ = ent.z;   // for the gait, below
         float ex = ent.x - px, ez = ent.z - pz;
         entDist = sqrtf(ex * ex + ez * ez);
         float dirDot = (entDist > 0.01f) ? (fwd.x * ex + fwd.z * ez) / entDist : 1;
@@ -1513,18 +1567,6 @@ void Game::updateEntity(float dt, double now) {
             ent.x += sx / sl * chaseSpd * dt;
             ent.z += sz / sl * chaseSpd * dt;
             world.collideCircle(ent.x, ent.z, 0.38f, ent.dispY);
-            // you hear him coming: footfalls panned to his bearing, fading with range
-            entStepAcc += chaseSpd * dt;
-            if (entStepAcc > 1.05f && entDist < 22.0f && deathT <= 0) {
-                entStepAcc -= 1.05f;
-                float inv = entDist > 0.01f ? 1.0f / entDist : 0.0f;
-                float sd = clampf((ex * inv) * r2x + (ez * inv) * r2z, -1.0f, 1.0f);   // + = to your right
-                Sound &s = entSteps[grng.ri(0, 3)];
-                SetSoundPan(s, panFor(sd));
-                SetSoundPitch(s, 0.66f + grng.f01() * 0.08f);   // heavy, unhurried
-                SetSoundVolume(s, clampf(1.4f / (1.0f + 0.07f * entDist * entDist), 0.0f, 0.9f));
-                PlaySound(s);
-            }
             ent.unseen = entVisible ? 0 : ent.unseen + dt * (hidden ? 2.4f : (crouchCur > 0.7f ? 1.7f : 1.0f));
             if (ent.unseen > 6 && (entDist > 14 || hidden)) ent.st = EState::Hidden, ent.nextSpawn = now + 25 + grng.f01() * 40;
             if (hidden && entDist < 2.2f && closeCallT <= 0) {   // it's right there and doesn't know
@@ -1552,6 +1594,31 @@ void Game::updateEntity(float dt, double now) {
             if (rl > 0.01f) { ent.x += rx / rl * 6.5f * dt; ent.z += rz / rl * 6.5f * dt; }
             world.collideCircle(ent.x, ent.z, 0.38f, ent.dispY);
             if (ent.life > 3.0f) { ent.st = EState::Hidden; ent.nextSpawn = now + 25 + grng.f01() * 35; }
+        }
+        // ---- his gait: one phase for the legs and the footfalls both.
+        //
+        // This used to be entStepAcc, which accumulated chaseSpd*dt inside the
+        // Chase block only. Two things were wrong with that: it counted
+        // *intended* speed, so a Clark grinding against a wall still sounded
+        // like one crossing the room, and it did not exist in any other state,
+        // so nothing could animate him while he fled. Distance actually
+        // travelled, in any state, and an integer value is a foot landing —
+        // which is what render.cpp indexes the walk cycle from, so the frame
+        // his boot hits the floor on is the frame you hear it.
+        {
+            float moved = hypotf(ent.x - entPrevX, ent.z - entPrevZ);
+            float lastGait = ent.gait;
+            ent.gait += moved / ENT_STRIDE;
+            if (ent.gait > 4096.0f) ent.gait -= 4096.0f;   // even integer: the cycle is continuous across it
+            if (floorf(ent.gait) > floorf(lastGait) && entDist < 22.0f && deathT <= 0) {
+                float inv = entDist > 0.01f ? 1.0f / entDist : 0.0f;
+                float sd = clampf((ex * inv) * r2x + (ez * inv) * r2z, -1.0f, 1.0f);   // + = to your right
+                Sound &s = entSteps[grng.ri(0, 3)];
+                SetSoundPan(s, panFor(sd));
+                SetSoundPitch(s, 0.66f + grng.f01() * 0.08f);   // heavy, unhurried
+                SetSoundVolume(s, clampf(1.4f / (1.0f + 0.07f * entDist * entDist), 0.0f, 0.9f));
+                PlaySound(s);
+            }
         }
         if (ent.st == EState::Die) {   // shot down: crumples, gone a long while
             fearT = 0.10f;
@@ -1689,8 +1756,13 @@ void Game::updateDogs(float dt, double now) {
                 else { d.wpx = tgx; d.wpz = tgz; }
             }
             float sx = d.wpx - d.x, sz = d.wpz - d.z, sl = sqrtf(sx * sx + sz * sz) + 1e-4f;
+            float dPrevX = d.x, dPrevZ = d.z;
             d.x += sx / sl * spd * dt; d.z += sz / sl * spd * dt;
             world.collideCircle(d.x, d.z, 0.3f, d.dispY);
+            // same scheme as Clark's: distance actually covered, an integer is a
+            // paw landing, and render.cpp reads the fraction for the run cycle
+            d.gait += hypotf(d.x - dPrevX, d.z - dPrevZ) / DOG_STRIDE;
+            if (d.gait > 4096.0f) d.gait -= 4096.0f;
 
             if (now > d.nextBark && dist < 26.0f && deathT <= 0) {
                 d.nextBark = now + (d.st == DState::Charge ? 0.7 + grng.f01() * 0.6
