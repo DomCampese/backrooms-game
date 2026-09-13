@@ -382,6 +382,18 @@ and breaks at the wrap, putting a row of half-features down every seam in the
 world. The brick had shipped that way for a while and nobody saw it, because
 until each brick got its own tone there was nothing at the seam to mismatch.
 
+**A sine is the wrong curve for a walk cycle, and it wastes half your frames.**
+`sin(60 deg)` and `sin(120 deg)` are the same number, so an evenly sampled sheet
+driven by a sine puts the ankle in the same place twice: the first six-frame
+Clark sheet had frames 1 and 2 differing by 129 silhouette pixels out of ~1900,
+and frames 4 and 5 by 96 — three poses wearing six frames' worth of texture. A
+real leg is planted for about 60% of the cycle, sliding backwards under the
+body, then swings through in the other 40% with the foot off the floor;
+`legPose` in textures.cpp is that, and it makes every frame distinct (worst pair
+646 px) as well as stopping the walk from skating. Measure a sheet by counting
+silhouette pixels that change between consecutive frames — the eye will happily
+tell you six near-identical poses look fine.
+
 **Temporary test hooks must be removed by exact string, not by slicing.**
 Cutting from `s.index(start)` to `s.index(end)` is dangerous when the end
 anchor appears more than once — `if (shotPath && frame == shotFrame)` occurs

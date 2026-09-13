@@ -5,7 +5,14 @@
 Texture2D makeWallpaperTex();      // Level 0: yellowed stripes, stains, baseboard
 Texture2D makeCarpetTex();         // Level 0: moist mustard carpet
 Texture2D makeCeilingTex();        // office ceiling tiles (Level 0 + LEVEL FUN)
-Texture2D makeEntityTex();         // PIRATE CLARK billboard sprite
+// Walk-cycle frames, laid out left to right in one sheet. A billboard picks
+// two adjacent frames and cross-fades between them, so the count is also the
+// resolution of the gait: six is enough that adjacent frames differ by a few
+// pixels and the fade reads as motion blur rather than as a dissolve.
+constexpr int ENT_FRAMES = 6;      // Clark and the partygoer, 128 px per frame
+constexpr int DOG_FRAMES = 4;      // the pack, 192 px per frame
+
+Texture2D makeEntityTex();         // PIRATE CLARK billboard sprite, ENT_FRAMES wide
 Texture2D makePartygoerTex();      // the thing that lives at the party
 Texture2D makeScrawlTex();         // graffiti atlas: what earlier wanderers wrote
 Texture2D makePropsTex();          // prop atlas: cardboard / cabinet / metal

@@ -17,6 +17,7 @@ struct Dog {
     float life = 0;              // time in the current state
     float lost = 0;              // how long it has been off your scent
     double nextBark = 0;
+    float gait = 0;              // metres run, for the walk cycle — one stride per DOG_STRIDE
     int hp = 2;
 };
 struct Entity {
