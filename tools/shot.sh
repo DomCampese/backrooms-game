@@ -8,9 +8,18 @@ SHOTS=${SHOTS_DIR:-$ROOT/shots}
 mkdir -p "$SHOTS"
 if [[ $(uname -s) == Linux ]]; then
     export DISPLAY=${DISPLAY:-:99}
-    if ! pgrep -x Xvfb >/dev/null; then
+    # Check for an Xvfb on THIS display, not for any Xvfb at all. The old test
+    # was `pgrep -x Xvfb`, which is true as soon as one exists anywhere — so
+    # asking for a second display (say two worktrees verifying side by side)
+    # silently skipped the launch and every capture died at GLFW with nothing
+    # but ALSA warnings in the log to go on. pgrep -f is read-only, so unlike
+    # the pkill -f trap in CLAUDE.md it cannot match and kill this shell.
+    if ! pgrep -f "Xvfb ${DISPLAY} " >/dev/null; then
         Xvfb "$DISPLAY" -screen 0 1440x850x24 >/dev/null 2>&1 &
-        sleep 2
+        for _ in $(seq 1 40); do
+            [ -e "/tmp/.X11-unix/X${DISPLAY#:}" ] && break
+            sleep 0.25
+        done
     fi
 fi
 cd "$SHOTS"
