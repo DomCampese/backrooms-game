@@ -144,6 +144,7 @@ Environment variables, all read at startup:
 | `BACKROOMS_SHOT=out.png` | headless: run, capture one frame, exit |
 | `BACKROOMS_SHOTFRAME=n` | which frame to capture (default 600); use ~150 for quick sweeps |
 | `BACKROOMS_SEED=n` | fix the world seed — repeatable maze |
+| `BACKROOMS_NOBLACKOUT=1` | never schedule a blackout (on by default under `BACKROOMS_SHOT`; pass `0` to shoot one) |
 | `BACKROOMS_LEVEL=n` | start on level n (0–4) |
 | `BACKROOMS_POS="x,z,yaw"` | start at a specific spot and heading, in world metres/radians |
 | `BACKROOMS_EXITS=1` | exit doors everywhere, for visual testing |
@@ -175,13 +176,21 @@ generation, run all five levels plus the menu and check for shader errors:
 tools/sweep.sh
 ```
 
-Then **look at the images**. Note that a Level 3 frame is *supposed* to look
-almost black — the Red Halls sit at a mean luma around 12 out of 255, so the
-regression shot for it is genuinely near-black and is not a broken shader or a
-blackout. Confirming that cost a build of the previous commit; take this line's
-word for it instead. (It was 16 before the fog started taking its brightness
-from the local light instead of a constant; an unlit corridor no longer glows
-at the far end, which is most of where the difference went.)
+It now **exits non-zero** on a shot that failed, on a shader-error line in any
+run log, and on any frame whose mean luma falls outside the per-level band in
+its own header. A failed shader compile does not crash — the frame goes black
+and the frame rate goes *up* — and until this landed the sweep exited 0 on a
+completely broken build. A clean exit is necessary, not sufficient: still
+**look at the images**.
+
+Note that a Level 3 frame is *supposed* to look almost black — the Red Halls sit
+at a mean luma around 12 out of 255, so the regression shot for it is genuinely
+near-black and is not a broken shader or a blackout. Confirming that cost a
+build of the previous commit; take this line's word for it, and the band table
+in `tools/sweep.sh` where the same number is written down. (It was 16 before the
+fog started taking its brightness from the local light instead of a constant; an
+unlit corridor no longer glows at the far end, which is most of where the
+difference went.)
 
 The sweep is a fixed spot in a corridor and it will not show you everything.
 Two shots worth taking by hand when you touch lighting, because each exercises
@@ -272,19 +281,46 @@ four metres away — which is exactly when it had a job to do. Stand small decal
 geometry ~1.5 mm off its host surface. A close-up screenshot will not catch
 this; check the thing at the distance it is actually used.
 
-**Blackouts are scheduled off wall-clock time, not frame count.** `applyLevel`
-sets `nextBlackout = GetTime() + 30 + rand*60`, so a headless capture is only
-repeatable if it lands before that window. The software rasteriser runs about
-2.5 fps, so `BACKROOMS_SHOTFRAME=150` is already ~60 s in and can capture a
-pitch-black frame that looks exactly like a broken shader. For iteration use
-`BACKROOMS_SHOTFRAME=80` (~30 s), which is inside the guaranteed-lit window
-and twice as fast. Level 2 never blacks out at all.
+**Blackouts are scheduled off wall-clock time, not frame count, and frame 80 is
+not safe from them.** `applyLevel` sets `nextBlackout = GetTime() + 30 + rand*60`,
+so the earliest one is 30 s in; the software rasteriser runs 2-3 fps, which puts
+`BACKROOMS_SHOTFRAME=80` at roughly 30-40 s — *inside* that window, not before
+it. This file used to claim frame 80 was "the guaranteed-lit window". It never
+was: two identical `tools/shot.sh` runs at seed 1337 produced one frame at mean
+luma 100 and one at 15, and the dark one looks exactly like the silent shader
+fallback, which is how it costs someone an hour.
+
+So headless captures no longer schedule blackouts at all — `BACKROOMS_SHOT`
+turns `noBlackout` on, and everything that sets `nextBlackout` goes through
+`Game::blackoutIn`, which returns `BLACKOUT_NEVER` in that mode. Pass
+`BACKROOMS_NOBLACKOUT=0` to shoot one on purpose; the F3 `B` key still forces
+one either way, because that is explicit. `blackoutIn` still *draws* its random
+number before discarding it, so a capture's `grng` stream stays aligned with a
+normal run's. Level 2 never blacks out regardless. Before this, `tools/shot.sh`
+at frame 200 came back at mean luma 3.4 — the frame was simply a blackout.
 
 **`pkill -f "some pattern"` can kill your own shell.** If the pattern appears
 in the command line of the shell running it — which it does whenever you type
 the command inline, or write a heredoc containing it — `pkill` matches itself
 and the shell dies with no output. Use `pkill -x Xvfb`, or put the command in
 a script file and run the file.
+
+**`tools/shot.sh`'s shader-error grep used to match a line nothing was wrong
+with.** Every headless run in this sandbox prints `error: XDG_RUNTIME_DIR is
+invalid or not set in the environment` from the audio/GLFW stack, and the filter
+was `grep -iE '...|ERROR:'` — case-insensitive, so it matched, so `shot.sh`
+exited 1, so `set -e` killed the sweep after level 0 with no output that looked
+like a cause. The `ERROR:` half is now case-sensitive, which is right anyway:
+`ERROR:` in capitals is raylib's own TraceLog prefix. Keep it that way, and
+never widen this filter with `-i` — it is the only thing that catches a silently
+failed shader compile.
+
+**`beginDescent` clears the per-run tallies, and `dieRun` calls it.** So
+anything you increment in `dieRun` before that call is wiped a line later:
+`deathCount` did exactly that and the death card cheerfully reported your first
+death on every run. A count that is supposed to outlive a descent — deaths, and
+the records — must be kept out of that reset list, with a comment saying why,
+because the reset list is otherwise the obvious place to add it.
 
 **Do not run two sweeps at once.** `tools/shot.sh` reuses a running Xvfb
 rather than killing and restarting one — the older scripts here killed it,
@@ -317,9 +353,11 @@ so a clip meant to loop has to begin and end somewhere quiet and be
 crossfaded, or the join clicks audibly.
 
 **`tools/pixdiff.py` needs Pillow, which a fresh sandbox does not have.**
-`pip install pillow` first, or every diff you try to run dies with
-`ModuleNotFoundError: No module named 'PIL'` — after the sweep you just waited
-fifteen minutes for.
+`tools/sandbox-setup.sh` now installs it, and pixdiff prints a one-line
+instruction instead of a traceback if it is still missing. Before that, every
+diff died with `ModuleNotFoundError: No module named 'PIL'` — after the sweep
+you had just waited fifteen minutes for. `pixdiff.py luma IMG...` prints each
+frame's mean luma, which is what `tools/sweep.sh` reads to catch a black frame.
 
 **A cross-run pixel diff is only meaningful if both runs hit the same frame
 rate.** The light flicker is `sin(t*31)*sin(t*47.3)` on wall-clock `GetTime()`,
@@ -374,6 +412,70 @@ the lit surfaces looking fine, which does not present as a tone-curve problem �
 it presents as "why is Level 3 completely black now". Whatever compensates for
 that has to decay as ambient rises, or the one level whose ambient was never in
 the toe (the poolrooms, four times any other) blows out to white paper instead.
+
+**A HUD authored in pixels is a HUD that only works at one resolution.** Every
+`DrawText` size and every offset from a screen edge in `render.cpp` goes through
+`hud(px)`, which scales from `GetScreenHeight() / 850` — 850 being the height
+the window opens at, which is what all those numbers were eyeballed against.
+Fractions of the screen (`sh / 2`, `sw / 3`) are already independent of it and
+must *not* be scaled, or the layout drifts off centre. Draw HUD strings with
+`hudText` / `hudTextC` / `hudTextR` rather than `DrawText`: they put a scaled
+dark offset behind the string first, which is the only reason the bottom-left
+inventory block is legible over the Poolrooms' white tile. `hudTextC` measures
+at the *scaled* size — measure at 16 and draw at 38 and the line sits off
+centre. The viewmodel's `k = 1.25f` is not this: that one is in gun-local metres.
+
+**An actor's floor height is not the same number as the height it is drawn at.**
+`ent.dispY` / `Dog::dispY` are smoothed floor heights, and they now feed
+`collideCircle` and the shot hit tests as well as the billboard — the six actor
+`collideCircle` calls used to pass the default `feetY = 0`, so Clark crossed a
+drop as if it were flat and stood inside a loading dock. They are smoothed
+*after* movement each frame, so collision sees last frame's value; that is safe
+only because `canStep` refuses to route across anything taller than `MAX_STEP`
+and a spawn sets `dispY` exactly, so nothing ever legitimately stands on a cell
+whose riser it would otherwise be pushed off.
+
+**Vertical faces need three separate things to agree, or terrain is decorative.**
+`MAX_STEP` (world.h) is the whole rule: `gatherCellAABBs` emits a full-height
+blocker on any cell more than that above a neighbour, `canStep` refuses to route
+across one, and the mover leaves the floor instead of gliding down one. The
+generator *also* relaxes its own elevations to within `MAX_STEP` — without that
+pass, enforcing the rule seals every sunken lounge in the game into a pit you
+can fall into and not climb out of, because there are no stair meshes yet
+(WORLD-06). Two traps around it: `lineOfSight` walks the same AABB list, so a
+riser box would make an elevated cell opaque and blind anything standing on it —
+it tests `top >= wallH` to look at full-height blockers only. And pools are
+exempt on both sides: a pool floor is 0.6 m down, and a blocker there would
+override the `poolAt` branches that are what getting in and out of one *is*.
+
+**A rule the generator can no longer trigger still has to be tested.** The
+elevation relaxation means nothing the world produces is taller than `MAX_STEP`,
+so the riser blocker never fires in a normal run — exactly the shape of failure
+the relief-bump opt-out had. `tools/regression.cpp` therefore writes a 2.5 m
+terrace into a chunk by hand and asserts the box appears, that a body below is
+pushed back and a body on top is not, and that `canStep` refuses both ways.
+Assert the mechanism, not the map.
+
+**The head bob and the footstep are one phase, and it counts footfalls.**
+`bobPhase` gains 1 per stride, so an integer value is a foot landing: the step
+sound fires on the integer crossing and the bob is `-cos(2*PI*bobPhase)`, whose
+low point is exactly there. They used to be two unrelated numbers — a 2.32 m
+stride against a 1.21 m bob cycle, 1.92 bobs per step and the ratio drifting
+with speed — and the result read as a floaty, sluggish walk rather than as a
+bug. Two things depend on the units now: `render.cpp`'s viewmodel sway reads
+`sinf(bobPhase * PI)`, which on this phase is one lateral cycle per *two*
+footfalls, which is what lateral sway actually tracks; and the wrap at 4096 has
+to stay an even integer or both the crossing test and that sway jump at it.
+
+**A hit test that only measures horizontal distance ignores where you aimed.**
+Both actor hit tests projected onto `f2x`/`f2z` and measured the miss distance
+in the plane, so you could aim at the ceiling and still land the round.
+`shotHitsBody` takes the 3D `fwd`, walks the aim line out to the target's
+horizontal distance and checks the height it has reached against the body's
+span. Falls out of that: the eye rides at 1.62 m and a dog stands 0.92 m, so a
+dead-level shot goes over a dog's back at any range — you have to put the
+crosshair on it, which is the point. `popBalloonsAlongAim` had no sight test at
+all and popped the party through walls; it gates on `lineOfSight` per balloon.
 
 **A pattern inside a tiling texture must have a period that divides its size.**
 The textures are 512 square and repeat. A feature grid at any other pitch —

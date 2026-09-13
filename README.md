@@ -122,6 +122,16 @@ make run
   glowing eye, a hook, a peg leg. Line-of-sight is ray-marched against real
   wall geometry. Stare too long and he chases. He is slightly slower than your
   sprint. Your sprint is finite.
+- **Being caught ends the run** — there is no waking up somewhere else any
+  more. He takes you, the run is over, and a card names the level, the time,
+  the metres walked and what got you before the title screen comes back. Your
+  deepest level and longest run are kept with the other records.
+- **...but the grab is telegraphed** — he has to commit from about two and a
+  half metres, the commit is announced and lasts a little over half a second,
+  and only a commit that is still running can take you. Sprint clear of it and
+  he has to back off and set up again. The catch used to be a silent proximity
+  test, which is fine when being caught costs nothing and simply unfair when
+  it costs the run.
 - **He hunts you around corners** — in a chase he beelines while he can see you,
   but the moment a wall breaks his line of sight he routes around it: a breadth-
   first search over the cell grid picks the next turn toward you, so he comes
@@ -164,8 +174,8 @@ make run
   tucked in and breathing slow. As it slips, the walls start to move on you,
   the whispers come closer together, and eventually you can hear your own
   pulse. Bottom it out and the halls stop waiting to be found — spawns and
-  blackouts start coming for you. Almond water is the only thing that puts
-  any of it back.
+  blackouts start coming for you, and something usually does. Almond water is
+  the only thing that puts any of it back.
 - **Almond water** — a proper aluminium can now: brushed top and base, a
   cream label with the brown band and the almond on it, the wordmark
   wrapping round the curve the way print on a can does, and a little
@@ -337,6 +347,10 @@ With the F3 debug HUD open, dev hotkeys are live: `B` force blackout,
 - `BACKROOMS_POS="x,z,yaw"` — start at a specific spot (visual testing).
 - `BACKROOMS_LEVEL=n` — start on level n (visual testing).
 - `BACKROOMS_SEED=n` — fix the world seed (repeatable maze).
+- `BACKROOMS_NOBLACKOUT=1` — never schedule a blackout. Defaults to on whenever
+  `BACKROOMS_SHOT` is set, because blackouts run on the wall clock and a headless
+  capture is slow enough to land inside one; pass `0` to capture a blackout
+  deliberately. The F3 `B` key still forces one either way.
 
 ### Native regression tools
 

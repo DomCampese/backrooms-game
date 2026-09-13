@@ -114,4 +114,13 @@ cat >> "$ROOT/rlshim/raylib.h" <<'COLORS'
 #define RAYWHITE   CLITERAL(Color){ 245, 245, 245, 255 }
 COLORS
 
+# tools/pixdiff.py — the only way to check a visual change numerically, and the
+# thing CLAUDE.md tells you to reach for — imports PIL, which a fresh sandbox
+# does not have. Installing it here means the first diff anyone runs works
+# rather than dying on ModuleNotFoundError after a ten-minute sweep.
+if ! python3 -c 'import PIL' 2>/dev/null; then
+    echo "==> installing Pillow for tools/pixdiff.py"
+    pip3 install -q pillow || echo "!! pillow install failed — tools/pixdiff.py will not run"
+fi
+
 echo "==> done. now run: tools/sandbox-build.sh"

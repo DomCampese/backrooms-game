@@ -64,6 +64,14 @@ enum ChunkMesh {
 
 // ChunkData::elev is stored in decimetres so it fits in an int8_t.
 constexpr float ELEV_UNIT = 0.1f;
+// The tallest rise a body can walk up, and the tallest drop it can walk down
+// without leaving the floor. Anything taller is terrain you have to go around:
+// gatherCellAABBs puts a full-height blocker on the riser, and the mover falls
+// off it the other way instead of gliding down. Without this the 2.5 m terraces
+// of a Level 0 atrium and the Level 1 loading docks were walkable vertical
+// faces — you strolled up them like ramps.
+constexpr float MAX_STEP = 0.45f;
+constexpr int   MAX_STEP_UNITS = (int)(MAX_STEP / ELEV_UNIT);   // 4 decimetres, in elev units
 
 // walls: wallN[i][k] = north edge of cell (i,k) at z=k*CELL; wallW = west edge at x=i*CELL
 struct ChunkData {

@@ -80,6 +80,13 @@ struct Game {
     static constexpr float TAPE_RUN = 26.0f;    // one side of a tape, as far as you'll listen
     static constexpr float TAPE_NOISE = 32.0f;  // how far a playing deck carries, in metres
     static constexpr int   ESCAPE_COST = 12;  // doubloons that buy your way out for good
+    // The catch, and the windup you get to react to. He commits from LUNGE_REACH
+    // and can only take you inside CATCH_REACH while that commit is still
+    // running, which is LUNGE_TIME long and announced when it starts.
+    static constexpr float LUNGE_REACH = 2.5f;
+    static constexpr float LUNGE_TIME = 0.6f;
+    static constexpr float CATCH_REACH = 1.25f;
+    static constexpr float DEATH_CARD = 7.0f;   // seconds the death card holds the title screen
 
     // env/test knobs (BACKROOMS_* — see README)
     bool benchmark = false, cleanShot = false;
@@ -87,6 +94,7 @@ struct Game {
     std::vector<float> frameSamples;
     const char *shotPath = nullptr;
     int shotFrame = 600;                      // BACKROOMS_SHOTFRAME: capture earlier, for quick looks
+    bool noBlackout = false;                  // BACKROOMS_NOBLACKOUT: suppress the random schedule
 
     // resources
     Texture2D texEntity{}, texPartygoer{}, texProps{}, texScrawl{}, texAO{}, texOcc{}, texDog{},
@@ -129,7 +137,8 @@ struct Game {
     float velx = 0, velz = 0;
     float py = 0, vy = 0;                     // feet height (0 = dry floor, -0.6 = pool bottom)
     bool grounded = true;
-    float stamina = 1.0f, fov = 70.0f, stepAcc = 0, bobPhase = 0;
+    float stamina = 1.0f, fov = 70.0f;
+    float bobPhase = 0;                       // counts footfalls: an integer is a foot landing
     bool flashOn = false;
     float flashCur = 0;
     float battery = 1.0f;                     // flashlight charge, 0..1 — drains while on, dead at 0
@@ -173,11 +182,21 @@ struct Game {
     double nextHowl = 0;
     float entDist = 1e9f;                     // distance to Clark this frame
     float entDarkCur = 0;                     // how hard it's smothering the lights (ramps with the hunt)
+    // 1e18 is "never": far enough out that the schedule can never fire. The
+    // poolrooms have always used it; headless captures now borrow it too.
+    static constexpr double BLACKOUT_NEVER = 1e18;
     double nextBlackout = 0, blackoutEnd = -1;
     float blackoutCur = 1.0f, fear = 0.0f;
-    float caughtT = 0, escapeT = 0, killT = 0, fellT = 0, winT = 0;
+    float deathT = 0, escapeT = 0, killT = 0, fellT = 0, winT = 0;
+    // Stats frozen for the death card. Being caught used to cost nothing at all
+    // — it teleported you 800 m and you kept every item — so there was nothing
+    // in the game that could be lost, which is most of why none of it was
+    // frightening. Now it ends the run, and the card says what took you.
+    const char *deathBy = "";
+    float deathTime = 0; int deathM = 0, deathLevel = 0, deathKills = 0;
     float softTimer = 0;                      // how long you've stood on a soft patch
-    int caughtCount = 0, escapeCount = 0, killCount = 0, winCount = 0;
+    int deathCount = 0, escapeCount = 0, killCount = 0, winCount = 0;
+    int deepest = 0;                          // deepest level this descent reached
     float winTime = 0; int winM = 0, winKills = 0;   // stats frozen for the escape screen
     float distWalked = 0;
     double runStart = 0;
@@ -219,6 +238,7 @@ struct Game {
     const char *tapeLine = "";                 // which recovered-tape line to show
     char bestPath[512] = {};
     int bestEsc = 0, bestKill = 0, bestM = 0, bestWins = 0, bestTapes = 0;
+    int bestDeep = 0, bestRun = 0;            // deepest level reached, longest run in seconds
     bool everFlashed = false;                 // HUD: flashlight reminder until first use
     bool inMenu = false;                      // title screen up, world drifting behind it
     bool paused = false;                      // P: the world holds its breath
@@ -231,12 +251,14 @@ struct Game {
     bool pipesShut = false;                   // all three closed on this descent
 
     void winRun(double now);                  // stepped through the true way out — reset the descent
+    void dieRun(double now, const char *by);  // something got you: end the run and go back to the title
     void updateMenu(double now);              // drift the title-screen camera; any key begins
     void startRun(double now);                // leave the menu and start a fresh descent
     // Throw away the current descent and set up a fresh one from Level 0: a new
     // maze, you back at the start of it, gear and tallies reset. Records and the
     // win count survive, because those belong to the player rather than the run.
     void beginDescent(double now);
+    double blackoutIn(double now, double lead, double span);   // next blackout, or never
 
     void init();
     bool tick();                              // one frame; false = run ended (headless shot taken)
@@ -272,6 +294,9 @@ struct Game {
     // knot point, and returns the count (0 = no bunch). Shared by render + aim.
     int tableBalloonBunch(int a, int b, Vector3 *pos, Color *cols, Vector3 &tie);
     void popBalloonsAlongAim();               // revolver vs. balloons, when you fire in LEVEL FUN
+    // a round from the eye against an actor's body cylinder — pitch included
+    bool shotHitsBody(float ax, float az, float feetY, float bodyH,
+                      float radius, float maxRange) const;
 
     // update, in frame order (game.cpp)
     void updateLook();

@@ -25,7 +25,8 @@ struct Entity {
     double nextSpawn = 12.0;
     float gaze = 0, life = 0, unseen = 0;
     float dispY = 0;   // smoothed floor height under him, so he doesn't pop on stairs
-    float lunge = 0;   // mid-chase burst of speed
+    float lunge = 0;     // the committed lunge: a telegraphed 0.6 s burst, and the only way he lands a catch
+    float lungeCd = 0;   // and the breath between attempts, so a missed lunge is a real escape
     float stagger = 0; // brief hitch after taking a round — he slows, he doesn't leave
     int hp = 3;
     float wpx = 0, wpz = 0;   // current chase waypoint (next cell centre on the path to you)

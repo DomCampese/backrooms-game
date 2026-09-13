@@ -19,7 +19,14 @@ LOG="${OUT%.png}.log"
 if ! env "$@" BACKROOMS_SHOT="$OUT" "${BACKROOMS_BIN:-$ROOT/backrooms}" >"$LOG" 2>&1; then
     cat "$LOG"; exit 1
 fi
-if grep -iE 'SHADER: .*(failed|error)|ERROR:' "$LOG"; then exit 1; fi
+# A failed shader compile does not crash — raylib falls back to its default
+# shader, the frame goes black and the frame rate goes UP — so this grep is the
+# only thing standing between a broken build and a "faster" result. It must stay
+# case-sensitive on ERROR:, which is raylib's own TraceLog prefix: the audio and
+# GLFW stacks print a lowercase "error: XDG_RUNTIME_DIR is invalid or not set"
+# on every headless run in this sandbox, and a case-insensitive match on that
+# aborted the whole sweep after level 0 with nothing that looked like a cause.
+if grep -E 'SHADER: .*([Ff]ailed|[Ee]rror)|^ERROR:' "$LOG"; then exit 1; fi
 grep -E 'fps=|BENCH ' "$LOG" || true
 [[ -s "$OUT" ]] || { cat "$LOG"; echo '!! no screenshot written'; exit 1; }
 echo "wrote $PWD/$OUT"
