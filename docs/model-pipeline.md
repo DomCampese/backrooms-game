@@ -9,7 +9,8 @@ The revolver's bespoke mesh/pose format and vertex animation loop are removed.
 1. Prepare the model in Blender or another glTF exporter. Export a self-contained
    GLB with textures; use triangles, at most 65,535 vertices per primitive, one
    skeleton, up to four joint weights per vertex and no more than 256 joints.
-   Apply transforms and bake animation into TRS channels. Raylib 5.5 does not
+   Export normals/UVs, apply transforms, and bake animation into TRS channels.
+   Avoid animated nonuniform bone scale in the current CPU animation path. Raylib 5.5 does not
    provide a general morph-target or multi-skeleton animation pipeline.
 2. Put it under `assets/models/` and record its source/license alongside it.
    `make` automatically embeds every GLB there using Raylib's file-data callback.
@@ -42,7 +43,7 @@ sampling otherwise stops before the final authored keyframe. The original
 revolver regression caught that seam; checks now report failure and exit instead
 of aborting and generating macOS crash dialogs.
 
-## Validation checkpoint
+## Validation
 
 - Native build and regression passed: static GLB, mixed static/skinned GLB,
   blended joint weights, normal correction, all six cylinder transitions,
@@ -53,4 +54,11 @@ of aborting and generating macOS crash dialogs.
   idle 7.817 → 7.804 ms; continuous reload/shoot 6.236 → 6.422 ms (+0.186 ms, 3%).
   No GPU/frame-rate improvement is claimed; the animation overhead is small at
   this scale. Larger crowds of animated objects still require their own benchmark.
-- Full five-level/menu plus pool/flashlight sweep pending at this checkpoint.
+- Full five-level/menu, pool, flashlight, reload, muzzle, and close-wall captures
+  passed and were visually inspected. Matched idle before/after capture: zero
+  pixels differed by more than 16/255; mean luma remained 81.58.
+- Re-running asset preparation reproduced the committed GLB byte-for-byte.
+
+The scene benchmark measures one viewmodel; it does not establish a budget for
+large numbers of animated models. `make benchmark-animation` builds the reusable
+continuous-animation benchmark, comparable across revisions with tools/bench.sh.
