@@ -325,10 +325,13 @@ vec3 roomLight(vec3 P, vec3 N){
 vec3 inScatter(vec3 ro, vec3 rd, float d){
     vec3 s = vec3(0.0);
     if (uFlash > 0.01){
-        float cone = pow(max(dot(rd, uFlashDir), 0.0), 20.0);
+        float cone = pow(max(dot(rd, uFlashDir), 0.0), 26.0);
         if (cone > 0.001){
             const float k = 0.31622777;              // sqrt(0.10), matching the beam falloff
-            s += vec3(1.0,0.97,0.86) * (uFlash * cone * 7.5 * atan(d*k) / k);
+            // Backscatter toward the flashlight holder should be faint: the old
+            // strength washed out the very surfaces the torch was illuminating.
+            const float torchScatter = 0.20;
+            s += vec3(1.0,0.97,0.86) * (torchScatter * uFlash * cone * 7.5 * atan(d*k) / k);
         }
     }
     if (uFlareInt > 0.01){
@@ -418,8 +421,8 @@ void main(){
     vec3 rd = (fragPos - uViewPos) / max(dist, 1e-4);
     // Scaled by the level's own fog density, because the air is what does the
     // scattering — a level with clear air should not have a visible beam. The
-    // constant is low on purpose: at twice this the torch stopped reading as a
-    // beam and started reading as a wall of haze with the room lost behind it.
+    // flashlight has its own weaker scattering weight above; reducing this
+    // shared factor would also dim the flare halo.
     col += inScatter(uViewPos, rd, dist) * (uFogDen * 0.10);
     col = tonemap(col);
     finalColor = vec4(col, aOut) * colDiffuse;

@@ -1,5 +1,11 @@
 # CLAUDE.md
 
+## Flashlight visibility
+
+- Flashlight air scattering has a separate 0.20 weight and matches the surface
+  cone exponent (26). Keep surface illumination independent: increasing the air
+  term washes out the view. The shared fog factor also controls flare halos.
+
 ## Revolver iron sights
 
 - Hold RMB to aim; F/L toggle the flashlight. Aim never toggles or queues reload.
