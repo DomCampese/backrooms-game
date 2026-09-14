@@ -41,6 +41,7 @@ void Game::init() {
     texPartygoer = makePartygoerTex();
     texProps = makePropsTex();
     texScrawl = makeScrawlTex();
+    texFixtures = makeFixturesTex();
     texDog = makeDogTex();
     texAlmondWrap = makeAlmondWrapTex();
     canMesh = buildCanMesh();
@@ -138,6 +139,7 @@ void Game::init() {
     propDetail=makePropDetail(texProps);
     mats[MAT_PROPS].maps[MATERIAL_MAP_SPECULAR].texture=propDetail;
     mats[MAT_SCRAWL].maps[MATERIAL_MAP_DIFFUSE].texture = texScrawl;   // wall scrawl decals
+    mats[MAT_FIXTURES].maps[MATERIAL_MAP_DIFFUSE].texture = texFixtures;   // outlets, grilles, conduit
     mats[MAT_AO].maps[MATERIAL_MAP_DIFFUSE].texture = texAO;           // baked contact-shadow gradients
     mats[MAT_CAN].maps[MATERIAL_MAP_DIFFUSE].texture = texAlmondWrap;
     mats[MAT_DECK].maps[MATERIAL_MAP_DIFFUSE].texture = texDeck;

@@ -382,6 +382,25 @@ and breaks at the wrap, putting a row of half-features down every seam in the
 world. The brick had shipped that way for a while and nobody saw it, because
 until each brick got its own tone there was nothing at the seam to mismatch.
 
+**`tools/bench.sh` aborts on any line containing "error:", including ALSA's.**
+It merges the child's stderr into stdout and greps that for
+`SHADER: .*(failed|error)|ERROR:` case-insensitively, so the sandbox's usual
+`snd_func_card_id returned error` spam — and GLFW's `error: XDG_RUNTIME_DIR is
+invalid` — kill the run after the first binary. What you get is one `BENCH`
+line and no comparison, which looks like the harness working rather than the
+harness dying. Setting `XDG_RUNTIME_DIR` fixes one of the two; ALSA's is
+unavoidable while there is no sound card. Until the filter is narrowed, run the
+two binaries yourself with `BACKROOMS_BENCH=1 BACKROOMS_TIME=4` and read
+`mean_ms` off stdout, which does not carry the noise — alternate the order and
+take the best of five, exactly as bench.py would.
+
+**Decal geometry has to clear the wall, not the wall's centreline.** `WT` is
+half-thickness (0.11), so a fitting built at ±0.028 about `gz` is sealed inside
+the plasterboard. The conduit runs shipped that way for an afternoon: hundreds
+of them generated, counted, and baked into the mesh, and not one pixel of any
+of them on screen. Decals stand off the *face* (`gz ± WT ± clearance`), and the
+face has to be chosen before the offset is applied, not after.
+
 **A sine is the wrong curve for a walk cycle, and it wastes half your frames.**
 `sin(60 deg)` and `sin(120 deg)` are the same number, so an evenly sampled sheet
 driven by a sine puts the ankle in the same place twice: the first six-frame
@@ -592,6 +611,19 @@ pass, and both obey the same three rules, learned the hard way:
   edge" test that collision, pathfinding, line of sight and the mesher share.
   Light does not use it: `buildOccupancy` tests `WALL_SOLID` alone, because
   glass stops you but not a fluorescent. Don't reintroduce bare `== 1` / `== 3`.
+- **An atlas cell and the quad that carries it must be the same shape.** The
+  quad stretches its cell to fit, so a fitting drawn at one aspect and hung at
+  another comes out squashed — and on something as familiar as a faceplate that
+  reads as wrong instantly. `FIXTURES` (textures.h) is one table holding both
+  the atlas rect and the size on the wall, so the two cannot drift; the fittings
+  get rects of their own proportions rather than slots in a uniform grid. The
+  first version drew each fitting inside part of a square cell and hung the
+  whole cell, and every outlet in the building came out a narrow vertical
+  sliver.
+- **`addSolidBox` hardcodes UV (0.375, 0.75)** for every face it emits, so any
+  atlas it draws from needs plain, opaque material at that spot. Both the props
+  atlas and the fixtures atlas keep their metal swatch there deliberately. Move
+  it and the boxes sample a transparent cell and disappear.
 - **The scrawl atlas grid lives in two places and they must agree**:
   `makeScrawlTex` (textures.cpp) lays the phrases out 4 across and 8 down, and
   `SCRAWL_PHRASES` / the `uvOf` lambda in world.cpp cut the UVs to match. Add a

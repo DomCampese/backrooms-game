@@ -683,6 +683,206 @@ Texture2D makeScrawlTex() {
     return finishTexture(img, false);
 }
 
+// ---------------------------------------------------------------- fixtures
+// The fittings the building would actually have: outlets at skirting height
+// (backrooms canon names them specifically), a switch, a return-air grille, a
+// ceiling diffuser, and a fire-exit sign that points somewhere there is no
+// exit. Plus one flat galvanised swatch, which is what the conduit runs and
+// sprinkler heads sample — they are geometry rather than decals, and putting
+// them in the fixtures mesh keeps them off the props mesh's 16-bit index
+// budget.
+//
+// Each fitting gets an atlas rect of its own proportions rather than a slot in
+// a uniform grid, so that its cell and the quad that carries it are the same
+// shape and nothing is stretched. FIXTURES (textures.h) is that table; the
+// pixel rects below are the same rectangles in atlas space.
+static const int FIXPX[FIX_COUNT][4] = {   // x, y, w, h in the 512px atlas
+    {   8,   8,  96, 152 },   // FIX_OUTLET        75 x 118 mm
+    { 120,   8,  96, 152 },   // FIX_OUTLET_BROKEN
+    { 232,   8,  92, 148 },   // FIX_SWITCH        72 x 115 mm
+    {   8, 168, 224, 160 },   // FIX_GRILLE        560 x 400 mm
+    { 296, 176, 192, 192 },   // FIX_DIFFUSER      600 x 600 mm
+    { 280, 400, 224,  80 },   // FIX_SIGN          560 x 200 mm
+};
+const FixtureRect FIXTURES[FIX_COUNT] = {
+    { 8/512.f,     8/512.f, 104/512.f, 160/512.f, 0.0375f, 0.059f  },
+    { 120/512.f,   8/512.f, 216/512.f, 160/512.f, 0.0375f, 0.059f  },
+    { 232/512.f,   8/512.f, 324/512.f, 156/512.f, 0.036f,  0.0575f },
+    { 8/512.f,   168/512.f, 232/512.f, 328/512.f, 0.280f,  0.200f  },
+    { 296/512.f, 176/512.f, 488/512.f, 368/512.f, 0.300f,  0.300f  },
+    { 280/512.f, 400/512.f, 504/512.f, 480/512.f, 0.280f,  0.100f  },
+};
+
+Texture2D makeFixturesTex() {
+    const int W = 512, H = 512;
+    Image img = GenImageColor(W, H, BLANK);
+    Color *p = (Color *)img.data;
+    auto box = [&](int x0, int y0, int x1, int y1, Color c) {
+        if (x0 < 0) x0 = 0;
+        if (y0 < 0) y0 = 0;
+        if (x1 > W - 1) x1 = W - 1;
+        if (y1 > H - 1) y1 = H - 1;
+        for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++) p[y * W + x] = c;
+    };
+    auto frame = [&](int x0, int y0, int x1, int y1, int t, Color c) {
+        box(x0, y0, x1, y0 + t - 1, c); box(x0, y1 - t + 1, x1, y1, c);
+        box(x0, y0, x0 + t - 1, y1, c); box(x1 - t + 1, y0, x1, y1, c);
+    };
+    auto line = [&](int ax, int ay, int bx, int by, int t, Color c) {
+        int n = (abs(bx - ax) > abs(by - ay) ? abs(bx - ax) : abs(by - ay)) + 1;
+        for (int i = 0; i < n; i++) {
+            int x = ax + (bx - ax) * i / (n - 1), y = ay + (by - ay) * i / (n - 1);
+            box(x - t / 2, y - t / 2, x - t / 2 + t - 1, y - t / 2 + t - 1, c);
+        }
+    };
+    // Nothing down here has been wiped in years. Dirt gathers in the corners of
+    // a plate and along the underside of every louvre, which is most of what
+    // makes moulded plastic read as moulded plastic and not a grey rectangle.
+    auto grime = [&](int x0, int y0, int x1, int y1, uint32_t s, float amt) {
+        for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++) {
+            if (x < 0 || y < 0 || x > W - 1 || y > H - 1) continue;
+            Color &c = p[y * W + x];
+            if (!c.a) continue;
+            float v = 1.0f - amt * fbm2(x * 0.075f, y * 0.075f, s, 3);
+            c.r = cl8(c.r * v); c.g = cl8(c.g * v); c.b = cl8(c.b * v);
+        }
+    };
+    const unsigned char OP = 254;   // textured, opaque, no relief bump — see CLAUDE.md
+
+    // --- a duplex outlet, intact and with the cover torn off. Both fill their
+    // rect: the plate *is* the fitting, so there is no margin to leave.
+    for (int variant = 0; variant < 2; variant++) {
+        const int *r = FIXPX[variant];
+        int x0 = r[0], y0 = r[1], x1 = r[0] + r[2] - 1, y1 = r[1] + r[3] - 1;
+        const Color plate = { 226, 219, 198, OP }, lipHi = { 243, 237, 219, OP };
+        const Color lipLo = { 170, 163, 144, OP }, slot = { 28, 26, 25, OP };
+        box(x0, y0, x1, y1, plate);
+        box(x0, y0, x1, y0 + 3, lipHi); box(x0, y0, x0 + 3, y1, lipHi);
+        box(x0, y1 - 3, x1, y1, lipLo); box(x1 - 3, y0, x1, y1, lipLo);
+        if (variant == 0) {
+            for (int k = 0; k < 2; k++) {
+                int cy = y0 + 38 + k * 76;
+                box(x0 + 14, cy - 26, x1 - 14, cy + 26, { 213, 206, 186, OP });   // moulded recess
+                frame(x0 + 14, cy - 26, x1 - 14, cy + 26, 2, { 182, 174, 154, OP });
+                box(x0 + 30, cy - 19, x0 + 37, cy + 2, slot);                     // neutral
+                box(x1 - 37, cy - 19, x1 - 30, cy + 2, slot);                     // live
+                box(x0 + 43, cy + 9, x1 - 43, cy + 17, slot);                     // ground
+            }
+            box(x0 + 43, y0 + 71, x1 - 43, y0 + 79, { 146, 140, 124, OP });       // centre screw
+        } else {
+            // Half the cover is gone. What is left is the hole, the yoke still
+            // screwed to the box, and two wire ends nobody made safe.
+            box(x0 + 30, y0, x1, y1, { 24, 22, 21, OP });
+            for (int y = y0; y <= y1; y++) {          // a torn edge, not a cut one
+                int w = 6 + (int)(lat(y, 3, 0xF1u) * 14);
+                box(x0 + 30, y, x0 + 30 + w, y, plate);
+                box(x0 + 30 + w, y, x0 + 31 + w, y, lipLo);
+            }
+            box(x0 + 46, y0 + 30, x1 - 10, y0 + 44, { 96, 92, 84, OP });          // yoke
+            box(x0 + 46, y1 - 44, x1 - 10, y1 - 30, { 96, 92, 84, OP });
+            line(x0 + 54, y0 + 58, x1 - 18, y0 + 86, 6, { 172, 106, 48, OP });    // copper, bare
+            line(x0 + 60, y1 - 22, x1 - 24, y1 - 52, 5, { 178, 174, 168, OP });
+        }
+        grime(x0, y0, x1, y1, 0xA1u + (unsigned)variant * 7u, 0.34f);
+    }
+
+    // --- a switch plate, its rocker resting off
+    {
+        const int *r = FIXPX[FIX_SWITCH];
+        int x0 = r[0], y0 = r[1], x1 = r[0] + r[2] - 1, y1 = r[1] + r[3] - 1;
+        box(x0, y0, x1, y1, { 228, 221, 200, OP });
+        box(x0, y0, x1, y0 + 3, { 244, 238, 220, OP });
+        box(x0, y1 - 3, x1, y1, { 170, 163, 144, OP });
+        int rx0 = x0 + 30, rx1 = x1 - 30, ry0 = y0 + 36, ry1 = y1 - 36;
+        box(rx0, ry0, rx1, ry1, { 236, 230, 212, OP });
+        box(rx0, ry0, rx1, ry0 + (ry1 - ry0) / 2, { 212, 205, 187, OP });   // the pressed half, in shadow
+        frame(rx0, ry0, rx1, ry1, 2, { 174, 167, 148, OP });
+        box(x0 + 40, y0 + 12, x1 - 40, y0 + 20, { 146, 140, 124, OP });     // screws
+        box(x0 + 40, y1 - 20, x1 - 40, y1 - 12, { 146, 140, 124, OP });
+        grime(x0, y0, x1, y1, 0xB3u, 0.32f);
+    }
+
+    // --- return-air grille. Louvres are lit on top and dark underneath, which
+    // is the whole read: without the dark line it is a striped rectangle.
+    {
+        const int *r = FIXPX[FIX_GRILLE];
+        int x0 = r[0], y0 = r[1], x1 = r[0] + r[2] - 1, y1 = r[1] + r[3] - 1;
+        box(x0, y0, x1, y1, { 150, 147, 138, OP });
+        frame(x0, y0, x1, y1, 5, { 180, 176, 165, OP });
+        box(x0 + 11, y0 + 11, x1 - 11, y1 - 11, { 24, 23, 22, OP });
+        for (int i = 0; i < 9; i++) {
+            int ly = y0 + 16 + i * 14;
+            if (ly + 8 > y1 - 12) break;
+            box(x0 + 12, ly, x1 - 12, ly + 5, { 168, 164, 152, OP });
+            box(x0 + 12, ly + 6, x1 - 12, ly + 8, { 56, 54, 51, OP });
+        }
+        for (int sx = x0 + 7; sx <= x1 - 7; sx += (x1 - x0 - 14))
+            for (int sy = y0 + 7; sy <= y1 - 7; sy += (y1 - y0 - 14))
+                box(sx - 3, sy - 3, sx + 3, sy + 3, { 116, 112, 102, OP });
+        grime(x0, y0, x1, y1, 0xC7u, 0.42f);
+    }
+
+    // --- ceiling supply diffuser, egg-crate core
+    {
+        const int *r = FIXPX[FIX_DIFFUSER];
+        int x0 = r[0], y0 = r[1], x1 = r[0] + r[2] - 1, y1 = r[1] + r[3] - 1;
+        box(x0, y0, x1, y1, { 158, 155, 146, OP });
+        frame(x0, y0, x1, y1, 6, { 186, 182, 172, OP });
+        box(x0 + 13, y0 + 13, x1 - 13, y1 - 13, { 22, 21, 20, OP });
+        for (int i = 1; i < 7; i++) {   // the crate: thin bars, each catching light on one side
+            int gx = x0 + 13 + i * (x1 - x0 - 26) / 7, gy = y0 + 13 + i * (y1 - y0 - 26) / 7;
+            box(gx, y0 + 13, gx + 3, y1 - 13, { 128, 125, 117, OP });
+            box(gx, y0 + 13, gx, y1 - 13, { 174, 170, 160, OP });
+            box(x0 + 13, gy, x1 - 13, gy + 3, { 128, 125, 117, OP });
+            box(x0 + 13, gy, x1 - 13, gy, { 174, 170, 160, OP });
+        }
+        grime(x0, y0, x1, y1, 0xD5u, 0.36f);
+    }
+
+    // --- the fire-exit sign. It points down a corridor like any other.
+    {
+        const int *r = FIXPX[FIX_SIGN];
+        int x0 = r[0], y0 = r[1], x1 = r[0] + r[2] - 1, y1 = r[1] + r[3] - 1;
+        box(x0, y0, x1, y1, { 26, 118, 62, OP });
+        frame(x0, y0, x1, y1, 3, { 232, 232, 226, OP });
+        const Color ink = { 238, 240, 234, OP };
+        int ty = y0 + 22, th = 38, tx = x0 + 22, sw = 6;   // E X I T, in strokes
+        box(tx, ty, tx + sw, ty + th, ink);
+        box(tx, ty, tx + 22, ty + sw, ink);
+        box(tx, ty + th / 2 - 3, tx + 18, ty + th / 2 + 3, ink);
+        box(tx, ty + th - sw, tx + 22, ty + th, ink);
+        tx += 34;
+        line(tx, ty + 3, tx + 22, ty + th - 3, sw, ink);
+        line(tx + 22, ty + 3, tx, ty + th - 3, sw, ink);
+        tx += 34;
+        box(tx, ty, tx + sw, ty + th, ink);
+        tx += 20;
+        box(tx, ty, tx + 26, ty + sw, ink);
+        box(tx + 10, ty, tx + 16, ty + th, ink);
+        int ax = x1 - 46, ay = (y0 + y1) / 2;            // and the arrow
+        box(ax - 26, ay - 5, ax + 2, ay + 5, ink);
+        for (int i = 0; i <= 18; i++) box(ax + 2 + i, ay - 19 + i, ax + 2 + i, ay + 19 - i, ink);
+        grime(x0, y0, x1, y1, 0xE9u, 0.40f);
+    }
+
+    // --- plain galvanised metal, covering the pixel at UV (0.375, 0.75).
+    //
+    // That is not an arbitrary corner: `addSolidBox` hardcodes exactly that UV
+    // for every face it emits, and the props atlas keeps its plain metal there
+    // for the same reason. Two atlases agreeing on where "plain metal" lives is
+    // what lets the conduit and sprinkler bodies — geometry, not decals — go
+    // through the same helper as everything else. Move it and they sample a
+    // transparent cell and vanish without a word.
+    {
+        int ox = 144, oy = 336;                       // 128 px square, contains (192, 384)
+        for (int y = oy; y < oy + 128; y++) for (int x = ox; x < ox + 128; x++) {
+            float v = 0.88f + 0.24f * fbm2(x * 0.11f, y * 0.11f, 0x5Eu, 3);
+            p[y * W + x] = { cl8(150 * v), cl8(150 * v), cl8(146 * v), OP };
+        }
+    }
+    return finishTexture(img, false);
+}
+
 // prop atlas: left half cardboard, right-top cabinet front (drawers), right-bottom plain metal
 Texture2D makePropsTex() {
     const int W = 1024, H = 512;
