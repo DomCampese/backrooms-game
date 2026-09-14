@@ -66,6 +66,17 @@ int main() {
     }
     CHECK(testedBattery);
     g.applyLevel(0); g.px=15;g.pz=15;g.py=0;g.eyeY=1.62f;g.yaw=0.8f;g.pitch=0;
+    g.weapon=WEAPON_REVOLVER;g.ammo=3;
+    g.updateAim(true,.2f);CHECK(g.aiming && g.aimBlend==1 && !g.canReload());
+    capture(g,"iron-sights.png");
+    g.gunCd=.36f;g.recoil=.8f;capture(g,"iron-sights-fire.png");g.gunCd=0;g.recoil=0;
+    g.updateSprint(true,true,false,.016f);CHECK(!g.sprinting);
+    g.updateAim(false,.08f);CHECK(!g.aiming && !g.canReload());
+    g.updateAim(false,.08f);CHECK(g.aimBlend==0 && g.canReload());
+    g.reloadT=1;g.updateAim(true,.2f);CHECK(!g.aiming && g.aimBlend==0);
+    g.reloadT=0;g.weapon=WEAPON_FLARE;g.updateAim(true,.2f);CHECK(!g.aiming);
+    g.weapon=WEAPON_REVOLVER;g.paused=true;g.updateAim(true,.2f);CHECK(!g.aiming);
+    g.paused=false;g.ammo=6;
     // Exercise the imported animation continuously, including its endpoint seam.
     auto vertices = [&]() {
         std::vector<float> result;
@@ -115,7 +126,8 @@ int main() {
     for (int x=4;x<15 && !testedWall;++x) for (int z=4;z<15 && !testedWall;++z) {
         if (g.world.wallWVal(x,z)!=WALL_SOLID || g.world.pillarAt(x,z) || g.world.propAt(x,z)) continue;
         g.px=x*CELL+0.09f+Game::PR;g.pz=z*CELL+1;g.py=0;g.eyeY=1.62f;g.yaw=PI;g.pitch=0;
-        capture(g,"wall-clearance.png");testedWall=true;
+        capture(g,"wall-clearance.png");g.updateAim(true,.2f);capture(g,"iron-sights-wall.png");
+        g.updateAim(false,.2f);testedWall=true;
     }
     CHECK(testedWall);
     g.chalk.push_back({{g.px,g.py+0.016f,g.pz},g.yaw});
@@ -139,6 +151,6 @@ int main() {
     }
     for(const auto &entry:g.world.chunks) for(const auto &mesh:entry.second.meshes)
         CHECK(mesh.vertexCount<=65535);
-    printf("PASS sprint recovery, crouch/stationary gating, restart reset, battery retention; animation continuity; 18 visual captures\n");
+    printf("PASS sprint recovery, crouch/stationary gating, restart reset, battery retention; animation continuity; held aim/reload gating; 21 visual captures\n");
     g.shutdown();
 }
