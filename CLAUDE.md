@@ -382,6 +382,44 @@ and breaks at the wrap, putting a row of half-features down every seam in the
 world. The brick had shipped that way for a while and nobody saw it, because
 until each brick got its own tone there was nothing at the seam to mismatch.
 
+**A sine is the wrong curve for a walk cycle, and it wastes half your frames.**
+`sin(60 deg)` and `sin(120 deg)` are the same number, so an evenly sampled sheet
+driven by a sine puts the ankle in the same place twice: the first six-frame
+Clark sheet had frames 1 and 2 differing by 129 silhouette pixels out of ~1900,
+and frames 4 and 5 by 96 — three poses wearing six frames' worth of texture. A
+real leg is planted for about 60% of the cycle, sliding backwards under the
+body, then swings through in the other 40% with the foot off the floor;
+`legPose` in textures.cpp is that, and it makes every frame distinct (worst pair
+646 px) as well as stopping the walk from skating. Measure a sheet by counting
+silhouette pixels that change between consecutive frames — the eye will happily
+tell you six near-identical poses look fine.
+
+**`DrawBillboardPro` does not place a billboard where `DrawBillboardRec` does.**
+Swapping one for the other to get a rotation moved the entity clean off the
+frame, and no value of `origin` brought it back to the same place. Whatever its
+convention is, it is not "Rec plus an angle", so it is not a drop-in. If a
+billboard needs to tilt, shear it in the sprite instead: the entity sheet's
+lean rows are exactly that, and they cost a texture row rather than an
+afternoon.
+
+**Details stamped onto a sprite after its body is drawn must use the same
+offsets the body used.** Those stamps — Clark's eyepatch, his eye, the skull on
+the hat, the bandolier — only recolour pixels that are already opaque, so one
+drawn at the unsheared position silently lands on empty background and is
+dropped. The symptom is not a misplaced detail, it is a *missing* one: on the
+first lean row his eye simply went out, which is the one thing on that sprite
+that must never happen by accident. `bodyOff(y)` is the single function both
+the scanline loop and the stamps go through.
+
+**A build failure looks exactly like a passing build if you only read the last
+line.** `tools/sandbox-build.sh` prints its error and then exits, so
+`build.sh 2>&1 | tail -1` shows you a compiler note rather than the word
+"built" — and the previous binary is still sitting there, so the next capture
+runs happily and shows you the *old* behaviour. Two separate sessions of
+"why is the entity missing" were this, both times from a missing `#include
+<cstdio>` for a temporary `printf`. Check that the last line actually starts
+with "built", or grep the output for "error".
+
 **Temporary test hooks must be removed by exact string, not by slicing.**
 Cutting from `s.index(start)` to `s.index(end)` is dangerous when the end
 anchor appears more than once — `if (shotPath && frame == shotFrame)` occurs
