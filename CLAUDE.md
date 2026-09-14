@@ -394,6 +394,32 @@ body, then swings through in the other 40% with the foot off the floor;
 silhouette pixels that change between consecutive frames — the eye will happily
 tell you six near-identical poses look fine.
 
+**`DrawBillboardPro` does not place a billboard where `DrawBillboardRec` does.**
+Swapping one for the other to get a rotation moved the entity clean off the
+frame, and no value of `origin` brought it back to the same place. Whatever its
+convention is, it is not "Rec plus an angle", so it is not a drop-in. If a
+billboard needs to tilt, shear it in the sprite instead: the entity sheet's
+lean rows are exactly that, and they cost a texture row rather than an
+afternoon.
+
+**Details stamped onto a sprite after its body is drawn must use the same
+offsets the body used.** Those stamps — Clark's eyepatch, his eye, the skull on
+the hat, the bandolier — only recolour pixels that are already opaque, so one
+drawn at the unsheared position silently lands on empty background and is
+dropped. The symptom is not a misplaced detail, it is a *missing* one: on the
+first lean row his eye simply went out, which is the one thing on that sprite
+that must never happen by accident. `bodyOff(y)` is the single function both
+the scanline loop and the stamps go through.
+
+**A build failure looks exactly like a passing build if you only read the last
+line.** `tools/sandbox-build.sh` prints its error and then exits, so
+`build.sh 2>&1 | tail -1` shows you a compiler note rather than the word
+"built" — and the previous binary is still sitting there, so the next capture
+runs happily and shows you the *old* behaviour. Two separate sessions of
+"why is the entity missing" were this, both times from a missing `#include
+<cstdio>` for a temporary `printf`. Check that the last line actually starts
+with "built", or grep the output for "error".
+
 **Temporary test hooks must be removed by exact string, not by slicing.**
 Cutting from `s.index(start)` to `s.index(end)` is dangerous when the end
 anchor appears more than once — `if (shotPath && frame == shotFrame)` occurs
