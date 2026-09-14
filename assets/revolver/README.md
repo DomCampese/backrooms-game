@@ -1,3 +1,14 @@
+# Current runtime asset
+
+The runtime now uses `../models/revolver.glb`, loaded by Raylib's standard APIs.
+The custom binary files described below have been removed. `tools/import-revolver.py`
+now prepares a portable GLB with named joints, standard TRS clips, embedded albedo,
+normal, and metallic/roughness textures. It retains the documented artistic edits.
+New unrelated models can be exported directly from Blender; they do not use this
+revolver-specific preparation script. See [the workflow](../../docs/model-pipeline.md).
+
+## Provenance and historical conversion notes
+
 # CC0 revolver
 
 Author: **loafbrr_1 / TheLoafbrr**. Source: [Revolver Game Asset](https://opengameart.org/content/revolver-game-asset), published December 4, 2021.
