@@ -7,6 +7,12 @@ Procedural worlds and sound, with an animated CC0 revolver and compact texture a
 
 ![screenshot](docs/screenshot.png)
 
+## Model asset pipeline
+
+Prepared `.glb` models use Raylib's standard model and animation loaders through
+`ModelAsset`. Add models under `assets/models`; build-time packaging discovers them
+automatically. See [the asset workflow and validation](docs/model-pipeline.md).
+
 ## Object realism pass
 
 The held revolver uses a complete CC0 model by loafbrr_1, with authored textures,

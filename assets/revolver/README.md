@@ -7,27 +7,39 @@ License: **Creative Commons CC0 1.0** ([legal terms](https://creativecommons.org
 Original archive: [revolver_fbx_gltf_blend_textures.zip](https://opengameart.org/sites/default/files/revolver_fbx_gltf_blend_textures.zip).
 SHA-256: `d404e247c2503937d7ba8fc965e9872a8e3636aef0de6100c2ae30650112eb4d`.
 
-## Conversion
+## Standard runtime asset
+
+The runtime asset is [revolver.glb](../models/revolver.glb), loaded by Raylib's
+standard model and animation APIs. The previous mesh.bin/poses.bin format is
+removed. See [the reusable model workflow](../../docs/model-pipeline.md).
 
 `tools/import-revolver.py /path/to/extracted/archive` reads the original
 `GLTF/RevolverExport.gltf` and `Textures/Revolver_1` / `Textures/RevolverAmmo`.
-This optional reimport requires NumPy and Pillow. Ordinary builds only require
-Python's standard library and the converted files committed here.
+This optional reimport requires NumPy and Pillow. It writes only the prepared GLB;
+ordinary builds use Python's standard library to package committed assets.
+New unrelated models can be exported directly from Blender and do not use this
+revolver-specific preparation recipe.
 
-- Retains all seven gun objects and six cartridges; combines them into two material batches (2,334 vertices, 2,534 triangles). Omits loose ammunition-box/display props and duplicate spent-case alternatives.
-- Preserves source UVs and normals, rigid joint assignments, and bind matrices. Rotates the source +X barrel to the game's +Z axis and centers it for the existing viewmodel transform.
-- Samples the complete Reload action and the first of six shots in Shoot at approximately 30 Hz. Runtime interpolates the sampled matrices. The existing 1.8-second reload and 0.42-second firing cooldown control playback.
-- Reload articulation is reversed in the handle’s local frame so the cylinder opens to the player’s left, with cartridge paths transformed together. Two reflections preserve the original closed geometry, UVs, and winding.
-- The complete Reload already includes opening/closing; the separate OpenCylinder/CloseCyinder clips are not appended.
-- Cartridges remain attached to the cylinder during shooting, avoiding the source's swap to omitted spent-case meshes. Reload retains individual cartridge movement. This is cosmetic ammunition animation, not a simulation of individual spent cases.
-- Downsamples authored albedo, AO, normals, roughness, and metalness to 512 pixels. Albedo gets partial AO and attenuated metallic diffuse energy to fit the game's diffuse/gloss lighting; this is not a full metallic PBR shader. Source tangent normals become the existing packed RG slope representation; roughness/metalness produce B gloss, alpha 128 selects absolute object gloss.
+## Artistic preparation
 
-`mesh.bin` contains two little-endian batches: uint32 vertex/index counts;
-vertices of eight float32 values (position, normal, UV) plus uint32 joint;
-then uint16 indices. `poses.bin` contains three clips (Default, Reload, Shoot):
-uint32 frame count, float32 duration, then 17 row-major 3x4 float32 skin matrices
-per frame. The coordinate conversion is baked into those matrices.
+- Seven gun objects and six cartridges are combined into two material batches:
+  2,334 vertices and 2,534 triangles. Loose props and duplicate spent-case meshes
+  are omitted.
+- Source geometry, UVs, and normals are preserved, with the barrel rotated from
+  +X to +Z and centered for the existing viewmodel. Prepared skin transforms are
+  exported as independent named joints with identity binds and standard TRS clips.
+- The complete reload and first firing cycle are resampled to standard glTF keys.
+  A 34 ms final-pose hold accommodates Raylib 5.5's 17 ms animation sampling.
+  Gameplay still controls the original 1.8-second reload and 0.42-second shot timing.
+- Reload opens left: hinge and cartridge trajectories are reversed together in
+  the handle's frame. The mesh and UVs are not mirrored. Cartridges remain in the
+  cylinder during firing and follow individual reload paths; spent cases do not
+  have persistent physical simulation.
+- Albedo is graded with partial AO and attenuated metallic diffuse energy for
+  this game's lighting. Textures are 512 pixels. Standard normal and combined
+  metallic/roughness maps are embedded in the GLB; the reusable renderer adapter
+  converts those maps to packed slope/gloss textures at load time.
 
-`tools/embed-materials.py revolver` creates the ignored C++ header used by
-`src/revolver.cpp`. No runtime downloads, filesystem paths, glTF parser,
-Blender, or Python dependencies are added to the executable.
+The standard GLB is 741,988 bytes and can be inspected in glTF-capable tools.
+Runtime uses Raylib's parser, with generic embedded-file packaging so it remains
+independent of its working directory. No Python or Blender runtime is required.

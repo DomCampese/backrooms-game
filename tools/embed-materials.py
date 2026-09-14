@@ -5,16 +5,14 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('group', nargs='?', choices=('objects', 'revolver'))
+parser.add_argument('group', nargs='?', choices=('objects', 'models'))
 args = parser.parse_args()
 groups = {
     'objects': ('object_materials.generated.h', [
         (f'object_{name}', root/'assets/materials'/f'{name}.jpg')
         for name in ('wood', 'metal', 'fabric')]),
-    'revolver': ('revolver.generated.h', [
-        ('revolver_'+name.split('.')[0].replace('-', '_'), root/'assets/revolver'/name)
-        for name in ('mesh.bin', 'poses.bin', 'gun.jpg', 'ammo.jpg',
-                     'gun-detail.png', 'ammo-detail.png')]),
+    'models': ('models.generated.h', [
+        ('model_'+str(i), path) for i, path in enumerate(sorted((root/'assets/models').rglob('*.glb')))]),
 }
 for group in ([args.group] if args.group else groups):
     filename, assets = groups[group]
@@ -24,6 +22,12 @@ for group in ([args.group] if args.group else groups):
         parts.append(f'static const unsigned char {symbol}[] = {{\n')
         parts.extend(','.join(str(b) for b in data[i:i+24])+',\n'
                      for i in range(0, len(data), 24))
+        parts.append('};\n')
+    if group == 'models':
+        parts.append('static const EmbeddedAsset modelAssets[] = {\n')
+        for symbol, path in assets:
+            key=path.relative_to(root/'assets').as_posix()
+            parts.append(f'{{"{key}",{symbol},sizeof({symbol})}},\n')
         parts.append('};\n')
     out = root/'src'/filename
     text = ''.join(parts)

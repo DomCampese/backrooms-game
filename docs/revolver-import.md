@@ -1,5 +1,8 @@
 # Authored CC0 revolver
 
+This page records the original import. The subsequent [standard model pipeline](model-pipeline.md)
+replaces its custom binary/pose format with GLB and Raylib APIs.
+
 The procedural revolver is replaced by loafbrr_1's complete gun model, with its
 UVs, material detail, rigged hammer/trigger/cylinder, and firing/reload motion.
 The cylinder opens to the player's left. Cartridges follow the reversed motion.

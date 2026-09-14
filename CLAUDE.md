@@ -1,6 +1,19 @@
 # CLAUDE.md
 
-## Current graphics implementation (September 2026)
+## Standard model pipeline (September 2026)
+
+- Imported models are standard GLB files under assets/models. ModelAsset uses
+  LoadModel, LoadModelAnimations, and UpdateModelAnimation; revolver code only
+  controls gameplay pose adjustments. The former mesh.bin/poses.bin format is removed.
+- The packaging callback embeds GLB bytes and falls back to normal file reads.
+  New models need no custom binary parser. Reuse one loaded asset for static instances.
+- Raylib 5.5 CPU skinning incorrectly translates normals. A version-gated fix
+  removes weighted translation after its update; keep the weighted fixture test.
+- Raylib samples animation every 17 ms. Prepared clips hold their final pose
+  for 34 ms so the last sample reaches it. Regression failures now exit cleanly.
+- See docs/model-pipeline.md for supported exports, limits, and performance.
+
+## Previous graphics implementation notes (September 2026)
 
 - Object detail maps use alpha 128 to identify an absolute gloss value in B;
   world maps and neutral maps use alpha 255 and retain level-relative gloss.
