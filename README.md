@@ -33,7 +33,8 @@ are needed. See [validation](docs/object-realism-pass-two.md).
 
 The renderer now uses generated, mipmapped surface-detail maps, recessed fluorescent
 housings, and physical baseboard trim. Tile grout reduces gloss independently of the
-glaze. The revolver and flare are 3D, including recoil, reload dip, and muzzle effects;
+glaze. Flashlight haze is kept faint so the illuminated surfaces remain readable.
+The revolver and flare are 3D, including recoil, reload dip, and muzzle effects;
 held almond water sits lower and is smaller. Model transforms now also transform lighting
 positions and normals, correcting misplaced lighting on cans and tape decks.
 
