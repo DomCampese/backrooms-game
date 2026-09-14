@@ -8,6 +8,9 @@
 #include <cstdlib>
 #include <ctime>
 #include <algorithm>
+#ifdef __APPLE__
+#include <CoreGraphics/CGDisplayConfiguration.h>
+#endif
 
 // found cassette tapes: someone else's days down here, in fragments
 static const char *TAPE_LINES[] = {
@@ -30,6 +33,15 @@ void Game::init() {
     if (const char *sf = getenv("BACKROOMS_SHOTFRAME")) shotFrame = atoi(sf);   // testing
     SetTraceLogLevel(LOG_WARNING);
     SetConfigFlags((benchmark ? 0 : FLAG_VSYNC_HINT) | FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
+#ifdef __APPLE__
+    // raylib 5.5 can call a null GL function inside InitWindow when macOS has
+    // no active display (e.g. a closed laptop used remotely). Check beforehand.
+    uint32_t displays=0;
+    if (CGGetActiveDisplayList(0,nullptr,&displays)!=kCGErrorSuccess || displays==0) {
+        fprintf(stderr,"Cannot start the game: macOS has no active display. Open the lid or connect a monitor.\n");
+        std::exit(EXIT_FAILURE);
+    }
+#endif
     InitWindow(1440, 850, "THE BACKROOMS — Level 0");
     SetExitKey(KEY_NULL);
     SetWindowMinSize(640, 400);
@@ -44,8 +56,7 @@ void Game::init() {
     texDog = makeDogTex();
     texAlmondWrap = makeAlmondWrapTex();
     canMesh = buildCanMesh();
-    revolverMesh = buildRevolverMesh();
-    revolverCylinderMesh = buildRevolverCylinderMesh();
+    revolver.load();
     flareMesh = buildFlareMesh();
     texDeck = makeDeckTex();
     deckMesh = buildDeckMesh();
@@ -220,8 +231,7 @@ void Game::shutdown() {
     }
     saveBest();
     UnloadTexture(texParticle);
-    UnloadMesh(revolverMesh);
-    UnloadMesh(revolverCylinderMesh);
+    revolver.unload();
     UnloadTexture(propDetail);
     UnloadMesh(flareMesh);
     for (Texture2D map : surfaceDetails) UnloadTexture(map);

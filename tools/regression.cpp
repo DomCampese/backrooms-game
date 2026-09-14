@@ -46,10 +46,41 @@ int main() {
     }
     assert(testedBattery);
     g.applyLevel(0); g.px=15;g.pz=15;g.py=0;g.eyeY=1.62f;g.yaw=0.8f;g.pitch=0;
-    g.weapon=WEAPON_REVOLVER;capture(g,"revolver.png");
+    // Exercise the imported animation continuously, including its endpoint seam.
+    auto vertices = [&]() {
+        std::vector<float> result;
+        for(const auto &mesh:g.revolver.meshes)
+            result.insert(result.end(),mesh.vertices,mesh.vertices+mesh.vertexCount*3);
+        return result;
+    };
+    g.revolver.pose(0,0,6); auto idle=vertices();
+    float maxRadius=0;
+    for(int frame=0;frame<=180;++frame) {
+        g.revolver.pose(1.8f*(1-frame/181.0f),0,0);
+        for(const auto &mesh:g.revolver.meshes) for(int v=0;v<mesh.vertexCount;++v) {
+            Vector3 p{mesh.vertices[v*3],mesh.vertices[v*3+1],mesh.vertices[v*3+2]};
+            assert(std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z));
+            maxRadius=fmaxf(maxRadius,Vector3Length(p));
+        }
+    }
+    g.revolver.pose(.000001f,0,0);auto end=vertices();
+    for(size_t i=0;i<idle.size();++i) assert(fabsf(idle[i]-end[i])<.001f);
+    for(int ammo=0;ammo<6;++ammo) {
+        g.revolver.pose(0,.000001f,ammo);auto fired=vertices();
+        g.revolver.pose(0,0,ammo);auto resting=vertices();
+        for(size_t i=0;i<fired.size();++i) assert(fabsf(fired[i]-resting[i])<.002f);
+    }
+    assert(maxRadius<.28f); // With the existing 0.48 scale and hold offset, stays inside 0.34 m.
+    printf("Imported reload maximum model-space radius: %.4f m\n",maxRadius);
+    g.ammo=6;g.weapon=WEAPON_REVOLVER;capture(g,"revolver.png");
+    g.ammo=5;g.gunCd=.34f;
     g.recoil=0.7f;g.muzzleT=0.06f;g.muzzleSmoke=0.8f;capture(g,"muzzle.png");
-    g.recoil=0;g.muzzleT=0;g.muzzleSmoke=0;g.reloadT=0.9f;capture(g,"reload.png");
-    g.reloadT=0;g.weapon=WEAPON_FLARE;capture(g,"flare-held.png");
+    g.recoil=0;g.gunCd=0;g.muzzleT=0;g.muzzleSmoke=0;g.reloadT=0.9f;capture(g,"reload.png");
+    for(int i=1;i<=5;++i) {
+        g.reloadT=1.8f*(1-i/6.0f);
+        char name[48];snprintf(name,sizeof(name),"reload-%d.png",i);capture(g,name);
+    }
+    g.reloadT=0;g.ammo=6;g.weapon=WEAPON_FLARE;capture(g,"flare-held.png");
     g.weapon=WEAPON_DECK;capture(g,"deck-held.png");
     g.drinkT=1;capture(g,"drink.png");g.drinkT=0;
     g.weapon=WEAPON_REVOLVER;
@@ -81,6 +112,6 @@ int main() {
     }
     for(const auto &entry:g.world.chunks) for(const auto &mesh:entry.second.meshes)
         assert(mesh.vertexCount<=65535);
-    printf("PASS sprint recovery, crouch/stationary gating, restart reset, battery retention; 13 visual captures\n");
+    printf("PASS sprint recovery, crouch/stationary gating, restart reset, battery retention; animation continuity; 18 visual captures\n");
     g.shutdown();
 }

@@ -377,17 +377,13 @@ void Game::drawHeldWeapon(const Camera3D &cam) {
     m.m12=pos.x; m.m13=pos.y; m.m14=pos.z; m.m15=1;
     float gloss = weapon == WEAPON_REVOLVER ? 0.48f : 0.12f;
     SetShaderValue(worldShader, locGloss, &gloss, SHADER_UNIFORM_FLOAT);
-    DrawMesh(weapon == WEAPON_REVOLVER ? revolverMesh : flareMesh, mats[MAT_PROPS], m);
     if (weapon == WEAPON_REVOLVER) {
-        // Cylinder indexes with the remaining rounds; reload swings the assembly
-        // out visibly while keeping every vertex inside the viewmodel envelope.
-        Matrix cylinder=MatrixMultiply(MatrixRotateZ((MAXAMMO-ammo)*TAU/6),
-                                       MatrixTranslate(-0.060f*dip,0.025f,0.015f));
-        DrawMesh(revolverCylinderMesh,mats[MAT_PROPS],MatrixMultiply(cylinder,m));
-    }
+        revolver.pose(reloadT,gunCd,ammo);
+        revolver.draw(mats[MAT_PROPS],m);
+    } else DrawMesh(flareMesh,mats[MAT_PROPS],m);
     SetShaderValue(worldShader, locGloss, &LEVELS[level].gloss, SHADER_UNIFORM_FLOAT);
     if (weapon == WEAPON_REVOLVER) {
-        Vector3 muzzle = Vector3Transform({0,0.04f,0.24f},m);
+        Vector3 muzzle = Vector3Transform(revolver.muzzlePosition,m);
         if (muzzleT > 0) {
             float life = muzzleT/0.09f;
             BeginBlendMode(BLEND_ADDITIVE);

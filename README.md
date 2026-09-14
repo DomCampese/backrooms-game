@@ -3,15 +3,18 @@
 Disclaimer: just for fun, mostly generated with Claude models
 
 A native, procedurally-infinite backrooms horror game in a small C++ codebase.
-Procedural worlds, meshes, and sound, with three compact CC0 texture tiles embedded at build time.
+Procedural worlds and sound, with an animated CC0 revolver and compact texture assets embedded at build time.
 
 ![screenshot](docs/screenshot.png)
 
 ## Object realism pass
 
-The revolver now has a chamfered frame, shaped wooden grip, open oval trigger
-guard, rear sight notch, chamber faces, and a separate cylinder that swings out
-on reload and indexes as rounds are spent. Wood and fabric furniture has softened
+The held revolver uses a complete CC0 model by loafbrr_1, with authored textures,
+normal detail, and firing/reload animation. It retains the six-shot mechanics and
+fits the existing wall-clearance envelope. [Import details and screenshots](docs/revolver-import.md)
+and [source/license](assets/revolver/README.md).
+
+Wood and fabric furniture has softened
 edges. Scanned metal, wood, and upholstery feed the existing shared prop atlas;
 object gloss is independent of each level's floor gloss.
 

@@ -151,7 +151,5 @@ struct World {
     void unloadAll();
 };
 
-Mesh buildRevolverMesh();
-Mesh buildFlareMesh();
 
-Mesh buildRevolverCylinderMesh();
+Mesh buildFlareMesh();

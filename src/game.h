@@ -7,6 +7,7 @@
 #include "levels.h"
 #include "entity.h"
 #include "audio.h"
+#include "revolver.h"
 #include <cstdint>
 #include <unordered_set>
 #include <vector>
@@ -91,7 +92,8 @@ struct Game {
     // resources
     Texture2D texEntity{}, texPartygoer{}, texProps{}, texScrawl{}, texAO{}, texOcc{}, texDog{},
               texAlmondWrap{}, texDeck{}, texParticle{};
-    Mesh revolverMesh{}, revolverCylinderMesh{}, flareMesh{};
+    Revolver revolver;
+    Mesh flareMesh{};
     Mesh canMesh{};                            // the almond water can, real geometry
     Mesh deckMesh{}, reelMesh{}, deckLampMesh{};   // the tape player, its reels, its record lamp
     // light-occlusion grid: the floorplan around you, uploaded for the shader to
