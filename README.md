@@ -153,7 +153,7 @@ make run
   in the shader, with a synthesized strike-and-hiss. Clark won't come near
   fire: catch him in the glow and he bolts. You carry three; you find another
   in your coat every so often. Water puts them out.
-- **Revolver** — select with 2 (or the mouse wheel). Six rounds, R to reload
+- **Revolver** — select with 1 (or the mouse wheel). Hold right mouse for iron sights; release to lower the gun. Six rounds, R to reload after lowering the sights
   (the gun dips while the cylinder's out), synthesized gunshot, muzzle flash
   that lights the hall. A hit rocks Clark back a step and costs him a
   moment's speed, but it does not turn him — it tells him exactly where you
@@ -318,7 +318,8 @@ Details that reward paying attention:
 | SHIFT | sprint (stamina) |
 | CTRL | crouch |
 | SPACE | jump |
-| F / right click | flashlight |
+| F / L | flashlight |
+| hold right mouse | revolver iron sights (release to lower; no reload while aiming) |
 | 1 / 2 / 4 / wheel | select item (revolver / flare / tape player) |
 | left click | use selected weapon |
 | Q | throw flare (always) |

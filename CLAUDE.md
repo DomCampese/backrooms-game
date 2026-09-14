@@ -1,5 +1,13 @@
 # CLAUDE.md
 
+## Revolver iron sights
+
+- Hold RMB to aim; F/L toggle the flashlight. Aim never toggles or queues reload.
+- Reload requires fully lowered sights; an active reload finishes before aiming.
+- Aim changes the viewmodel transform, FOV and look sensitivity, not asset skinning.
+  The imported rear frame rib is solid: the eye must clear it slightly to see
+  the front blade. Keep the blade tip on the camera ray when changing placement.
+
 ## Standard model pipeline (September 2026)
 
 - Imported models are standard GLB files under assets/models. ModelAsset uses

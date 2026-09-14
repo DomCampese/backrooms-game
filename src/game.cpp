@@ -309,7 +309,7 @@ void Game::beginDescent(double now) {
     deck = TapeDeck{}; if (IsSoundPlaying(sndVoice)) StopSound(sndVoice);
     caughtCount = 0; escapeCount = 0; killCount = 0; distWalked = 0;
     fear = 0; boostT = 0;
-    stamina = 1; sprintExhausted = false;
+    stamina = 1; sprintExhausted = false; aiming = false; aimBlend = 0;
     sanity = 1.0f; sanityStage = 0; sanityWarnT = 0; sanityLine = "";
     drinkT = 0; drinkLanded = false; nextHeartbeat = now + 20;
     ent.st = EState::Hidden; ent.nextSpawn = now + 30;
@@ -592,7 +592,7 @@ bool Game::tick() {
         return true;
     }
 
-    if (IsKeyPressed(KEY_F) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || IsKeyPressed(KEY_L)) {
+    if (IsKeyPressed(KEY_F) || IsKeyPressed(KEY_L)) {
         if (flashOn || battery > 0.001f) {
             flashOn = !flashOn;
             SetSoundPitch(sndClick, flashOn ? 1.0f : 0.85f);
@@ -650,8 +650,9 @@ void Game::updateLook() {
     // ---- look
     if (IsCursorHidden()) {
         Vector2 md = GetMouseDelta();
-        yaw += md.x * 0.0030f;
-        pitch = clampf(pitch - md.y * 0.0030f, -1.45f, 1.45f);
+        float sensitivity = 0.0030f * (1 - 0.25f * aimBlend);
+        yaw += md.x * sensitivity;
+        pitch = clampf(pitch - md.y * sensitivity, -1.45f, 1.45f);
     }
     fwd = { cosf(pitch) * cosf(yaw), sinf(pitch), cosf(pitch) * sinf(yaw) };
     f2x = cosf(yaw); f2z = sinf(yaw);
@@ -662,7 +663,7 @@ void Game::updateSprint(bool requested, bool moving, bool crouched, float dt) {
     // Hysteresis prevents rapid run/walk oscillation while holding shift empty.
     if (stamina <= 0.02f) sprintExhausted = true;
     if (stamina >= 0.25f) sprintExhausted = false;
-    sprinting = moving && requested && !sprintExhausted && !crouched;
+    sprinting = moving && requested && !sprintExhausted && !crouched && !aiming;
     stamina = clampf(stamina + (sprinting ? -dt / 10.0f : dt / 6.0f), 0, 1);
 }
 
@@ -755,7 +756,7 @@ void Game::updateMovement(float dt) {
         SetSoundVolume(s, (0.35f + 0.3f * bobAmt) * (inWater ? 1.4f : 1.0f));
         PlaySound(s);
     }
-    float fovT = sprinting ? 79.0f : 70.0f;
+    float fovT = sprinting ? 79.0f : 70.0f - 8.0f * aimBlend;
     fov += (fovT - fov) * fminf(1, 6 * dt);
 
     // hiding: crouched, close enough to real cover, and *still* — checked after
@@ -821,6 +822,20 @@ void Game::updateDevKeys(double now) {
     }
 }
 
+void Game::updateAim(bool held, float dt) {
+    aiming = held && weapon == WEAPON_REVOLVER && reloadT <= 0 &&
+        drinkT <= 0 && caughtT <= 0 && winT <= 0 && !paused && !inMenu;
+    float target = aiming ? 1.0f : 0.0f;
+    // Fixed travel time, independent of frame rate; no lingering asymptotic sway.
+    aimBlend += clampf(target - aimBlend, -dt / 0.16f, dt / 0.20f);
+    if (weapon != WEAPON_REVOLVER || reloadT > 0 || drinkT > 0) aimBlend = 0;
+}
+
+bool Game::canReload() const {
+    return !aiming && aimBlend <= 0 && weapon == WEAPON_REVOLVER &&
+        ammo < MAXAMMO && reloadT <= 0 && drinkT <= 0 && caughtT <= 0 && winT <= 0;
+}
+
 void Game::updateWeapons(float dt, double now) {
     // ---- weapons: keys 1/2/4 pick one directly, the wheel cycles, left click
     // uses whichever is in your hands
@@ -835,6 +850,7 @@ void Game::updateWeapons(float dt, double now) {
             wheelCd = 0.25f;
         }
     }
+    updateAim(IsCursorHidden() && IsMouseButtonDown(MOUSE_BUTTON_RIGHT), dt);
     gunCd = fmaxf(0, gunCd - dt);
     muzzleT = fmaxf(0, muzzleT - dt);
     muzzleSmoke = fmaxf(0, muzzleSmoke - dt * 0.7f);   // powder haze drifts and thins
@@ -903,7 +919,7 @@ void Game::updateWeapons(float dt, double now) {
             }
         }
     }
-    if (IsKeyPressed(KEY_R) && weapon == WEAPON_REVOLVER && ammo < MAXAMMO && reloadT <= 0) {
+    if (IsKeyPressed(KEY_R) && IsCursorHidden() && canReload()) {
         reloadT = 1.8f;
         SetSoundPitch(sndClick, 0.95f); PlaySound(sndClick);
     }

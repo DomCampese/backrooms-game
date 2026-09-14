@@ -164,6 +164,10 @@ struct Game {
     // revolver: hitscan, six rounds, three hits put Clark down
     int weapon = WEAPON_REVOLVER;                // see enum Weapon — keys 1/2/4, or the wheel
     int ammo = MAXAMMO;
+    bool aiming = false;
+    float aimBlend = 0;
+    void updateAim(bool held, float dt);
+    bool canReload() const;
     float reloadT = 0, gunCd = 0, muzzleT = 0, recoil = 0, wheelCd = 0;
 
     // run state
