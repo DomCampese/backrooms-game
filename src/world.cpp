@@ -6,6 +6,13 @@
 #include <vector>
 #include <algorithm>
 
+// Door trim: an architrave 24 mm proud of the wall face, and the threshold
+// strip under the opening. Both sample the props atlas's plain metal at
+// (0.375, 0.75), which is where addSolidBox looks.
+static const float TRIM_T = 0.024f;
+static const Color TRIM_COL = { 176, 170, 152, 254 };   // painted trim, no relief bump
+static const Color SILL_COL = { 138, 136, 130, 254 };   // dulled metal threshold
+
 // mesh builder: accumulate textured quads, bake to a raylib Mesh
 struct MB {
     std::vector<float> v, uv, n;
@@ -87,7 +94,10 @@ void World::generate(ChunkData &d, int cx, int cz) {
         int end = std::min(CCELLS - 1, a + len);
         int doorAt = (rng.f01() < (level == 0 ? 0.72f : 0.8f)) ? a + 1 + rng.ri(0, std::max(0, end - a - 2)) : -1;
         for (int i = a; i <= end; i++) {
-            if (i == doorAt) continue;
+            if (i == doorAt) {   // the gap in a wall run is a door, not an absence
+                if (horiz) d.wallN[i][b] = WALL_DOOR; else d.wallW[b][i] = WALL_DOOR;
+                continue;
+            }
             // rarely a window instead of blank wall; behind it, nothing
             uint8_t v = ((level == 0 || level == 3) && rng.f01() < 0.035f) ? WALL_WINDOW : WALL_SOLID;
             if (horiz) d.wallN[i][b] = v; else d.wallW[b][i] = v;
@@ -772,6 +782,23 @@ void World::ensureMesh(int cx, int cz) {
             wa.quad({gx+0.35f,0,gz},{gx+1.65f,0,gz},{gx+1.65f,2.3f,gz},{gx+0.35f,2.3f,gz},{0,0,-1},
                     {0,1},{1,1},{1,0},{0,0},glow);
         }
+        else if (nv == WALL_DOOR) {   // doorway on x-running wall
+            addBoxSides(wa, gx - WT, 0, gz - WT, gx + 0.35f, wallH, gz + WT);
+            addBoxSides(wa, gx + 1.65f, 0, gz - WT, gx + CELL + WT, wallH, gz + WT);
+            addBoxSides(wa, gx + 0.35f, 2.3f, gz - WT, gx + 1.65f, wallH, gz + WT, true);
+            // The architrave is what makes it read as a door rather than a hole:
+            // it stands proud of both faces, so you can see it is a way through
+            // from either side and at a glancing angle.
+            for (int sgn = -1; sgn <= 1; sgn += 2) {
+                float zf = (sgn < 0) ? gz - WT - TRIM_T : gz + WT;
+                addSolidBox(pr, gx + 0.29f, 0, zf, gx + 0.35f, 2.36f, zf + TRIM_T, TRIM_COL);
+                addSolidBox(pr, gx + 1.65f, 0, zf, gx + 1.71f, 2.36f, zf + TRIM_T, TRIM_COL);
+                addSolidBox(pr, gx + 0.29f, 2.30f, zf, gx + 1.71f, 2.36f, zf + TRIM_T, TRIM_COL);
+            }
+            // and a threshold strip underfoot, worn by whoever came through
+            float fy0 = floorY(cx * CCELLS + i, cz * CCELLS + kk);
+            addSolidBox(pr, gx + 0.35f, fy0, gz - 0.07f, gx + 1.65f, fy0 + 0.013f, gz + 0.07f, SILL_COL);
+        }
         uint8_t wv = dd.wallW[i][kk];
         if (wv == WALL_SOLID) {
             int gi0 = cx * CCELLS + i, gk0 = cz * CCELLS + kk;
@@ -797,6 +824,19 @@ void World::ensureMesh(int cx, int cz) {
             Color glow = crs ? Color{ 255, 60, 40, 70 } : Color{ 255, 248, 225, 70 };
             wa.quad({gx,0,gz+0.35f},{gx,0,gz+1.65f},{gx,2.3f,gz+1.65f},{gx,2.3f,gz+0.35f},{1,0,0},
                     {0,1},{1,1},{1,0},{0,0},glow);
+        }
+        else if (wv == WALL_DOOR) {   // doorway on z-running wall
+            addBoxSides(wa, gx - WT, 0, gz - WT, gx + WT, wallH, gz + 0.35f);
+            addBoxSides(wa, gx - WT, 0, gz + 1.65f, gx + WT, wallH, gz + CELL + WT);
+            addBoxSides(wa, gx - WT, 2.3f, gz + 0.35f, gx + WT, wallH, gz + 1.65f, true);
+            for (int sgn = -1; sgn <= 1; sgn += 2) {
+                float xf = (sgn < 0) ? gx - WT - TRIM_T : gx + WT;
+                addSolidBox(pr, xf, 0, gz + 0.29f, xf + TRIM_T, 2.36f, gz + 0.35f, TRIM_COL);
+                addSolidBox(pr, xf, 0, gz + 1.65f, xf + TRIM_T, 2.36f, gz + 1.71f, TRIM_COL);
+                addSolidBox(pr, xf, 2.30f, gz + 0.29f, xf + TRIM_T, 2.36f, gz + 1.71f, TRIM_COL);
+            }
+            float fy0 = floorY(cx * CCELLS + i, cz * CCELLS + kk);
+            addSolidBox(pr, gx - 0.07f, fy0, gz + 0.35f, gx + 0.07f, fy0 + 0.013f, gz + 1.65f, SILL_COL);
         }
         if (level == 0 || level == 4) {
             // Thin timber trim catches grazing light. Keep the extrusion within
@@ -1133,6 +1173,19 @@ int World::gatherCellAABBs(int ci, int ck, AABB *out, int cap, int cnt, bool inc
     uint8_t nv = wallNVal(ci, ck), wv = wallWVal(ci, ck);
     if (cnt < cap && blocksEdge(nv)) out[cnt++] = { x0 - WT, z0 - WT, x0 + CELL + WT, z0 + WT, wallH };
     if (cnt < cap && blocksEdge(wv)) out[cnt++] = { x0 - WT, z0 - WT, x0 + WT, z0 + CELL + WT, wallH };
+    // A doorway is passable — blocksEdge says so, and pathfinding, line of sight
+    // and the light all take it at that. Its jambs are not: without these two
+    // boxes you walk through the frame, which is worse than the bare gap the
+    // doorway replaced. The opening they leave is 1.3 m, comfortably wider than
+    // the player's 0.34 m radius and Clark's 0.38 m.
+    if (nv == WALL_DOOR) {
+        if (cnt < cap) out[cnt++] = { x0 - WT, z0 - WT, x0 + 0.35f, z0 + WT, wallH };
+        if (cnt < cap) out[cnt++] = { x0 + 1.65f, z0 - WT, x0 + CELL + WT, z0 + WT, wallH };
+    }
+    if (wv == WALL_DOOR) {
+        if (cnt < cap) out[cnt++] = { x0 - WT, z0 - WT, x0 + WT, z0 + 0.35f, wallH };
+        if (cnt < cap) out[cnt++] = { x0 - WT, z0 + 1.65f, x0 + WT, z0 + CELL + WT, wallH };
+    }
     if (cnt < cap && pillarAt(ci, ck)) out[cnt++] = { x0 + 0.42f, z0 + 0.42f, x0 + 1.58f, z0 + 1.58f, wallH };
     if (includeProps && cnt < cap) {
         uint8_t pv = propAt(ci, ck);

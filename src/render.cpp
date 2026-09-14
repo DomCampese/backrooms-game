@@ -1,6 +1,7 @@
 #include "game.h"
 #include "raymath.h"
 #include <cmath>
+#include "textures.h"   // ENT_FRAMES / DOG_FRAMES: how many frames each walk sheet holds
 #include <algorithm>
 
 // How hard one flare is burning right now: a fast flare-up as the cap comes
@@ -9,6 +10,21 @@
 // dims in the room and in its own glow together.
 static float flareGlow(const FlareProj &f, float flick) {
     return clampf((Game::FLAREBURN - f.burn) * 6.0f, 0, 1) * clampf(f.burn / Game::FLAREFADE, 0, 1) * flick;
+}
+
+// Which two frames of a walk sheet a gait phase falls between, and how far.
+//
+// Cross-fading rather than snapping matters at this frame count: six frames over
+// two steps is about one frame every 0.35 m, and a hard cut at that rate reads as
+// a strobe. Faded, the overlap reads as motion blur — the frames differ by a few
+// pixels at the ankle, so the ghost is exactly where a fast-moving limb should be
+// smeared anyway.
+static void gaitFrames(float phase, int frames, int &f0, int &f1, float &t) {
+    phase -= floorf(phase);
+    float u = phase * frames;
+    f0 = (int)u % frames;
+    f1 = (f0 + 1) % frames;
+    t = u - floorf(u);
 }
 
 void Game::renderScene(double now) {
@@ -285,8 +301,13 @@ void Game::renderScene(double now) {
         unsigned char l8 = cl8(40 + 215 * lum);
         unsigned char al = cl8(255 * clampf(expf(-dd * c.fogDen) * 1.6f, 0, 1) * fade);
         // shoulder height ~0.75 m, and a long body — drawn wide, not tall
-        DrawBillboardRec(cam, texDog, { 0, 0, 192, 128 },
-                         { d.x, d.dispY + 0.46f, d.z }, { 1.45f, 0.97f }, { l8, l8, l8, al });
+        int df0, df1; float dt2;
+        gaitFrames(d.gait / (DOG_STRIDE * 2.0f), DOG_FRAMES, df0, df1, dt2);
+        Vector3 dpos = { d.x, d.dispY + 0.46f, d.z };
+        DrawBillboardRec(cam, texDog, { (float)df0 * 192, 0, 192, 128 }, dpos, { 1.45f, 0.97f },
+                         { l8, l8, l8, cl8(al * (1.0f - dt2)) });
+        DrawBillboardRec(cam, texDog, { (float)df1 * 192, 0, 192, 128 }, dpos, { 1.45f, 0.97f },
+                         { l8, l8, l8, cl8(al * dt2) });
     }
     for (const FlareProj &f : litFlares) {   // each flare: hot core, orange halo, stub of a body
         if (!f.active) continue;
@@ -326,8 +347,35 @@ void Game::renderScene(double now) {
         unsigned char al = cl8(255 * clampf(fogf * 1.6f, 0, 1) * dieA);
         // LEVEL FUN has its own resident; everywhere else it's Pirate Clark
         Texture2D &spr = (level == 4) ? texPartygoer : texEntity;
-        DrawBillboardRec(cam, spr, { 0, 0, 128, 256 },
-                         { ent.x, eg + 0.98f - sink, ent.z }, { 0.98f, 1.96f }, { lum8, lum8, lum8, al });
+        // The gait rides entStepAcc, which is also what fires his footfalls, so
+        // the foot plants on the sound rather than near it. That accumulator
+        // wraps once per step and a walk is two steps, hence the parity bit.
+        int ef0, ef1; float et;
+        float gph = ((float)entStepAcc / ENT_STRIDE + entStepPar) * 0.5f;
+        gaitFrames(gph, ENT_FRAMES, ef0, ef1, et);
+        // A walk rises and falls twice a cycle, once per step, highest at
+        // mid-stance and lowest as a foot lands — so the bob is |sin| of the
+        // same phase the legs run on, and his head dips exactly when the
+        // footfall plays.
+        float bob = 0.032f * fabsf(sinf(gph * TAU));
+        // Which way his head is round. While stalking it follows ent.gaze, the
+        // same timer that tips him into a chase at 1.6 s, so his head coming
+        // round *is* the warning rather than a decoration beside it. In any
+        // other state he is already looking at you.
+        float look = (ent.st == EState::Stalk) ? clampf((float)ent.gaze / 1.45f, 0, 1) : 1.0f;
+        int headRow = look < 0.34f ? ENT_ROW_AWAY : (look < 0.72f ? ENT_ROW_HALF : ENT_ROW_FACE);
+        // And he tips into where he is going. Only the part of his velocity that
+        // runs across your view can show on a billboard, which is exactly the
+        // part a lean would be visible for. Below a walking pace it stays
+        // upright, so he does not twitch between rows while shuffling.
+        float side = ent.vx * r2x + ent.vz * r2z;
+        if (ent.st == EState::Chase && fabsf(side) > 1.4f)
+            headRow = (side < 0) ? ENT_ROW_LEAN_L : ENT_ROW_LEAN_R;
+        Vector3 epos = { ent.x, eg + 0.98f - sink + bob, ent.z };
+        DrawBillboardRec(cam, spr, { (float)ef0 * 128, (float)headRow * 256, 128, 256 }, epos,
+                         { 0.98f, 1.96f }, { lum8, lum8, lum8, cl8(al * (1.0f - et)) });
+        DrawBillboardRec(cam, spr, { (float)ef1 * 128, (float)headRow * 256, 128, 256 }, epos,
+                         { 0.98f, 1.96f }, { lum8, lum8, lum8, cl8(al * et) });
     }
     if (!inMenu && (drinkT > 0 || (weapon == WEAPON_DECK && deck.carried) ||
                     weapon == WEAPON_REVOLVER || (weapon == WEAPON_FLARE && flares > 0))) {

@@ -1367,8 +1367,13 @@ void Game::updateEntity(float dt, double now) {
             world.collideCircle(ent.x, ent.z, 0.38f);
             // you hear him coming: footfalls panned to his bearing, fading with range
             entStepAcc += chaseSpd * dt;
-            if (entStepAcc > 1.05f && entDist < 22.0f && caughtT <= 0) {
-                entStepAcc -= 1.05f;
+            // The wrap is the stride, so it has to happen whether or not you are
+            // near enough to hear it — the legs are visible a long way past the
+            // 22 m the footfall carries.
+            bool heard = entDist < 22.0f && caughtT <= 0;
+            if (entStepAcc > ENT_STRIDE && !heard) { entStepAcc -= ENT_STRIDE; entStepPar ^= 1; }
+            if (entStepAcc > ENT_STRIDE && heard) {
+                entStepAcc -= ENT_STRIDE; entStepPar ^= 1;
                 float inv = entDist > 0.01f ? 1.0f / entDist : 0.0f;
                 float sd = clampf((ex * inv) * r2x + (ez * inv) * r2z, -1.0f, 1.0f);   // + = to your right
                 Sound &s = entSteps[grng.ri(0, 3)];
@@ -1403,6 +1408,8 @@ void Game::updateEntity(float dt, double now) {
             float rx = ent.x - (from ? from->x : px), rz = ent.z - (from ? from->z : pz);
             float rl = sqrtf(rx * rx + rz * rz);
             if (rl > 0.01f) { ent.x += rx / rl * 6.5f * dt; ent.z += rz / rl * 6.5f * dt; }
+            entStepAcc += 6.5f * dt;   // bolting is still walking, as far as the legs are concerned
+            if (entStepAcc > ENT_STRIDE) { entStepAcc -= ENT_STRIDE; entStepPar ^= 1; }
             world.collideCircle(ent.x, ent.z, 0.38f);
             if (ent.life > 3.0f) { ent.st = EState::Hidden; ent.nextSpawn = now + 25 + grng.f01() * 35; }
         }
@@ -1412,6 +1419,13 @@ void Game::updateEntity(float dt, double now) {
             if (ent.life > 1.2f) { ent.st = EState::Hidden; ent.nextSpawn = now + 90 + grng.f01() * 60; }
         }
     }
+    // What he is actually doing, measured rather than assumed: states move him in
+    // three different places and each would have to remember to report it.
+    if (dt > 1e-5f) {
+        ent.vx = (ent.x - entPrevX) / dt;
+        ent.vz = (ent.z - entPrevZ) / dt;
+    }
+    entPrevX = ent.x; entPrevZ = ent.z;
     if (ent.st != EState::Hidden) {   // he takes the stairs too, smoothly
         float egt = world.floorY(cellOf(ent.x), cellOf(ent.z));
         ent.dispY += (egt - ent.dispY) * fminf(1, 10 * dt);
@@ -1492,6 +1506,7 @@ void Game::updateDogs(float dt, double now) {
         if (d.st == DState::Yelp) {          // shot or burned: bolts, then gone
             float rx = d.x - px, rz = d.z - pz, rl = sqrtf(rx * rx + rz * rz) + 1e-4f;
             d.x += rx / rl * 7.5f * dt; d.z += rz / rl * 7.5f * dt;
+            d.gait += 7.5f * dt;
             world.collideCircle(d.x, d.z, 0.3f);
             if (d.life > 2.6f) d.st = DState::Gone;
         } else {
@@ -1543,6 +1558,7 @@ void Game::updateDogs(float dt, double now) {
             }
             float sx = d.wpx - d.x, sz = d.wpz - d.z, sl = sqrtf(sx * sx + sz * sz) + 1e-4f;
             d.x += sx / sl * spd * dt; d.z += sz / sl * spd * dt;
+            d.gait += spd * dt;
             world.collideCircle(d.x, d.z, 0.3f);
 
             if (now > d.nextBark && dist < 26.0f && caughtT <= 0) {

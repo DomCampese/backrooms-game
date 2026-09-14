@@ -131,21 +131,82 @@ Texture2D makeCeilingTex() {
 }
 
 // PIRATE CLARK: tricorn hat, eyepatch strap, one glowing eye, hook hand, peg leg
+// Where one leg is at a given point in the gait, as a fraction of full stride.
+//
+// Not a sine. A leg spends about 60% of a cycle planted — sliding backwards
+// under the body at the speed the body moves forward — and the other 40%
+// swinging through, off the floor. A sine gets you a walk that skates, and
+// worse, it is symmetric: sin(60 deg) and sin(120 deg) put the ankle in exactly
+// the same place, so half the frames of an evenly sampled sheet come out
+// duplicates. Measured on the first version of this sheet, frames 1 and 2
+// differed by 129 pixels out of 1900 and frames 4 and 5 by 96.
+//
+// `x` runs -1 (trailing) to +1 (leading); `lift` is 0 planted, 1 at the top of
+// the swing.
+static void legPose(float ph, float &x, float &lift) {
+    ph -= floorf(ph);
+    if (ph < 0.6f) { float t = ph / 0.6f; x = 1.0f - 2.0f * t; lift = 0.0f; }
+    else           { float t = (ph - 0.6f) / 0.4f; x = -1.0f + 2.0f * t; lift = sinf(t * 3.14159265f); }
+}
+
+// PIRATE CLARK, six frames of a walk.
+//
+// The pose is the one this generator always drew; what moves between frames is
+// where the limbs are. Each limb swings about its own pivot and its offset is
+// scaled by how far down the limb the scanline is, so a leg pivots at the hip
+// and travels furthest at the boot rather than sliding sideways as a block.
+//
+// The two legs are not mirror images. He has a peg on the right, and a peg does
+// not stride — it is planted and swung stiffly from the hip. Giving the real leg
+// a longer throw than the peg is what turns a walk into his walk.
 Texture2D makeEntityTex() {
-    const int W = 128, H = 256;
+    const int FW = 128, FH = 256, W = FW * ENT_FRAMES, H = FH * ENT_ROWS;
     Image img = GenImageColor(W, H, BLANK);
     Color *p = (Color *)img.data;
-    auto put = [&](int x, int y, Color c) { if (x >= 0 && x < W && y >= 0 && y < H) p[y * W + x] = c; };
+    int fx = 0, fy = 0;   // origin of the cell being drawn; every write goes through it
+    auto put = [&](int x, int y, Color c) { x += fx; y += fy; if (x >= 0 && x < W && y >= 0 && y < H) p[y * W + x] = c; };
     auto hspan = [&](int y, float cx, float halfw, Color c) {
         for (int x = (int)(cx - halfw); x <= (int)(cx + halfw); x++) put(x, y, c);
     };
     Color body = { 13, 11, 10, 255 };
     Color hat  = { 18, 15, 13, 255 };
     Color wood = { 62, 48, 33, 255 };
+    for (int hr = 0; hr < ENT_ROWS; hr++)
+    for (int f = 0; f < ENT_FRAMES; f++) {
+    fx = f * FW; fy = hr * FH;
+    // 0 = looking away over his shoulder, 1 = facing you. The head, hat, beard
+    // and eye all ride it; the body does not turn, because the thing that makes
+    // this read is the head moving independently of the walk.
+    float look = (hr < ENT_ROW_LEAN_L) ? (float)hr / (ENT_ROW_FACE) : 1.0f;
+    float headShift = -(1.0f - look) * 9.0f;
+    // He tips into where he is going, from the feet up — they stay planted.
+    float shear = (hr == ENT_ROW_LEAN_L) ? -12.0f : (hr == ENT_ROW_LEAN_R) ? 12.0f : 0.0f;
+    // How far sideways the body is at a given height: the lean, pivoting at the
+    // boots, plus the head turn over the top 80 px. Everything stamped on him
+    // after the scanline loop — the eyepatch, the eye, the skull, the bandolier
+    // — has to go through this too. Those stamps only paint pixels that are
+    // already opaque, so a stamp at the unsheared position silently lands on
+    // empty background and vanishes: on the first lean row his eye went out.
+    auto bodyOff = [&](float y) {
+        float o = shear * clampf((252.0f - y) / 250.0f, 0, 1);
+        if (y < 80) o += headShift * clampf((80.0f - y) / 60.0f, 0, 1);
+        return o;
+    };
+    float ph = (float)f / ENT_FRAMES;
+    float lx0, ll0, rx0, rl0;
+    legPose(ph, lx0, ll0);           // the real leg
+    legPose(ph + 0.5f, rx0, rl0);    // and the peg, half a cycle behind it
+    // A peg is not a leg: it is planted and swung stiffly from the hip, with
+    // barely any throw and almost no lift. That asymmetry is the limp.
+    float legReal = lx0 * 7.0f,  liftReal = ll0 * 7.0f;
+    float legPeg  = rx0 * 4.0f,  liftPeg  = rl0 * 2.5f;
+    float armL = -rx0 * 5.5f, armR = -lx0 * 4.5f;   // arms answer the opposite leg
+    float hemSway = lx0 * 2.4f;
     for (int y = 2; y < 252; y++) {
         float wob = (vnoise2(0.05f * y, 3.7f, 77u) - 0.5f) * 7.0f;
         float rag = (vnoise2(0.35f * y, 9.1f, 88u) - 0.5f) * 2.5f;
         float cx = 64 + wob * 0.35f;
+        cx += bodyOff((float)y);
         if (y >= 2 && y < 16) hspan(y, cx, 10 + (y - 2) * 0.35f + rag * 0.5f, hat);   // hat crown
         if (y >= 10 && y < 16) {                                                     // upturned brim corners
             for (int s = -1; s <= 1; s += 2)
@@ -165,33 +226,44 @@ Texture2D makeEntityTex() {
             float t = (y - 62) / 103.0f;
             float halfw = (t < 0.10f) ? 12 + t * 110 : (y < 150 ? 23 - 5 * t : 22 + (y - 150) * 0.35f);
             float hem = (y > 158) ? (vnoise2(0.6f * y, 5.5f, 71u) - 0.5f) * 4 : 0;
-            hspan(y, cx, halfw + rag + hem, body);
+            // heavy wool does not keep up with the legs inside it
+            float sway = (y > 138) ? hemSway * (y - 138) / 27.0f : 0.0f;
+            hspan(y, cx + sway, halfw + rag + hem, body);
         }
         if (y > 68 && y <= 190) {                                                    // arms
             float t = (y - 68) / 122.0f;
             float off = 24 + 7 * t;
-            hspan(y, cx - off, 3.6f + rag * 0.5f, body);
-            if (y <= 184) hspan(y, cx + off, 3.6f + rag * 0.5f, body);
+            hspan(y, cx - off + armL * t, 3.6f + rag * 0.5f, body);
+            if (y <= 184) hspan(y, cx + off + armR * t, 3.6f + rag * 0.5f, body);
         }
         if (y > 165 && y < 252) {                                                    // legs: boot + peg
             float t = (y - 165) / 87.0f;
-            hspan(y, cx - 10 + wob * 0.2f, 5.8f - 1.2f * t + rag * 0.5f, body);      // left: real leg
-            if (y > 244) hspan(y, cx - 10 + wob * 0.2f, 8, body);                    // boot
-            if (y <= 185) hspan(y, cx + 10 + wob * 0.2f, 5.8f + rag * 0.5f, body);   // right: stump...
-            else hspan(y, cx + 10 + wob * 0.2f, 2.4f, wood);                         // ...then peg leg
+            float lx = cx - 10 + wob * 0.2f + legReal * t;
+            float rx = cx + 10 + wob * 0.2f + legPeg * t;
+            if (y < 252 - liftReal) {
+                hspan(y, lx, 5.8f - 1.2f * t + rag * 0.5f, body);                    // left: real leg
+                if (y > 244 - liftReal) hspan(y, lx, 8, body);                        // boot
+            }
+            if (y < 252 - liftPeg) {
+                if (y <= 185) hspan(y, rx, 5.8f + rag * 0.5f, body);                 // right: stump...
+                else hspan(y, rx, 2.4f, wood);                                       // ...then peg leg
+            }
         }
     }
-    // eyepatch strap across the face
+    // eyepatch strap across the face, turning with it
     for (int x = 46; x <= 82; x++) {
-        int y = 30 + (x - 46) / 9;
-        if (p[y * W + x].a) { p[y * W + x] = { 58, 52, 46, 255 }; p[(y + 1) * W + x] = { 48, 43, 38, 255 }; }
+        int y = 30 + (x - 46) / 9 + fy;
+        int xx = fx + x + (int)bodyOff(30.0f + (x - 46) / 9.0f);
+        if (xx >= 0 && xx < W && p[y * W + xx].a) { p[y * W + xx] = { 58, 52, 46, 255 }; p[(y + 1) * W + xx] = { 48, 43, 38, 255 }; }
     }
-    // single glowing eye (right side; left is under the patch) — brighter for the close-ups
-    {
-        float ex = 64 + 7.5f, ey = 36;
+    // Single glowing eye; the left is under the patch. It is only lit on the row
+    // where he is facing you — eyeshine you can see means something is looking
+    // back, so it must not be there while his head is turned away.
+    if (look > 0.55f) {
+        float ex = 64 + 7.5f + bodyOff(36.0f), ey = 36;
         for (int dy = -7; dy <= 7; dy++) for (int dx = -7; dx <= 7; dx++) {
             float d = sqrtf((float)(dx * dx + dy * dy));
-            int x = (int)(ex + dx), y = (int)(ey + dy);
+            int x = (int)(ex + dx) + fx, y = (int)(ey + dy) + fy;
             if (x < 0 || x >= W || y < 0 || y >= H || p[y * W + x].a == 0) continue;
             if (d < 3.0f) p[y * W + x] = { 244, 238, 214, 255 };
             else if (d < 7.0f) {
@@ -203,7 +275,7 @@ Texture2D makeEntityTex() {
     }
     // hook where the right hand should be
     {
-        float hx = 64 + 31, hy = 194;
+        float hx = 64 + 31 + armR, hy = 194;   // it is on the end of the arm that just swung
         for (int dy = -6; dy <= 8; dy++) for (int dx = -7; dx <= 7; dx++) {
             float d = sqrtf((float)(dx * dx + dy * dy));
             if (fabsf(d - 5.0f) < 1.4f && dy > -3) put((int)(hx + dx), (int)(hy + dy), { 150, 150, 158, 255 });
@@ -213,6 +285,7 @@ Texture2D makeEntityTex() {
     }
     // the movie-poster details: skull on the hat, bandolier, brass buttons
     auto putIf = [&](int x, int y, Color c) {
+        x += fx + (int)bodyOff((float)y); y += fy;
         if (x >= 0 && x < W && y >= 0 && y < H && p[y * W + x].a) p[y * W + x] = c;
     };
     {   // bone-white skull emblem, crossbones behind
@@ -232,25 +305,55 @@ Texture2D makeEntityTex() {
         }
         for (int y = 82; y <= 152; y += 14) { putIf(59, y, { 158, 124, 58, 255 }); putIf(60, y, { 182, 148, 74, 255 }); } // buttons
     }
+    }
     return finishTexture(img, false);
 }
 
 // THE PARTYGOER =): pale yellow, painted-on smile, striped party hat. It was
 // here before the bunting went up. It will be here after.
 Texture2D makePartygoerTex() {
-    const int W = 128, H = 256;
+    const int FW = 128, FH = 256, W = FW * ENT_FRAMES, H = FH * ENT_ROWS;
     Image img = GenImageColor(W, H, BLANK);
     Color *p = (Color *)img.data;
-    auto put = [&](int x, int y, Color c) { if (x >= 0 && x < W && y >= 0 && y < H) p[y * W + x] = c; };
+    int fx = 0, fy = 0;
+    auto put = [&](int x, int y, Color c) { x += fx; y += fy; if (x >= 0 && x < W && y >= 0 && y < H) p[y * W + x] = c; };
     auto hspan = [&](int y, float cx, float halfw, Color c) {
         for (int x = (int)(cx - halfw); x <= (int)(cx + halfw); x++) put(x, y, c);
     };
     Color skin = { 208, 182, 84, 255 };
     Color skin2 = { 176, 150, 62, 255 };
+    // It walks like something wearing a body rather than living in one: the legs
+    // do the work and the arms barely answer, which is most of why it is worse
+    // to look at than Clark.
+    for (int hr = 0; hr < ENT_ROWS; hr++)
+    for (int f = 0; f < ENT_FRAMES; f++) {
+    fx = f * FW; fy = hr * FH;
+    // 0 = looking away over his shoulder, 1 = facing you. The head, hat, beard
+    // and eye all ride it; the body does not turn, because the thing that makes
+    // this read is the head moving independently of the walk.
+    float look = (hr < ENT_ROW_LEAN_L) ? (float)hr / (ENT_ROW_FACE) : 1.0f;
+    float headShift = -(1.0f - look) * 9.0f;
+    // He tips into where he is going, from the feet up — they stay planted.
+    float shear = (hr == ENT_ROW_LEAN_L) ? -12.0f : (hr == ENT_ROW_LEAN_R) ? 12.0f : 0.0f;
+    float ph = (float)f / ENT_FRAMES;
+    float lx0, ll0, rx0, rl0;
+    legPose(ph, lx0, ll0);
+    legPose(ph + 0.5f, rx0, rl0);
+    float legL = lx0 * 6.0f, liftL = ll0 * 5.5f;
+    float legR = rx0 * 6.0f, liftR = rl0 * 5.5f;
+    float armSw = -lx0 * 2.2f;
+    // Same rule as Clark: its face is painted on, so the smile and the eyes have
+    // to travel with the head or they end up on the wall behind it.
+    auto bodyOff = [&](float y) {
+        float o = shear * clampf((252.0f - y) / 250.0f, 0, 1);
+        if (y < 76) o += headShift * clampf((76.0f - y) / 54.0f, 0, 1);
+        return o;
+    };
     for (int y = 24; y < 252; y++) {
         float wob = (vnoise2(0.05f * y, 8.2f, 177u) - 0.5f) * 6.0f;
         float rag = (vnoise2(0.35f * y, 4.4f, 188u) - 0.5f) * 2.2f;
         float cx = 64 + wob * 0.3f;
+        cx += bodyOff((float)y);
         if (y >= 24 && y <= 62) {   // round head
             float dy = (y - 43) / 20.0f;
             if (dy * dy < 1.0f) hspan(y, cx, 19.0f * sqrtf(1 - dy * dy) + rag * 0.5f, skin);
@@ -265,20 +368,27 @@ Texture2D makePartygoerTex() {
         if (y > 78 && y <= 178) {   // arms, hanging a little too still
             float t = (y - 78) / 100.0f;
             float off = 21 + 8 * t;
-            hspan(y, cx - off, 3.4f + rag * 0.4f, skin2);
-            hspan(y, cx + off, 3.4f + rag * 0.4f, skin2);
+            hspan(y, cx - off - armSw * t, 3.4f + rag * 0.4f, skin2);
+            hspan(y, cx + off + armSw * t, 3.4f + rag * 0.4f, skin2);
         }
         if (y > 200 && y < 252) {   // legs
-            hspan(y, cx - 9 + wob * 0.2f, 5.2f + rag * 0.4f, skin2);
-            hspan(y, cx + 9 + wob * 0.2f, 5.2f + rag * 0.4f, skin2);
-            if (y > 246) { hspan(y, cx - 9, 7, skin2); hspan(y, cx + 9, 7, skin2); }
+            float t = (y - 200) / 52.0f;
+            float lx = cx - 9 + wob * 0.2f + legL * t, rx = cx + 9 + wob * 0.2f + legR * t;
+            if (y < 252 - liftL) {
+                hspan(y, lx, 5.2f + rag * 0.4f, skin2);
+                if (y > 246 - liftL) hspan(y, lx, 7, skin2);
+            }
+            if (y < 252 - liftR) {
+                hspan(y, rx, 5.2f + rag * 0.4f, skin2);
+                if (y > 246 - liftR) hspan(y, rx, 7, skin2);
+            }
         }
     }
     // something sweet dripped down it once and never dried
-    for (int x = 0; x < W; x++) {
-        if (lat(x, 7, 191u) < 0.82f) continue;
-        int len = 30 + (int)(lat(x, 9, 192u) * 90);
-        for (int y = 70; y < 70 + len && y < 250; y++)
+    for (int x = fx; x < fx + FW; x++) {
+        if (lat(x - fx, 7, 191u) < 0.82f) continue;
+        int len = 30 + (int)(lat(x - fx, 9, 192u) * 90);
+        for (int y = 70 + fy; y < 70 + fy + len && y < fy + 250; y++)
             if (p[y * W + x].a) {
                 Color &c = p[y * W + x];
                 c.r = cl8(c.r * 0.82f); c.g = cl8(c.g * 0.80f); c.b = cl8(c.b * 0.72f);
@@ -286,6 +396,7 @@ Texture2D makePartygoerTex() {
     }
     // the face: two dot eyes and a smile that was painted on, not grown
     auto putIf = [&](int x, int y, Color c) {
+        x += fx + (int)bodyOff((float)y); y += fy;
         if (x >= 0 && x < W && y >= 0 && y < H && p[y * W + x].a) p[y * W + x] = c;
     };
     Color ink = { 34, 26, 20, 255 };
@@ -300,10 +411,11 @@ Texture2D makePartygoerTex() {
         Color ha = { 196, 60, 54, 255 }, hb = { 84, 138, 192, 255 };
         for (int y = 2; y <= 26; y++) {
             float t = (y - 2) / 24.0f;
-            hspan(y, 60 + t * 4, 1.0f + 11.0f * t, ((y / 5) & 1) ? ha : hb);
+            hspan(y, 60 + t * 4 + bodyOff((float)y), 1.0f + 11.0f * t, ((y / 5) & 1) ? ha : hb);
         }
         for (int dy = -2; dy <= 2; dy++) for (int dx = -2; dx <= 2; dx++)
-            if (dx * dx + dy * dy < 5) put(60 + dx, 2 + dy, { 226, 218, 200, 255 });   // pompom
+            if (dx * dx + dy * dy < 5) put(60 + dx + (int)bodyOff(2.0f), 2 + dy, { 226, 218, 200, 255 });   // pompom
+    }
     }
     return finishTexture(img, false);
 }
@@ -1151,20 +1263,33 @@ Texture2D makeAOStripTex() {
 // The pack, seen side-on: a low, long-backed quadruped with too much leg and a
 // head that hangs. Drawn wide rather than tall — it reads as an animal from the
 // silhouette alone, which is all you get before it reaches you.
+// The pack, four frames of a run. A quadruped moves its legs in diagonal pairs
+// — front-left with back-right — so that is how they are offset; moving all four
+// together would read as a rocking horse.
 Texture2D makeDogTex() {
-    const int W = 192, H = 128;
+    const int FW = 192, H = 128, W = FW * DOG_FRAMES;
     Image img = GenImageColor(W, H, BLANK);
     Color *p = (Color *)img.data;
-    auto put = [&](int x, int y, Color c) { if (x >= 0 && x < W && y >= 0 && y < H) p[y * W + x] = c; };
+    int fx = 0;
+    auto put = [&](int x, int y, Color c) { x += fx; if (x >= 0 && x < W && y >= 0 && y < H) p[y * W + x] = c; };
     auto vspan = [&](int x, int y0, int y1, Color c) { for (int y = y0; y <= y1; y++) put(x, y, c); };
     Color hide  = { 44, 28, 26, 255 };
     Color hide2 = { 62, 38, 32, 255 };
+    for (int f = 0; f < DOG_FRAMES; f++) {
+    fx = f * FW;
+    float phd = (float)f / DOG_FRAMES;
+    float ax, al2, bx, bl2;
+    legPose(phd, ax, al2);            // front-left and back-right move together...
+    legPose(phd + 0.5f, bx, bl2);     // ...against front-right and back-left
+    const float legSw[4]   = { ax * 0.030f, bx * 0.030f, bx * 0.030f, ax * 0.030f };
+    const float legLift[4] = { al2 * 7.0f,  bl2 * 7.0f,  bl2 * 7.0f,  al2 * 7.0f  };
+    float gather = cosf(phd * TAU) * 1.6f;        // the back bunches as it gathers
     for (int x = 22; x < 170; x++) {
         float u = (x - 22) / 148.0f;
         float mange = vnoise2(x * 0.22f, 3.1f, 921u);
         Color c = (mange > 0.56f) ? hide2 : hide;
         // body: deepest over the shoulders, tucked at the waist, rump lifted
-        float top = 46.0f + 5.0f * sinf(u * 3.14159f) - 4.0f * expf(-powf((u - 0.22f) * 5.0f, 2.0f));
+        float top = 46.0f + gather + 5.0f * sinf(u * 3.14159f) - 4.0f * expf(-powf((u - 0.22f) * 5.0f, 2.0f));
         float bot = 78.0f - 4.0f * expf(-powf((u - 0.55f) * 6.0f, 2.0f));
         if (u > 0.06f && u < 0.94f) vspan(x, (int)top, (int)bot, c);
         // neck and hanging head, forward of the shoulders
@@ -1174,8 +1299,8 @@ Texture2D makeDogTex() {
         }
         // four legs, thin and a little too long
         for (int L = 0; L < 4; L++) {
-            float lu = 0.16f + L * 0.22f;
-            if (fabsf(u - lu) < 0.022f) vspan(x, (int)bot - 2, 116, (L & 1) ? hide : hide2);
+            float lu = 0.16f + L * 0.22f + legSw[L];
+            if (fabsf(u - lu) < 0.022f) vspan(x, (int)bot - 2, 116 - (int)legLift[L], (L & 1) ? hide : hide2);
         }
         // tail, low and straight
         if (u > 0.90f) vspan(x, (int)(58 + (u - 0.90f) * 120.0f), (int)(64 + (u - 0.90f) * 130.0f), hide);
@@ -1185,6 +1310,7 @@ Texture2D makeDogTex() {
     for (int e = 0; e < 2; e++)
         for (int dx = 0; dx < 4; dx++) for (int dy = 0; dy < 3; dy++)
             put(26 + dx + e * 7, 60 + dy, Color{ 226, 216, 176, 255 });
+    }
     return finishTexture(img, false);
 }
 
