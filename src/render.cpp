@@ -410,14 +410,18 @@ void Game::drawHeldWeapon(const Camera3D &cam) {
     float dip = weapon == WEAPON_REVOLVER && reloadT > 0
         ? sinf(clampf(1 - reloadT / 1.8f, 0, 1) * PI) : 0;
     float kick = weapon == WEAPON_REVOLVER ? recoil : 0;
-    float tilt = weapon == WEAPON_REVOLVER ? 0.06f + kick * 0.30f - dip * 0.65f : 0.85f;
+    float aim = weapon == WEAPON_REVOLVER ? aimBlend * aimBlend * (3 - 2 * aimBlend) : 0;
+    // The front blade is at GLB Z/Y (0.23706, 0.07560). Keep its tip on
+    // the camera ray, with the eye just clearing the rear frame rib. Aligning
+    // the rib top exactly with the blade hides the blade behind this model's solid rear face.
+    float tilt = weapon == WEAPON_REVOLVER ? 0.06f - 0.063f * aim + kick * 0.30f - dip * 0.65f : 0.85f;
     Vector3 forward = Vector3Normalize(Vector3Add(fwd,
-        Vector3Add(Vector3Scale(right, -0.20f), Vector3Scale(up, tilt))));
+        Vector3Add(Vector3Scale(right, -0.20f * (1 - aim)), Vector3Scale(up, tilt))));
     Vector3 axisUp = Vector3Normalize(Vector3CrossProduct(right, forward));
     Vector3 axisRight = Vector3Normalize(Vector3CrossProduct(forward, axisUp));
-    float sway = sinf(bobPhase * PI) * 0.003f * bobAmt;
+    float sway = sinf(bobPhase * PI) * 0.003f * bobAmt * (1 - aim);
     Vector3 pos = Vector3Add(cam.position, Vector3Add(Vector3Scale(fwd, 0.155f-kick*0.012f),
-        Vector3Add(Vector3Scale(right, 0.077f+sway), Vector3Scale(up, -0.072f-dip*0.024f))));
+        Vector3Add(Vector3Scale(right, 0.077f*(1-aim)+sway), Vector3Scale(up, -0.072f+0.03605f*aim-dip*0.024f))));
     // Farthest vertex is <0.33 m from the eye, even during recoil/reload.
     float scale = weapon == WEAPON_REVOLVER ? 0.48f : 0.64f;
     Matrix m{};
@@ -427,17 +431,13 @@ void Game::drawHeldWeapon(const Camera3D &cam) {
     m.m12=pos.x; m.m13=pos.y; m.m14=pos.z; m.m15=1;
     float gloss = weapon == WEAPON_REVOLVER ? 0.48f : 0.12f;
     SetShaderValue(worldShader, locGloss, &gloss, SHADER_UNIFORM_FLOAT);
-    DrawMesh(weapon == WEAPON_REVOLVER ? revolverMesh : flareMesh, mats[MAT_PROPS], m);
     if (weapon == WEAPON_REVOLVER) {
-        // Cylinder indexes with the remaining rounds; reload swings the assembly
-        // out visibly while keeping every vertex inside the viewmodel envelope.
-        Matrix cylinder=MatrixMultiply(MatrixRotateZ((MAXAMMO-ammo)*TAU/6),
-                                       MatrixTranslate(-0.060f*dip,0.025f,0.015f));
-        DrawMesh(revolverCylinderMesh,mats[MAT_PROPS],MatrixMultiply(cylinder,m));
-    }
+        revolver.pose(reloadT,gunCd,ammo);
+        revolver.draw(mats[MAT_PROPS],m);
+    } else DrawMesh(flareMesh,mats[MAT_PROPS],m);
     SetShaderValue(worldShader, locGloss, &LEVELS[level].gloss, SHADER_UNIFORM_FLOAT);
     if (weapon == WEAPON_REVOLVER) {
-        Vector3 muzzle = Vector3Transform({0,0.04f,0.24f},m);
+        Vector3 muzzle = Vector3Transform(revolver.muzzlePosition,m);
         if (muzzleT > 0) {
             float life = muzzleT/0.09f;
             BeginBlendMode(BLEND_ADDITIVE);
@@ -504,7 +504,7 @@ void Game::renderUI(double now) {
     }
 
     if (drinkT <= 0 && (weapon == WEAPON_REVOLVER || (weapon == WEAPON_FLARE && flares > 0)))
-        DrawCircle(sw / 2, sh / 2, 1.5f, {230,220,190,110});
+        DrawCircle(sw / 2, sh / 2, 1.5f, Fade({230,220,190,110}, 1-aimBlend));
 
     if (elapsed < 9.0 && winT <= 0) {   // intro (suppressed while the escape screen is up)
         float a = 1.0f - clampf((float)elapsed / 3.0f, 0, 1);
@@ -654,7 +654,7 @@ void Game::renderUI(double now) {
         DrawText(TextFormat("3  almond water  ×%d", almond), 16, sh - 94, 16,
                  almond > 0 ? Color{ 150, 190, 235, 170 } : dimc);
         DrawText(reloadT > 0 ? "1  revolver  [reloading]"
-                    : TextFormat("1  revolver  %d/%d%s", ammo, MAXAMMO, ammo == 0 ? "  · R" : ""),
+                    : TextFormat("1  revolver  %d/%d%s  · hold RMB aim", ammo, MAXAMMO, ammo == 0 ? "  · R" : ""),
                     16, sh - 50, 16, weapon == WEAPON_REVOLVER ? selc : dimc);
         DrawText(TextFormat("2  flare  ×%d", flares), 16, sh - 72, 16, weapon == WEAPON_FLARE ? selc : dimc);
         DrawText(!deck.carried

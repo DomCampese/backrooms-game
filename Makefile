@@ -10,6 +10,10 @@ else
   LIBS_RL   := -L$(RAYLIB_PREFIX)/lib -lraylib
 endif
 
+ifeq ($(UNAME_S),Darwin)
+  LIBS_RL += -framework CoreGraphics
+endif
+
 ifeq ($(UNAME_S),Linux)
   LIBS_RL += -lm -ldl -lpthread
 endif
@@ -18,9 +22,12 @@ SRCS := $(wildcard src/*.cpp)
 HDRS := $(wildcard src/*.h)
 
 src/object_materials.generated.h: tools/embed-materials.py $(wildcard assets/materials/*.jpg)
-	python3 tools/embed-materials.py
+	python3 tools/embed-materials.py objects
 
-backrooms: $(SRCS) $(HDRS) src/object_materials.generated.h
+src/models.generated.h: tools/embed-materials.py $(shell find assets/models -name "*.glb")
+	python3 tools/embed-materials.py models
+
+backrooms: $(SRCS) $(HDRS) src/object_materials.generated.h src/models.generated.h
 	c++ -std=c++17 -O2 -Wall -Wno-missing-field-initializers $(CFLAGS_RL) $(SRCS) -o backrooms $(LIBS_RL)
 
 run: backrooms
@@ -32,9 +39,14 @@ clean:
 .PHONY: run clean
 
 # Uses the same native renderer as the game; run from shots/regression for captures.
-regression: src/object_materials.generated.h tools/regression.cpp $(filter-out src/main.cpp,$(SRCS)) $(HDRS)
+regression: src/object_materials.generated.h src/models.generated.h tools/regression.cpp $(filter-out src/main.cpp,$(SRCS)) $(HDRS)
 	c++ -std=c++17 -O2 -Wall -Wno-missing-field-initializers $(CFLAGS_RL) -Isrc tools/regression.cpp $(filter-out src/main.cpp,$(SRCS)) -o /tmp/backrooms-regression $(LIBS_RL)
 	mkdir -p shots/regression
-	cd shots/regression && /tmp/backrooms-regression
+	cd shots/regression && BACKROOMS_TEST_ASSET_DIR="$(CURDIR)/tests/fixtures" /tmp/backrooms-regression
 
 .PHONY: regression
+
+benchmark-animation: src/object_materials.generated.h src/models.generated.h tools/bench-animation.cpp $(filter-out src/main.cpp,$(SRCS)) $(HDRS)
+	c++ -std=c++17 -O2 $(CFLAGS_RL) -Isrc tools/bench-animation.cpp $(filter-out src/main.cpp,$(SRCS)) -o /tmp/backrooms-animation-after $(LIBS_RL)
+
+.PHONY: benchmark-animation

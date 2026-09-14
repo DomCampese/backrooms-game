@@ -1,5 +1,5 @@
 // THE BACKROOMS — Level 0
-// Native game on raylib + OpenGL 3.3. Procedural content plus embedded CC0 object materials.
+// Native game on raylib + OpenGL 3.3. Procedural worlds plus embedded CC0 materials and revolver.
 //
 // Module map:
 //   util      hashes, RNG, value noise, shared palette

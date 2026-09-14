@@ -3,15 +3,24 @@
 Disclaimer: just for fun, mostly generated with Claude models
 
 A native, procedurally-infinite backrooms horror game in a small C++ codebase.
-Procedural worlds, meshes, and sound, with three compact CC0 texture tiles embedded at build time.
+Procedural worlds and sound, with an animated CC0 revolver and compact texture assets embedded at build time.
 
 ![screenshot](docs/screenshot.png)
 
+## Model asset pipeline
+
+Prepared `.glb` models use Raylib's standard model and animation loaders through
+`ModelAsset`. Add models under `assets/models`; build-time packaging discovers them
+automatically. See [the asset workflow and validation](docs/model-pipeline.md).
+
 ## Object realism pass
 
-The revolver now has a chamfered frame, shaped wooden grip, open oval trigger
-guard, rear sight notch, chamber faces, and a separate cylinder that swings out
-on reload and indexes as rounds are spent. Wood and fabric furniture has softened
+The held revolver uses a complete CC0 model by loafbrr_1, with authored textures,
+normal detail, and firing/reload animation. It retains the six-shot mechanics and
+fits the existing wall-clearance envelope. [Import details and screenshots](docs/revolver-import.md)
+and [source/license](assets/revolver/README.md).
+
+Wood and fabric furniture has softened
 edges. Scanned metal, wood, and upholstery feed the existing shared prop atlas;
 object gloss is independent of each level's floor gloss.
 
@@ -144,7 +153,7 @@ make run
   in the shader, with a synthesized strike-and-hiss. Clark won't come near
   fire: catch him in the glow and he bolts. You carry three; you find another
   in your coat every so often. Water puts them out.
-- **Revolver** — select with 2 (or the mouse wheel). Six rounds, R to reload
+- **Revolver** — select with 1 (or the mouse wheel). Hold right mouse for iron sights; release to lower the gun. Six rounds, R to reload after lowering the sights
   (the gun dips while the cylinder's out), synthesized gunshot, muzzle flash
   that lights the hall. A hit rocks Clark back a step and costs him a
   moment's speed, but it does not turn him — it tells him exactly where you
@@ -309,7 +318,8 @@ Details that reward paying attention:
 | SHIFT | sprint (stamina) |
 | CTRL | crouch |
 | SPACE | jump |
-| F / right click | flashlight |
+| F / L | flashlight |
+| hold right mouse | revolver iron sights (release to lower; no reload while aiming) |
 | 1 / 2 / 4 / wheel | select item (revolver / flare / tape player) |
 | left click | use selected weapon |
 | Q | throw flare (always) |
