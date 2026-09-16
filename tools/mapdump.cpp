@@ -242,12 +242,14 @@ int main(int argc, char **argv) {
     for (int b = -half; b <= half; b++) for (int x = -half; x <= half; x++) {
         if (seen[idx(x, b)] || w.pillarAt(x, b)) continue;
         long size = 0;
+        bool touchesEdge = false;   // see below
         std::vector<std::pair<int,int>> q{ { x, b } };
         seen[idx(x, b)] = 1;
         while (!q.empty()) {
             auto [cx2, cz2] = q.back();
             q.pop_back();
             size++;
+            if (cx2 <= -half || cx2 >= half || cz2 <= -half || cz2 >= half) touchesEdge = true;
             const int dx[4] = { 1, -1, 0, 0 }, dz[4] = { 0, 0, 1, -1 };
             for (int k = 0; k < 4; k++) {
                 int nx = cx2 + dx[k], nz = cz2 + dz[k];
@@ -258,6 +260,11 @@ int main(int argc, char **argv) {
                 q.push_back({ nx, nz });
             }
         }
+        // A region touching the window border is almost certainly reachable via
+        // cells outside the window, so counting it would be an artefact of where
+        // the sample was cut rather than anything the generator did. The world
+        // is infinite; the sample is not.
+        if (touchesEdge) continue;
         pockets++;
         inPockets += size;
         if (size > biggest) { biggest = size; bigX = x; bigZ = b; }
