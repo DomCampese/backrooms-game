@@ -9,6 +9,53 @@
 #include <unordered_set>
 
 namespace {
+// raylib 6.0 moved the skeleton off Model and renamed ModelAnimation's frame
+// fields. It is the same data under different names, but the file was written
+// against 5.5 and simply does not compile against 6.0 — which is what
+// tools/sandbox-build.sh links, so the whole game stopped building in the
+// sandbox while `make` against a brew 5.5 kept working. These accessors are the
+// only place that difference is allowed to live.
+//
+//   5.5                     6.0
+//   model.boneCount         model.skeleton.boneCount
+//   model.bones             model.skeleton.bones
+//   clip.frameCount         clip.keyframeCount
+//   clip.framePoses[f]      clip.keyframePoses[f]      (both are Transform *)
+//   ModelAnimation::bones   gone — 6.0 keeps only boneCount
+#if defined(RAYLIB_VERSION_MAJOR) && RAYLIB_VERSION_MAJOR >= 6
+inline int boneCountOf(const Model &m) { return m.skeleton.boneCount; }
+inline BoneInfo *bonesOf(const Model &m) { return m.skeleton.bones; }
+inline int keyframesOf(const ModelAnimation &c) { return c.keyframeCount; }
+inline const Transform *poseOf(const ModelAnimation &c, int f) { return c.keyframePoses[f]; }
+// Two keyframes, both the same pose, and it has to be two.
+//
+// 6.0 also changed UpdateModelAnimation's frame from int to float and made it
+// interpolate, so it reads keyframe f *and* f+1. Hand it a one-keyframe clip and
+// it reads one past the end and segfaults inside the library — which is what
+// the whole game did on startup, with a stack ending in UpdateModelAnimation
+// and nothing in the log. Two identical keyframes interpolate to themselves.
+inline ModelAnimation onePoseClip(const Model &m, ModelAnimPose *twoFrames) {
+    ModelAnimation a{};
+    a.boneCount = boneCountOf(m);
+    a.keyframeCount = 2;
+    a.keyframePoses = twoFrames;
+    return a;
+}
+#else
+inline int boneCountOf(const Model &m) { return m.boneCount; }
+inline BoneInfo *bonesOf(const Model &m) { return m.bones; }
+inline int keyframesOf(const ModelAnimation &c) { return c.frameCount; }
+inline const Transform *poseOf(const ModelAnimation &c, int f) { return c.framePoses[f]; }
+inline ModelAnimation onePoseClip(const Model &m, Transform **twoFrames) {
+    ModelAnimation a{};
+    a.boneCount = m.boneCount;
+    a.bones = m.bones;
+    a.frameCount = 1;      // 5.5 takes an int frame and does not interpolate
+    a.framePoses = twoFrames;
+    return a;
+}
+#endif
+
 struct EmbeddedAsset { const char *path; const unsigned char *data; size_t size; };
 #include "models.generated.h"
 // Raylib's documented file callback preserves standard GLB loading while making
@@ -60,9 +107,9 @@ bool ModelAsset::load(const char *path) {
     if(!isGlb) {TraceLog(LOG_WARNING,"ASSET: Missing or invalid GLB: %s",path);return false;}
     model=LoadModel(path);
     if(!IsModelValid(model)) {unload();return false;}
-    if(model.boneCount>0) animations=LoadModelAnimations(path,&animationCount);
+    if(boneCountOf(model)>0) animations=LoadModelAnimations(path,&animationCount);
     for(int i=0;i<animationCount;++i) if(!IsModelAnimationValid(model,animations[i])) {unload();return false;}
-    sampledPose.resize(model.boneCount);
+    sampledPose.resize(boneCountOf(model));
     for(int i=0;i<model.materialCount;++i) {
         Texture2D &texture=model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture;
         if(texture.id!=rlGetTextureIdDefault()) {GenTextureMipmaps(&texture);SetTextureFilter(texture,TEXTURE_FILTER_TRILINEAR);}
@@ -74,29 +121,34 @@ int ModelAsset::clip(const char *name) const {
     for(int i=0;i<animationCount;++i) if(std::strcmp(animations[i].name,name)==0)return i;
     return -1;
 }
+int ModelAsset::boneCount() const { return boneCountOf(model); }
+const char *ModelAsset::boneName(int index) const {
+    return (index>=0 && index<boneCountOf(model)) ? bonesOf(model)[index].name : "";
+}
 int ModelAsset::bone(const char *name) const {
-    for(int i=0;i<model.boneCount;++i) if(std::strcmp(model.bones[i].name,name)==0)return i;
+    for(int i=0;i<boneCountOf(model);++i) if(std::strcmp(bonesOf(model)[i].name,name)==0)return i;
     return -1;
 }
 void ModelAsset::sample(int index,float progress) {
     const auto &clip=animations[index];
-    float frame=std::clamp(progress,0.0f,1.0f)*(clip.frameCount-1);
-    int a=(int)frame,b=std::min(a+1,clip.frameCount-1);float f=frame-a;
-    for(int i=0;i<model.boneCount;++i) {
-        const Transform &x=clip.framePoses[a][i],&y=clip.framePoses[b][i];
+    float frame=std::clamp(progress,0.0f,1.0f)*(keyframesOf(clip)-1);
+    int a=(int)frame,b=std::min(a+1,keyframesOf(clip)-1);float f=frame-a;
+    for(int i=0;i<boneCountOf(model);++i) {
+        const Transform &x=poseOf(clip,a)[i],&y=poseOf(clip,b)[i];
         sampledPose[i]={Vector3Lerp(x.translation,y.translation,f),QuaternionSlerp(x.rotation,y.rotation,f),Vector3Lerp(x.scale,y.scale,f)};
     }
 }
 void ModelAsset::update() {
     if(sampledPose.empty())return;
     Transform *frame=sampledPose.data();
-    ModelAnimation pose{};pose.boneCount=model.boneCount;pose.bones=model.bones;pose.frameCount=1;pose.framePoses=&frame;
+    Transform *frames[2]={frame,frame};
+    ModelAnimation pose=onePoseClip(model,frames);
     // A GLB can contain both static and skinned primitives. Raylib's CPU update
     // assumes every supplied mesh is skinned, so pass it only those meshes.
     std::vector<Mesh> skinned;
     for(int i=0;i<model.meshCount;++i) if(model.meshes[i].boneWeights)skinned.push_back(model.meshes[i]);
     Model animated=model;animated.meshes=skinned.data();animated.meshCount=(int)skinned.size();
-    UpdateModelAnimation(animated,pose,0);
+    UpdateModelAnimation(animated,pose,0.0f);
 #if RAYLIB_VERSION_MAJOR == 5 && RAYLIB_VERSION_MINOR == 5
     // Raylib 5.5 transforms normals as positions in its CPU skinning path.
     // Remove that erroneous weighted translation; vertex skinning stays upstream.
