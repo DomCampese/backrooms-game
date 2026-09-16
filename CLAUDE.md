@@ -338,6 +338,19 @@ Writing the usual `noise * 0.5 + 0.5` on it silently gives you half the range
 sitting in the top half of it, which reads as a flat, washed-out texture
 rather than an obviously broken one. `fbm2` is the same.
 
+**raylib 6.0 also restructured `Model` and made animation frames fractional.**
+`Model.boneCount` / `Model.bones` moved into `Model.skeleton`,
+`ModelAnimation.frameCount` / `framePoses` became `keyframeCount` /
+`keyframePoses`, and — the one that bites at runtime rather than at compile
+time — `UpdateModelAnimation`'s frame went from `int` to `float` and now
+*interpolates*, so it reads keyframe `f` **and** `f+1`. A synthetic
+one-keyframe clip, which is how you push a hand-built pose, therefore reads one
+past the end and segfaults inside the library: the game died on startup with a
+stack ending in `UpdateModelAnimation` and nothing in the log. Two identical
+keyframes interpolate to themselves and are safe on both versions.
+`src/model_asset.cpp` is the only file allowed to know any of this — ask
+`ModelAsset` for the skeleton rather than reaching through `Model`.
+
 **raylib 6.0 redefined `SetSoundPan`'s argument without renaming it.** 5.5 took
 0..1 with **0 = hard right**; 6.0 takes -1..1 with **-1 = hard left**. The
 signature is identical and the mixer accepts any float, so old values keep

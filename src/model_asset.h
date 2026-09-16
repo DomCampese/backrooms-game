@@ -17,6 +17,11 @@ struct ModelAsset {
     void unload();
     int clip(const char *name) const;
     int bone(const char *name) const;
+    // The skeleton, asked for by name rather than reached for through Model.
+    // Where those live moved between raylib 5.5 and 6.0, and model_asset.cpp is
+    // the one file allowed to know that.
+    int boneCount() const;
+    const char *boneName(int index) const;
     void sample(int clipIndex,float progress);
     void update();
     void draw(Material sceneMaterial,Matrix placement);
