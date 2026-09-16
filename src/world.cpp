@@ -83,10 +83,15 @@ void World::generate(ChunkData &d, int cx, int cz) {
     uint64_t k = key(cx, cz);
     Rng rng(hash64(k ^ ((uint64_t)seed + (uint64_t)level * 0x51ED270Bu
                         + (uint64_t)visit * 0x2545F4914F6CDD1DULL) * 0x9E3779B97F4A7C15ULL));
-    // the plazas have to move with the rest of it, or every revisit has its
-    // open rooms in the same places and the maze still feels like the old one
+    // Open plazas were one chunk in eight. They are most of what is left of
+    // the old wall-less world and they dominate the enclosure average, so cap
+    // them at one in sixteen: still a room to break out into, half as often.
+    //
+    // They also have to move with the rest of the maze when you come back down
+    // to a level (BUG-05), or every revisit has its open rooms in the same
+    // places and the maze still feels like the one you just left.
     bool openChunk = (hash64(k ^ 0xA11CEULL ^ (uint64_t)seed
-                             ^ ((uint64_t)visit * 0xD1B54A32D192ED03ULL)) & 7) == 0;   // occasional open plaza
+                             ^ ((uint64_t)visit * 0xD1B54A32D192ED03ULL)) & 15) == 0;
     int nseg = level == 0 ? 12 + rng.ri(0, 5) : level == 1 ? 7 + rng.ri(0, 4)
              : level == 4 ? 9 + rng.ri(0, 4) : 5 + rng.ri(0, 3);
     if (openChunk) nseg = 2 + rng.ri(0, 2);
@@ -107,6 +112,109 @@ void World::generate(ChunkData &d, int cx, int cz) {
             if (horiz) d.wallN[i][b] = v; else d.wallW[b][i] = v;
         }
     }
+    // ---- rooms.
+    //
+    // The segments above leave wall *stubs*. Measured over Level 0 with
+    // tools/mapdump: 13.9% of edges solid and 55% of cells with no wall on any
+    // side, so you are almost never inside anything. Three systems starve on
+    // that — the light-occlusion shadowing has nothing to occlude so the shafts
+    // through doorways rarely happen, Clark's around-a-corner routing almost
+    // never fires because line of sight is rarely broken at chase range, and
+    // there is little to hide behind.
+    //
+    // So partition a patch of the chunk into rooms that share their walls,
+    // rather than scattering rectangles and hoping: a BSP down to rooms a few
+    // cells across, with a doorway punched into every wall as it is cut.
+    // Scattering independent rooms instead was tried and took the reachable
+    // share of the world from 92% to 84%, a pocket per room.
+    //
+    // Chunks are generated blind of each other, so the partition stays one cell
+    // off the chunk boundary. A room allowed to sit on the edge walls it, the
+    // neighbour does the same, and the two chunks seal apart. That free ring is
+    // also the corridor the rooms open onto — and because each chunk leaves
+    // one, every seam is a two-cell corridor, which is where the long sightlines
+    // that survive this change come from.
+    auto roomEdge = [&](uint8_t &e, uint8_t v) {
+        // Never overwrite something that is already a way through. A room wall
+        // laid across an existing doorway would seal a corridor the segment
+        // pass had already opened.
+        if (e == WALL_NONE || e == WALL_SOLID) e = v;
+    };
+    if (!openChunk) {
+        // Smallest room side, in cells. Level 2 is a bathhouse, not an office:
+        // its pools only form on cells with no wall on any side, so partitioning
+        // it as tightly as Level 0 drains it.
+        const int MINR = level == 2 ? 5 : 3;
+        const int SPLIT = 2 * MINR;              // a side this wide still has room for two
+        const float HALL = 0.06f;                // chance a splittable rect is left whole
+        const int px0 = 1, pz0 = 1, px1 = CCELLS - 2, pz1 = CCELLS - 2;
+        struct Rect { int x0, z0, x1, z1; };
+        Rect stack[64];
+        int sp = 0;
+        stack[sp++] = { px0, pz0, px1, pz1 };
+        // The patch's outer wall is what separates the rooms from the ring
+        // corridor. Several doors per side, not one: a single door makes the
+        // whole block hang off it, so a prop dropped in that one cell strands
+        // everything behind it.
+        for (int x = px0; x <= px1; x++) {
+            roomEdge(d.wallN[x][pz0], WALL_SOLID);
+            roomEdge(d.wallN[x][pz1 + 1], WALL_SOLID);
+        }
+        for (int z = pz0; z <= pz1; z++) {
+            roomEdge(d.wallW[px0][z], WALL_SOLID);
+            roomEdge(d.wallW[px1 + 1][z], WALL_SOLID);
+        }
+        for (int i = 0; i < 3; i++) {
+            d.wallN[px0 + rng.ri(0, px1 - px0)][pz0]     = WALL_DOOR;
+            d.wallN[px0 + rng.ri(0, px1 - px0)][pz1 + 1] = WALL_DOOR;
+            d.wallW[px0][pz0 + rng.ri(0, pz1 - pz0)]     = WALL_DOOR;
+            d.wallW[px1 + 1][pz0 + rng.ri(0, pz1 - pz0)] = WALL_DOOR;
+        }
+        // Clear the ring along its own axis. The segment pass ran before this
+        // and is free to drop a wall stub across the corridor; left there, the
+        // ring stops being a route and the rooms are all you can see. Each
+        // chunk leaves one, so the two either side of a seam make a two-cell
+        // corridor, and those line up across chunks into the long runs that
+        // keep the world from being nothing but small rooms.
+        //
+        // Leave them unbroken. Walling one cell of each per chunk was tried, to
+        // stop a corridor running to the horizon: it moved the enclosure figures
+        // by a third of a percent and took the longest measured sightline from
+        // 184 m to 50 m. A 184 m axis-aligned run reads alarming in a number and
+        // plays fine, because fog density 0.055 closes it long before the end.
+        for (int i = 0; i < CCELLS; i++) {
+            d.wallW[i][0] = d.wallW[i][CCELLS - 1] = WALL_NONE;
+            d.wallN[0][i] = d.wallN[CCELLS - 1][i] = WALL_NONE;
+        }
+        while (sp > 0) {
+            Rect r = stack[--sp];
+            int rw = r.x1 - r.x0 + 1, rh = r.z1 - r.z0 + 1;
+            bool canX = rw >= SPLIT, canZ = rh >= SPLIT;
+            if (!canX && !canZ) continue;        // small enough: it is a room
+            bool splitX = canX && (!canZ || rw > rh || (rw == rh && (rng.next() & 1)));
+            if (sp > 60) continue;
+            // Stop early sometimes and leave the rect whole. A partition taken
+            // all the way down is uniformly small rooms, which is as wrong in
+            // the other direction as the wall-less world was: nowhere in the
+            // building is there a hall, and every sightline is the width of one
+            // room. These are what the long ones come off.
+            if (rng.f01() < HALL) continue;
+            if (splitX) {
+                int cut = r.x0 + MINR + rng.ri(0, rw - 2 * MINR);
+                for (int z = r.z0; z <= r.z1; z++) roomEdge(d.wallW[cut][z], WALL_SOLID);
+                d.wallW[cut][r.z0 + rng.ri(0, rh - 1)] = WALL_DOOR;
+                stack[sp++] = { r.x0, r.z0, cut - 1, r.z1 };
+                stack[sp++] = { cut, r.z0, r.x1, r.z1 };
+            } else {
+                int cut = r.z0 + MINR + rng.ri(0, rh - 2 * MINR);
+                for (int x = r.x0; x <= r.x1; x++) roomEdge(d.wallN[x][cut], WALL_SOLID);
+                d.wallN[r.x0 + rng.ri(0, rw - 1)][cut] = WALL_DOOR;
+                stack[sp++] = { r.x0, r.z0, r.x1, cut - 1 };
+                stack[sp++] = { r.x0, cut, r.x1, r.z1 };
+            }
+        }
+    }
+
     int np = level == 0 ? 4 + rng.ri(0, 5) : level == 1 ? 10 + rng.ri(0, 8) : 2 + rng.ri(0, 3);
     for (int i = 0; i < np; i++) d.pillar[rng.ri(0, CCELLS - 1)][rng.ri(0, CCELLS - 1)] = 1;
     memset(d.prop, 0, sizeof(d.prop));
@@ -170,6 +278,57 @@ void World::generate(ChunkData &d, int cx, int cz) {
                 if (n <= 0.615f) continue;
                 int ring = 1 + (int)((n - 0.615f) / 0.028f);   // deeper toward the middle
                 d.elev[i][kk] = (int8_t)(-5 * std::min(ring, 5));
+            }
+        }
+    }
+    // ---- connectivity.
+    //
+    // Walls, pillars and props are placed by passes that cannot see each other:
+    // a segment laid across a room cuts it in two, and a desk dropped in a
+    // room's only doorway strands everything behind it. Constraining every
+    // placement pass against every other one is a losing game, so instead flood
+    // the finished chunk once and punch a doorway across any edge that still
+    // has two regions either side of it.
+    //
+    // This is not decoration. Before it existed the enclosure work above left
+    // 1002 sealed pockets in a 129-cell sample and took the reachable share of
+    // the world from 92% down to 85%; most were one or two cells, wedged
+    // between a room wall and a segment, and no amount of tuning the room sizes
+    // made them go away — they are what happens when independent passes share a
+    // grid.
+    {
+        const int N = CCELLS * CCELLS;
+        int parent[N];
+        for (int i = 0; i < N; i++) parent[i] = i;
+        auto find = [&](int a) { while (parent[a] != a) { parent[a] = parent[parent[a]]; a = parent[a]; } return a; };
+        auto join = [&](int a, int b) { a = find(a); b = find(b); if (a == b) return false; parent[a] = b; return true; };
+        // A pillar or a prop fills its cell outright — canStep() says so — so
+        // those cells are not part of the graph and are not worth opening to.
+        auto solidCell = [&](int x, int z) { return d.pillar[x][z] != 0 || d.prop[x][z] != PROP_NONE; };
+        auto cellId = [](int x, int z) { return x * CCELLS + z; };
+        for (int x = 0; x < CCELLS; x++) for (int z = 0; z < CCELLS; z++) {
+            if (solidCell(x, z)) continue;
+            if (z > 0 && !solidCell(x, z - 1) && !blocksEdge(d.wallN[x][z])) join(cellId(x, z), cellId(x, z - 1));
+            if (x > 0 && !solidCell(x - 1, z) && !blocksEdge(d.wallW[x][z])) join(cellId(x, z), cellId(x - 1, z));
+        }
+        for (int x = 0; x < CCELLS; x++) for (int z = 0; z < CCELLS; z++) {
+            if (solidCell(x, z)) continue;
+            if (z > 0 && !solidCell(x, z - 1) && join(cellId(x, z), cellId(x, z - 1))) d.wallN[x][z] = WALL_DOOR;
+            if (x > 0 && !solidCell(x - 1, z) && join(cellId(x, z), cellId(x - 1, z))) d.wallW[x][z] = WALL_DOOR;
+        }
+        // The chunk owns the wall line along its west and north seams, and the
+        // neighbour across each seam owns the other two, so opening these two
+        // opens all four. Nothing else can: a neighbour generated blind cannot
+        // put a hole in a wall it does not store.
+        for (int side = 0; side < 2; side++) {
+            int opened = 0;
+            for (int t = 0; t < CCELLS && opened < 3; t++) {
+                int i = (t * 7 + (int)rng.ri(0, CCELLS - 1)) % CCELLS;
+                uint8_t &e = side ? d.wallW[0][i] : d.wallN[i][0];
+                if (side ? solidCell(0, i) : solidCell(i, 0)) continue;
+                if (!blocksEdge(e)) { opened++; continue; }
+                e = WALL_DOOR;
+                opened++;
             }
         }
     }
