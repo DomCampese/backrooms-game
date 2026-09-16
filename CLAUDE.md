@@ -238,6 +238,34 @@ into blank white paper. The second is the only way to see the torch, which is
 the one light in the game you aim and therefore the one a fixed-position shot
 cannot otherwise reach.
 
+## Measuring the layout, which screenshots will lie to you about
+
+`tools/mapdump.cpp` links the game's own `world.cpp` and calls `generate()`
+directly — no window, no GL, no Xvfb, about a second for a 258 m square:
+
+```bash
+tools/sandbox-build.sh mapdump                       # second build target
+./mapdump --level 0 --seed 1337 --cells 129 --no-plan
+./mapdump --level 0 --cells 33 --plan 0 0 26 12      # ASCII floorplan too
+```
+
+It reports enclosure (share of edges that are solid, and the distribution of
+cells by how many solid sides they have), sightline percentiles and occlusion at
+20 m, a reachability flood fill over the same `canStep` the pathfinder uses, and
+densities in m² per instance for pillars, props, hide spots, doubloons, soft
+floor, valves, exits, pools and elevation.
+
+**Use it for anything that touches the generator.** From screenshots alone the
+halls look like they run for hundreds of metres; the measured median sightline
+is 7.0 m and a point 20 m away is hidden 85% of the time. The actual defect is
+enclosure — 57% of Level 0 cells have no wall on any side — and no screenshot
+makes that obvious. It also answers questions a capture cannot: 8% of Level 0's
+open cells are unreachable from the centre.
+
+`hideSpotAt` and `coinAt` live on `Game`, which would drag the renderer into the
+harness, so mapdump mirrors those two rules. Change either in `game.cpp` and
+change it there too, or the harness quietly reports the old world.
+
 To compare frame cost against another build rather than eyeballing `fps=`
 (which is a smoothed integer, and the sandbox swings about 15% run to run):
 
