@@ -233,9 +233,41 @@ int main(int argc, char **argv) {
             stack.push_back({ nx, nz });
         }
     }
+    // What is left over, grouped. One big sealed region and a scatter of sealed
+    // broom cupboards are both "92% reachable" and they are not the same bug:
+    // the first is a generator that cut the world in half, the second is a few
+    // rooms whose doors all landed on the same side.
+    long pockets = 0, biggest = 0, inPockets = 0;
+    int bigX = 0, bigZ = 0;
+    for (int b = -half; b <= half; b++) for (int x = -half; x <= half; x++) {
+        if (seen[idx(x, b)] || w.pillarAt(x, b)) continue;
+        long size = 0;
+        std::vector<std::pair<int,int>> q{ { x, b } };
+        seen[idx(x, b)] = 1;
+        while (!q.empty()) {
+            auto [cx2, cz2] = q.back();
+            q.pop_back();
+            size++;
+            const int dx[4] = { 1, -1, 0, 0 }, dz[4] = { 0, 0, 1, -1 };
+            for (int k = 0; k < 4; k++) {
+                int nx = cx2 + dx[k], nz = cz2 + dz[k];
+                if (nx < -half || nx > half || nz < -half || nz > half) continue;
+                if (seen[idx(nx, nz)] || w.pillarAt(nx, nz)) continue;
+                if (!w.canStep(cx2, cz2, nx, nz)) continue;
+                seen[idx(nx, nz)] = 1;
+                q.push_back({ nx, nz });
+            }
+        }
+        pockets++;
+        inPockets += size;
+        if (size > biggest) { biggest = size; bigX = x; bigZ = b; }
+    }
     printf("\nreachability (flood fill over canStep)\n");
     printf("  open cells            %ld\n", openCells);
     printf("  reached from centre   %ld  (%.2f%%)\n", reached, 100.0 * reached / (openCells ? openCells : 1));
+    printf("  cut-off pockets       %ld  holding %ld cells\n", pockets, inPockets);
+    printf("  largest pocket        %ld cells  (median %ld) at x %d z %d\n",
+           biggest, pockets ? inPockets / pockets : 0, bigX, bigZ);
 
     // ---- what is lying about. Densities in m2 per instance read better than
     // percentages here: "one doubloon per 1,753 m2" is the number that showed
