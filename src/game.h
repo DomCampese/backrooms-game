@@ -63,7 +63,9 @@ enum MatSlot {
     MAT_COUNT,
 };
 
-struct ChalkMark { Vector3 pos; float yaw; };
+// `mine` separates the marks you drew from the ones that were already there.
+// They are the same arrow; only the chalk has aged.
+struct ChalkMark { Vector3 pos; float yaw; bool mine; };
 
 struct Game {
     // tuning
@@ -203,7 +205,14 @@ struct Game {
     // pickups, currency, chalk, ambient events, records
     std::unordered_set<uint64_t> taken;       // world pickups already grabbed (reset per level)
     std::vector<Vector3> coinsWorld;          // doubloons Clark spills when he goes down
-    std::vector<ChalkMark> chalk;               // navigation marks
+    // Navigation marks, kept per level for the whole descent. A mark is the only
+    // counter-play the game offers to not knowing where you are, and finding one
+    // of your own again is the good moment; clearing them at every doorway threw
+    // that away. Cleared by beginDescent, not by applyLevel.
+    std::vector<ChalkMark> chalk[NLEVELS];
+    bool chalkSeeded[NLEVELS]{};              // the stranger's marks are laid once per level per descent
+    bool chalkSeedPending = false;            // ...and on the first frame after arrival, once px/pz are real
+    static constexpr int MAXCHALK = 128;      // per level
     std::unordered_set<uint64_t> poppedBalloons;     // LEVEL FUN ceiling balloons already shot
     std::unordered_set<uint64_t> poppedTableBunches; // and party-table balloon bunches
     struct Confetti { Vector3 pos, vel; float life; Color col; };
@@ -258,6 +267,7 @@ struct Game {
     void shutdown();
 
     void applyLevel(int lv);
+    void seedStrangerChalk();
     void saveBest();
 
     // deterministic world pickups, keyed by cell

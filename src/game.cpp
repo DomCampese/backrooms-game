@@ -315,7 +315,30 @@ void Game::beginDescent(double now) {
     sanity = 1.0f; sanityStage = 0; sanityWarnT = 0; sanityLine = "";
     drinkT = 0; drinkLanded = false; nextHeartbeat = now + 20;
     ent.st = EState::Hidden; ent.nextSpawn = now + 30;
+    for (auto &c : chalk) c.clear();            // a new descent is a clean building
+    for (bool &b : chalkSeeded) b = false;
+    chalkSeedPending = true;
     runStart = now;
+}
+
+// Someone was here before you. Two arrows per level, laid once when you first
+// arrive, far enough out that finding one is luck rather than scenery — the
+// recovered tapes and the wall scrawl already say you are not the first, and
+// this is the first time the building says it in the one language you use.
+//
+// Seeded on the frame after arrival rather than inside applyLevel, because
+// applyLevel runs before the level change has moved you: on a doorway it still
+// sees the old floor's position, and on a fresh descent px/pz are whatever the
+// title screen left behind.
+void Game::seedStrangerChalk() {
+    chalkSeeded[level] = true;
+    Rng r(hash64((uint64_t)world.seed ^ ((uint64_t)level * 0x9E3779B97F4A7C15ULL) ^ 0xC4A15ULL));
+    for (int i = 0; i < 2; i++) {
+        float a = r.f01() * 6.2831853f, d = 18 + r.f01() * 22;
+        Vector2 spot = world.findOpenSpot(px + cosf(a) * d, pz + sinf(a) * d);
+        chalk[level].push_back({{ spot.x, world.groundAt(spot.x, spot.y, 0.0f) + 0.016f, spot.y },
+                                r.f01() * 6.2831853f, false });
+    }
 }
 
 void Game::applyLevel(int lv) {
@@ -363,7 +386,11 @@ void Game::applyLevel(int lv) {
     nextPack = GetTime() + (lv == 3 ? 8 + grng.f01() * 8 : 1e9);
     nextHowl = GetTime() + 12 + grng.f01() * 20;
     valvesTurned.clear(); pipesShut = false; valveT = 0;   // a fresh set of standpipes
-    taken.clear(); coinsWorld.clear(); chalk.clear();   // it's a different maze down here
+    taken.clear(); coinsWorld.clear();                  // it's a different maze down here
+    // Chalk is NOT cleared here. It is the one thing the player made, it is
+    // keyed by level, and it survives every doorway until the descent ends —
+    // which is the whole point of leaving a mark. beginDescent clears it.
+    chalkSeedPending = !chalkSeeded[lv];
     poppedBalloons.clear(); poppedTableBunches.clear(); confetti.clear();
     SetWindowTitle(TextFormat("THE BACKROOMS — %s", c.name));
 }
@@ -614,6 +641,7 @@ bool Game::tick() {
         captureClick = true;   // this click is spoken for — no accidental discharge
     }
 
+    if (chalkSeedPending) { seedStrangerChalk(); chalkSeedPending = false; }
     updateLook();
     updateMovement(dt);
     updateDevKeys(now);
@@ -1242,8 +1270,14 @@ void Game::updateInteraction() {
     if (IsKeyPressed(KEY_M)) {   // chalk mark: the only map you get
         float x = px + f2x * 0.5f, z = pz + f2z * 0.5f;
         if (!grounded || !world.lineOfSight(px, pz, x, z)) return;
-        chalk.push_back({{x, world.groundAt(x, z, py) + 0.016f, z}, yaw});
-        if (chalk.size() > 128) chalk.erase(chalk.begin());
+        auto &marks = chalk[level];
+        marks.push_back({{x, world.groundAt(x, z, py) + 0.016f, z}, yaw, true});
+        // Over the cap, drop your own oldest mark rather than whatever is at the
+        // front: the stranger's arrows are laid first, and evicting those would
+        // quietly delete the rarest thing on the floor.
+        if ((int)marks.size() > MAXCHALK)
+            for (size_t i = 0; i < marks.size(); i++)
+                if (marks[i].mine) { marks.erase(marks.begin() + i); break; }
     }
 }
 

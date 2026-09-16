@@ -386,6 +386,14 @@ a diff, and re-shoot rather than reason about a mismatched pair. The frame rate
 varies with what else is running on the box, so this is not something you set —
 it is something you check.
 
+**Level 4 has a noise floor of its own, and it is about 0.014%.** Its balloons
+bob on `sinf(now * 0.8f + ...)` — wall clock, not frame count — so every balloon
+in the frame moves with any run-to-run frame-rate wobble, and the regression
+capture lands ~170 differing pixels in the middle-left bands against an
+*unchanged* binary. Twice now that has been read as evidence for a change that
+had nothing to do with it. The other four levels sit at single-digit pixels, so
+do not carry Level 4's floor over to them, or the reverse.
+
 **Game time is not wall-clock time.** `dt` is clamped, so each headless frame
 advances the simulation about 0.05 s while the wall clock advances ~0.25-0.3 s.
 Anything driven by `dt` — a flare's 9 s burn, reload timers — needs roughly 20
@@ -499,6 +507,19 @@ in three places, and slicing to the first one deletes hundreds of lines of
 real code. Use a unique multi-line anchor, and `git diff --stat` afterwards.
 
 ## Architecture invariants
+
+**Chalk is per level and per descent.** `Game::chalk` is an array indexed by
+level, not one list: `applyLevel` no longer clears it, `beginDescent` does. The
+marks are the only counter-play the game has to not knowing where you are, and
+finding one of your own again is the good moment — clearing them at every
+doorway deleted it. Two of the marks on each level were not made by you
+(`ChalkMark::mine` is false, and they draw duller and yellower); they are laid
+once per level per descent, on the first frame *after* arrival rather than
+inside `applyLevel`, because `applyLevel` runs before the transition has moved
+the player and would seed them around the last floor's position. The 128 cap is
+`MAXCHALK`, per level, and eviction drops your own oldest rather than the front
+of the list — the stranger's arrows are at the front, and evicting those would
+quietly delete the rarest thing on the floor.
 
 ### The shader's alpha coding
 
