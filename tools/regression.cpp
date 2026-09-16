@@ -154,7 +154,6 @@ int main() {
     }
     for(const auto &entry:g.world.chunks) for(const auto &mesh:entry.second.meshes)
         CHECK(mesh.vertexCount<=65535);
-    printf("PASS sprint recovery, crouch/stationary gating, restart reset, battery retention; animation continuity; held aim/reload gating; 21 visual captures\n");
     // ---- step height. The generator relaxes every terrace to within MAX_STEP,
     // so nothing it produces exercises the riser blocker; a rule that never
     // fires is not a rule that works, so force a drop and check it directly.
