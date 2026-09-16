@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cmath>
 #include <unordered_map>
+#include <unordered_set>
 
 constexpr float CELL = 2.0f;           // metres per grid cell
 constexpr int   CCELLS = 16;           // cells per chunk side
@@ -86,6 +87,14 @@ enum ChunkMesh {
 
 // ChunkData::elev is stored in decimetres so it fits in an int8_t.
 constexpr float ELEV_UNIT = 0.1f;
+// The tallest rise a body can walk up, and the tallest drop it can walk down
+// without leaving the floor. Anything taller is terrain you have to go around:
+// gatherCellAABBs puts a full-height blocker on the riser, and the mover falls
+// off it the other way instead of gliding down. Without this the 2.5 m terraces
+// of a Level 0 atrium and the Level 1 loading docks were walkable vertical
+// faces — you strolled up them like ramps.
+constexpr float MAX_STEP = 0.45f;
+constexpr int   MAX_STEP_UNITS = (int)(MAX_STEP / ELEV_UNIT);   // 4 decimetres, in elev units
 
 // walls: wallN[i][k] = north edge of cell (i,k) at z=k*CELL; wallW = west edge at x=i*CELL
 struct ChunkData {
@@ -129,6 +138,14 @@ Mesh buildDeckLampMesh();
 struct World {
     unsigned seed = 1337;
     int level = 0;           // 0 = Level 0, 1 = Level 1 (garage), 2 = Poolrooms, 3 = Red Halls, 4 = LEVEL FUN
+    // Which visit to this level, this descent — 0 the first time you arrive.
+    // Mixed into the chunk seed so coming back gives you a genuinely different
+    // maze rather than the one you already stripped. The chunk seed was
+    // seed + level*K alone, so Level 0 regenerated identically every time you
+    // returned to it and the exit loop 0 -> 1 -> 2 -> 4 -> 0 put every pickup
+    // back where it was. At visit 0 the mix is a no-op, so a fresh descent at a
+    // given seed still produces exactly the maze it always did.
+    unsigned visit = 0;
     float wallH = 3.0f;
     bool exitTest = false;   // BACKROOMS_EXITS env: exits everywhere, for visual testing
     std::unordered_map<uint64_t, ChunkData> chunks;
@@ -171,6 +188,25 @@ struct World {
     Vector2 findOpenSpot(float x, float z);
     void unloadFar(int pcx, int pcz, int radius);
     void unloadAll();
+    // ---- PAC-03: the place does not stay where you left it.
+    //
+    // The Backrooms is canonically non-Euclidean and this was a fixed grid that
+    // was perfectly, deterministically consistent — the one thing the world
+    // model actively worked against. `shifted` is an overlay of edges that have
+    // become walls since you last looked at them: a doorway you walked through
+    // is a blank wall when you turn round.
+    //
+    // It lands in wallNVal/wallWVal deliberately. Occupancy (and therefore the
+    // lighting), the pathfinder, collision and the mesher all read the walls
+    // through those two functions, so putting it anywhere else would have Clark
+    // and the shadows disagreeing with the geometry. Game::shiftAWall is what
+    // decides when, and only ever picks an edge you cannot currently see.
+    std::unordered_set<uint64_t> shifted;
+    static uint64_t edgeKey(int ci, int ck, bool west) {
+        return (key(ci, ck) << 1) | (west ? 1ull : 0ull);
+    }
+    void shiftEdge(int ci, int ck, bool west);   // wall it off, and rebake the chunk that owns it
+    void rebuildChunk(int cx, int cz);           // drop its meshes so streamChunks bakes it again
 };
 
 

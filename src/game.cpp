@@ -31,6 +31,14 @@ void Game::init() {
     cleanShot = getenv("BACKROOMS_CLEAN") != nullptr;
     if (const char *t = getenv("BACKROOMS_TIME")) captureTime = (float)atof(t);
     if (const char *sf = getenv("BACKROOMS_SHOTFRAME")) shotFrame = atoi(sf);   // testing
+    // Blackouts are scheduled off the wall clock, and the software rasteriser
+    // runs about 2 fps — so even frame 80 lands ~40 s in, past the earliest
+    // blackout at 30 s. Two identical shot.sh runs produced one frame at mean
+    // luma 100 and one at 15, and the dark one looks exactly like the silent
+    // shader fallback. Headless captures therefore default to no blackouts;
+    // BACKROOMS_NOBLACKOUT=0 puts them back if you actually want to shoot one.
+    noBlackout = shotPath != nullptr;
+    if (const char *nb = getenv("BACKROOMS_NOBLACKOUT")) noBlackout = atoi(nb) != 0;
     SetTraceLogLevel(LOG_WARNING);
     SetConfigFlags((benchmark ? 0 : FLAG_VSYNC_HINT) | FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
 #ifdef __APPLE__
@@ -156,7 +164,10 @@ void Game::init() {
     mats[MAT_DECK].maps[MATERIAL_MAP_DIFFUSE].texture = texDeck;
 
     for (int i = 0; i < 4; i++) steps[i] = makeFootstep(100 + i * 17);
-    for (int i = 0; i < 4; i++) entSteps[i] = makeFootstep(300 + i * 23);   // heavier, its own gait
+    for (int i = 0; i < 4; i++) {
+        entSteps[i] = makeFootstep(300 + i * 23);                  // heavier, its own gait
+        entStepsThrough[i] = makeFootstep(300 + i * 23, true);     // ...and the same foot, through a wall
+    }
     splashes[0] = makeSplash(1, false); splashes[1] = makeSplash(2, false);
     sndBigSplash = makeSplash(3, true);
     sndClick = makeClick();
@@ -173,7 +184,10 @@ void Game::init() {
     sndHowl = makeDogHowl();       SetSoundVolume(sndHowl, 0.5f);
     sndGulp = makeGulp();          SetSoundVolume(sndGulp, 0.75f);
     sndVoice = makeTapeVoice();    SetSoundVolume(sndVoice, 0.9f);
-    for (int i = 0; i < NBARKS; i++) sndBarks[i] = makeDogBark(400 + i * 31);
+    for (int i = 0; i < NBARKS; i++) {
+        sndBarks[i] = makeDogBark(400 + i * 31);
+        sndBarksThrough[i] = makeDogBark(400 + i * 31, true);
+    }
 
     synth.init();
 
@@ -195,7 +209,7 @@ void Game::init() {
 
     nextFlareRegen = GetTime() + 75;
 
-    nextBlackout = 40 + grng.f01() * 60;
+    nextBlackout = blackoutIn(0, 40, 60);
     runStart = GetTime();
     rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
     SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);   // post CA/bloom sample past the edges: clamp, don't wrap
@@ -206,6 +220,7 @@ void Game::init() {
         if (fscanf(bf, "%d %d %d", &bestEsc, &bestKill, &bestM) != 3) bestEsc = bestKill = bestM = 0;
         if (fscanf(bf, "%d", &bestWins) != 1) bestWins = 0;   // 4th field added later; old files lack it
         if (fscanf(bf, "%d", &bestTapes) != 1) bestTapes = 0; // 5th field, same story
+        if (fscanf(bf, "%d %d", &bestDeep, &bestRun) != 2) bestDeep = bestRun = 0;   // 6th/7th, same story
         fclose(bf);
     }
 
@@ -250,8 +265,10 @@ void Game::saveBest() {
     if ((int)distWalked > bestM) { bestM = (int)distWalked; up = true; }
     if (winCount > bestWins) { bestWins = winCount; up = true; }
     if (tapes > bestTapes) { bestTapes = tapes; up = true; }
+    if (deepest > bestDeep) { bestDeep = deepest; up = true; }
     if (up) if (FILE *bf = fopen(bestPath, "w"))
-        { fprintf(bf, "%d %d %d %d %d\n", bestEsc, bestKill, bestM, bestWins, bestTapes); fclose(bf); }
+        { fprintf(bf, "%d %d %d %d %d\n%d %d\n", bestEsc, bestKill, bestM, bestWins, bestTapes,
+                  bestDeep, bestRun); fclose(bf); }
 }
 
 // You've banked enough doubloons and found a real door: escape the backrooms.
@@ -264,6 +281,30 @@ void Game::winRun(double now) {
     saveBest();
     // a clean new maze, from the top, gear and tallies reset — records persist
     beginDescent(now);
+}
+
+// Something got you. There was no death in this game at all — being caught
+// moved you 800 m and took nothing — so every other system was doing work that
+// no consequence backed up. Freeze the run's numbers for the card, bank the
+// records, then hand the player back to the title screen with a fresh descent
+// waiting behind it: the same reset winRun already does, with a different
+// overlay and a different way in.
+void Game::dieRun(double now, const char *by, const char *title) {
+    deathBy = by;
+    deathTitle = title;
+    deathLevel = level;
+    deathTime = (float)(now - runStart);
+    deathM = (int)distWalked;
+    deathKills = killCount;
+    deathCount++;
+    deathT = DEATH_CARD;
+    if ((int)deathTime > bestRun) bestRun = (int)deathTime;   // longest run, however it ended
+    saveBest();
+    PlaySound(sndScare);
+    if (IsSoundPlaying(sndVoice)) StopSound(sndVoice);
+    beginDescent(now);          // a clean maze waiting behind the card
+    inMenu = true;
+    if (!shotPath) EnableCursor();
 }
 
 // Title screen: the world drifts by behind the card until any key drops you in.
@@ -280,8 +321,72 @@ void Game::updateMenu(double now) {
     fear = 0.0f; blackoutCur = 1.0f;
     streamChunks();
     updateOccupancy();
+    deathT = fmaxf(0, deathT - dt);
+    // A death card you can dismiss on the frame it appears is a card nobody
+    // reads — the hand that just died is still on the keys. Hold the first
+    // stretch of it, then let any key move on.
+    if (deathT > DEATH_CARD - 1.6f) return;
     int k = GetKeyPressed();                    // F11 (fullscreen) shouldn't count as "begin"
     if ((k != 0 && k != KEY_F11) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) startRun(now);
+}
+
+// Can the pack still place you? Sound only: they do not care what you are
+// standing behind, and a running deck in your coat gives you away however
+// still you are holding it.
+bool Game::packDeaf() const {
+    return still && !(deck.playing && deck.carried);
+}
+
+// PAC-03: let the building move when you are not looking at it.
+//
+// Picks one doorway within a ring around you, walls it off, and leaves it
+// walled. Three conditions, all of them load-bearing:
+//   * neither cell it joins may be in line of sight, or you watch it happen and
+//     it reads as a rendering bug rather than as the place;
+//   * both cells must keep at least two other ways out, so a corridor never
+//     seals into a pocket with you or a pickup inside it;
+//   * and it is gated on sanity, so it reads as the place taking you rather
+//     than as the maze being broken.
+// Returns true if it moved something, so the caller can invalidate the shadows.
+bool Game::shiftAWall() {
+    int ci = cellOf(px), ck = cellOf(pz);
+    // count the ways out of a cell, so we never wall off the last one
+    auto ways = [&](int a, int b) {
+        int n = 0;
+        if (!blocksEdge(world.wallNVal(a, b))) n++;
+        if (!blocksEdge(world.wallNVal(a, b + 1))) n++;
+        if (!blocksEdge(world.wallWVal(a, b))) n++;
+        if (!blocksEdge(world.wallWVal(a + 1, b))) n++;
+        return n;
+    };
+    for (int tries = 0; tries < 24; tries++) {
+        int a = ci + grng.ri(-SHIFT_RING, SHIFT_RING);
+        int b = ck + grng.ri(-SHIFT_RING, SHIFT_RING);
+        int d2 = (a - ci) * (a - ci) + (b - ck) * (b - ck);
+        if (d2 < 9) continue;                       // not right on top of you
+        bool west = grng.ri(0, 1) != 0;
+        // an edge that is already a wall, a window or an exit is not a doorway
+        if (blocksEdge(west ? world.wallWVal(a, b) : world.wallNVal(a, b))) continue;
+        int oa = west ? a - 1 : a, ob = west ? b : b - 1;   // the cell on the far side
+        if (world.pillarAt(a, b) || world.pillarAt(oa, ob)) continue;
+        if (ways(a, b) < 3 || ways(oa, ob) < 3) continue;   // leave both rooms another way out
+        float cx = a * CELL + 1.0f, cz = b * CELL + 1.0f;
+        float ox = oa * CELL + 1.0f, oz = ob * CELL + 1.0f;
+        if (world.lineOfSight(px, pz, cx, cz)) continue;    // you would see it happen
+        if (world.lineOfSight(px, pz, ox, oz)) continue;
+        world.shiftEdge(a, b, west);
+        return true;
+    }
+    return false;
+}
+
+// When the next blackout falls — or never, under BACKROOMS_NOBLACKOUT. The
+// random draw happens either way: grng feeds every other scheduled event too,
+// and skipping one draw would shift a suppressed-blackout run's whole stream
+// away from a normal run's, which is the opposite of what this is for.
+double Game::blackoutIn(double now, double lead, double span) {
+    double t = now + lead + grng.f01() * span;
+    return noBlackout ? BLACKOUT_NEVER : t;
 }
 
 // Leave the title screen and drop into a fresh descent from the top.
@@ -292,7 +397,7 @@ void Game::startRun(double now) {
     // The menu has been sitting here for however long; applyLevel scheduled the
     // first blackout off that. Push everything out so a fresh run opens quiet.
     blackoutCur = 1.0f; blackoutEnd = -1;
-    nextBlackout = now + 40 + grng.f01() * 60;
+    nextBlackout = blackoutIn(now, 40, 60);
     nextWhisper = now + 45 + grng.f01() * 60;
     nextFlareRegen = now + 75;
 }
@@ -309,7 +414,16 @@ void Game::beginDescent(double now) {
     yaw = 0.8f; pitch = 0.0f;
     coins = 0; almond = 0; tapes = 0; flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; battery = 1.0f;
     deck = TapeDeck{}; if (IsSoundPlaying(sndVoice)) StopSound(sndVoice);
-    caughtCount = 0; escapeCount = 0; killCount = 0; distWalked = 0;
+    escapeCount = 0; killCount = 0; distWalked = 0;
+    deepest = level;
+    for (int &v : visits) v = 0;   // a new descent gets the levels back as they were authored
+    slide = 0; nextShift = now + 30;
+    pipesPaid = false;
+    // deathCount is deliberately NOT reset here: a death *is* the end of a
+    // descent, so a per-descent count of them is always 0 or 1. It tallies the
+    // runs this session has cost you, which is what the death card reports —
+    // and it used to be reset here, right after dieRun incremented it, which
+    // showed up as the card claiming your first death every time.
     fear = 0; boostT = 0;
     stamina = 1; sprintExhausted = false; aiming = false; aimBlend = 0;
     sanity = 1.0f; sanityStage = 0; sanityWarnT = 0; sanityLine = "";
@@ -320,6 +434,13 @@ void Game::beginDescent(double now) {
 
 void Game::applyLevel(int lv) {
     level = lv;
+    if (lv > deepest) deepest = lv;   // how far down this descent got, for the records
+    // Which time this is, this descent. Read before the increment, so the first
+    // arrival is visit 0 and a fresh descent at a given seed still generates
+    // exactly the maze it always did — which is what keeps the regression
+    // captures comparable across this change.
+    world.visit = (unsigned)visits[lv];
+    visits[lv]++;
     // no carton carries through a doorway — but one already raised has been paid
     // for, so settle it before dropping the animation rather than eating it
     if (drinkT > 0 && !drinkLanded) sanity = clampf(sanity + 0.34f + 0.04f * level, 0.0f, 1.0f);
@@ -356,7 +477,7 @@ void Game::applyLevel(int lv) {
     synth.tDrone = lv == 1 ? 1.0f : 0.0f;
     synth.tWater = lv == 2 ? 1.0f : 0.0f;
     synth.tParty = lv == 4 ? 1.0f : 0.0f;
-    nextBlackout = lv == 2 ? 1e18 : GetTime() + 30 + grng.f01() * 60;   // no blackouts in the poolrooms
+    nextBlackout = lv == 2 ? BLACKOUT_NEVER : blackoutIn(GetTime(), 30, 60);   // no blackouts in the poolrooms
     blackoutEnd = -1;
     occValid = false;                                   // different floorplan, different shadows
     for (auto &d : dogs) d.st = DState::Gone;           // the pack doesn't follow you out
@@ -388,9 +509,9 @@ bool Game::bottleAt(int a, int b) {
         // left standing on the furniture. Far likelier than on bare floor,
         // because a table is where a person puts a drink down.
         if (bottleShelfY(a, b) < 0) return false;
-        return ih(a, b, (uint32_t)world.seed ^ 0xA1A2u) % 4 == 0;
+        return ih(a, b, pickupSalt() ^ 0xA1A2u) % 4 == 0;
     }
-    return ih(a, b, (uint32_t)world.seed ^ 0xA1A1u) % 137 == 0;
+    return ih(a, b, pickupSalt() ^ 0xA1A1u) % 137 == 0;
 }
 
 // How fast each place works on you: meter fraction per second, standing still in
@@ -432,19 +553,29 @@ Pickup Game::pickupAt(int a, int b) {
     return Pickup::None;
 }
 
+// The loose-item hashes keyed on world.seed alone — no level, no visit — so
+// Level 0 and the Red Halls laid their pickups in the same cells as each
+// other, and walking the exit loop back round found every one of them exactly
+// where it had been. Level 0 on its first visit still hashes to the bare seed,
+// so the world a fresh descent opens on is unchanged.
+uint32_t Game::pickupSalt() const {
+    return (uint32_t)world.seed ^ ((uint32_t)level * 0x9E3779B9u)
+                                ^ (world.visit * 0x85EBCA6Bu);
+}
+
 bool Game::coinAt(int a, int b) {
     if (world.pillarAt(a, b) || world.propAt(a, b) || world.poolAt(a, b)) return false;
-    return ih(a, b, (uint32_t)world.seed ^ 0xC01Du) % 449 == 0;
+    return ih(a, b, pickupSalt() ^ 0xC01Du) % 449 == 0;
 }
 
 bool Game::batteryAt(int a, int b) {
     if (world.pillarAt(a, b) || world.propAt(a, b) || world.poolAt(a, b)) return false;
-    return ih(a, b, (uint32_t)world.seed ^ 0xBA77u) % 379 == 0;
+    return ih(a, b, pickupSalt() ^ 0xBA77u) % 379 == 0;
 }
 
 bool Game::tapeAt(int a, int b) {
     if (world.pillarAt(a, b) || world.propAt(a, b) || world.poolAt(a, b)) return false;
-    return ih(a, b, (uint32_t)world.seed ^ 0x7A9Eu) % 401 == 0;
+    return ih(a, b, pickupSalt() ^ 0x7A9Eu) % 401 == 0;
 }
 
 // Furniture with enough bulk to tuck in beside: crouch within reach of one of
@@ -464,7 +595,7 @@ bool Game::hideSpotAt(int a, int b) {
 bool Game::balloonAt(int a, int b, Vector3 &out) {
     if (level != 4) return false;
     if (poppedBalloons.count(cellKey2(a, b))) return false;
-    uint32_t h = ih(a, b, (uint32_t)world.seed ^ 0xBA11u);
+    uint32_t h = ih(a, b, pickupSalt() ^ 0xBA11u);
     if (h % 17 != 0 || world.pillarAt(a, b)) return false;
     out = { a * CELL + 1.0f + (((h >> 4) & 7) / 7.0f - 0.5f) * 0.9f,
             world.wallH - 0.21f,
@@ -476,7 +607,7 @@ bool Game::balloonAt(int a, int b, Vector3 &out) {
 // adds is left off — it's tiny next to the hit radius, so aim stays honest).
 int Game::tableBalloonBunch(int a, int b, Vector3 *pos, Color *cols, Vector3 &tie) {
     if (level != 4 || world.propAt(a, b) != PROP_PARTY_TABLE) return 0;
-    uint32_t h = ih(a, b, (uint32_t)world.seed ^ 0x8A11u);
+    uint32_t h = ih(a, b, pickupSalt() ^ 0x8A11u);
     if (h % 3 != 0) return 0;                       // most tables, not all
     float tx = a * CELL + 1.0f, tz = b * CELL + 1.0f;
     float ty = world.floorY(a, b) + 0.74f;          // knotted at the tabletop
@@ -491,6 +622,28 @@ int Game::tableBalloonBunch(int a, int b, Vector3 *pos, Color *cols, Vector3 &ti
         if (cols) cols[k] = PARTY[(bh >> 13) % 5];
     }
     return nb;
+}
+
+// Does a round fired from the eye pass through a body standing at (ax, az)?
+//
+// Both hit tests used to project onto the 2D forward vector and measure the
+// miss distance in the horizontal plane alone: aim at the ceiling, fire, and
+// the round still landed. The shot leaves the eye along the 3D aim, so a hit
+// needs the aim line inside the body's radius horizontally *and* inside its
+// height vertically.
+bool Game::shotHitsBody(float ax, float az, float feetY, float bodyH,
+                        float radius, float maxRange) const {
+    float ex = ax - px, ez = az - pz;
+    float along = ex * f2x + ez * f2z;              // horizontal metres down the aim line
+    if (along <= 0 || along > maxRange) return false;
+    if (fabsf(ex * r2x + ez * r2z) > radius) return false;
+    // How high the round is after `along` metres of horizontal travel. fwd is
+    // the 3D aim, so vertical-over-horizontal is the slope of the shot; aimed
+    // straight up or down there is no horizontal travel and nothing to hit.
+    float horiz = hypotf(fwd.x, fwd.z);
+    if (horiz < 1e-4f) return false;
+    float rayY = eyeY + (fwd.y / horiz) * along;
+    return rayY >= feetY && rayY <= feetY + bodyH;
 }
 
 // Fire the revolver in LEVEL FUN and the first balloon on the aim line bursts
@@ -514,9 +667,12 @@ void Game::popBalloonsAlongAim() {
             if (balloonAt(ca, cb, bp)) {   // a lone ceiling balloon
                 float ex = bp.x - wx, ey = bp.y - wy, ez = bp.z - wz;
                 if (ex * ex + ey * ey + ez * ez <= 0.24f * 0.24f) {
+                    // The march never asked whether anything was in the way, so
+                    // you could pop the party through a wall from the corridor.
+                    if (!world.lineOfSight(px, pz, bp.x, bp.z)) continue;
                     poppedBalloons.insert(cellKey2(ca, cb));
                     SetSoundPitch(sndPop, 0.9f + grng.f01() * 0.3f); SetSoundPan(sndPop, panFor(0)); PlaySound(sndPop);
-                    burst(bp, PARTY[(ih(ca, cb, (uint32_t)world.seed ^ 0xBA11u) >> 10) % 5], 16);
+                    burst(bp, PARTY[(ih(ca, cb, pickupSalt() ^ 0xBA11u) >> 10) % 5], 16);
                     return;
                 }
             }
@@ -526,6 +682,7 @@ void Game::popBalloonsAlongAim() {
                 for (int k = 0; k < nb; k++) {
                     float ex = bpos[k].x - wx, ey = bpos[k].y - wy, ez = bpos[k].z - wz;
                     if (ex * ex + ey * ey + ez * ez > 0.26f * 0.26f) continue;
+                    if (!world.lineOfSight(px, pz, bpos[k].x, bpos[k].z)) continue;
                     poppedTableBunches.insert(cellKey2(ca, cb));
                     SetSoundPitch(sndPop, 0.95f + grng.f01() * 0.3f); SetSoundPan(sndPop, panFor(0)); PlaySound(sndPop);
                     for (int j = 0; j < nb; j++) burst(bpos[j], bcol[j], 11);
@@ -626,7 +783,7 @@ bool Game::tick() {
     updateEntity(dt, now);
     updateDogs(dt, now);
     updateExits(now);
-    caughtT = fmaxf(0, caughtT - dt);
+    deathT = fmaxf(0, deathT - dt);
     escapeT = fmaxf(0, escapeT - dt);
     killT = fmaxf(0, killT - dt);
     fellT = fmaxf(0, fellT - dt);
@@ -707,7 +864,7 @@ void Game::updateMovement(float dt) {
     // the floor is a lie: linger on a soft patch and it gives way to Level 1
     if (level == 0 && grounded && py > -0.05f && world.softAt(cellOf(px), cellOf(pz))) {
         softTimer += dt;
-        if (softTimer > 0.9f && fellT <= 0 && escapeT <= 0 && caughtT <= 0) {
+        if (softTimer > 0.9f && fellT <= 0 && escapeT <= 0 && deathT <= 0) {
             fellT = 4.0f;
             SetSoundVolume(sndBigSplash, 0.5f); SetSoundPitch(sndBigSplash, 0.5f);
             PlaySound(sndBigSplash);
@@ -723,6 +880,12 @@ void Game::updateMovement(float dt) {
     if (IsKeyPressed(KEY_SPACE) && grounded) { vy = inWater ? 4.3f : 5.6f; grounded = false; }
     if (grounded) {
         if (py > groundY + 0.05f && world.poolAt(cellOf(px), cellOf(pz))) { grounded = false; vy = 0; }  // pool edge: drop in
+        // Walked off something taller than a step — a terrace lip, the top of a
+        // cabinet — so leave the floor and fall. The glide below has no cap of
+        // its own: it used to lower you off a 1.3 m cabinet at a smooth 14 m/s
+        // as though the drop were a ramp, which is the same reason a 2.5 m
+        // terrace read as walkable in the other direction.
+        else if (groundY < py - MAX_STEP) { grounded = false; vy = 0; }
         else {   // stairs, steps, furniture edges: glide to the new floor height
             py += (groundY - py) * fminf(1, 14 * dt);
             if (fabsf(py - groundY) < 0.004f) py = groundY;
@@ -745,20 +908,46 @@ void Game::updateMovement(float dt) {
         }
     }
 
-    // head bob + footsteps (grounded only)
+    // Head bob and footsteps run off ONE phase, because the footfall *is* the
+    // bottom of the bob. They used to be two independent numbers — a 2.32 m
+    // stride against a 1.21 m bob cycle, so 1.92 bobs per footstep and the
+    // ratio drifting with speed. The step sound never landed on the dip, which
+    // is most of why the walk felt floaty.
+    //
+    // bobPhase now counts footfalls: it gains 1 per stride, so an integer value
+    // is a foot hitting the floor. Stride grows with speed the way a real one
+    // does, holding cadence in the human 2-3 steps/s band at every speed the
+    // game has — crouch 1.9 m/s -> 0.95 m / 2.0 Hz, walk 3.6 -> 1.35 m /
+    // 2.7 Hz, sprint 6.8 -> 2.12 m / 3.2 Hz. (0.75 m per step is the stride for
+    // a 1.4 m/s amble; at this game's 3.6 m/s it would be a 4.8 Hz scurry.)
     bobAmt = clampf(spd / 5.3f, 0, 1) * (grounded ? 1.0f : 0.0f);
-    stepAcc += spd * dt * (grounded ? 1.0f : 0.0f);
-    bobPhase += spd * dt * 1.65f;
-    eyeY = 1.62f - 0.55f * crouchCur - landDip + py + sinf(bobPhase * 3.14159f) * 0.045f * bobAmt;
-    float stepLen = 1.85f + speed * 0.13f;
-    if (stepAcc > stepLen) {
-        stepAcc -= stepLen;
+    float strideLen = 0.49f + speed * 0.24f;
+    float lastPhase = bobPhase;
+    bobPhase += (spd * dt / strideLen) * (grounded ? 1.0f : 0.0f);
+    // -cos puts the low point of the bob exactly on the integer, which is where
+    // the foot lands. Amplitude is down from 0.045 because the bob now runs at
+    // step rate rather than half of it, and 0.09 m peak-to-peak at 2.7 Hz is
+    // seasickness. The viewmodel sway in render.cpp reads sinf(bobPhase*PI),
+    // which on this phase is one lateral cycle per two footfalls — a gait
+    // cycle, which is what lateral sway actually tracks.
+    eyeY = 1.62f - 0.55f * crouchCur - landDip + py - cosf(bobPhase * 6.28318f) * 0.032f * bobAmt;
+    if (floorf(bobPhase) > floorf(lastPhase)) {
         Sound &s = inWater ? splashes[grng.ri(0, 1)] : steps[grng.ri(0, 3)];
         SetSoundPitch(s, 0.9f + grng.f01() * 0.22f);
         SetSoundVolume(s, (0.35f + 0.3f * bobAmt) * (inWater ? 1.4f : 1.0f));
         PlaySound(s);
     }
-    float fovT = sprinting ? 79.0f : 70.0f - 8.0f * aimBlend;
+    // Keep the phase from drifting into float mush over a long run. 4096 is an
+    // integer number of strides and an even one, so both the footfall crossing
+    // above and render.cpp's sinf(bobPhase*PI) sway are continuous across it.
+    if (bobPhase > 4096.0f) bobPhase -= 4096.0f;
+    // Two independent pulls on the FOV, and they compose: sighting the revolver
+    // narrows it 8 degrees (the iron-sight work), and the corridor closes in a
+    // further 15 as the last of your grip goes (STK-03). The slide reads as the
+    // building narrowing rather than as a camera effect, which is the point —
+    // you notice the walls before you notice the meter. Sprinting overrides the
+    // aim term because you cannot hold sights at a run.
+    float fovT = (sprinting ? 79.0f : 70.0f - 8.0f * aimBlend) - slide * 15.0f;
     fov += (fovT - fov) * fminf(1, 6 * dt);
 
     // hiding: crouched, close enough to real cover, and *still* — checked after
@@ -783,6 +972,9 @@ void Game::updateMovement(float dt) {
             if (ddx * ddx + ddz * ddz < 1.35f * 1.35f) nearCover = true;
         }
     }
+    // Hiding needs cover *and* stillness; the pack needs only the stillness,
+    // so it is recorded separately rather than read off `hidden`.
+    still = spd < HIDE_ENTER;
     if (!nearCover) { hidden = false; hideBreakT = 0; }          // stood up, or walked out of it
     else if (!hidden) { if (spd < HIDE_ENTER) hidden = true; hideBreakT = 0; }
     else if (spd > HIDE_BREAK) {
@@ -796,7 +988,7 @@ void Game::updateDevKeys(double now) {
     if (debugHud) {
         if (IsKeyPressed(KEY_B)) {   // force a blackout right now
             blackoutEnd = now + 3.0 + grng.f01() * 3.0;
-            nextBlackout = level == 2 ? 1e18 : blackoutEnd + 45 + grng.f01() * 75;
+            nextBlackout = level == 2 ? BLACKOUT_NEVER : blackoutIn(blackoutEnd, 45, 75);
         }
         if (IsKeyPressed(KEY_E)) {   // (re)spawn Clark stalking ~12m ahead
             Vector2 spot = world.findOpenSpot(px + f2x * 12, pz + f2z * 12);
@@ -861,7 +1053,7 @@ void Game::updateWeapons(float dt, double now) {
         reloadT -= dt;
         if (reloadT <= 0) { ammo = MAXAMMO; SetSoundPitch(sndClick, 1.15f); PlaySound(sndClick); }
     }
-    if (weapon == WEAPON_REVOLVER && IsCursorHidden() && !captureClick && caughtT <= 0 && reloadT <= 0 && gunCd <= 0 &&
+    if (weapon == WEAPON_REVOLVER && IsCursorHidden() && !captureClick && deathT <= 0 && reloadT <= 0 && gunCd <= 0 &&
         drinkT <= 0 &&
         IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         if (ammo <= 0) { SetSoundPitch(sndClick, 0.7f); PlaySound(sndClick); gunCd = 0.25f; }  // dry fire
@@ -872,10 +1064,10 @@ void Game::updateWeapons(float dt, double now) {
             for (int i = 0; i < MAXDOGS; i++) {   // and in the Red Halls, the pack does
                 Dog &d = dogs[i];
                 if (d.st == DState::Gone || d.st == DState::Yelp) continue;
-                float ex = d.x - px, ez = d.z - pz;
-                float along = ex * f2x + ez * f2z, perp = fabsf(ex * r2x + ez * r2z);
-                if (along <= 0 || perp > 0.6f || along > 30.0f) continue;
+                // low and long: the sprite stands 0.97 m tall on its own floor
+                if (!shotHitsBody(d.x, d.z, d.dispY, 0.92f, 0.6f, 30.0f)) continue;
                 if (!world.lineOfSight(px, pz, d.x, d.z)) continue;
+                float ex = d.x - px, ez = d.z - pz;
                 if (--d.hp <= 0) {
                     d.st = DState::Yelp; d.life = 0;
                     SetSoundPitch(sndBarks[i % 3], 1.6f); SetSoundVolume(sndBarks[i % 3], 0.9f);
@@ -884,7 +1076,7 @@ void Game::updateWeapons(float dt, double now) {
                     PlaySound(sndHit);
                     float dl = sqrtf(ex * ex + ez * ez) + 1e-4f;
                     d.x += ex / dl * 0.8f; d.z += ez / dl * 0.8f;   // rocked, not repelled
-                    world.collideCircle(d.x, d.z, 0.3f);
+                    world.collideCircle(d.x, d.z, 0.3f, d.dispY);
                 }
                 break;   // one round, one dog
             }
@@ -892,10 +1084,9 @@ void Game::updateWeapons(float dt, double now) {
             if (ent.st == EState::Hidden) ent.nextSpawn = fmin(ent.nextSpawn, now + 5 + grng.f01() * 6);
             else if (ent.st == EState::Stalk) ent.gaze += 0.8f;
             if (ent.st == EState::Stalk || ent.st == EState::Chase || ent.st == EState::Flee) {
-                float ex = ent.x - px, ez = ent.z - pz;
-                float along = ex * f2x + ez * f2z;          // in front of the muzzle
-                float perp = fabsf(ex * r2x + ez * r2z);    // off the aim line
-                if (along > 0 && perp < 0.55f && world.lineOfSight(px, pz, ent.x, ent.z)) {
+                // 1.96 m of him, standing on whatever floor he is standing on
+                if (shotHitsBody(ent.x, ent.z, ent.dispY, 1.95f, 0.55f, 60.0f) &&
+                    world.lineOfSight(px, pz, ent.x, ent.z)) {
                     ent.hp--;
                     if (ent.hp <= 0) {   // put down
                         PlaySound(sndKill);
@@ -908,9 +1099,10 @@ void Game::updateWeapons(float dt, double now) {
                         saveBest();
                     } else {             // hurt, and now it knows exactly where you are
                         PlaySound(sndHit);
+                        float ex = ent.x - px, ez = ent.z - pz;
                         float dd = sqrtf(ex * ex + ez * ez);
                         if (dd > 0.01f) { ent.x += ex / dd * 0.5f; ent.z += ez / dd * 0.5f; }
-                        world.collideCircle(ent.x, ent.z, 0.38f);
+                        world.collideCircle(ent.x, ent.z, 0.38f, ent.dispY);
                         ent.stagger = 0.45f;
                         if (ent.st != EState::Chase) {   // being shot at is a proper introduction
                             ent.st = EState::Chase;
@@ -970,7 +1162,7 @@ const FlareProj *Game::dominantFlare(float x, float z) const {
 
 void Game::updateFlare(float dt, double now) {
     // ---- flare weapon
-    if (IsCursorHidden() && caughtT <= 0 && flares > 0 && drinkT <= 0 &&
+    if (IsCursorHidden() && deathT <= 0 && flares > 0 && drinkT <= 0 &&
         (IsKeyPressed(KEY_Q) || (weapon == WEAPON_FLARE && !captureClick && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)))) {
         flares--;
         // A free slot if there is one. There are as many slots as flares you can
@@ -1043,7 +1235,7 @@ void Game::updateTapeDeck(float dt, double now) {
     deckNoteT = fmaxf(0, deckNoteT - dt);
 
     // ---- thread a tape, or set the running deck down
-    if (IsCursorHidden() && !captureClick && caughtT <= 0 && drinkT <= 0 &&
+    if (IsCursorHidden() && !captureClick && deathT <= 0 && drinkT <= 0 &&
         weapon == WEAPON_DECK && deck.carried && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         if (!deck.playing && tapes > 0) {
             tapes--;
@@ -1209,10 +1401,21 @@ void Game::updateInteraction() {
                 if ((int)valvesTurned.size() >= VALVES_NEEDED && !pipesShut) {
                     pipesShut = true;
                     PlaySound(sndWin);
-                    for (int c2 = 0; c2 < 9; c2++) {   // the pipes give up their cache
-                        float aa = c2 * 0.698f + grng.f01();
-                        float rr = 1.2f + grng.f01() * 1.1f;
-                        coinsWorld.push_back({ px + cosf(aa) * rr, 0, pz + sinf(aa) * rr });
+                    // The cache is there once a descent, not once a visit. It
+                    // pays 9 against an ESCAPE_COST of 12, and a cursed exit
+                    // (1 in 6) drops you straight back into the Red Halls — so
+                    // paying per visit let you bank your way out on laps of the
+                    // exit loop without ever meeting Clark, which is the exact
+                    // opposite of having to fight him to earn the way out. The
+                    // pipes still go quiet on a later visit; they just have
+                    // nothing left in them.
+                    if (!pipesPaid) {
+                        pipesPaid = true;
+                        for (int c2 = 0; c2 < 9; c2++) {   // the pipes give up their cache
+                            float aa = c2 * 0.698f + grng.f01();
+                            float rr = 1.2f + grng.f01() * 1.1f;
+                            coinsWorld.push_back({ px + cosf(aa) * rr, 0, pz + sinf(aa) * rr });
+                        }
                     }
                 }
             }
@@ -1260,13 +1463,46 @@ void Game::updateAmbience(float dt, double now) {
     bool blackout = now < blackoutEnd;
     if (!blackout && now > nextBlackout) {
         blackoutEnd = now + 2.5 + grng.f01() * 4.0;
-        nextBlackout = blackoutEnd + 45 + grng.f01() * 75;
+        nextBlackout = blackoutIn(blackoutEnd, 45, 75);
         if (grng.f01() < 0.45f && ent.st == EState::Hidden)
             ent.nextSpawn = blackoutEnd + 1.5;   // something arrives in the dark
         blackout = true;
     }
     blackoutCur += ((blackout ? 0.02f : 1.0f) - blackoutCur) * fminf(1, 18 * dt);
     synth.humTarget = blackout ? 0.12f : 1.0f;
+
+    // ---- what the room sounds like from where you are standing (AUD-03/04).
+    //
+    // The buzz swells under a live fitting. Panels sit on the level's own uLS
+    // grid with a fitting at each cell centre, so the nearest one is just the
+    // player's position rounded to that grid — no search, and it is the same
+    // grid the shader lights from, so what you hear and what you see agree.
+    {
+        float ls = LEVELS[level].ls;
+        float nx = (floorf(px / ls) + 0.5f) * ls, nz = (floorf(pz / ls) + 0.5f) * ls;
+        float pd = sqrtf((px - nx) * (px - nx) + (pz - nz) * (pz - nz));
+        // right underneath it is 1, and it is gone by about 4 m out
+        synth.panelTarget = blackout ? 0.0f : clampf(1.0f - pd / 4.0f, 0.0f, 1.0f);
+
+        // And how big the space is, for the reverb's decay. Walk the four
+        // cardinal directions from your cell until a wall stops you: the mean
+        // open run is what "corridor" versus "warehouse hall" actually means
+        // here, and it is the same measure the map harness reports. Cheap —
+        // four short marches of cell lookups, no rays.
+        int ci = cellOf(px), ck = cellOf(pz);
+        const int DIRS[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+        int total = 0;
+        for (auto &d : DIRS) {
+            int a = ci, b = ck;
+            for (int step = 0; step < ROOM_PROBE; step++) {
+                int na = a + d[0], nb = b + d[1];
+                if (!world.canStep(a, b, na, nb)) break;
+                a = na; b = nb; total++;
+            }
+        }
+        float openRun = (total / 4.0f) * CELL;                 // metres, averaged over the four
+        synth.spaceTarget = clampf(openRun / (ROOM_PROBE * CELL), 0.0f, 1.0f);
+    }
 
     // ---- your grip on the place. It only ever goes one way on its own.
     float drain = sanityDrain(level);
@@ -1297,13 +1533,36 @@ void Game::updateAmbience(float dt, double now) {
 
     // low enough and you start hearing your own pulse, quicker the further down
     if (sanity < 0.34f && now > nextHeartbeat) {
+        // ...and in the slide it stops being a warning and starts being the
+        // loudest thing in the room.
+        SetSoundVolume(sndHeartbeat, clampf(0.55f + 0.45f * slide, 0.0f, 1.0f));
         PlaySound(sndHeartbeat);
-        nextHeartbeat = now + 1.1 + sanity * 3.4;
+        nextHeartbeat = now + (1.1 + sanity * 3.4) * (1.0f - 0.45f * slide);
     }
-    // bottomed out, it stops being a meter and starts being an invitation
-    if (sanity <= 0.0f) {
-        if (ent.st == EState::Hidden && ent.nextSpawn > now + 4.0) ent.nextSpawn = now + 4.0;
-        if (nextBlackout > now + 8.0) nextBlackout = now + 8.0;
+    // ---- the last of it (STK-03). The meter's whole fiction is that the place
+    // eventually takes you, and then it did not: bottoming out merely pulled
+    // spawns and blackouts forward, which is a difficulty setting, not an
+    // ending. The last SLIDE_FROM of it is now a slide you can feel happening —
+    // the corridor narrowing, the whispers coming up out of the walls, your own
+    // pulse crowding out the rest of the mix — and zero ends the run.
+    slide = clampf((SLIDE_FROM - sanity) / SLIDE_FROM, 0.0f, 1.0f);
+    if (slide > 0.0f) {
+        // the whispers stop being texture and start being close
+        synth.whisperTarget = fmaxf(synth.whisperTarget, 0.30f + 0.70f * slide);
+        fear = fmaxf(fear, 0.35f + 0.55f * slide);
+    }
+    if (sanity <= 0.0f && deathT <= 0 && !inMenu) {
+        dieRun(now, "THE PLACE ITSELF", "YOU STOPPED KEEPING TRACK");
+        return;
+    }
+
+    // ---- PAC-03: and while you are down there, it starts moving on you.
+    if (slide > 0.0f && now > nextShift && !inMenu) {
+        nextShift = now + SHIFT_GAP_MIN + grng.f01() * SHIFT_GAP_SPAN * (1.0f - slide);
+        // updateOccupancy only rebuilds when you have walked six cells, so a
+        // wall that appears between rebuilds would light and shadow as though
+        // it were not there. Invalidate it explicitly.
+        if (shiftAWall()) occValid = false;
     }
 
     // confetti from popped balloons: drift down, tumble, fade out
@@ -1334,18 +1593,73 @@ void Game::updateEntity(float dt, double now) {
     if (ent.st == EState::Hidden) {
         if (sprinting) ent.nextSpawn -= 1.5 * dt;   // running feet echo a long way
         if (now > ent.nextSpawn) {
-            float a = grng.f01() * TAU;
-            float d = 20 + grng.f01() * 10;
-            Vector2 spot = world.findOpenSpot(px + cosf(a) * d, pz + sinf(a) * d);
-            ent.x = spot.x; ent.z = spot.y;
+            // Where he arrives from. This was one draw — 20-30 m out on a random
+            // bearing — so every encounter in the game opened the same way: a
+            // shape resolving out of the fog while you watched it come. The
+            // version that is actually frightening, already standing at the end
+            // of the corridor you have just decided to walk down, could not
+            // happen at all. So there are three arrivals now, and the far one
+            // stays in the mix: replacing one fixed ritual with another fixed
+            // ritual buys nothing.
+            //
+            // Both near arrivals demand the cell fail lineOfSight from where you
+            // are standing. That is the whole trick — inside the fog, close
+            // enough to matter, and behind something, so the first you know of
+            // him is when you turn the corner he is already round.
+            auto unseenSpot = [&](float wx, float wz, float &ox, float &oz) {
+                Vector2 s = world.findOpenSpot(wx, wz);
+                float dx = s.x - px, dz = s.y - pz, d = sqrtf(dx * dx + dz * dz);
+                if (d < SPAWN_NEAR_MIN || d > SPAWN_NEAR_MAX) return false;
+                if (world.lineOfSight(px, pz, s.x, s.y)) return false;
+                ox = s.x; oz = s.y; return true;
+            };
+            float sx = 0, sz = 0;
+            bool placed = false;
+            float roll = grng.f01();
+            if (roll < 0.45f) {
+                // Down the way you are heading: walk the BFS along your own
+                // heading a cell at a time and take the first cell past the
+                // point where the route bends out of sight. pathStep is the
+                // same router the hunt uses, so the cell is one you could have
+                // walked to yourself — not a spot across a wall.
+                int ci = cellOf(px), ck = cellOf(pz);
+                int ti = cellOf(px + f2x * 26.0f), tk = cellOf(pz + f2z * 26.0f);
+                for (int step = 0; step < 20 && !placed; step++) {
+                    int oi, ok;
+                    if (!world.pathStep(ci, ck, ti, tk, oi, ok)) break;
+                    ci = oi; ck = ok;
+                    float cx = ci * CELL + 1.0f, cz = ck * CELL + 1.0f;
+                    float dx = cx - px, dz = cz - pz;
+                    if (dx * dx + dz * dz > SPAWN_NEAR_MAX * SPAWN_NEAR_MAX) break;   // walked out of the fog
+                    placed = unseenSpot(cx, cz, sx, sz);
+                }
+            } else if (roll < 0.80f) {
+                // Just around a corner, any bearing: the median sightline here
+                // is about 7 m, so a handful of tries almost always finds one.
+                for (int tries = 0; tries < 16 && !placed; tries++) {
+                    float a = grng.f01() * TAU;
+                    float d = SPAWN_NEAR_MIN + grng.f01() * (SPAWN_NEAR_MAX - SPAWN_NEAR_MIN);
+                    placed = unseenSpot(px + cosf(a) * d, pz + sinf(a) * d, sx, sz);
+                }
+            }
+            if (!placed) {   // and the original: out in the fog, coming to find you
+                float a = grng.f01() * TAU;
+                float d = SPAWN_FAR_MIN + grng.f01() * SPAWN_FAR_SPAN;
+                Vector2 spot = world.findOpenSpot(px + cosf(a) * d, pz + sinf(a) * d);
+                sx = spot.x; sz = spot.y;
+            }
+            ent.x = sx; ent.z = sz;
             ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.hp = 3; ent.stagger = 0;
+            ent.gait = 0;   // he is standing still when you first see him; stand him in the neutral cel
             ent.dispY = world.floorY(cellOf(ent.x), cellOf(ent.z));
         }
     } else {
+        float entPrevX = ent.x, entPrevZ = ent.z;   // for the gait, below
         float ex = ent.x - px, ez = ent.z - pz;
         entDist = sqrtf(ex * ex + ez * ez);
         float dirDot = (entDist > 0.01f) ? (fwd.x * ex + fwd.z * ez) / entDist : 1;
-        entVisible = entDist < 36 && dirDot > 0.86f && world.lineOfSight(px, pz, ent.x, ent.z);
+        bool entLos = world.lineOfSight(px, pz, ent.x, ent.z);
+        entVisible = entDist < 36 && dirDot > 0.86f && entLos;
         if (crouchCur > 0.7f && entDist > 7) entVisible = false;   // low and quiet: hard to pick out
         if (hidden) entVisible = false;                            // tucked away — it can walk right past you
         if (ent.st == EState::Stalk || ent.st == EState::Chase) {
@@ -1368,9 +1682,23 @@ void Game::updateEntity(float dt, double now) {
         }
         if (ent.st == EState::Chase) {
             fearT = entDist < 8 ? 1.0f : 0.8f;
+            // The lunge is the tell. It used to be a silent random speed burst
+            // and the catch was a bare distance test, so the run ended with no
+            // warning at all; now he has to commit from LUNGE_REACH out, the
+            // commit is announced, and only a commit that is still running can
+            // take you. Sprinting away for the 0.6 s breaks it — he closes
+            // about 0.4 m on a sprint in that time and needs 1.25 m — and
+            // walking away does not, which is the choice the tell is for.
             ent.lunge = fmaxf(0, ent.lunge - dt);
-            if (entDist < 5.5f && entDist > 1.6f && ent.lunge <= 0 && grng.f01() < dt * 0.5f)
-                ent.lunge = 0.55f;   // sudden burst — don't let him get close
+            ent.lungeCd = fmaxf(0, ent.lungeCd - dt);
+            if (entDist < LUNGE_REACH && ent.lunge <= 0 && ent.lungeCd <= 0 && !hidden) {
+                ent.lunge = LUNGE_TIME;
+                ent.lungeCd = LUNGE_TIME + 1.2f;   // a breath between attempts, so it is not a grind
+                SetSoundPitch(sndScare, 0.62f);    // the growl drops and spikes: he has decided
+                SetSoundVolume(sndScare, 0.85f);
+                PlaySound(sndScare);
+                fearT = 1.0f;
+            }
             float chaseSpd = 3.3f + 1.0f * clampf(1 - entDist / 25.0f, 0, 1) + (ent.lunge > 0 ? 3.2f : 0.0f);
             if (ent.stagger > 0) chaseSpd *= 0.35f;   // the round rocked him, briefly
             // beeline when it can see you; otherwise route around walls on the cell grid
@@ -1390,7 +1718,7 @@ void Game::updateEntity(float dt, double now) {
             float sx = ent.wpx - ent.x, sz = ent.wpz - ent.z, sl = sqrtf(sx * sx + sz * sz) + 1e-4f;
             ent.x += sx / sl * chaseSpd * dt;
             ent.z += sz / sl * chaseSpd * dt;
-            world.collideCircle(ent.x, ent.z, 0.38f);
+            world.collideCircle(ent.x, ent.z, 0.38f, ent.dispY);
             // you hear him coming: footfalls panned to his bearing, fading with range
             entStepAcc += chaseSpd * dt;
             // The wrap is the stride, so it has to happen whether or not you are
@@ -1414,15 +1742,14 @@ void Game::updateEntity(float dt, double now) {
                 closeCallT = 3.0f;
                 PlaySound(sndHeartbeat);
             }
-            if (entDist < 1.25f && !hidden) {   // caught
-                PlaySound(sndScare);
-                caughtT = 2.4f; caughtCount++;
-                saveBest();
-                float a = grng.f01() * TAU;
-                Vector2 spot = world.findOpenSpot(px + cosf(a) * 800, pz + sinf(a) * 800);
-                px = spot.x; pz = spot.y; velx = velz = 0;
-                ent.st = EState::Hidden; ent.nextSpawn = now + 30 + grng.f01() * 30;
-                entDist = 1e9f;
+            // He can only take you out of a lunge he has committed to, and the
+            // commit is loud and 0.6 s long — see the chase block above. The
+            // bare proximity test this replaces fired the instant you came
+            // within 1.25 m, silently and with no windup, which is survivable
+            // when being caught is free and simply unfair once it is not.
+            if (entDist < CATCH_REACH && ent.lunge > 0 && !hidden) {
+                dieRun(now, level == 4 ? "THE PARTYGOER" : "PIRATE CLARK");
+                return;   // beginDescent has already replaced the world under us
             }
         }
         if (ent.st == EState::Flee) {   // bolts away from the burning flare
@@ -1436,8 +1763,38 @@ void Game::updateEntity(float dt, double now) {
             if (rl > 0.01f) { ent.x += rx / rl * 6.5f * dt; ent.z += rz / rl * 6.5f * dt; }
             entStepAcc += 6.5f * dt;   // bolting is still walking, as far as the legs are concerned
             if (entStepAcc > ENT_STRIDE) { entStepAcc -= ENT_STRIDE; entStepPar ^= 1; }
-            world.collideCircle(ent.x, ent.z, 0.38f);
+            world.collideCircle(ent.x, ent.z, 0.38f, ent.dispY);
             if (ent.life > 3.0f) { ent.st = EState::Hidden; ent.nextSpawn = now + 25 + grng.f01() * 35; }
+        }
+        // ---- his gait: one phase for the legs and the footfalls both.
+        //
+        // This used to be entStepAcc, which accumulated chaseSpd*dt inside the
+        // Chase block only. Two things were wrong with that: it counted
+        // *intended* speed, so a Clark grinding against a wall still sounded
+        // like one crossing the room, and it did not exist in any other state,
+        // so nothing could animate him while he fled. Distance actually
+        // travelled, in any state, and an integer value is a foot landing —
+        // which is what render.cpp indexes the walk cycle from, so the frame
+        // his boot hits the floor on is the frame you hear it.
+        {
+            float moved = hypotf(ent.x - entPrevX, ent.z - entPrevZ);
+            float lastGait = ent.gait;
+            ent.gait += moved / ENT_STRIDE;
+            if (ent.gait > 4096.0f) ent.gait -= 4096.0f;   // even integer: the cycle is continuous across it
+            if (floorf(ent.gait) > floorf(lastGait) && entDist < 22.0f && deathT <= 0) {
+                float inv = entDist > 0.01f ? 1.0f / entDist : 0.0f;
+                float sd = clampf((ex * inv) * r2x + (ez * inv) * r2z, -1.0f, 1.0f);   // + = to your right
+                // Through a wall it is the dull set, and quieter: a wall should
+                // cost you the certainty, not just a few dB. entLos is the same
+                // ray entVisible already needed, hoisted so it is cast once.
+                int pick = grng.ri(0, 3);
+                Sound &s = entLos ? entSteps[pick] : entStepsThrough[pick];
+                SetSoundPan(s, panFor(sd));
+                SetSoundPitch(s, 0.66f + grng.f01() * 0.08f);   // heavy, unhurried
+                float occ = entLos ? 1.0f : 0.45f;
+                SetSoundVolume(s, clampf(1.4f * occ / (1.0f + (entLos ? 0.07f : 0.13f) * entDist * entDist), 0.0f, 0.9f));
+                PlaySound(s);
+            }
         }
         if (ent.st == EState::Die) {   // shot down: crumples, gone a long while
             fearT = 0.10f;
@@ -1500,7 +1857,7 @@ void Game::updateDogs(float dt, double now) {
     for (const FlareProj &f : litFlares) if (f.active && f.burn > FLAREBURN - 0.6f) justStruck = true;
     if (justStruck) { noise = 30.0f; nsx = px; nsz = pz; }
 
-    if (now > nextHowl && caughtT <= 0) {    // the pack calling across the halls
+    if (now > nextHowl && deathT <= 0) {    // the pack calling across the halls
         nextHowl = now + 26 + grng.f01() * 34;
         int live = 0;
         for (auto &d : dogs) if (d.st != DState::Gone) live++;
@@ -1533,7 +1890,7 @@ void Game::updateDogs(float dt, double now) {
             float rx = d.x - px, rz = d.z - pz, rl = sqrtf(rx * rx + rz * rz) + 1e-4f;
             d.x += rx / rl * 7.5f * dt; d.z += rz / rl * 7.5f * dt;
             d.gait += 7.5f * dt;
-            world.collideCircle(d.x, d.z, 0.3f);
+            world.collideCircle(d.x, d.z, 0.3f, d.dispY);
             if (d.life > 2.6f) d.st = DState::Gone;
         } else {
             // fire is the one thing that turns them, same as it turns Clark
@@ -1585,27 +1942,30 @@ void Game::updateDogs(float dt, double now) {
             float sx = d.wpx - d.x, sz = d.wpz - d.z, sl = sqrtf(sx * sx + sz * sz) + 1e-4f;
             d.x += sx / sl * spd * dt; d.z += sz / sl * spd * dt;
             d.gait += spd * dt;
-            world.collideCircle(d.x, d.z, 0.3f);
+            world.collideCircle(d.x, d.z, 0.3f, d.dispY);
 
-            if (now > d.nextBark && dist < 26.0f && caughtT <= 0) {
+            if (now > d.nextBark && dist < 26.0f && deathT <= 0) {
                 d.nextBark = now + (d.st == DState::Charge ? 0.7 + grng.f01() * 0.6
                                                           : 3.5 + grng.f01() * 4.0);
-                Sound &s = sndBarks[i % 3];
+                bool dogLos = world.lineOfSight(px, pz, d.x, d.z);
+                Sound &s = dogLos ? sndBarks[i % 3] : sndBarksThrough[i % 3];
                 float sd = clampf((ddx / dist) * r2x + (ddz / dist) * r2z, -1.0f, 1.0f);
                 SetSoundPan(s, panFor(sd));
                 SetSoundPitch(s, 0.92f + grng.f01() * 0.2f);
-                SetSoundVolume(s, clampf(1.5f / (1.0f + 0.05f * dist * dist), 0.0f, 0.95f));
+                float occ = dogLos ? 1.0f : 0.45f;
+                SetSoundVolume(s, clampf(1.5f * occ / (1.0f + (dogLos ? 0.05f : 0.10f) * dist * dist), 0.0f, 0.95f));
                 PlaySound(s);
             }
-            if (dist < 1.15f && caughtT <= 0 && !hidden) {   // they have you
-                PlaySound(sndScare);
-                caughtT = 2.4f; caughtCount++;
-                saveBest();
-                float a = grng.f01() * TAU;
-                Vector2 spot = world.findOpenSpot(px + cosf(a) * 800, pz + sinf(a) * 800);
-                px = spot.x; pz = spot.y; velx = velz = 0;
-                for (auto &o : dogs) o.st = DState::Gone;
-                nextPack = now + 25 + grng.f01() * 20;
+            // They hunt by SOUND. `hidden` is visual cover — crouched, beside
+            // furniture — and letting it stop a dog undercut the one mechanic
+            // in the game that is not about line of sight. Furniture is nothing
+            // to them in either direction now: standing dead still in the open
+            // works, and crouching behind a cabinet with a tape running in your
+            // coat does not, which is what makes putting the deck down
+            // somewhere else the actual play rather than a flourish.
+            if (dist < 1.15f && deathT <= 0 && !packDeaf()) {   // they have you
+                dieRun(now, "THE PACK");
+                return;   // beginDescent has already replaced the world under us
             }
         }
         float gy = world.floorY(cellOf(d.x), cellOf(d.z));
