@@ -62,7 +62,8 @@
   brightness unrelated to where they actually stood.
 - The prop atlas is 1024x512: original cardboard/metal occupies the left half;
   veneer and fabric occupy the right. Flat metal UV is (0.375,0.75).
-- Fluorescent emissive geometry is at wallH-0.12, matching the light height.
+- Fluorescent emissive geometry is 0.12 below the ceiling of the cell it hangs
+  in (`ceilY`, not a fixed wallH), matching the light height.
 - Revolver and flare are now 3D; their geometry shares the viewmodel shadow and
   ambient handling. Preserve depth testing and wall clearance.
 - Native macOS startup checks for an active display before InitWindow: raylib
@@ -278,6 +279,24 @@ sweeps concurrently — see the Xvfb note below.
 ## Things that will bite you
 
 These each cost real debugging time. They are not hypothetical.
+
+**Replacing one quad with a quad per cell costs 4% of the frame, for nothing.**
+The ceiling used to be a single chunk-wide quad. Making it per-cell so a raised
+deck could carry its ceiling up turned 1 quad per chunk into 256 coplanar ones,
+and elevation touches about 5% of cells, so 95% of that was the same flat
+ceiling drawn 256 times: `tools/bench.sh` read 1.043 on Level 0, which has no
+raised cells at all. Greedy-meshing equal-height runs back together gives a flat
+chunk its single quad back (0.986, i.e. noise) and only pays where the ceiling
+actually steps. Any per-cell surface that is usually uniform wants the same
+treatment — and `bench.sh` will tell you, where a screenshot will not.
+
+**A cross-chunk lookup in the mesher pulls neighbouring chunks into existence.**
+`ceilY(gi + 1, gk)` at a chunk edge calls `data()` on the neighbour and
+generates it. That is correct and the floor mesher already did it, but it moved
+`chunks=` in the capture banner from 40 to 45 and, on Level 4, filled in a room
+through a doorway that the previous build had left as black void. If a frame
+gains distant geometry after a mesher change and you cannot see why, check
+`chunks=` before you go looking in the renderer.
 
 **A failed shader compile does not crash — it goes black and gets faster.**
 raylib silently falls back to its default shader. The frame rate goes *up*,
@@ -550,6 +569,51 @@ separate from the array size, so bumping the array and forgetting the loop left
 the new material with no shader and no occupancy texture — a failure that looks
 nothing like a material problem. Both now come from `MAT_COUNT`; leave it that
 way.
+
+### Height
+
+`int8_t ChunkData::elev` is one floor height per cell, in decimetres. The whole
+engine rests on there being exactly one: `floorY` returns a scalar,
+`buildOccupancy` is a byte per cell with no height in it, `lightVis` is a 2D DDA
+and `pathStep` a 2D BFS. Extending height *upward* keeps all of that and still
+buys stairwells, mezzanines and drops; walkable floor directly over walkable
+floor is the one thing it cannot express, and nothing in the fiction needs it.
+
+The ceiling is `World::ceilY`, not `wallH`. It follows the floor **up only**:
+`max(floorY, 0) + wallH`. A raised deck has to carry its ceiling with it or its
+floor comes through the slab, which is the whole reason the ceiling is per-cell.
+A sunken cell is the other case and is *not* a lower storey — a pool basin and a
+sunken lounge are depressions in the floor of the room they are in, and they
+keep that room's ceiling. Dropping it with them hangs a soffit round every pool
+in the Poolrooms 0.6 m below the tile grid, which reads as a broken mesh.
+Telling a depression from a genuine lower storey needs something the cell does
+not store yet.
+
+Two rules fall out of this, and both have already been broken once:
+
+- **Anything attached to the ceiling takes `ceilY` of the cell it is in**, not
+  `wallH`: the light trays, the diffusers and sprinklers, the conduit runs, the
+  Level 3 pipework, the Level 4 streamers and the ceiling crease AO strips. A
+  crease left at a fixed `wallH` hangs in clear air under a ceiling that moved,
+  which reads as a smear rather than a shadow.
+- **A wall stands between two cells that may differ in height.** It is based on
+  the lower floor and taken to the higher ceiling, and everything fixed to it —
+  sill, door head, architrave, skirting, scrawl — is measured off that same
+  base. Base a wall on its own cell instead and a step leaves a gap under it on
+  the low side and a slot over it on the high side, both of which you see
+  straight through.
+
+What has *not* moved is the shader's light plane. `uLY` is still one constant
+per level (`wallH - 0.12`), and `lightAtCPU` mirrors that constant, so a fitting
+hanging in a raised bay is drawn where it is but lights the room from where the
+base ceiling is. That is invisible at Level 1's 0.6-1.2 m decks and would not be
+at a whole storey; it needs the panel grid to carry a height, which is a
+different ticket. Move it and `lightAtCPU` moves with it.
+
+Where two neighbouring cells' ceilings differ, the lower one draws a soffit
+closing the slot. Only the lower of each pair draws it, so a shared edge is
+drawn exactly once, including across a chunk seam where both sides read the same
+global heights.
 
 ### Lighting
 
