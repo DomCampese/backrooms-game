@@ -20,8 +20,8 @@ void Revolver::load() {
         TraceLog(LOG_ERROR,"Revolver GLB lacks required clips or named joints");std::exit(EXIT_FAILURE);
     }
     spinningBones.push_back(cylinder);
-    for(int i=0;i<asset.model.boneCount;++i)
-        if(std::strncmp(asset.model.bones[i].name,"DEF_Bullet",10)==0)spinningBones.push_back(i);
+    for(int i=0;i<asset.boneCount();++i)
+        if(std::strncmp(asset.boneName(i),"DEF_Bullet",10)==0)spinningBones.push_back(i);
     pose(0,0,6);
 }
 void Revolver::pose(float reloadTime,float cooldown,int ammo) {
