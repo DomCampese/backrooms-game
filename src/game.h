@@ -168,12 +168,6 @@ struct Game {
     bool captureClick = false;                // this click grabbed the mouse; don't also fire
     float leanCur = 0, landDip = 0;           // camera feel: strafe lean + landing dip
     float strafeInput = 0;                    // -1..1, set by movement, read by render lean
-    double entStepAcc = 0;                    // spacing of the thing's audible footfalls
-    // Which foot is leading. entStepAcc wraps once per *step*, so on its own it
-    // cannot tell a left stride from a right one; the walk cycle is two steps
-    // long and needs to know. Flipped on every wrap, including the ones that are
-    // too far away to be heard.
-    int entStepPar = 0;
     float entPrevX = 0, entPrevZ = 0;         // last frame's position, to derive his velocity
     static constexpr float ENT_STRIDE = 1.05f;   // metres per step — also the footfall spacing
     static constexpr float DOG_STRIDE = 0.85f;   // the pack's, which is quicker and shorter

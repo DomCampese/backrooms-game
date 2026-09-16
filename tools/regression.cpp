@@ -255,16 +255,12 @@ int main() {
         // stalking, head still down the corridor, mid-stride at four phases
         g.ent.st=EState::Stalk; g.ent.gaze=0;
         for (int i=0;i<4;++i) {
-            // Quarter-cycle steps. render.cpp's phase is
-            // (entStepAcc/ENT_STRIDE + entStepPar) * 0.5, so a full cycle is
-            // two strides and the parity bit is the second one.
-            g.entStepAcc = (i % 2) * 0.5f * Game::ENT_STRIDE;
-            g.entStepPar = i / 2;
+            g.ent.gait = i * 0.5f;   // quarter-cycle steps: render.cpp's phase is gait*0.5
             char n[48]; snprintf(n,sizeof(n),"clark-walk-%d.png",i);
             capture(g,n);
         }
         // gaze tips over: his head comes round, which is the tell
-        g.ent.gaze=1.2f; g.entStepAcc=0.5f*Game::ENT_STRIDE; g.entStepPar=0; capture(g,"clark-noticed.png");
+        g.ent.gaze=1.2f; g.ent.gait=0.5f; capture(g,"clark-noticed.png");
         // and the chase lean, and the harder lean of a committed lunge
         g.ent.st=EState::Chase; g.ent.lunge=0; capture(g,"clark-chase.png");
         g.ent.lunge=Game::LUNGE_TIME; capture(g,"clark-lunge.png");

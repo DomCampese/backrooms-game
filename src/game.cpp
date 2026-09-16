@@ -1018,7 +1018,7 @@ void Game::updateDevKeys(double now) {
 
 void Game::updateAim(bool held, float dt) {
     aiming = held && weapon == WEAPON_REVOLVER && reloadT <= 0 &&
-        drinkT <= 0 && caughtT <= 0 && winT <= 0 && !paused && !inMenu;
+        drinkT <= 0 && deathT <= 0 && winT <= 0 && !paused && !inMenu;
     float target = aiming ? 1.0f : 0.0f;
     // Fixed travel time, independent of frame rate; no lingering asymptotic sway.
     aimBlend += clampf(target - aimBlend, -dt / 0.16f, dt / 0.20f);
@@ -1027,7 +1027,7 @@ void Game::updateAim(bool held, float dt) {
 
 bool Game::canReload() const {
     return !aiming && aimBlend <= 0 && weapon == WEAPON_REVOLVER &&
-        ammo < MAXAMMO && reloadT <= 0 && drinkT <= 0 && caughtT <= 0 && winT <= 0;
+        ammo < MAXAMMO && reloadT <= 0 && drinkT <= 0 && deathT <= 0 && winT <= 0;
 }
 
 void Game::updateWeapons(float dt, double now) {
@@ -1719,23 +1719,11 @@ void Game::updateEntity(float dt, double now) {
             ent.x += sx / sl * chaseSpd * dt;
             ent.z += sz / sl * chaseSpd * dt;
             world.collideCircle(ent.x, ent.z, 0.38f, ent.dispY);
-            // you hear him coming: footfalls panned to his bearing, fading with range
-            entStepAcc += chaseSpd * dt;
-            // The wrap is the stride, so it has to happen whether or not you are
-            // near enough to hear it — the legs are visible a long way past the
-            // 22 m the footfall carries.
-            bool heard = entDist < 22.0f && caughtT <= 0;
-            if (entStepAcc > ENT_STRIDE && !heard) { entStepAcc -= ENT_STRIDE; entStepPar ^= 1; }
-            if (entStepAcc > ENT_STRIDE && heard) {
-                entStepAcc -= ENT_STRIDE; entStepPar ^= 1;
-                float inv = entDist > 0.01f ? 1.0f / entDist : 0.0f;
-                float sd = clampf((ex * inv) * r2x + (ez * inv) * r2z, -1.0f, 1.0f);   // + = to your right
-                Sound &s = entSteps[grng.ri(0, 3)];
-                SetSoundPan(s, panFor(sd));
-                SetSoundPitch(s, 0.66f + grng.f01() * 0.08f);   // heavy, unhurried
-                SetSoundVolume(s, clampf(1.4f / (1.0f + 0.07f * entDist * entDist), 0.0f, 0.9f));
-                PlaySound(s);
-            }
+            // His footfalls are not fired here. They used to be, off entStepAcc
+            // inside this block; they now come off ent.gait below, which counts
+            // distance actually covered in every state and picks the dull
+            // through-a-wall set on line of sight (AUD-02). Firing them in both
+            // places played every step twice.
             ent.unseen = entVisible ? 0 : ent.unseen + dt * (hidden ? 2.4f : (crouchCur > 0.7f ? 1.7f : 1.0f));
             if (ent.unseen > 6 && (entDist > 14 || hidden)) ent.st = EState::Hidden, ent.nextSpawn = now + 25 + grng.f01() * 40;
             if (hidden && entDist < 2.2f && closeCallT <= 0) {   // it's right there and doesn't know
@@ -1761,9 +1749,7 @@ void Game::updateEntity(float dt, double now) {
             float rx = ent.x - (from ? from->x : px), rz = ent.z - (from ? from->z : pz);
             float rl = sqrtf(rx * rx + rz * rz);
             if (rl > 0.01f) { ent.x += rx / rl * 6.5f * dt; ent.z += rz / rl * 6.5f * dt; }
-            entStepAcc += 6.5f * dt;   // bolting is still walking, as far as the legs are concerned
-            if (entStepAcc > ENT_STRIDE) { entStepAcc -= ENT_STRIDE; entStepPar ^= 1; }
-            world.collideCircle(ent.x, ent.z, 0.38f, ent.dispY);
+            world.collideCircle(ent.x, ent.z, 0.38f, ent.dispY);   // bolting is still walking, as far as the legs are concerned
             if (ent.life > 3.0f) { ent.st = EState::Hidden; ent.nextSpawn = now + 25 + grng.f01() * 35; }
         }
         // ---- his gait: one phase for the legs and the footfalls both.

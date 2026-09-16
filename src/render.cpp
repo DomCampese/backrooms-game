@@ -383,11 +383,16 @@ void Game::renderScene(double now) {
         unsigned char al = cl8(255 * clampf(fogf * 1.6f, 0, 1) * dieA);
         // LEVEL FUN has its own resident; everywhere else it's Pirate Clark
         Texture2D &spr = (level == 4) ? texPartygoer : texEntity;
-        // The gait rides entStepAcc, which is also what fires his footfalls, so
-        // the foot plants on the sound rather than near it. That accumulator
-        // wraps once per step and a walk is two steps, hence the parity bit.
+        // The gait rides ent.gait, which is also what fires his footfalls, so
+        // the foot plants on the sound rather than near it — by construction,
+        // off one number, rather than by two accumulators agreeing.
+        //
+        // ent.gait counts strides (an integer is a foot landing) and a walk
+        // cycle is two of them, hence the halving. It counts distance actually
+        // covered, in every state, so a Clark grinding against a wall no longer
+        // walks on the spot and a fleeing one has legs at all.
         int ef0, ef1; float et;
-        float gph = ((float)entStepAcc / ENT_STRIDE + entStepPar) * 0.5f;
+        float gph = ent.gait * 0.5f;
         gaitFrames(gph, ENT_FRAMES, ef0, ef1, et);
         // A walk rises and falls twice a cycle, once per step, highest at
         // mid-stance and lowest as a foot lands — so the bob is |sin| of the
