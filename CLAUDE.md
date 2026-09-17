@@ -457,6 +457,22 @@ keyframes interpolate to themselves and are safe on both versions.
 `src/model_asset.cpp` is the only file allowed to know any of this — ask
 `ModelAsset` for the skeleton rather than reaching through `Model`.
 
+That interpolation also moves the *poses*, not just the API. The sampled reload
+reaches about 5% further at its extreme on 6.0 than on 5.5 — measured 0.2942 m
+model-space against the old 0.28 the regression harness asserted — so landing
+the 6.0 fix turned `make regression` red on `main` with nothing actually wrong:
+the rule is that the viewmodel stays inside 0.34 m, and `0.155 + 0.2942 × 0.48`
+is 0.296. **Assert the rule, not a proxy for it**, and give any threshold that
+stands in for a real constraint a stated margin. A check that fails on a rule
+the code does not have is worse than no check, because the next person relaxes
+the number instead of reading it.
+
+`tools/regression.cpp` also needs `BACKROOMS_TEST_ASSET_DIR` pointing at
+`tests/fixtures` or it exits immediately on its first `CHECK` — which reads as
+a broken build rather than a missing variable. `tools/sandbox-build.sh` has no
+regression target, so nothing in the repo tells you that; build it by hand with
+`src/*.cpp` minus `main.cpp` plus `tools/regression.cpp`.
+
 **raylib 6.0 redefined `SetSoundPan`'s argument without renaming it.** 5.5 took
 0..1 with **0 = hard right**; 6.0 takes -1..1 with **-1 = hard left**. The
 signature is identical and the mixer accepts any float, so old values keep

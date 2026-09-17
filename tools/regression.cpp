@@ -111,7 +111,16 @@ int main() {
         g.revolver.pose(0,0,ammo);auto resting=vertices();
         for(size_t i=0;i<fired.size();++i) CHECK(fabsf(fired[i]-resting[i])<.002f);
     }
-    CHECK(maxRadius<.28f); // With the existing 0.48 scale and hold offset, stays inside 0.34 m.
+    // Assert the rule, not a proxy for it: the viewmodel has to stay inside the
+    // 0.34 m collision radius, and the hold offset and scale in drawHeldWeapon
+    // are what turn a model-space radius into that distance. The bare
+    // maxRadius<.28f this replaces had no stated margin, and raylib 6.0's
+    // UpdateModelAnimation interpolates where 5.5's did not, so the sampled
+    // reload reaches ~5% further at its extreme — 0.2942 m, which tripped the
+    // proxy while the actual clearance was still 44 mm. Failing on a rule the
+    // code does not have is worse than not checking, because the next person
+    // relaxes the number instead of reading it.
+    CHECK(0.155f + maxRadius * 0.48f < 0.34f);
     printf("Imported reload maximum model-space radius: %.4f m\n",maxRadius);
     g.ammo=6;g.weapon=WEAPON_REVOLVER;capture(g,"revolver.png");
     g.ammo=5;g.gunCd=.34f;
