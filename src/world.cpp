@@ -81,11 +81,17 @@ void World::generate(ChunkData &d, int cx, int cz) {
     memset(d.pool, 0, sizeof(d.pool));
     memset(d.elev, 0, sizeof(d.elev));
     uint64_t k = key(cx, cz);
-    Rng rng(hash64(k ^ ((uint64_t)seed + (uint64_t)level * 0x51ED270Bu) * 0x9E3779B97F4A7C15ULL));
+    Rng rng(hash64(k ^ ((uint64_t)seed + (uint64_t)level * 0x51ED270Bu
+                        + (uint64_t)visit * 0x2545F4914F6CDD1DULL) * 0x9E3779B97F4A7C15ULL));
     // Open plazas were one chunk in eight. They are most of what is left of
     // the old wall-less world and they dominate the enclosure average, so cap
     // them at one in sixteen: still a room to break out into, half as often.
-    bool openChunk = (hash64(k ^ 0xA11CEULL ^ (uint64_t)seed) & 15) == 0;
+    //
+    // They also have to move with the rest of the maze when you come back down
+    // to a level (BUG-05), or every revisit has its open rooms in the same
+    // places and the maze still feels like the one you just left.
+    bool openChunk = (hash64(k ^ 0xA11CEULL ^ (uint64_t)seed
+                             ^ ((uint64_t)visit * 0xD1B54A32D192ED03ULL)) & 15) == 0;
     int nseg = level == 0 ? 12 + rng.ri(0, 5) : level == 1 ? 7 + rng.ri(0, 4)
              : level == 4 ? 9 + rng.ri(0, 4) : 5 + rng.ri(0, 3);
     if (openChunk) nseg = 2 + rng.ri(0, 2);
@@ -349,15 +355,83 @@ void World::generate(ChunkData &d, int cx, int cz) {
         }
         if (exitTest) { d.wallN[6][11] = WALL_SOLID; d.wallN[7][11] = WALL_EXIT; d.wallN[8][11] = WALL_SOLID; }
     }
+
+    // No edge of walkable terrain may be taller than one step. A 0.5 m lounge
+    // lip or a 0.6 m dock face used to be strolled up like a ramp; with
+    // MAX_STEP enforced they would instead be sealed — and a sunken lounge you
+    // can fall into but not climb out of is a softlock, since there are no
+    // stair meshes yet (WORLD-06). So the generator gives every region a tread:
+    // each pass pulls any cell that overhangs its most moderate neighbour back
+    // toward it, which leaves plateau interiors at their authored depth and
+    // turns the boundary ring into a step.
+    //
+    // This runs LAST, after the spawn-room clear above, which zeroes a block of
+    // cells and would otherwise leave a 0.5 m face round the spawn room that
+    // nothing had smoothed. Both directions move cells toward zero, so it
+    // always terminates; the chunk's border ring is elev 0 (the placement loops
+    // start at 1), so chunk seams are flat and no pass ever needs to look into
+    // the neighbouring chunk.
+    for (int pass = 0; pass < 10; pass++) {
+        bool changed = false;
+        for (int i = 1; i < CCELLS - 1; i++) for (int kk = 1; kk < CCELLS - 1; kk++) {
+            int e = d.elev[i][kk];
+            if (e == 0) continue;
+            int nb[4] = { d.elev[i - 1][kk], d.elev[i + 1][kk],
+                          d.elev[i][kk - 1], d.elev[i][kk + 1] };
+            if (e > 0) {   // a rise: no higher than one step above its lowest neighbour
+                int lo = nb[0];
+                for (int q = 1; q < 4; q++) lo = std::min(lo, nb[q]);
+                if (e > lo + MAX_STEP_UNITS) { d.elev[i][kk] = (int8_t)(lo + MAX_STEP_UNITS); changed = true; }
+            } else {       // a drop: no lower than one step below its highest neighbour
+                int hi = nb[0];
+                for (int q = 1; q < 4; q++) hi = std::max(hi, nb[q]);
+                if (e < hi - MAX_STEP_UNITS) { d.elev[i][kk] = (int8_t)(hi - MAX_STEP_UNITS); changed = true; }
+            }
+        }
+        if (!changed) break;
+    }
 }
 
+// Both wall lookups consult the shifted-edge overlay first, because every
+// system that cares about walls — collision, the pathfinder, line of sight, the
+// occupancy grid the shader marches, and the mesher — comes through here. Put
+// the overlay anywhere else and the lighting and Clark end up disagreeing with
+// the geometry the player can see. An empty set is the overwhelmingly common
+// case and costs one hash lookup.
 uint8_t World::wallNVal(int ci, int ck) {
+    if (!shifted.empty() && shifted.count(edgeKey(ci, ck, false))) return WALL_SOLID;
     int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
     return data(cx, cz).wallN[ci - cx * CCELLS][ck - cz * CCELLS];
 }
 uint8_t World::wallWVal(int ci, int ck) {
+    if (!shifted.empty() && shifted.count(edgeKey(ci, ck, true))) return WALL_SOLID;
     int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
     return data(cx, cz).wallW[ci - cx * CCELLS][ck - cz * CCELLS];
+}
+
+// Drop a chunk's baked meshes so streamChunks rebuilds it from the current
+// wall values. Everything else about the chunk — its cells, its props — is
+// untouched; only the geometry is stale.
+void World::rebuildChunk(int cx, int cz) {
+    auto it = chunks.find(key(cx, cz));
+    if (it == chunks.end()) return;
+    for (int i = 0; i < MESH_COUNT; i++)
+        if (it->second.meshes[i].vertexCount > 0) {
+            UnloadMesh(it->second.meshes[i]);
+            it->second.meshes[i] = Mesh{};
+        }
+    it->second.built = false;
+}
+
+void World::shiftEdge(int ci, int ck, bool west) {
+    if (!shifted.insert(edgeKey(ci, ck, west)).second) return;   // already shifted
+    // The edge sits on the boundary of its own chunk, so the neighbour on the
+    // far side draws its half of it too — rebake both or you get a wall that
+    // exists from one room and not from the other.
+    int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
+    rebuildChunk(cx, cz);
+    int nx = fdiv(west ? ci - 1 : ci, CCELLS), nz = fdiv(west ? ck : ck - 1, CCELLS);
+    if (nx != cx || nz != cz) rebuildChunk(nx, nz);
 }
 bool World::pillarAt(int ci, int ck) {
     int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
@@ -1344,6 +1418,30 @@ int World::gatherCellAABBs(int ci, int ck, AABB *out, int cap, int cnt, bool inc
         if (cnt < cap) out[cnt++] = { x0 - WT, z0 + 1.65f, x0 + WT, z0 + CELL + WT, wallH };
     }
     if (cnt < cap && pillarAt(ci, ck)) out[cnt++] = { x0 + 0.42f, z0 + 0.42f, x0 + 1.58f, z0 + 1.58f, wallH };
+    // A riser taller than one step is terrain, not a ramp. The box covers the
+    // whole high cell and tops out at its floor, which is the same trick the
+    // furniture above uses: collideCircle skips any box you are already standing
+    // level with, so a body up here walks over it freely while a body down there
+    // is stopped at the face and has to find another way round.
+    //
+    // Pools are exempt on both sides: a pool's floor is 0.6 m down and getting
+    // into and out of one is handled by the poolAt branches in the mover, which
+    // a blocker here would override. Today the generator relaxes every terrace
+    // to within MAX_STEP, so nothing it produces trips this — it is here so the
+    // drops WORLD-03..WORLD-10 want to add are solid the day they land, and
+    // tools/regression.cpp exercises it directly rather than trusting that.
+    if (cnt < cap && !poolAt(ci, ck)) {
+        float h = floorY(ci, ck);
+        const int NB[4][2] = { { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 } };
+        for (int q = 0; q < 4; q++) {
+            int na = ci + NB[q][0], nb = ck + NB[q][1];
+            if (poolAt(na, nb)) continue;
+            if (h - floorY(na, nb) > MAX_STEP) {
+                out[cnt++] = { x0, z0, x0 + CELL, z0 + CELL, h };
+                break;
+            }
+        }
+    }
     if (includeProps && cnt < cap) {
         uint8_t pv = propAt(ci, ck);
         if (pv) {
@@ -1432,8 +1530,15 @@ bool World::lineOfSight(float ax, float az, float bx, float bz) {
         for (int ddx = -1; ddx <= 1; ddx++)
             for (int ddz = -1; ddz <= 1; ddz++)
                 cnt = gatherCellAABBs(ci + ddx, ck + ddz, boxes, MAX_NEARBY_AABBS, cnt, false);  // props don't block sight
+        // Only full-height blockers stop a sight line. Props are already out via
+        // the flag above; the elevation risers are the other short box, and a
+        // knee-high terrace lip does not hide anything — treating one as opaque
+        // would blind every actor standing on a terrace, itself included. When
+        // real multi-storey geometry arrives (WORLD-03 on) this test needs the
+        // heights of both endpoints rather than just the blocker's.
         for (int i = 0; i < cnt; i++)
-            if (x > boxes[i].minx && x < boxes[i].maxx && z > boxes[i].minz && z < boxes[i].maxz) return false;
+            if (boxes[i].top >= wallH - 0.01f &&
+                x > boxes[i].minx && x < boxes[i].maxx && z > boxes[i].minz && z < boxes[i].maxz) return false;
     }
     return true;
 }
@@ -1457,6 +1562,12 @@ void World::buildOccupancy(int originI, int originK, int n, unsigned char *out) 
 
 bool World::canStep(int ci, int ck, int ni, int nk) {
     if (pillarAt(ni, nk) || propAt(ni, nk) != PROP_NONE) return false;   // furniture and pillars are solid
+    // A body cannot route up or down a face it cannot walk. The BFS used to
+    // test walls alone, so the pack and Clark crossed a terrace edge as if it
+    // were flat and stood 1.2 m inside a loading dock. Pools stay passable:
+    // wading in and out of one is movement the mover handles, not a wall.
+    if (!poolAt(ci, ck) && !poolAt(ni, nk) &&
+        fabsf(floorY(ni, nk) - floorY(ci, ck)) > MAX_STEP) return false;
     // the edge the two cells share: a wall or window blocks it, a doorway does not
     if (nk == ck - 1)      { if (blocksEdge(wallNVal(ci, ck)))     return false; }
     else if (nk == ck + 1) { if (blocksEdge(wallNVal(ci, ck + 1))) return false; }
@@ -1520,6 +1631,7 @@ void World::unloadFar(int pcx, int pcz, int radius) {
 }
 
 void World::unloadAll() {
+    shifted.clear();   // a different floor is a different building; it has not moved on you yet
     for (auto &kv : chunks)
         if (kv.second.built)
             for (int i = 0; i < MESH_COUNT; i++)

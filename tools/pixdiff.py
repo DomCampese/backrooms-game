@@ -3,12 +3,21 @@
 
   pixdiff.py crop  IN OUT X Y W H [SCALE]   zoom in on a detail
   pixdiff.py diff  A B                      mean luma + where two frames differ
+  pixdiff.py luma  IMG [IMG ...]            mean luma of each frame, one per line
 
 `diff` reports which eighth of the screen the differences land in, which is how
 you tell "I changed the HUD" from "I changed the world pass".
 """
 import sys
-from PIL import Image
+
+try:
+    from PIL import Image
+except ImportError:
+    # A fresh sandbox has no Pillow, and the bare traceback tells you nothing
+    # about what to do next — usually after a sweep you just waited ten minutes
+    # for. tools/sandbox-setup.sh installs it; this is the manual escape hatch.
+    sys.exit("pixdiff needs Pillow:  pip3 install pillow   "
+             "(tools/sandbox-setup.sh does this for you)")
 
 
 def crop(a):
@@ -43,7 +52,19 @@ def diff(a):
     print("  by col band (left->right):", cols)
 
 
+def luma(a):
+    """Mean luma of each frame. tools/sweep.sh reads this to catch a black
+    frame, which is what a silently failed shader compile looks like."""
+    if not a:
+        sys.exit("usage: pixdiff.py luma IMG [IMG ...]")
+    for p in a:
+        im = Image.open(p).convert("RGB")
+        d = list(im.getdata())
+        print(f"{sum(map(sum, d))/(3*len(d)):.2f} {p}")
+
+
 if __name__ == "__main__":
-    if len(sys.argv) < 2 or sys.argv[1] not in ("crop", "diff"):
+    CMDS = {"crop": crop, "diff": diff, "luma": luma}
+    if len(sys.argv) < 2 or sys.argv[1] not in CMDS:
         sys.exit(__doc__)
-    (crop if sys.argv[1] == "crop" else diff)(sys.argv[2:])
+    CMDS[sys.argv[1]](sys.argv[2:])
