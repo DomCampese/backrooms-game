@@ -86,6 +86,7 @@ enum ChunkMesh {
 
 // ChunkData::elev is stored in decimetres so it fits in an int8_t.
 constexpr float ELEV_UNIT = 0.1f;
+constexpr float SOFT_DEPTH = 0.085f;   // how far a rotten patch has sagged at its middle, metres
 
 // walls: wallN[i][k] = north edge of cell (i,k) at z=k*CELL; wallW = west edge at x=i*CELL
 struct ChunkData {
@@ -163,6 +164,11 @@ struct World {
     bool pathStep(int si, int sk, int ti, int tk, int &outI, int &outK);
     // Level 0 only: a rare patch of carpet that has stopped being a floor
     bool softAt(int ci, int ck);
+    // How far the rotten patch in this cell has sunk at a continuous point in
+    // it, as a positive depth below the cell's floor. The floor mesher shapes
+    // the bowl out of this and groundAt walks the player down into it, so the
+    // dip you see and the dip you stand in cannot drift apart.
+    float softDip(float x, float z);
     // Red Halls only: a standpipe with a shut-off wheel on it. The mesher builds
     // the pipe, the game logic runs the puzzle, so both ask this.
     bool valveAt(int ci, int ck);

@@ -117,7 +117,7 @@ struct Game {
     Material mats[MAT_COUNT]{};
     Sound steps[4]{}, splashes[2]{}, sndBigSplash{}, sndClick{}, sndScare{}, sndWin{},
           sndFlare{}, sndShot{}, sndHit{}, sndKill{}, sndPop{}, sndHeartbeat{}, sndTape{},
-          sndValve{}, sndHowl{}, sndGulp{}, sndVoice{};
+          sndValve{}, sndHowl{}, sndGulp{}, sndVoice{}, sndGroan{};
     static constexpr int NBARKS = 3;
     Sound sndBarks[NBARKS]{};                   // the pack, panned to whichever one spoke
     Sound entSteps[4]{};                        // the thing's own footfalls, panned + attenuated
@@ -192,6 +192,8 @@ struct Game {
     float blackoutCur = 1.0f, fear = 0.0f;
     float caughtT = 0, escapeT = 0, killT = 0, fellT = 0, winT = 0;
     float softTimer = 0;                      // how long you've stood on a soft patch
+    float softSag = 0;                        // ...and how far it has let you down while you did
+    double nextGroan = 0;                     // the subfloor complaining, re-triggered as it worsens
     int caughtCount = 0, escapeCount = 0, killCount = 0, winCount = 0;
     float winTime = 0; int winM = 0, winKills = 0;   // stats frozen for the escape screen
     float distWalked = 0;
