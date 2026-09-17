@@ -238,6 +238,47 @@ into blank white paper. The second is the only way to see the torch, which is
 the one light in the game you aim and therefore the one a fixed-position shot
 cannot otherwise reach.
 
+## Measuring the layout, which screenshots will lie to you about
+
+`tools/mapdump.cpp` links the game's own `world.cpp` and calls `generate()`
+directly — no window, no GL, no Xvfb, about a second for a 258 m square:
+
+```bash
+tools/sandbox-build.sh mapdump                       # second build target
+./mapdump --level 0 --seed 1337 --cells 129 --no-plan
+./mapdump --level 0 --cells 33 --plan 0 0 26 12      # ASCII floorplan too
+```
+
+It reports enclosure (share of edges that are solid, and the distribution of
+cells by how many solid sides they have), sightline percentiles and occlusion at
+20 m, a reachability flood fill over the same `canStep` the pathfinder uses, and
+densities in m² per instance for pillars, props, hide spots, doubloons, soft
+floor, valves, exits, pools and elevation.
+
+**Use it for anything that touches the generator.** From screenshots alone the
+halls looked like they ran for hundreds of metres; measured, the median
+sightline was already 7.0 m. The defect the pictures hid was enclosure — 57% of
+Level 0 cells had no wall on any side — and no screenshot makes that obvious. It
+also answers questions a capture cannot: 8% of Level 0's open cells were
+unreachable from the centre.
+
+Level 0, seed 1337, over 16641 cells, before and after the room partition:
+
+| measure | before | after |
+|---|---|---|
+| edges that are solid wall | 13.7% | 26.7% |
+| cells with zero solid sides | 56.6% | 23.1% |
+| cells with two or more | 10.3% | 27.0% |
+| median sightline | 7.0 m | 3.5 m |
+| 90th percentile sightline | 24.5 m | 9.5 m |
+| hidden at 20 m | 85.4% | 98.4% |
+| reachable from the centre | 91.8% | 94.3% |
+| largest cut-off pocket | 41 cells | 3 cells |
+
+`hideSpotAt` and `coinAt` live on `Game`, which would drag the renderer into the
+harness, so mapdump mirrors those two rules. Change either in `game.cpp` and
+change it there too, or the harness quietly reports the old world.
+
 To compare frame cost against another build rather than eyeballing `fps=`
 (which is a smoothed integer, and the sandbox swings about 15% run to run):
 
@@ -279,6 +320,34 @@ sweeps concurrently — see the Xvfb note below.
 
 These each cost real debugging time. They are not hypothetical.
 
+**Enclosure and sightlines are the same number, and you cannot have both.**
+A random sightline's mean free path is about one cell divided by the share of
+edges that are solid: 13.7% walled gave a 7.0 m median, 26.7% gives 3.5 m, and
+the relation held to within a few percent at every point in between. The same
+arithmetic decides occlusion at 20 m — `(1-p)^20` — so asking for 25-30% walled
+edges *is* asking for a ~3.5 m median and ~98% hidden at 20 m, whether or not
+the ticket asking for it says so. Do not go looking for the bug that shortened
+the sightlines; there isn't one. Long runs have to be put back deliberately, as
+corridors and halls, which is what the ring clear and `HALL` in `generate` are.
+
+**Independent generator passes sharing one grid will seal cells, and no amount
+of tuning any one pass fixes it.** Segments, the room partition, pillars and
+props are placed by four loops that cannot see each other: a segment laid across
+a room cuts it in two, and a desk dropped in a room's only doorway strands
+everything behind it. Tuned in isolation this looked like a room-size problem —
+every size left hundreds of one and two cell pockets and reachability around
+85%. The fix is not in any of the four passes but after all of them: the
+union-find at the end of `World::generate` floods the finished chunk and punches
+a doorway across any edge that still has two regions either side of it. Add a
+pass that can block a cell and it is already handled; add one that runs *after*
+that flood and you have reintroduced the bug.
+
+**`Rng::ri(0, n)` takes a modulo and dies on a negative `n`.** A BSP that
+splits any rect at least `2*MINR - 1` wide computes its cut range as
+`rw - 2*MINR`, which is -1 on the narrowest splittable rect: the whole game
+exits with a bare `Floating point exception` and no other output, from a line
+that looks like arithmetic on room sizes rather than a division. A side needs
+`2*MINR` to hold two rooms, not `2*MINR - 1`.
 **A guard written against absolute zero breaks the moment the floor moves.**
 The trapdoor's trigger was `py > -0.05f`, meaning "you are standing at floor
 level and not falling into a pit". Dishing the rotten patches 8.5 cm put the
