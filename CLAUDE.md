@@ -718,11 +718,18 @@ the scanline loop and the stamps go through.
 **A build failure looks exactly like a passing build if you only read the last
 line.** `tools/sandbox-build.sh` prints its error and then exits, so
 `build.sh 2>&1 | tail -1` shows you a compiler note rather than the word
-"built" — and the previous binary is still sitting there, so the next capture
-runs happily and shows you the *old* behaviour. Two separate sessions of
+"built" — and the previous binary *used to be* still sitting there, so the next
+capture ran happily and showed you the *old* behaviour. Two separate sessions of
 "why is the entity missing" were this, both times from a missing `#include
 <cstdio>` for a temporary `printf`. Check that the last line actually starts
 with "built", or grep the output for "error".
+
+`sandbox-build.sh` now deletes its target before compiling, so a failed build
+leaves **no** binary rather than a stale one: `tools/shot.sh` fails outright
+instead of capturing code you did not write. That closes the trap rather than
+the habit — the compiler error still scrolls past, and a build you did not
+notice failing now reads as a missing file, so it is still worth checking for
+the word "built".
 
 **Temporary test hooks must be removed by exact string, not by slicing.**
 Cutting from `s.index(start)` to `s.index(end)` is dangerous when the end
