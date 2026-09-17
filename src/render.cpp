@@ -270,10 +270,14 @@ void Game::renderScene(double now) {
             DrawCube(c.pos, 0.05f, 0.05f, 0.05f, cc);
         }
     }
-    for (const auto &mark : chalk) {
+    for (const auto &mark : chalk[level]) {
         const Vector3 &cm = mark.pos;
         if (fabsf(cm.x-px) > 30 || fabsf(cm.z-pz) > 30) continue;
-        Color cc = lit({228,228,218,210}, propLum(cm.x,cm.y+0.1f,cm.z));
+        // The stranger's chalk has been down longer than yours: duller, yellower,
+        // further gone. Same arrow, so it reads as a mark first and as somebody
+        // else's a moment later, which is the order that lands.
+        Color cc = mark.mine ? lit({228,228,218,210}, propLum(cm.x,cm.y+0.1f,cm.z))
+                             : lit({186,180,156,150}, propLum(cm.x,cm.y+0.1f,cm.z));
         Vector3 along{cosf(mark.yaw),0,sinf(mark.yaw)}, side{-along.z,0,along.x};
         Vector3 tip = Vector3Add(cm,Vector3Scale(along,0.25f));
         Vector3 tail = Vector3Subtract(cm,Vector3Scale(along,0.25f));
