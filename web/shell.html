@@ -79,13 +79,50 @@
   #bar a:hover { color: var(--wall); border-bottom-color: var(--wall-dim); }
   #bar .spacer { flex: 1 1 auto; }
   #bar .note { color: #5d5949; }
-  @media (max-width: 30rem) { #bar .note { display: none; } }
+  @media (max-width: 34rem) {
+    #bar { font-size: .6rem; gap: .3rem .7rem; padding: .35rem .6rem; flex-wrap: nowrap; }
+    #bar .note, #bar > span:first-child { display: none; }
+  }
+
+  /* ---- touch controls ---------------------------------------------------- */
+  /* The layer never swallows events on its own; only the controls inside it
+     do, so a drag that starts on empty space still reaches the look handler. */
+  #touch { position: absolute; inset: 0; z-index: 15; display: none; touch-action: none; }
+  #touch.on { display: block; }
+  #touch * { touch-action: none; user-select: none; -webkit-user-select: none; }
+
+  #stick {
+    position: absolute; left: 4.5vmin; bottom: 9vmin;
+    width: 34vmin; height: 34vmin; max-width: 190px; max-height: 190px;
+    border-radius: 50%; border: 1px solid rgba(201,180,88,.30);
+    background: radial-gradient(circle, rgba(201,180,88,.09), rgba(0,0,0,.20));
+  }
+  #knob {
+    position: absolute; left: 50%; top: 50%; width: 40%; height: 40%;
+    margin: -20% 0 0 -20%; border-radius: 50%;
+    background: rgba(201,180,88,.42); border: 1px solid rgba(243,236,210,.45);
+    will-change: transform;
+  }
+
+  .tbtn {
+    position: absolute; display: flex; align-items: center; justify-content: center;
+    border-radius: 50%; border: 1px solid rgba(201,180,88,.34);
+    background: rgba(18,17,13,.46); color: #e8dfb8;
+    font: 600 2.6vmin/1 ui-monospace, Menlo, Consolas, monospace;
+    letter-spacing: .04em; text-align: center; padding: 0;
+  }
+  .tbtn.held { background: rgba(201,180,88,.55); color: #14130f; }
+  .tbtn.sm { font-size: 2.1vmin; }
 </style>
 </head>
 <body>
 <div id="frame">
   <div id="stage">
     <canvas class="emscripten" id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+
+    <div id="touch" aria-hidden="true">
+      <div id="stick"><div id="knob"></div></div>
+    </div>
 
     <div id="gate">
       <h1>THE BACKROOMS</h1>
@@ -95,6 +132,12 @@
         <b>WASD</b> move &middot; <b>MOUSE</b> look &middot; <b>SHIFT</b> sprint &middot; <b>RMB</b> aim &middot; <b>LMB</b> fire<br>
         <b>R</b> reload &middot; <b>F</b> flashlight &middot; <b>1/2/4</b> revolver, flare, tape deck &middot; <b>E</b> interact<br>
         <b>ESC</b> releases the mouse &middot; click the game to take it back
+      </p>
+      <p id="keys-touch" hidden>
+        <b>LEFT STICK</b> move, push it all the way to run &middot; <b>DRAG</b> anywhere to look<br>
+        <b>FIRE</b> shoot &middot; <b>AIM</b> hold to sight &middot; <b>LOAD</b> reload &middot; <b>USE</b> interact<br>
+        <b>LAMP</b> torch &middot; <b>ITEM</b> cycle what you hold &middot; <b>THROW</b> flare &middot; <b>MARK</b> chalk<br>
+        Tap <b>FIRE</b> on the title screen to begin.
       </p>
       <p id="legal">
         THE BACKROOMS &mdash; Level 0, Copyright &copy; 2026 Dominic Campese.
@@ -183,6 +226,208 @@
   };
   window.Module = Module;
 
+  // ---- touch controls --------------------------------------------------
+  // The bits here are duplicated in src/input_web.cpp. Nothing checks that the
+  // two agree; change one and a button quietly starts doing another button's
+  // job, which reads as a game bug rather than a mapping bug.
+  var BTN = { FIRE:1, AIM:2, RELOAD:4, FLASH:8, INTERACT:16, JUMP:32,
+              WEAPON:64, CHALK:128, DRINK:256, SPRINT:512, CROUCH:1024, THROW:2048 };
+
+  // A finger travels further than a mouse for the same intent.
+  var LOOK_GAIN = 1.35;
+
+  var touch = { active: false, down: 0, pressed: 0,
+                lookX: 0, lookY: 0, moveX: 0, moveY: 0, wheel: 0 };
+  Module.__touch = touch;
+
+  var layer = document.getElementById('touch');
+  var stick = document.getElementById('stick');
+  var knob  = document.getElementById('knob');
+
+  // label, bit, and where it sits. Percentages of the stage, so the cluster
+  // scales with the screen instead of colliding with itself on a small phone.
+  // Right thumb gets the things you do under pressure — fire, aim, reload,
+  // jump, use. Left thumb has the stick and only crouch. Everything you press
+  // while nothing is chasing you lives out of the way, along the top edge.
+  //
+  // Nothing here may overlap anything else at any aspect ratio: these are
+  // laid out from the two bottom corners and the top-right corner, never from
+  // the middle, because a button addressed from the far side of a narrow
+  // portrait screen lands on top of its neighbour. DUCK on the right at
+  // 42vmin and USE at 40vmin from the other edge did exactly that.
+  var BUTTONS = [
+    { t:'FIRE',  bit:BTN.FIRE,     r:'4vmin',    b:'10vmin',   size:'19vmin', max:104 },
+    { t:'AIM',   bit:BTN.AIM,      r:'25vmin',   b:'11vmin',   size:'14vmin', max:78  },
+    { t:'JUMP',  bit:BTN.JUMP,     r:'5vmin',    b:'31vmin',   size:'13vmin', max:72  },
+    { t:'LOAD',  bit:BTN.RELOAD,   r:'24vmin',   b:'27vmin',   size:'13vmin', max:72  },
+    { t:'USE',   bit:BTN.INTERACT, r:'39vmin',   b:'10vmin',   size:'13vmin', max:72  },
+    { t:'LAMP',  bit:BTN.FLASH,    r:'4vmin',    t2:'4vmin',   size:'12vmin', max:66, sm:1 },
+    { t:'ITEM',  bit:BTN.WEAPON,   r:'17.5vmin', t2:'4vmin',   size:'12vmin', max:66, sm:1 },
+    { t:'THROW', bit:BTN.THROW,    r:'31vmin',   t2:'4vmin',   size:'12vmin', max:66, sm:1 },
+    { t:'DRINK', bit:BTN.DRINK,    r:'4vmin',    t2:'17.5vmin',size:'12vmin', max:66, sm:1 },
+    { t:'MARK',  bit:BTN.CHALK,    r:'17.5vmin', t2:'17.5vmin',size:'12vmin', max:66, sm:1 },
+    { t:'DUCK',  bit:BTN.CROUCH,   l:'4.5vmin',  b:'47vmin',   size:'13vmin', max:72 }
+  ];
+
+  var byBit = {};
+  BUTTONS.forEach(function (b) {
+    var el = document.createElement('button');
+    el.className = 'tbtn' + (b.sm ? ' sm' : '');
+    el.textContent = b.t;
+    el.style.width = el.style.height = 'min(' + b.size + ', ' + b.max + 'px)';
+    if (b.r !== undefined)  el.style.right  = b.r;
+    if (b.l !== undefined)  el.style.left   = b.l;
+    if (b.b !== undefined)  el.style.bottom = b.b;
+    if (b.t2 !== undefined) el.style.top    = b.t2;
+    el.dataset.bit = b.bit;
+    byBit[b.bit] = el;
+    layer.appendChild(el);
+  });
+
+  function press(bit, el) {
+    // A tap shorter than a frame still has to fire, so downs accumulate into
+    // `pressed` and are drained by the C++ side rather than sampled.
+    touch.down |= bit; touch.pressed |= bit;
+    if (el) el.classList.add('held');
+  }
+  function release(bit, el) {
+    touch.down &= ~bit;
+    if (el) el.classList.remove('held');
+  }
+
+  // pointerId -> what that finger is doing. Several fingers at once is the
+  // whole point: walk, look and shoot are one gesture each.
+  var roles = {};
+  var STICK_R = 1;   // recomputed on each grab from the element's real size
+
+  function roleInUse(kind) {
+    for (var id in roles) if (roles[id].kind === kind) return true;
+    return false;
+  }
+
+  // The stick floats: it goes wherever the thumb lands in the movement zone,
+  // rather than sitting at one spot the thumb has to find. A fixed circle
+  // means every slightly-missed grab becomes a look-drag instead of a step,
+  // and on a phone that is most of them.
+  var stickOrigin = null;
+
+  function stickRadius() { return stick.offsetWidth / 2 || 1; }
+
+  function placeStick(x, y) {
+    var host = layer.getBoundingClientRect();
+    var rad = stickRadius();
+    stick.style.left   = (x - host.left - rad) + 'px';
+    stick.style.top    = (y - host.top  - rad) + 'px';
+    stick.style.bottom = 'auto';
+    stickOrigin = { x: x, y: y };
+  }
+
+  function homeStick() {
+    stick.style.left = ''; stick.style.top = ''; stick.style.bottom = '';
+    stickOrigin = null;
+  }
+
+  function stickVec(x, y) {
+    STICK_R = stickRadius();
+    var o = stickOrigin;
+    if (!o) { var r = stick.getBoundingClientRect();
+              o = { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
+    var dx = (x - o.x) / STICK_R, dy = (y - o.y) / STICK_R;
+    // Full deflection well before the edge of the ring: a thumb pivots, it
+    // does not reach, so requiring the whole radius means never sprinting.
+    var m = Math.hypot(dx, dy) / 0.72;
+    if (m > 1) { var k = 1 / (m * 0.72); dx *= k; dy *= k; m = 1; }
+    else { dx /= 0.72; dy /= 0.72; }
+    return { x: dx, y: dy, m: m };
+  }
+
+  // Anything in the lower-left of the stage that is not a button drives the
+  // stick. The zone is generous on purpose.
+  function inMoveZone(x, y) {
+    var r = layer.getBoundingClientRect();
+    return (x - r.left) < r.width * 0.46 && (y - r.top) > r.height * 0.42;
+  }
+
+  function applyStick(v) {
+    touch.moveX = v.x;
+    touch.moveY = -v.y;                 // screen y is down; forward is up
+    knob.style.transform = 'translate(' + (v.x * STICK_R * 0.62) + 'px,'
+                                        + (v.y * STICK_R * 0.62) + 'px)';
+    // Auto-sprint at the edge of the stick, so running costs no extra button
+    // and no extra thumb. The game still applies its own stamina rules.
+    if (v.m > 0.92) press(BTN.SPRINT); else release(BTN.SPRINT);
+  }
+
+  layer.addEventListener('pointerdown', function (e) {
+    var b = e.target.closest ? e.target.closest('.tbtn') : null;
+    if (b) {
+      var bit = +b.dataset.bit;
+      roles[e.pointerId] = { kind: 'btn', bit: bit, el: b };
+      press(bit, b);
+      if (bit === BTN.WEAPON) touch.wheel += 1;   // ITEM cycles, as the wheel does
+      try { b.setPointerCapture(e.pointerId); } catch (err) {}
+      e.preventDefault();
+      return;
+    }
+    if (!roleInUse('stick') && inMoveZone(e.clientX, e.clientY)) {
+      roles[e.pointerId] = { kind: 'stick' };
+      placeStick(e.clientX, e.clientY);
+      applyStick(stickVec(e.clientX, e.clientY));
+      try { layer.setPointerCapture(e.pointerId); } catch (err) {}
+      e.preventDefault();
+      return;
+    }
+    // Anything else is a look drag. Starting one must not also fire the gun:
+    // firing is the FIRE button's job and nothing else's.
+    roles[e.pointerId] = { kind: 'look', x: e.clientX, y: e.clientY };
+    e.preventDefault();
+  });
+
+  layer.addEventListener('pointermove', function (e) {
+    var r = roles[e.pointerId];
+    if (!r) return;
+    if (r.kind === 'stick') applyStick(stickVec(e.clientX, e.clientY));
+    else if (r.kind === 'look') {
+      // Reported in the same pixels a mouse delta is, so the game's existing
+      // sensitivity — and its reduction while aiming — apply unchanged.
+      touch.lookX += (e.clientX - r.x) * LOOK_GAIN;
+      touch.lookY += (e.clientY - r.y) * LOOK_GAIN;
+      r.x = e.clientX; r.y = e.clientY;
+    }
+    e.preventDefault();
+  });
+
+  function lift(e) {
+    var r = roles[e.pointerId];
+    if (!r) return;
+    if (r.kind === 'btn') release(r.bit, r.el);
+    else if (r.kind === 'stick') {
+      touch.moveX = touch.moveY = 0;
+      knob.style.transform = '';
+      homeStick();
+      release(BTN.SPRINT);
+    }
+    delete roles[e.pointerId];
+  }
+  layer.addEventListener('pointerup', lift);
+  layer.addEventListener('pointercancel', lift);
+  layer.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+  // Touch by default on a coarse pointer; ?touch=1 forces it on for testing on
+  // a desktop, ?touch=0 forces it off on a tablet with a keyboard attached.
+  var forced = new URLSearchParams(location.search).get('touch');
+  var useTouch = forced !== null ? forced !== '0'
+               : (matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0);
+
+  function setTouch(on) {
+    touch.active = !!on;
+    layer.classList.toggle('on', !!on);
+    layer.setAttribute('aria-hidden', on ? 'false' : 'true');
+    document.getElementById('keys').hidden = !!on;
+    document.getElementById('keys-touch').hidden = !on;
+  }
+  setTouch(useTouch);
+
   // Pointer lock and the audio context both require a real user gesture, and
   // the game asks for the pointer from inside its requestAnimationFrame loop,
   // which is not one. This click is what makes both of them legal.
@@ -190,14 +435,16 @@
     if (start.disabled) return;
     gate.classList.add('hidden');
     canvas.focus();
-    if (canvas.requestPointerLock) canvas.requestPointerLock();
-    status.textContent = 'ESC releases the mouse';
+    if (!touch.active && canvas.requestPointerLock) canvas.requestPointerLock();
+    status.textContent = touch.active ? 'drag to look \u00b7 FIRE begins the descent'
+                                      : 'ESC releases the mouse';
   }
   start.addEventListener('click', enter);
 
   // ESC hands the pointer back to the browser; a click has to be able to take
   // it again, or the game is unplayable after the first pause.
   canvas.addEventListener('click', function () {
+    if (touch.active) return;
     if (!gate.classList.contains('hidden')) return;
     if (!document.pointerLockElement && canvas.requestPointerLock) canvas.requestPointerLock();
   });

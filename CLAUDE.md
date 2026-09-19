@@ -176,6 +176,49 @@ Three things about that port are load-bearing:
   `FS.syncfs` — and since `shutdown()` never runs, that is the only place on the
   web where records are written.
 
+### Touch controls
+
+A phone has no keyboard, no mouse and no pointer to lock. `src/input.h` is the
+one place the game asks whether the player is doing something: natively, and in
+a desktop browser, every wrapper is the raylib call it is named after and the
+generated code is identical — the same frame captured before and after the
+change differed by **0 pixels**. On a touch device `src/input_web.cpp` answers
+from the on-screen controls `web/shell.html` draws instead.
+
+Read player intent through those wrappers, not through raylib directly, or the
+new control will work on a desktop and do nothing on a phone. Window-level keys
+(F11) are not player intent and stay direct.
+
+**`IsCursorHidden()` is the game's "am I actually playing" test**, and it gates
+looking, firing, reloading, throwing and the aim — nine call sites. There is no
+pointer lock on a phone, so it is false forever there, and the game comes up
+rendering perfectly while ignoring every input. `inCursorHidden()` returns true
+whenever the touch controls are up, because on that platform they *are* the
+playing state.
+
+**The virtual button bits are written down in two files** — the enum in
+`src/input_web.cpp` and `BTN` in `web/shell.html` — and nothing checks that they
+agree. Get them out of step and a button still works, it just does another
+button's job, which reads as a game bug rather than a mapping bug.
+
+**A fixed thumbstick is the wrong thing to build.** Anchored to one spot, every
+grab that lands slightly off it becomes a look-drag instead of a step, and on a
+phone that is most grabs. The stick floats to wherever the thumb lands in the
+lower-left zone. It also reaches full deflection at 72% of its radius: a thumb
+pivots rather than reaches, so requiring the whole radius means the player can
+never sprint.
+
+**Lay the buttons out from the corners they sit in, never from the far edge.**
+`DUCK` addressed as `left: 42vmin` and `USE` as `right: 40vmin` are nowhere near
+each other on a desktop and directly on top of each other on a 412px phone.
+`tools/`-style checking does not catch this; the mobile test asserts that no two
+controls' bounding boxes intersect, at portrait, landscape and 360×640.
+
+**`setPointerCapture` throws if the pointer is already gone** — a fast tap, or a
+synthetic event from a test driver. The throw aborts the rest of the handler,
+so the press is registered and never released: the player ends up walking, or
+firing, forever. Both calls are wrapped.
+
 **`emcc` will compile this and then fail to link it.** Every C++ symbol comes
 back undefined — `operator new`, `operator delete`, `std::__2::__next_prime` —
 which reads as a missing stdlib or a broken sysroot. It is neither: `emcc` is

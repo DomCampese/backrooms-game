@@ -2,6 +2,7 @@
 #include "textures.h"
 #include "sfx.h"
 #include "shaders.h"
+#include "input.h"
 #include "rlgl.h"
 #include <cmath>
 #include <cstdio>
@@ -343,7 +344,7 @@ void Game::updateMenu(double now) {
     // stretch of it, then let any key move on.
     if (deathT > DEATH_CARD - 1.6f) return;
     int k = GetKeyPressed();                    // F11 (fullscreen) shouldn't count as "begin"
-    if ((k != 0 && k != KEY_F11) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) startRun(now);
+    if ((k != 0 && k != KEY_F11) || inMousePressed(MOUSE_BUTTON_LEFT)) startRun(now);
 }
 
 // Can the pack still place you? Sound only: they do not care what you are
@@ -739,6 +740,8 @@ void Game::popBalloonsAlongAim() {
 // One frame: advance the simulation in a fixed order, then draw it.
 // Returns false when the run should end (headless screenshot captured).
 bool Game::tick() {
+    // One snapshot of the touch controls for the whole frame. No-op natively.
+    webInputPoll();
     float dt = fminf(GetFrameTime(), 0.05f);
     double now = GetTime();
     frame++;
@@ -759,11 +762,11 @@ bool Game::tick() {
         return true;
     }
 
-    if (IsKeyPressed(KEY_P) && !shotPath) {
+    if (inKeyPressed(KEY_P) && !shotPath) {
         paused = !paused;
         if (paused) {
             pausedAt = now;
-            if (IsCursorHidden()) EnableCursor();
+            if (inCursorHidden()) EnableCursor();
         } else {
             // Every schedule in this game is an absolute timestamp. Left alone,
             // a minute paused would dump a blackout, a whisper and a spawn all
@@ -794,7 +797,7 @@ bool Game::tick() {
         return true;
     }
 
-    if (IsKeyPressed(KEY_F) || IsKeyPressed(KEY_L)) {
+    if (inKeyPressed(KEY_F) || inKeyPressed(KEY_L)) {
         if (flashOn || battery > 0.001f) {
             flashOn = !flashOn;
             SetSoundPitch(sndClick, flashOn ? 1.0f : 0.85f);
@@ -806,10 +809,10 @@ bool Game::tick() {
         battery = fmaxf(0.0f, battery - dt / 100.0f);
         if (battery <= 0.0f) flashOn = false;   // it just dies
     }
-    if (IsKeyPressed(KEY_F3)) debugHud = !debugHud;
-    if (IsKeyPressed(KEY_ESCAPE) && IsCursorHidden()) EnableCursor();
+    if (inKeyPressed(KEY_F3)) debugHud = !debugHud;
+    if (inKeyPressed(KEY_ESCAPE) && inCursorHidden()) EnableCursor();
     captureClick = false;
-    if (!IsCursorHidden() && !shotPath && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+    if (!inCursorHidden() && !shotPath && inMousePressed(MOUSE_BUTTON_LEFT)) {
         DisableCursor();
         captureClick = true;   // this click is spoken for — no accidental discharge
     }
@@ -851,8 +854,8 @@ bool Game::tick() {
 
 void Game::updateLook() {
     // ---- look
-    if (IsCursorHidden()) {
-        Vector2 md = GetMouseDelta();
+    if (inCursorHidden()) {
+        Vector2 md = inMouseDelta();
         float sensitivity = 0.0030f * (1 - 0.25f * aimBlend);
         yaw += md.x * sensitivity;
         pitch = clampf(pitch - md.y * sensitivity, -1.45f, 1.45f);
@@ -873,16 +876,20 @@ void Game::updateSprint(bool requested, bool moving, bool crouched, float dt) {
 void Game::updateMovement(float dt) {
     // ---- move
     float ix = 0, iz = 0;
-    if (IsKeyDown(KEY_W)) { ix += f2x; iz += f2z; }
-    if (IsKeyDown(KEY_S)) { ix -= f2x; iz -= f2z; }
-    if (IsKeyDown(KEY_D)) { ix += r2x; iz += r2z; }
-    if (IsKeyDown(KEY_A)) { ix -= r2x; iz -= r2z; }
+    if (inKeyDown(KEY_W)) { ix += f2x; iz += f2z; }
+    if (inKeyDown(KEY_S)) { ix -= f2x; iz -= f2z; }
+    if (inKeyDown(KEY_D)) { ix += r2x; iz += r2z; }
+    if (inKeyDown(KEY_A)) { ix -= r2x; iz -= r2z; }
     float il = sqrtf(ix * ix + iz * iz);
     bool moving = il > 0.01f;
     if (moving) { ix /= il; iz /= il; }
-    bool crouched = IsKeyDown(KEY_LEFT_CONTROL);
+    // A thumbstick is analog where a key is not: half a push is half a speed.
+    // webMoveScale returns 1 for keys and for a stick at full deflection, so
+    // this multiplies nothing away on any other platform.
+    if (moving) { float ms = webMoveScale(); ix *= ms; iz *= ms; }
+    bool crouched = inKeyDown(KEY_LEFT_CONTROL);
     crouchCur += ((crouched ? 1.0f : 0.0f) - crouchCur) * fminf(1, 10 * dt);
-    updateSprint(IsKeyDown(KEY_LEFT_SHIFT), moving, crouched, dt);
+    updateSprint(inKeyDown(KEY_LEFT_SHIFT), moving, crouched, dt);
     boostT = fmaxf(0, boostT - dt);
     float groundY = world.groundAt(px, pz, py);
     bool inWater = grounded && py < -0.1f && world.poolAt(cellOf(px), cellOf(pz));
@@ -921,7 +928,7 @@ void Game::updateMovement(float dt) {
 
     // jump + floor height (groundY recomputed after collision; furniture tops count)
     groundY = world.groundAt(px, pz, py);
-    if (IsKeyPressed(KEY_SPACE) && grounded) { vy = inWater ? 4.3f : 5.6f; grounded = false; }
+    if (inKeyPressed(KEY_SPACE) && grounded) { vy = inWater ? 4.3f : 5.6f; grounded = false; }
     if (grounded) {
         if (py > groundY + 0.05f && world.poolAt(cellOf(px), cellOf(pz))) { grounded = false; vy = 0; }  // pool edge: drop in
         // Walked off something taller than a step — a terrace lip, the top of a
@@ -1030,16 +1037,16 @@ void Game::updateMovement(float dt) {
 void Game::updateDevKeys(double now) {
     // ---- dev tools (only while the F3 debug HUD is up)
     if (debugHud) {
-        if (IsKeyPressed(KEY_B)) {   // force a blackout right now
+        if (inKeyPressed(KEY_B)) {   // force a blackout right now
             blackoutEnd = now + 3.0 + grng.f01() * 3.0;
             nextBlackout = level == 2 ? BLACKOUT_NEVER : blackoutIn(blackoutEnd, 45, 75);
         }
-        if (IsKeyPressed(KEY_E)) {   // (re)spawn Clark stalking ~12m ahead
+        if (inKeyPressed(KEY_E)) {   // (re)spawn Clark stalking ~12m ahead
             Vector2 spot = world.findOpenSpot(px + f2x * 12, pz + f2z * 12);
             ent.x = spot.x; ent.z = spot.y;
             ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.hp = 3; ent.stagger = 0;
         }
-        if (IsKeyPressed(KEY_C)) {   // force chase (spawns him first if hidden)
+        if (inKeyPressed(KEY_C)) {   // force chase (spawns him first if hidden)
             if (ent.st == EState::Hidden) {
                 Vector2 spot = world.findOpenSpot(px + f2x * 14, pz + f2z * 14);
                 ent.x = spot.x; ent.z = spot.y;
@@ -1047,11 +1054,11 @@ void Game::updateDevKeys(double now) {
             }
             ent.st = EState::Chase; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.repathT = 0;
         }
-        if (IsKeyPressed(KEY_H)) {   // banish him
+        if (inKeyPressed(KEY_H)) {   // banish him
             ent.st = EState::Hidden; ent.nextSpawn = now + 20 + grng.f01() * 20;
         }
-        if (IsKeyPressed(KEY_G)) { flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; }   // refill weapons
-        if (IsKeyPressed(KEY_N)) {   // jump to next level (incl. Red Halls)
+        if (inKeyPressed(KEY_G)) { flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; }   // refill weapons
+        if (inKeyPressed(KEY_N)) {   // jump to next level (incl. Red Halls)
             applyLevel((level + 1) % NLEVELS);
             Vector2 spot = world.findOpenSpot(px, pz);
             px = spot.x; pz = spot.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
@@ -1077,18 +1084,18 @@ bool Game::canReload() const {
 void Game::updateWeapons(float dt, double now) {
     // ---- weapons: keys 1/2/4 pick one directly, the wheel cycles, left click
     // uses whichever is in your hands
-    if (IsKeyPressed(KEY_ONE)) weapon = WEAPON_REVOLVER;
-    if (IsKeyPressed(KEY_TWO)) weapon = WEAPON_FLARE;
-    if (IsKeyPressed(KEY_FOUR)) weapon = WEAPON_DECK;
+    if (inKeyPressed(KEY_ONE)) weapon = WEAPON_REVOLVER;
+    if (inKeyPressed(KEY_TWO)) weapon = WEAPON_FLARE;
+    if (inKeyPressed(KEY_FOUR)) weapon = WEAPON_DECK;
     wheelCd = fmaxf(0, wheelCd - dt);
     {   // the wheel runs the loop both ways: +1 forward, -1 as +(N-1) to stay positive
-        float mw = GetMouseWheelMove();
+        float mw = inWheel();
         if (wheelCd <= 0 && fabsf(mw) > 0.5f) {
             weapon = (weapon + (mw > 0 ? 1 : WEAPON_COUNT - 1)) % WEAPON_COUNT;
             wheelCd = 0.25f;
         }
     }
-    updateAim(IsCursorHidden() && IsMouseButtonDown(MOUSE_BUTTON_RIGHT), dt);
+    updateAim(inCursorHidden() && inMouseDown(MOUSE_BUTTON_RIGHT), dt);
     gunCd = fmaxf(0, gunCd - dt);
     muzzleT = fmaxf(0, muzzleT - dt);
     muzzleSmoke = fmaxf(0, muzzleSmoke - dt * 0.7f);   // powder haze drifts and thins
@@ -1097,9 +1104,9 @@ void Game::updateWeapons(float dt, double now) {
         reloadT -= dt;
         if (reloadT <= 0) { ammo = MAXAMMO; SetSoundPitch(sndClick, 1.15f); PlaySound(sndClick); }
     }
-    if (weapon == WEAPON_REVOLVER && IsCursorHidden() && !captureClick && deathT <= 0 && reloadT <= 0 && gunCd <= 0 &&
+    if (weapon == WEAPON_REVOLVER && inCursorHidden() && !captureClick && deathT <= 0 && reloadT <= 0 && gunCd <= 0 &&
         drinkT <= 0 &&
-        IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        inMousePressed(MOUSE_BUTTON_LEFT)) {
         if (ammo <= 0) { SetSoundPitch(sndClick, 0.7f); PlaySound(sndClick); gunCd = 0.25f; }  // dry fire
         else {
             ammo--; gunCd = 0.42f; muzzleT = 0.09f; recoil = 1.0f; muzzleSmoke = 1.0f;
@@ -1157,7 +1164,7 @@ void Game::updateWeapons(float dt, double now) {
             }
         }
     }
-    if (IsKeyPressed(KEY_R) && IsCursorHidden() && canReload()) {
+    if (inKeyPressed(KEY_R) && inCursorHidden() && canReload()) {
         reloadT = 1.8f;
         SetSoundPitch(sndClick, 0.95f); PlaySound(sndClick);
     }
@@ -1206,8 +1213,8 @@ const FlareProj *Game::dominantFlare(float x, float z) const {
 
 void Game::updateFlare(float dt, double now) {
     // ---- flare weapon
-    if (IsCursorHidden() && deathT <= 0 && flares > 0 && drinkT <= 0 &&
-        (IsKeyPressed(KEY_Q) || (weapon == WEAPON_FLARE && !captureClick && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)))) {
+    if (inCursorHidden() && deathT <= 0 && flares > 0 && drinkT <= 0 &&
+        (inKeyPressed(KEY_Q) || (weapon == WEAPON_FLARE && !captureClick && inMousePressed(MOUSE_BUTTON_LEFT)))) {
         flares--;
         // A free slot if there is one. There are as many slots as flares you can
         // carry, so running out needs a fresh flare in your coat while all of
@@ -1279,8 +1286,8 @@ void Game::updateTapeDeck(float dt, double now) {
     deckNoteT = fmaxf(0, deckNoteT - dt);
 
     // ---- thread a tape, or set the running deck down
-    if (IsCursorHidden() && !captureClick && deathT <= 0 && drinkT <= 0 &&
-        weapon == WEAPON_DECK && deck.carried && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+    if (inCursorHidden() && !captureClick && deathT <= 0 && drinkT <= 0 &&
+        weapon == WEAPON_DECK && deck.carried && inMousePressed(MOUSE_BUTTON_LEFT)) {
         if (!deck.playing && tapes > 0) {
             tapes--;
             deck.playing = true;
@@ -1416,7 +1423,7 @@ void Game::updateInteraction() {
             coinsWorld.erase(coinsWorld.begin() + c2);
         } else ++c2;
     }
-    if (IsKeyPressed(KEY_THREE) && almond > 0 && drinkT <= 0) {   // drink: steady your hands
+    if (inKeyPressed(KEY_THREE) && almond > 0 && drinkT <= 0) {   // drink: steady your hands
         almond--;
         drinkT = DRINK_TIME;
         drinkLanded = false;
@@ -1426,7 +1433,7 @@ void Game::updateInteraction() {
     // it can reach lives in its own block below. They can't collide: a valve
     // cell never holds a prop, so a standpipe and a vending machine are never
     // the same cell, and the deck is wherever you personally put it down.
-    if (IsKeyPressed(KEY_E)) {
+    if (inKeyPressed(KEY_E)) {
         // Red Halls: close a standpipe.
         if (level == 3) {
             bool turned = false;
@@ -1486,7 +1493,7 @@ void Game::updateInteraction() {
             }
         }
     }
-    if (IsKeyPressed(KEY_M)) {   // chalk mark: the only map you get
+    if (inKeyPressed(KEY_M)) {   // chalk mark: the only map you get
         float x = px + f2x * 0.5f, z = pz + f2z * 0.5f;
         if (!grounded || !world.lineOfSight(px, pz, x, z)) return;
         auto &marks = chalk[level];

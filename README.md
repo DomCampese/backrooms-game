@@ -41,6 +41,17 @@ lands in one is a black frame that looks exactly like a failed shader compile.
 Records are kept in IndexedDB rather than `$HOME`, so they survive a reload but
 are per-browser.
 
+### On a phone
+
+Touch controls appear automatically on a coarse pointer: a floating thumbstick
+in the lower left (push it all the way to run), drag anywhere else to look, and
+a button cluster for fire, aim, reload, jump, use, torch, item, throw, chalk and
+drink. Force them on or off with `?touch=1` / `?touch=0`.
+
+They are drawn by the page, not the game; `src/input.h` folds them into the same
+input questions the desktop build asks, so the game itself does not know which
+it is running on.
+
 ![screenshot](docs/screenshot.png)
 
 ## Model asset pipeline
