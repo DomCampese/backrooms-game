@@ -160,6 +160,10 @@ struct World {
     uint8_t propAt(int ci, int ck);
     bool poolAt(int ci, int ck);
     float floorY(int ci, int ck);
+    // The ceiling sits one wall height above *this cell's* floor, not at a
+    // fixed y. A raised deck carries its ceiling up with it; without that it
+    // would push its floor through a slab that never moved.
+    float ceilY(int ci, int ck);
     void ensureMesh(int cx, int cz);
     int gatherCellAABBs(int ci, int ck, AABB *out, int cap, int cnt, bool includeProps = true);
     // feetY: obstacles whose top is at or below your feet are walkable, not solid

@@ -452,6 +452,19 @@ float World::floorY(int ci, int ck) {
     return data(cx, cz).elev[ci - cx * CCELLS][ck - cz * CCELLS] * ELEV_UNIT;
 }
 
+float World::ceilY(int ci, int ck) {
+    // Follow the floor *up*, never down. A raised deck has to carry its ceiling
+    // with it or its floor comes through the slab — that is the whole point of
+    // this being per cell. A sunken cell is a different thing: a pool basin and
+    // a sunken lounge are depressions in the floor of the room they are in, and
+    // they keep that room's ceiling. Dropping it with them instead hangs a
+    // soffit round every pool in the Poolrooms at 0.6 m below the tile grid,
+    // which reads as a broken mesh rather than as architecture. Telling a
+    // depression from a genuine lower storey needs something the cell does not
+    // store yet; until it does, up only.
+    return std::max(floorY(ci, ck), 0.0f) + wallH;
+}
+
 bool World::softAt(int ci, int ck) {
     if (level != 0) return false;
     if (abs(ci) <= 10 && abs(ck) <= 10) return false;   // never near where you wake up
@@ -935,11 +948,11 @@ void World::ensureMesh(int cx, int cz) {
             if (level == 0 && softAt(cx * CCELLS + i, cz * CCELLS + kk)) {
                 // the carpet has gone dark and soft here. don't linger.
                 float mx3 = gx + 1.0f, mz3 = gz + 1.0f;
-                fl.quad({mx3-0.85f,0.006f,mz3-0.85f},{mx3+0.85f,0.006f,mz3-0.85f},
-                        {mx3+0.85f,0.006f,mz3+0.85f},{mx3-0.85f,0.006f,mz3+0.85f},{0,1,0},
+                fl.quad({mx3-0.85f,fy+0.006f,mz3-0.85f},{mx3+0.85f,fy+0.006f,mz3-0.85f},
+                        {mx3+0.85f,fy+0.006f,mz3+0.85f},{mx3-0.85f,fy+0.006f,mz3+0.85f},{0,1,0},
                         {0.75f,0.75f},{0.75f,0.75f},{0.75f,0.75f},{0.75f,0.75f}, Color{ 16, 13, 10, 165 });
-                fl.quad({mx3-0.5f,0.008f,mz3-0.5f},{mx3+0.5f,0.008f,mz3-0.5f},
-                        {mx3+0.5f,0.008f,mz3+0.5f},{mx3-0.5f,0.008f,mz3+0.5f},{0,1,0},
+                fl.quad({mx3-0.5f,fy+0.008f,mz3-0.5f},{mx3+0.5f,fy+0.008f,mz3-0.5f},
+                        {mx3+0.5f,fy+0.008f,mz3+0.5f},{mx3-0.5f,fy+0.008f,mz3+0.5f},{0,1,0},
                         {0.75f,0.75f},{0.75f,0.75f},{0.75f,0.75f},{0.75f,0.75f}, Color{ 10, 8, 6, 205 });
             }
             if (d.elev[i][kk] == 0) continue;
@@ -960,8 +973,61 @@ void World::ensureMesh(int cx, int cz) {
             else if (hE > fy) stepEdge(gx + CELL, gz, gx + CELL, gz + CELL, hE, fy, -1, 0);
         }
     }
-    ce.quad({wx,wallH,wz},{wx,wallH,wz+CHUNK},{wx+CHUNK,wallH,wz+CHUNK},{wx+CHUNK,wallH,wz},{0,-1,0},
-            {wx/2,wz/2},{wx/2,(wz+CHUNK)/2},{(wx+CHUNK)/2,(wz+CHUNK)/2},{(wx+CHUNK)/2,wz/2},ccol);
+    // Per-cell ceiling at this cell's own floor plus a wall height, in place of
+    // one flat slab per chunk at a fixed y. The slab is what stopped the world
+    // going upward: a raised deck pushed its floor through it and its walls
+    // started below it. UVs stay world-space, so the tile grid runs across the
+    // cell seams exactly as it did when this was one quad.
+    //
+    // Emitted by greedy meshing rather than one quad per cell. Elevation touches
+    // about 5% of cells, so a naive per-cell ceiling replaces one quad per chunk
+    // with 256 identical coplanar ones and costs 4% of the frame on the software
+    // rasteriser for nothing; merging equal-height runs gives a flat chunk its
+    // single quad back and only pays where the ceiling actually steps.
+    {
+        float cyc[CCELLS][CCELLS];
+        for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++)
+            cyc[i][kk] = ceilY(cx * CCELLS + i, cz * CCELLS + kk);
+        bool done[CCELLS][CCELLS] = {};
+        for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
+            if (done[i][kk]) continue;
+            float cy = cyc[i][kk];
+            int i1x = i;                                  // grow along x first
+            while (i1x + 1 < CCELLS && !done[i1x + 1][kk] && cyc[i1x + 1][kk] == cy) i1x++;
+            int k1z = kk;                                 // then take whole rows down z
+            while (k1z + 1 < CCELLS) {
+                bool ok = true;
+                for (int a = i; a <= i1x && ok; a++) ok = !done[a][k1z + 1] && cyc[a][k1z + 1] == cy;
+                if (!ok) break;
+                k1z++;
+            }
+            for (int a = i; a <= i1x; a++) for (int b = kk; b <= k1z; b++) done[a][b] = true;
+            float x0 = wx + i * CELL, x1 = wx + (i1x + 1) * CELL;
+            float z0 = wz + kk * CELL, z1 = wz + (k1z + 1) * CELL;
+            ce.quad({x0,cy,z0},{x0,cy,z1},{x1,cy,z1},{x1,cy,z0},{0,-1,0},
+                    {x0/2,z0/2},{x0/2,z1/2},{x1/2,z1/2},{x1/2,z0/2},ccol);
+        }
+        // Where the neighbour's ceiling is higher, close the slot with a soffit.
+        // Leave it out and you look straight along the gap and out of the
+        // building. Only the *lower* cell of a pair draws it, so a shared edge
+        // is drawn exactly once — including across a chunk seam, where both
+        // sides read the same global heights.
+        for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
+            float gx = wx + i * CELL, gz = wz + kk * CELL;
+            int gi = cx * CCELLS + i, gk = cz * CCELLS + kk;
+            float cy = cyc[i][kk];
+            auto soffit = [&](float ax, float az, float bx2, float bz2, float hi) {
+                if (hi <= cy + 1e-4f) return;
+                ce.quad({ax,cy,az},{bx2,cy,bz2},{bx2,hi,bz2},{ax,hi,az},
+                        {(bz2-az)/CELL,0,(ax-bx2)/CELL},
+                        {(ax+az)/2,0},{(bx2+bz2)/2,0},{(bx2+bz2)/2,(hi-cy)/2},{(ax+az)/2,(hi-cy)/2},ccol);
+            };
+            soffit(gx, gz, gx + CELL, gz, ceilY(gi, gk - 1));
+            soffit(gx + CELL, gz + CELL, gx, gz + CELL, ceilY(gi, gk + 1));
+            soffit(gx, gz + CELL, gx, gz, ceilY(gi - 1, gk));
+            soffit(gx + CELL, gz, gx + CELL, gz + CELL, ceilY(gi + 1, gk));
+        }
+    }
     // light panels on the global grid (emissive: alpha=0); spacing varies per level
     Color panel = {255,255,255,0};
     float ls = level == 1 ? 12.0f : 8.0f;
@@ -969,62 +1035,81 @@ void World::ensureMesh(int cx, int cz) {
     int g0z = (int)floorf(wz / ls), g1z = (int)floorf((wz + CHUNK) / ls);
     for (int gx = g0x; gx <= g1x; gx++)
         for (int gz = g0z; gz <= g1z; gz++) {
-            float lx = gx * ls + ls * 0.5f, lz = gz * ls + ls * 0.5f, hp = 0.62f, yq = wallH - 0.12f;
+            float lx = gx * ls + ls * 0.5f, lz = gz * ls + ls * 0.5f, hp = 0.62f;
             if (lx < wx || lx >= wx + CHUNK || lz < wz || lz >= wz + CHUNK) continue;
+            // The fitting hangs in the ceiling, so it goes wherever the ceiling
+            // of the cell it is centred in went. The tray is 1.38 m across and a
+            // cell is 2 m, so it can overhang a neighbour at another height;
+            // that neighbour's soffit is what it meets, which is what a real
+            // bulkhead beside a light does.
+            float wallTop = ceilY((int)floorf(lx / CELL), (int)floorf(lz / CELL));
+            float yq = wallTop - 0.12f;
             // Recessed diffuser inside a real metal tray. The luminous plane
             // now matches uLY instead of floating 10 cm above its own light.
             Color rim = {156, 153, 140, 254};
             const float outer = 0.69f, lip = 0.035f;
-            addSolidBox(pr, lx-outer, yq-lip, lz-outer, lx-hp, wallH, lz+outer, rim);
-            addSolidBox(pr, lx+hp, yq-lip, lz-outer, lx+outer, wallH, lz+outer, rim);
-            addSolidBox(pr, lx-hp, yq-lip, lz-outer, lx+hp, wallH, lz-hp, rim);
-            addSolidBox(pr, lx-hp, yq-lip, lz+hp, lx+hp, wallH, lz+outer, rim);
+            addSolidBox(pr, lx-outer, yq-lip, lz-outer, lx-hp, wallTop, lz+outer, rim);
+            addSolidBox(pr, lx+hp, yq-lip, lz-outer, lx+outer, wallTop, lz+outer, rim);
+            addSolidBox(pr, lx-hp, yq-lip, lz-outer, lx+hp, wallTop, lz-hp, rim);
+            addSolidBox(pr, lx-hp, yq-lip, lz+hp, lx+hp, wallTop, lz+outer, rim);
             ce.quad({lx-hp,yq,lz-hp},{lx-hp,yq,lz+hp},{lx+hp,yq,lz+hp},{lx+hp,yq,lz-hp},{0,-1,0},
                     {0,0},{0,1},{1,1},{1,0},panel);
         }
     ChunkData &dd = d;
     for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
         float gx = wx + i * CELL, gz = wz + kk * CELL;
+        int gi0 = cx * CCELLS + i, gk0 = cz * CCELLS + kk;
+        // A wall stands between two cells that may be at different heights. Base
+        // it on the lower floor and take it to the higher ceiling: base it on
+        // its own cell's floor instead and a step leaves a gap under the wall on
+        // the low side and a slot over it on the high side, both of which you
+        // see straight through. Everything fixed to the wall — sill, door head,
+        // architrave — is measured off that same base, so a doorway in a step
+        // has its head where a real one would.
+        float fyc = floorY(gi0, gk0), cyc = fyc + wallH;
+        float nb = std::min(floorY(gi0, gk0 - 1), floorY(gi0, gk0));
+        float nt = std::max(ceilY(gi0, gk0 - 1), ceilY(gi0, gk0));
+        float wb = std::min(floorY(gi0 - 1, gk0), floorY(gi0, gk0));
+        float wt2 = std::max(ceilY(gi0 - 1, gk0), ceilY(gi0, gk0));
         uint8_t nv = dd.wallN[i][kk];
         if (nv == WALL_SOLID) {
-            int gi0 = cx * CCELLS + i, gk0 = cz * CCELLS + kk;
             int sk = (blocksEdge(wallNVal(gi0 - 1, gk0)) ? 4 : 0) | (blocksEdge(wallNVal(gi0 + 1, gk0)) ? 8 : 0);
-            addBoxSides(wa, gx - WT, 0, gz - WT, gx + CELL + WT, wallH, gz + WT, false, sk);
+            addBoxSides(wa, gx - WT, nb, gz - WT, gx + CELL + WT, nt, gz + WT, false, sk);
         }
         else if (nv == WALL_WINDOW) {   // window on x-running wall; behind the glass, nothing
-            addBoxSides(wa, gx - WT, 0, gz - WT, gx + CELL + WT, 1.0f, gz + WT);
-            addBoxSides(wa, gx - WT, 2.1f, gz - WT, gx + CELL + WT, wallH, gz + WT, true);
-            addBoxSides(wa, gx - WT, 1.0f, gz - WT, gx + 0.45f, 2.1f, gz + WT);
-            addBoxSides(wa, gx + 1.55f, 1.0f, gz - WT, gx + CELL + WT, 2.1f, gz + WT);
-            wa.quad({gx-WT,1.0f,gz-WT},{gx+CELL+WT,1.0f,gz-WT},{gx+CELL+WT,1.0f,gz+WT},{gx-WT,1.0f,gz+WT},
+            addBoxSides(wa, gx - WT, nb, gz - WT, gx + CELL + WT, nb + 1.0f, gz + WT);
+            addBoxSides(wa, gx - WT, nb + 2.1f, gz - WT, gx + CELL + WT, nt, gz + WT, true);
+            addBoxSides(wa, gx - WT, nb + 1.0f, gz - WT, gx + 0.45f, nb + 2.1f, gz + WT);
+            addBoxSides(wa, gx + 1.55f, nb + 1.0f, gz - WT, gx + CELL + WT, nb + 2.1f, gz + WT);
+            wa.quad({gx-WT,nb+1.0f,gz-WT},{gx+CELL+WT,nb+1.0f,gz-WT},{gx+CELL+WT,nb+1.0f,gz+WT},{gx-WT,nb+1.0f,gz+WT},
                     {0,1,0},{0,0},{1,0},{1,0.1f},{0,0.1f}, WHITE);   // sill top
             // real glass now: translucent pane (alpha 100 -> glass branch), see the room beyond
             Color glass = { 20, 26, 32, 100 };
-            gl.quad({gx+0.45f,1.0f,gz},{gx+1.55f,1.0f,gz},{gx+1.55f,2.1f,gz},{gx+0.45f,2.1f,gz},
+            gl.quad({gx+0.45f,nb+1.0f,gz},{gx+1.55f,nb+1.0f,gz},{gx+1.55f,nb+2.1f,gz},{gx+0.45f,nb+2.1f,gz},
                     {0,0,-1},{0,1},{1,1},{1,0},{0,0}, glass);
         }
         else if (nv == WALL_EXIT) {   // exit doorway on x-running wall
-            addBoxSides(wa, gx - WT, 0, gz - WT, gx + 0.35f, wallH, gz + WT);
-            addBoxSides(wa, gx + 1.65f, 0, gz - WT, gx + CELL + WT, wallH, gz + WT);
-            addBoxSides(wa, gx + 0.35f, 2.3f, gz - WT, gx + 1.65f, wallH, gz + WT, true);
+            addBoxSides(wa, gx - WT, nb, gz - WT, gx + 0.35f, nt, gz + WT);
+            addBoxSides(wa, gx + 1.65f, nb, gz - WT, gx + CELL + WT, nt, gz + WT);
+            addBoxSides(wa, gx + 0.35f, nb + 2.3f, gz - WT, gx + 1.65f, nt, gz + WT, true);
             // cursed exits glow red — they don't lead deeper, they lead to the Red Halls
             bool crs = cursedExit(cx * CCELLS + i, cz * CCELLS + kk);
             Color glow = crs ? Color{ 255, 60, 40, 70 } : Color{ 255, 248, 225, 70 };
-            wa.quad({gx+0.35f,0,gz},{gx+1.65f,0,gz},{gx+1.65f,2.3f,gz},{gx+0.35f,2.3f,gz},{0,0,-1},
+            wa.quad({gx+0.35f,nb,gz},{gx+1.65f,nb,gz},{gx+1.65f,nb+2.3f,gz},{gx+0.35f,nb+2.3f,gz},{0,0,-1},
                     {0,1},{1,1},{1,0},{0,0},glow);
         }
         else if (nv == WALL_DOOR) {   // doorway on x-running wall
-            addBoxSides(wa, gx - WT, 0, gz - WT, gx + 0.35f, wallH, gz + WT);
-            addBoxSides(wa, gx + 1.65f, 0, gz - WT, gx + CELL + WT, wallH, gz + WT);
-            addBoxSides(wa, gx + 0.35f, 2.3f, gz - WT, gx + 1.65f, wallH, gz + WT, true);
+            addBoxSides(wa, gx - WT, nb, gz - WT, gx + 0.35f, nt, gz + WT);
+            addBoxSides(wa, gx + 1.65f, nb, gz - WT, gx + CELL + WT, nt, gz + WT);
+            addBoxSides(wa, gx + 0.35f, nb + 2.3f, gz - WT, gx + 1.65f, nt, gz + WT, true);
             // The architrave is what makes it read as a door rather than a hole:
             // it stands proud of both faces, so you can see it is a way through
             // from either side and at a glancing angle.
             for (int sgn = -1; sgn <= 1; sgn += 2) {
                 float zf = (sgn < 0) ? gz - WT - TRIM_T : gz + WT;
-                addSolidBox(pr, gx + 0.29f, 0, zf, gx + 0.35f, 2.36f, zf + TRIM_T, TRIM_COL);
-                addSolidBox(pr, gx + 1.65f, 0, zf, gx + 1.71f, 2.36f, zf + TRIM_T, TRIM_COL);
-                addSolidBox(pr, gx + 0.29f, 2.30f, zf, gx + 1.71f, 2.36f, zf + TRIM_T, TRIM_COL);
+                addSolidBox(pr, gx + 0.29f, nb, zf, gx + 0.35f, nb + 2.36f, zf + TRIM_T, TRIM_COL);
+                addSolidBox(pr, gx + 1.65f, nb, zf, gx + 1.71f, nb + 2.36f, zf + TRIM_T, TRIM_COL);
+                addSolidBox(pr, gx + 0.29f, nb + 2.30f, zf, gx + 1.71f, nb + 2.36f, zf + TRIM_T, TRIM_COL);
             }
             // and a threshold strip underfoot, worn by whoever came through
             float fy0 = floorY(cx * CCELLS + i, cz * CCELLS + kk);
@@ -1032,39 +1117,38 @@ void World::ensureMesh(int cx, int cz) {
         }
         uint8_t wv = dd.wallW[i][kk];
         if (wv == WALL_SOLID) {
-            int gi0 = cx * CCELLS + i, gk0 = cz * CCELLS + kk;
             int sk = (blocksEdge(wallWVal(gi0, gk0 - 1)) ? 1 : 0) | (blocksEdge(wallWVal(gi0, gk0 + 1)) ? 2 : 0);
-            addBoxSides(wa, gx - WT, 0, gz - WT, gx + WT, wallH, gz + CELL + WT, false, sk);
+            addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wt2, gz + CELL + WT, false, sk);
         }
         else if (wv == WALL_WINDOW) {   // window on z-running wall
-            addBoxSides(wa, gx - WT, 0, gz - WT, gx + WT, 1.0f, gz + CELL + WT);
-            addBoxSides(wa, gx - WT, 2.1f, gz - WT, gx + WT, wallH, gz + CELL + WT, true);
-            addBoxSides(wa, gx - WT, 1.0f, gz - WT, gx + WT, 2.1f, gz + 0.45f);
-            addBoxSides(wa, gx - WT, 1.0f, gz + 1.55f, gx + WT, 2.1f, gz + CELL + WT);
-            wa.quad({gx-WT,1.0f,gz-WT},{gx+WT,1.0f,gz-WT},{gx+WT,1.0f,gz+CELL+WT},{gx-WT,1.0f,gz+CELL+WT},
+            addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wb + 1.0f, gz + CELL + WT);
+            addBoxSides(wa, gx - WT, wb + 2.1f, gz - WT, gx + WT, wt2, gz + CELL + WT, true);
+            addBoxSides(wa, gx - WT, wb + 1.0f, gz - WT, gx + WT, wb + 2.1f, gz + 0.45f);
+            addBoxSides(wa, gx - WT, wb + 1.0f, gz + 1.55f, gx + WT, wb + 2.1f, gz + CELL + WT);
+            wa.quad({gx-WT,wb+1.0f,gz-WT},{gx+WT,wb+1.0f,gz-WT},{gx+WT,wb+1.0f,gz+CELL+WT},{gx-WT,wb+1.0f,gz+CELL+WT},
                     {0,1,0},{0,0},{1,0},{1,0.1f},{0,0.1f}, WHITE);   // sill top
             Color glass = { 20, 26, 32, 100 };
-            gl.quad({gx,1.0f,gz+0.45f},{gx,1.0f,gz+1.55f},{gx,2.1f,gz+1.55f},{gx,2.1f,gz+0.45f},
+            gl.quad({gx,wb+1.0f,gz+0.45f},{gx,wb+1.0f,gz+1.55f},{gx,wb+2.1f,gz+1.55f},{gx,wb+2.1f,gz+0.45f},
                     {1,0,0},{0,1},{1,1},{1,0},{0,0}, glass);
         }
         else if (wv == WALL_EXIT) {   // exit doorway on z-running wall
-            addBoxSides(wa, gx - WT, 0, gz - WT, gx + WT, wallH, gz + 0.35f);
-            addBoxSides(wa, gx - WT, 0, gz + 1.65f, gx + WT, wallH, gz + CELL + WT);
-            addBoxSides(wa, gx - WT, 2.3f, gz + 0.35f, gx + WT, wallH, gz + 1.65f, true);
+            addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wt2, gz + 0.35f);
+            addBoxSides(wa, gx - WT, wb, gz + 1.65f, gx + WT, wt2, gz + CELL + WT);
+            addBoxSides(wa, gx - WT, wb + 2.3f, gz + 0.35f, gx + WT, wt2, gz + 1.65f, true);
             bool crs = cursedExit(cx * CCELLS + i, cz * CCELLS + kk);
             Color glow = crs ? Color{ 255, 60, 40, 70 } : Color{ 255, 248, 225, 70 };
-            wa.quad({gx,0,gz+0.35f},{gx,0,gz+1.65f},{gx,2.3f,gz+1.65f},{gx,2.3f,gz+0.35f},{1,0,0},
+            wa.quad({gx,wb,gz+0.35f},{gx,wb,gz+1.65f},{gx,wb+2.3f,gz+1.65f},{gx,wb+2.3f,gz+0.35f},{1,0,0},
                     {0,1},{1,1},{1,0},{0,0},glow);
         }
         else if (wv == WALL_DOOR) {   // doorway on z-running wall
-            addBoxSides(wa, gx - WT, 0, gz - WT, gx + WT, wallH, gz + 0.35f);
-            addBoxSides(wa, gx - WT, 0, gz + 1.65f, gx + WT, wallH, gz + CELL + WT);
-            addBoxSides(wa, gx - WT, 2.3f, gz + 0.35f, gx + WT, wallH, gz + 1.65f, true);
+            addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wt2, gz + 0.35f);
+            addBoxSides(wa, gx - WT, wb, gz + 1.65f, gx + WT, wt2, gz + CELL + WT);
+            addBoxSides(wa, gx - WT, wb + 2.3f, gz + 0.35f, gx + WT, wt2, gz + 1.65f, true);
             for (int sgn = -1; sgn <= 1; sgn += 2) {
                 float xf = (sgn < 0) ? gx - WT - TRIM_T : gx + WT;
-                addSolidBox(pr, xf, 0, gz + 0.29f, xf + TRIM_T, 2.36f, gz + 0.35f, TRIM_COL);
-                addSolidBox(pr, xf, 0, gz + 1.65f, xf + TRIM_T, 2.36f, gz + 1.71f, TRIM_COL);
-                addSolidBox(pr, xf, 2.30f, gz + 0.29f, xf + TRIM_T, 2.36f, gz + 1.71f, TRIM_COL);
+                addSolidBox(pr, xf, wb, gz + 0.29f, xf + TRIM_T, wb + 2.36f, gz + 0.35f, TRIM_COL);
+                addSolidBox(pr, xf, wb, gz + 1.65f, xf + TRIM_T, wb + 2.36f, gz + 1.71f, TRIM_COL);
+                addSolidBox(pr, xf, wb + 2.30f, gz + 0.29f, xf + TRIM_T, wb + 2.36f, gz + 1.71f, TRIM_COL);
             }
             float fy0 = floorY(cx * CCELLS + i, cz * CCELLS + kk);
             addSolidBox(pr, gx - 0.07f, fy0, gz + 0.35f, gx + 0.07f, fy0 + 0.013f, gz + 1.65f, SILL_COL);
@@ -1074,42 +1158,47 @@ void World::ensureMesh(int cx, int cz) {
             // the collision clearance; no separate obstacle or draw call.
             Color trim = level == 0 ? Color{91, 71, 39, 254} : Color{67, 41, 34, 254};
             if (nv == WALL_SOLID) {
-                addSolidBox(pr, gx, 0, gz-WT-0.025f, gx+CELL, 0.13f, gz-WT, trim);
-                addSolidBox(pr, gx, 0, gz+WT, gx+CELL, 0.13f, gz+WT+0.025f, trim);
+                float tS = floorY(gi0, gk0 - 1), tN = floorY(gi0, gk0);
+                addSolidBox(pr, gx, tS, gz-WT-0.025f, gx+CELL, tS + 0.13f, gz-WT, trim);
+                addSolidBox(pr, gx, tN, gz+WT, gx+CELL, tN + 0.13f, gz+WT+0.025f, trim);
             }
             if (wv == WALL_SOLID) {
-                addSolidBox(pr, gx-WT-0.025f, 0, gz, gx-WT, 0.13f, gz+CELL, trim);
-                addSolidBox(pr, gx+WT, 0, gz, gx+WT+0.025f, 0.13f, gz+CELL, trim);
+                float tW = floorY(gi0 - 1, gk0), tE = floorY(gi0, gk0);
+                addSolidBox(pr, gx-WT-0.025f, tW, gz, gx-WT, tW + 0.13f, gz+CELL, trim);
+                addSolidBox(pr, gx+WT, tE, gz, gx+WT+0.025f, tE + 0.13f, gz+CELL, trim);
             }
         }
         // baked AO around this cell's walls: floor strip, ceiling strip, and a
         // wall-face strip on both sides (solid walls and windows; doorways stay clean)
         if (blocksEdge(nv)) {
-            int gi = cx * CCELLS + i, gk = cz * CCELLS + kk;
-            float fyS = floorY(gi, gk - 1) + 0.005f, fyN = floorY(gi, gk) + 0.005f;
+            float fyS = floorY(gi0, gk0 - 1) + 0.005f, fyN = floorY(gi0, gk0) + 0.005f;
+            // Ceiling creases follow each side's own ceiling. Pinned to a fixed
+            // wallH they detach the moment the floor moves, and a crease hanging
+            // in clear air under a ceiling reads as a smear, not a shadow.
+            float cyS = ceilY(gi0, gk0 - 1) - 0.005f, cyN = ceilY(gi0, gk0) - 0.005f;
             // span exactly one cell — neighbours butt up seamlessly, no double-blend overlap
-            float x0 = gx, x1 = gx + CELL, cy = wallH - 0.005f;
+            float x0 = gx, x1 = gx + CELL;
             aoStrip({ x0, fyS, gz - WT }, { x1, fyS, gz - WT }, { 0, 0, -AOW }, { 0, 1, 0 }, 0);          // floor, -z side
             aoStrip({ x0, fyN, gz + WT }, { x1, fyN, gz + WT }, { 0, 0, AOW }, { 0, 1, 0 }, 0);           // floor, +z side
-            aoStrip({ x0, cy, gz - WT }, { x1, cy, gz - WT }, { 0, 0, -AOW }, { 0, -1, 0 }, AOC);         // ceiling creases
-            aoStrip({ x0, cy, gz + WT }, { x1, cy, gz + WT }, { 0, 0, AOW }, { 0, -1, 0 }, AOC);
+            aoStrip({ x0, cyS, gz - WT }, { x1, cyS, gz - WT }, { 0, 0, -AOW }, { 0, -1, 0 }, AOC);       // ceiling creases
+            aoStrip({ x0, cyN, gz + WT }, { x1, cyN, gz + WT }, { 0, 0, AOW }, { 0, -1, 0 }, AOC);
             aoStrip({ x0, fyS, gz - WT - 0.006f }, { x1, fyS, gz - WT - 0.006f }, { 0, AOH, 0 }, { 0, 0, -1 }, 0);   // skirting shadow up the faces
             aoStrip({ x0, fyN, gz + WT + 0.006f }, { x1, fyN, gz + WT + 0.006f }, { 0, AOH, 0 }, { 0, 0, 1 }, 0);
-            aoStrip({ x0, wallH, gz - WT - 0.006f }, { x1, wallH, gz - WT - 0.006f }, { 0, -AOH, 0 }, { 0, 0, -1 }, AOC);   // and down from the ceiling
-            aoStrip({ x0, wallH, gz + WT + 0.006f }, { x1, wallH, gz + WT + 0.006f }, { 0, -AOH, 0 }, { 0, 0, 1 }, AOC);
+            aoStrip({ x0, cyS + 0.005f, gz - WT - 0.006f }, { x1, cyS + 0.005f, gz - WT - 0.006f }, { 0, -AOH, 0 }, { 0, 0, -1 }, AOC);   // and down from the ceiling
+            aoStrip({ x0, cyN + 0.005f, gz + WT + 0.006f }, { x1, cyN + 0.005f, gz + WT + 0.006f }, { 0, -AOH, 0 }, { 0, 0, 1 }, AOC);
         }
         if (blocksEdge(wv)) {
-            int gi = cx * CCELLS + i, gk = cz * CCELLS + kk;
-            float fyW = floorY(gi - 1, gk) + 0.005f, fyE = floorY(gi, gk) + 0.005f;
-            float z0 = gz, z1 = gz + CELL, cy = wallH - 0.005f;
+            float fyW = floorY(gi0 - 1, gk0) + 0.005f, fyE = floorY(gi0, gk0) + 0.005f;
+            float cyW = ceilY(gi0 - 1, gk0) - 0.005f, cyE = ceilY(gi0, gk0) - 0.005f;
+            float z0 = gz, z1 = gz + CELL;
             aoStrip({ gx - WT, fyW, z0 }, { gx - WT, fyW, z1 }, { -AOW, 0, 0 }, { 0, 1, 0 }, 0);
             aoStrip({ gx + WT, fyE, z0 }, { gx + WT, fyE, z1 }, { AOW, 0, 0 }, { 0, 1, 0 }, 0);
-            aoStrip({ gx - WT, cy, z0 }, { gx - WT, cy, z1 }, { -AOW, 0, 0 }, { 0, -1, 0 }, AOC);
-            aoStrip({ gx + WT, cy, z0 }, { gx + WT, cy, z1 }, { AOW, 0, 0 }, { 0, -1, 0 }, AOC);
+            aoStrip({ gx - WT, cyW, z0 }, { gx - WT, cyW, z1 }, { -AOW, 0, 0 }, { 0, -1, 0 }, AOC);
+            aoStrip({ gx + WT, cyE, z0 }, { gx + WT, cyE, z1 }, { AOW, 0, 0 }, { 0, -1, 0 }, AOC);
             aoStrip({ gx - WT - 0.006f, fyW, z0 }, { gx - WT - 0.006f, fyW, z1 }, { 0, AOH, 0 }, { -1, 0, 0 }, 0);
             aoStrip({ gx + WT + 0.006f, fyE, z0 }, { gx + WT + 0.006f, fyE, z1 }, { 0, AOH, 0 }, { 1, 0, 0 }, 0);
-            aoStrip({ gx - WT - 0.006f, wallH, z0 }, { gx - WT - 0.006f, wallH, z1 }, { 0, -AOH, 0 }, { -1, 0, 0 }, AOC);
-            aoStrip({ gx + WT + 0.006f, wallH, z1 }, { gx + WT + 0.006f, wallH, z0 }, { 0, -AOH, 0 }, { 1, 0, 0 }, AOC);
+            aoStrip({ gx - WT - 0.006f, cyW + 0.005f, z0 }, { gx - WT - 0.006f, cyW + 0.005f, z1 }, { 0, -AOH, 0 }, { -1, 0, 0 }, AOC);
+            aoStrip({ gx + WT + 0.006f, cyE + 0.005f, z1 }, { gx + WT + 0.006f, cyE + 0.005f, z0 }, { 0, -AOH, 0 }, { 1, 0, 0 }, AOC);
         }
         // ---- the building's fittings. Decals pressed off the wall and ceiling
         // faces, plus real (if tiny) geometry for the conduit and sprinklers.
@@ -1190,15 +1279,15 @@ void World::ensureMesh(int cx, int cz) {
             float ccx = gx + CELL * 0.5f, ccz = gz + CELL * 0.5f;
             if (hc % DIFFUSER_RATE == 0) {
                 const FixtureRect &f = FIXTURES[FIX_DIFFUSER];
-                float yq = wallH - 0.008f;
+                float yq = cyc - 0.008f;
                 fx.quad({ccx-f.halfW,yq,ccz-f.halfH},{ccx-f.halfW,yq,ccz+f.halfH},
                         {ccx+f.halfW,yq,ccz+f.halfH},{ccx+f.halfW,yq,ccz-f.halfH},{0,-1,0},
                         {f.u0,f.v0},{f.u0,f.v1},{f.u1,f.v1},{f.u1,f.v0}, FIXC);
             } else if (hc % SPRINK_RATE == 0) {
                 const Color BRASS = { 158, 126, 66, 254 };
-                addSolidBox(fx, ccx-0.016f, wallH-0.085f, ccz-0.016f, ccx+0.016f, wallH, ccz+0.016f, BRASS);
-                addSolidBox(fx, ccx-0.033f, wallH-0.085f, ccz-0.033f, ccx+0.033f, wallH-0.070f, ccz+0.033f, BRASS);
-                addSolidBox(fx, ccx-0.045f, wallH-0.100f, ccz-0.045f, ccx+0.045f, wallH-0.090f, ccz+0.045f, BRASS);
+                addSolidBox(fx, ccx-0.016f, cyc-0.085f, ccz-0.016f, ccx+0.016f, cyc, ccz+0.016f, BRASS);
+                addSolidBox(fx, ccx-0.033f, cyc-0.085f, ccz-0.033f, ccx+0.033f, cyc-0.070f, ccz+0.033f, BRASS);
+                addSolidBox(fx, ccx-0.045f, cyc-0.100f, ccz-0.045f, ccx+0.045f, cyc-0.090f, ccz+0.045f, BRASS);
             }
             // Conduit runs along the top of a wall. Keyed on a bucket of cells
             // rather than a single one, so it comes out as a run of six with a
@@ -1211,8 +1300,8 @@ void World::ensureMesh(int cx, int cz) {
             // halfway along.
             const Color STEEL = { 138, 136, 130, 254 };
             const float CDY = 0.052f;          // how far it stands off the wall
-            float cy = wallH - 0.155f;
             if (nv == WALL_SOLID) {
+                float cy = nt - 0.155f;
                 uint32_t hr = ih(gi / CONDUIT_RUN, gk, seed ^ 0x71C5u);
                 if (hr % 7 == 0) {
                     float z0 = (hr & 32) ? gz + WT : gz - WT - CDY;
@@ -1220,6 +1309,7 @@ void World::ensureMesh(int cx, int cz) {
                 }
             }
             if (wv == WALL_SOLID) {
+                float cy = wt2 - 0.155f;
                 uint32_t hr = ih(gi, gk / CONDUIT_RUN, seed ^ 0x71CBu);
                 if (hr % 7 == 0) {
                     float x0 = (hr & 32) ? gx + WT : gx - WT - CDY;
@@ -1255,7 +1345,7 @@ void World::ensureMesh(int cx, int cz) {
                 uint32_t hs = ih(gi, gk, seed ^ 0x5C1Bu);
                 if (hs % SCRAWL_RATE == 0) {
                     float u0, v0, u1, v1; uvOf((hs >> 5) % SCRAWL_PHRASES, u0, v0, u1, v1);
-                    float y0 = 0.95f + ((hs >> 9) & 3) * 0.12f, y1 = y0 + 0.66f;
+                    float y0 = nb + 0.95f + ((hs >> 9) & 3) * 0.12f, y1 = y0 + 0.66f;
                     float x0 = gx + 0.28f, x1 = gx + 1.72f;
                     float zf = (hs & 8) ? gz + WT + 0.006f : gz - WT - 0.006f;
                     float mx = (x0 + x1) * 0.5f, my = (y0 + y1) * 0.5f;
@@ -1275,7 +1365,7 @@ void World::ensureMesh(int cx, int cz) {
                 uint32_t hs = ih(gi, gk, seed ^ 0x5C2Du);
                 if (hs % SCRAWL_RATE == 0) {
                     float u0, v0, u1, v1; uvOf((hs >> 5) % SCRAWL_PHRASES, u0, v0, u1, v1);
-                    float y0 = 0.95f + ((hs >> 9) & 3) * 0.12f, y1 = y0 + 0.66f;
+                    float y0 = wb + 0.95f + ((hs >> 9) & 3) * 0.12f, y1 = y0 + 0.66f;
                     float z0 = gz + 0.28f, z1 = gz + 1.72f;
                     float xf = (hs & 8) ? gx + WT + 0.006f : gx - WT - 0.006f;
                     float mz = (z0 + z1) * 0.5f, my = (y0 + y1) * 0.5f;
@@ -1293,13 +1383,13 @@ void World::ensureMesh(int cx, int cz) {
             }
         }
         if (dd.pillar[i][kk]) {
-            addBoxSides(wa, gx + 0.42f, 0, gz + 0.42f, gx + 1.58f, wallH, gz + 1.58f);
-            wa.quad({gx+0.30f,0.004f,gz+0.30f},{gx+1.70f,0.004f,gz+0.30f},   // contact shadow
-                    {gx+1.70f,0.004f,gz+1.70f},{gx+0.30f,0.004f,gz+1.70f},
+            addBoxSides(wa, gx + 0.42f, fyc, gz + 0.42f, gx + 1.58f, cyc, gz + 1.58f);
+            wa.quad({gx+0.30f,fyc+0.004f,gz+0.30f},{gx+1.70f,fyc+0.004f,gz+0.30f},   // contact shadow
+                    {gx+1.70f,fyc+0.004f,gz+1.70f},{gx+0.30f,fyc+0.004f,gz+1.70f},
                     {0,1,0},{0,0},{0.04f,0},{0.04f,0.04f},{0,0.04f}, Color{ 12, 12, 12, 160 });
             // AO up the pillar's feet and a ceiling crease around its head
-            float pfy = floorY(cx * CCELLS + i, cz * CCELLS + kk) + 0.005f;
-            float px0 = gx + 0.42f, px1 = gx + 1.58f, pz0 = gz + 0.42f, pz1 = gz + 1.58f, cy = wallH - 0.005f;
+            float pfy = fyc + 0.005f;
+            float px0 = gx + 0.42f, px1 = gx + 1.58f, pz0 = gz + 0.42f, pz1 = gz + 1.58f, cy = cyc - 0.005f;
             aoStrip({ px0, pfy, pz0 - 0.006f }, { px1, pfy, pz0 - 0.006f }, { 0, AOH, 0 }, { 0, 0, -1 }, 0);
             aoStrip({ px0, pfy, pz1 + 0.006f }, { px1, pfy, pz1 + 0.006f }, { 0, AOH, 0 }, { 0, 0, 1 }, 0);
             aoStrip({ px0 - 0.006f, pfy, pz0 }, { px0 - 0.006f, pfy, pz1 }, { 0, AOH, 0 }, { -1, 0, 0 }, 0);
@@ -1329,7 +1419,7 @@ void World::ensureMesh(int cx, int cz) {
             if (dd.wallN[i][kk] == WALL_SOLID) {
                 uint32_t rh = ih(gk, 7717, seed ^ 0x9191u);
                 if (rh % 4 == 0) {
-                    float py = wallH - 0.22f - ((rh >> 5) & 3) * 0.09f;
+                    float py = ceilY(gi, gk) - 0.22f - ((rh >> 5) & 3) * 0.09f;
                     float side = ((rh >> 9) & 1) ? 0.34f : -0.34f;
                     float r = 0.065f + ((rh >> 11) & 3) * 0.012f;
                     Color pc = ((rh >> 13) & 1) ? Color{ 78, 54, 40, 255 }   // rusted iron
@@ -1344,7 +1434,7 @@ void World::ensureMesh(int cx, int cz) {
             if (dd.wallW[i][kk] == WALL_SOLID) {
                 uint32_t rh = ih(gi, 3313, seed ^ 0x9292u);
                 if (rh % 4 == 0) {
-                    float py = wallH - 0.22f - ((rh >> 5) & 3) * 0.09f;
+                    float py = ceilY(gi, gk) - 0.22f - ((rh >> 5) & 3) * 0.09f;
                     float side = ((rh >> 9) & 1) ? 0.34f : -0.34f;
                     float r = 0.065f + ((rh >> 11) & 3) * 0.012f;
                     Color pc = ((rh >> 13) & 1) ? Color{ 78, 54, 40, 255 }
@@ -1359,7 +1449,7 @@ void World::ensureMesh(int cx, int cz) {
             // valve station: a standpipe floor to ceiling, wheel drawn by the renderer
             if (valveAt(gi, gk)) {
                 float vx = gx + 1.0f, vz = gz + 1.0f, fy = dd.elev[i][kk] * ELEV_UNIT;
-                addSolidBox(pr, vx - 0.085f, fy, vz - 0.085f, vx + 0.085f, wallH, vz + 0.085f,
+                addSolidBox(pr, vx - 0.085f, fy, vz - 0.085f, vx + 0.085f, ceilY(gi, gk), vz + 0.085f,
                             Color{ 84, 60, 44, 255 });
                 addSolidBox(pr, vx - 0.13f, fy + 1.02f, vz - 0.13f, vx + 0.13f, fy + 1.24f, vz + 0.13f,
                             Color{ 104, 80, 58, 255 });   // the body the wheel sits on
@@ -1373,7 +1463,9 @@ void World::ensureMesh(int cx, int cz) {
             float ax = wx + srng.f01() * CHUNK, az = wz + srng.f01() * CHUNK;
             float bx2 = ax + (srng.f01() - 0.5f) * 9, bz2 = az + (srng.f01() - 0.5f) * 9;
             float mx2 = (ax + bx2) * 0.5f, mz2 = (az + bz2) * 0.5f;
-            float ytop = wallH - 0.03f, ymid = wallH - 0.55f - srng.f01() * 0.35f;
+            float cA = ceilY((int)floorf(ax / CELL), (int)floorf(az / CELL));
+            float cB = ceilY((int)floorf(bx2 / CELL), (int)floorf(bz2 / CELL));
+            float ytop = std::min(cA, cB) - 0.03f, ymid = ytop - 0.52f - srng.f01() * 0.35f;
             Color sc = PARTY[srng.ri(0, 4)];
             float dx2 = bx2 - ax, dz2 = bz2 - az, dl = sqrtf(dx2 * dx2 + dz2 * dz2) + 1e-4f;
             Vector3 nrm = { dz2 / dl, 0, -dx2 / dl };
