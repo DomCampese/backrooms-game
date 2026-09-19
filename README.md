@@ -5,6 +5,19 @@ Disclaimer: just for fun, mostly generated with Claude models
 A native, procedurally-infinite backrooms horror game in a small C++ codebase.
 Procedural worlds and sound, with an animated CC0 revolver and compact texture assets embedded at build time.
 
+## License and credits
+
+This unofficial hobby game is released under **GNU GPLv3**. See [LICENSE](LICENSE)
+and [Credits and third-party notices](CREDITS.md) for the full terms, Backrooms
+wiki author acknowledgments, and the separate licenses for adapted lore and assets.
+Thanks to the Backrooms community, especially 1000dumplings and the other authors
+credited there, for the shared lore behind Partygoers, Level Fun and Almond Water.
+
+The software is provided without warranty. Source and build instructions are
+available in this repository; released builds must include access to their
+corresponding source. This project is not affiliated with or endorsed by the wiki
+or other Backrooms creators.
+
 ![screenshot](docs/screenshot.png)
 
 ## Model asset pipeline
