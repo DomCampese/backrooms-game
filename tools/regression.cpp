@@ -8,8 +8,11 @@
 #include <cstdlib>
 #include <cmath>
 #include <string>
+#include <cstring>
 
+static int captureCount = 0;
 static void capture(Game &g, const char *name) {
+    ++captureCount;
     g.updateLook();
     // Fill the complete visible ring; three calls previously left black holes
     // in shots after moving the camera or changing level.
@@ -108,7 +111,16 @@ int main() {
         g.revolver.pose(0,0,ammo);auto resting=vertices();
         for(size_t i=0;i<fired.size();++i) CHECK(fabsf(fired[i]-resting[i])<.002f);
     }
-    CHECK(maxRadius<.28f); // With the existing 0.48 scale and hold offset, stays inside 0.34 m.
+    // Assert the rule, not a proxy for it: the viewmodel has to stay inside the
+    // 0.34 m collision radius, and the hold offset and scale in drawHeldWeapon
+    // are what turn a model-space radius into that distance. The bare
+    // maxRadius<.28f this replaces had no stated margin, and raylib 6.0's
+    // UpdateModelAnimation interpolates where 5.5's did not, so the sampled
+    // reload reaches ~5% further at its extreme — 0.2942 m, which tripped the
+    // proxy while the actual clearance was still 44 mm. Failing on a rule the
+    // code does not have is worse than not checking, because the next person
+    // relaxes the number instead of reading it.
+    CHECK(0.155f + maxRadius * 0.48f < 0.34f);
     printf("Imported reload maximum model-space radius: %.4f m\n",maxRadius);
     g.ammo=6;g.weapon=WEAPON_REVOLVER;capture(g,"revolver.png");
     g.ammo=5;g.gunCd=.34f;
@@ -151,6 +163,219 @@ int main() {
     }
     for(const auto &entry:g.world.chunks) for(const auto &mesh:entry.second.meshes)
         CHECK(mesh.vertexCount<=65535);
-    printf("PASS sprint recovery, crouch/stationary gating, restart reset, battery retention; animation continuity; held aim/reload gating; 21 visual captures\n");
+    // ---- step height. The generator relaxes every terrace to within MAX_STEP,
+    // so nothing it produces exercises the riser blocker; a rule that never
+    // fires is not a rule that works, so force a drop and check it directly.
+    {
+        g.applyLevel(0);
+        int ci=24, ck=24;                       // inside chunk (1,1), clear of the spawn room
+        int cx=fdiv(ci,CCELLS), cz=fdiv(ck,CCELLS);
+        ChunkData &cd=g.world.data(cx,cz);
+        int li=ci-cx*CCELLS, lk=ck-cz*CCELLS;
+        cd.wallN[li][lk]=cd.wallW[li][lk]=cd.wallN[li][lk+1]=cd.wallW[li+1][lk]=0;
+        cd.pillar[li][lk]=cd.prop[li][lk]=cd.pool[li][lk]=0;
+        cd.elev[li][lk]=25;                     // a 2.5 m terrace, the atrium's full depth
+        CHECK(g.world.floorY(ci,ck)>MAX_STEP);
+        // it emits a blocker topping out at its own floor
+        AABB boxes[MAX_NEARBY_AABBS]; int n=g.world.gatherCellAABBs(ci,ck,boxes,MAX_NEARBY_AABBS,0);
+        bool riser=false;
+        for(int i=0;i<n;++i) if(fabsf(boxes[i].top-g.world.floorY(ci,ck))<0.001f) riser=true;
+        CHECK(riser);
+        // from below you are stopped at the face; from on top you walk over it
+        float bx=ci*CELL+1, bz=ck*CELL-0.2f, ox=bx, oz=bz;
+        g.world.collideCircle(bx,bz,Game::PR,0.0f);
+        CHECK(bz<oz-0.01f && fabsf(bx-ox)<0.5f);
+        bx=ci*CELL+1; bz=ck*CELL+1; ox=bx; oz=bz;
+        g.world.collideCircle(bx,bz,Game::PR,g.world.floorY(ci,ck));
+        CHECK(fabsf(bx-ox)<0.001f && fabsf(bz-oz)<0.001f);
+        // and no route crosses it, so the pack has to go round rather than through
+        CHECK(!g.world.canStep(ci,ck-1,ci,ck) && !g.world.canStep(ci,ck,ci,ck-1));
+        cd.elev[li][lk]=0;
+    }
+
+    // ---- shots respect pitch. Level aim through a body hits; the same shot
+    // aimed at the ceiling misses, which it did not before — the hit test was
+    // horizontal-only, so you could shoot the ceiling and still land the round.
+    {
+        g.px=0; g.pz=0; g.py=0; g.eyeY=1.62f; g.yaw=0; g.pitch=0; g.updateLook();
+        CHECK(g.shotHitsBody(6.0f, 0.0f, 0.0f, 1.95f, 0.55f, 60.0f));
+        g.pitch=1.0f; g.updateLook();                       // aimed well above his head
+        CHECK(!g.shotHitsBody(6.0f, 0.0f, 0.0f, 1.95f, 0.55f, 60.0f));
+        g.pitch=-1.0f; g.updateLook();                      // and at the floor in front
+        CHECK(!g.shotHitsBody(6.0f, 0.0f, 0.0f, 1.95f, 0.55f, 60.0f));
+        g.pitch=0.15f; g.updateLook();                      // a low dog at that pitch is over-shot
+        CHECK(!g.shotHitsBody(9.0f, 0.0f, 0.0f, 0.92f, 0.6f, 30.0f));
+        // the eye rides at 1.62 m and a dog stands 0.92 m, so a dead-level shot
+        // goes over its back at any range — you have to put the crosshair on it
+        g.pitch=0; g.updateLook();
+        CHECK(!g.shotHitsBody(9.0f, 0.0f, 0.0f, 0.92f, 0.6f, 30.0f));
+        g.pitch=-0.15f; g.updateLook();
+        CHECK(g.shotHitsBody(9.0f, 0.0f, 0.0f, 0.92f, 0.6f, 30.0f));
+        g.pitch=0; g.updateLook();
+        CHECK(!g.shotHitsBody(-6.0f, 0.0f, 0.0f, 1.95f, 0.55f, 60.0f));   // behind you
+    }
+
+    // ---- the catch ends the run, and only out of a committed lunge. The bare
+    // proximity test this replaced fired the instant you came inside 1.25 m,
+    // silently — survivable when being caught was free, unfair once it is not.
+    {
+        g.applyLevel(0); g.beginDescent(0);
+        g.inMenu=false; g.deathT=0; g.hidden=false; g.deathCount=0;
+        g.px=40; g.pz=40; g.py=0; g.yaw=0; g.pitch=0; g.updateLook();
+        g.ent.st=EState::Chase; g.ent.hp=3; g.ent.stagger=0; g.ent.dispY=0;
+        // well inside reach, but he has not committed and cannot yet
+        g.ent.x=g.px+1.0f; g.ent.z=g.pz; g.ent.lunge=0; g.ent.lungeCd=5.0f;
+        g.updateEntity(0.001f, 100.0);
+        CHECK(!g.inMenu && g.deathT<=0);
+        // from the tell's range with the cooldown clear, he commits rather than grabbing
+        g.ent.st=EState::Chase; g.ent.x=g.px+2.3f; g.ent.z=g.pz;
+        g.ent.lunge=0; g.ent.lungeCd=0;
+        g.updateEntity(0.001f, 100.0);
+        CHECK(g.ent.lunge>0 && !g.inMenu);
+        // and a commit that reaches you ends the run, with the card's numbers frozen
+        g.ent.x=g.px+1.0f; g.ent.z=g.pz; g.ent.lunge=Game::LUNGE_TIME;
+        g.distWalked=250; g.killCount=2;
+        g.updateEntity(0.001f, 100.0);
+        // deathCount must survive the beginDescent inside dieRun: it counts the
+        // runs this session has cost you, and resetting it there made the card
+        // report your first death every single time.
+        CHECK(g.inMenu && g.deathT>0 && g.deathCount==1);
+        CHECK(strcmp(g.deathBy,"PIRATE CLARK")==0);
+        CHECK(g.deathM==250 && g.deathKills==2 && g.deathTime>99.0f);
+        // ...and the world behind the card is a fresh descent, not the one that killed you
+        CHECK(g.level==0 && g.coins==0 && g.ent.st==EState::Hidden);
+        // ...and look at the card it puts up, since it is the only screen in the
+        // game that renders on the title screen rather than over a live run
+        g.deathBy="PIRATE CLARK"; g.deathLevel=0; g.deathTime=247; g.deathM=612;
+        g.deathKills=2; g.deathCount=3; g.bestDeep=3; g.bestRun=430;
+        g.deathT=Game::DEATH_CARD-1.8f; g.inMenu=true;
+        capture(g,"death-card.png");
+        g.deathT=0; g.inMenu=false;
+    }
+
+    // ---- the hunter actually moves now (ENT-01/ENT-02). Look at these: a
+    // walk cycle that does not read as a walk is worse than no walk cycle.
+    {
+        g.applyLevel(0);
+        g.px=40; g.pz=40; g.py=0; g.eyeY=1.62f; g.pitch=0; g.deathT=0; g.inMenu=false;
+        g.ent.x=g.px+7.0f; g.ent.z=g.pz; g.ent.dispY=0; g.ent.hp=3; g.ent.stagger=0;
+        g.yaw=0; g.updateLook();
+        // stalking, head still down the corridor, mid-stride at four phases
+        g.ent.st=EState::Stalk; g.ent.gaze=0;
+        for (int i=0;i<4;++i) {
+            g.ent.gait = i * 0.5f;   // quarter-cycle steps: render.cpp's phase is gait*0.5
+            char n[48]; snprintf(n,sizeof(n),"clark-walk-%d.png",i);
+            capture(g,n);
+        }
+        // gaze tips over: his head comes round, which is the tell
+        g.ent.gaze=1.2f; g.ent.gait=0.5f; capture(g,"clark-noticed.png");
+        // and the chase lean, and the harder lean of a committed lunge
+        g.ent.st=EState::Chase; g.ent.lunge=0; capture(g,"clark-chase.png");
+        g.ent.lunge=Game::LUNGE_TIME; capture(g,"clark-lunge.png");
+        g.ent.st=EState::Hidden; g.ent.lunge=0;
+        // The pack, mid-bound. Captured on Level 0 rather than in the Red Halls
+        // they actually live in: the Red Halls sit at mean luma 12 and a black
+        // dog against it is unreviewable. This shot is for the run cycle only.
+        g.px=40; g.pz=40; g.yaw=0; g.updateLook();
+        g.dogs[0].st=DState::Charge; g.dogs[0].x=g.px+5.0f; g.dogs[0].z=g.pz;
+        g.dogs[0].dispY=0; g.dogs[0].hp=2; g.dogs[0].gait=0.5f;
+        for (int i=0;i<2;++i) {
+            g.dogs[0].gait = i * 0.5f;
+            char n[48]; snprintf(n,sizeof(n),"pack-bound-%d.png",i);
+            capture(g,n);
+        }
+        g.dogs[0].st=DState::Gone;
+    }
+
+    // ---- he no longer always walks out of the fog (ENT-03). Measured, not
+    // asserted by eye: the claim "sometimes he is already round the corner"
+    // needs a number behind it.
+    {
+        g.applyLevel(0); g.beginDescent(0); g.inMenu=false; g.deathT=0;
+        g.px=40; g.pz=40; g.yaw=0.8f; g.pitch=0; g.updateLook();
+        int near=0, unseen=0, nearUnseen=0, total=400;
+        float dmin=1e9f, dmax=0;
+        for (int i=0;i<total;++i) {
+            g.ent.st=EState::Hidden; g.ent.nextSpawn=0;
+            g.updateEntity(0.001f, 100.0);
+            float dx=g.ent.x-g.px, dz=g.ent.z-g.pz;
+            float d=sqrtf(dx*dx+dz*dz);
+            dmin=fminf(dmin,d); dmax=fmaxf(dmax,d);
+            bool los = g.world.lineOfSight(g.px,g.pz,g.ent.x,g.ent.z);
+            if (d < Game::SPAWN_FAR_MIN) near++;
+            if (!los) unseen++;
+            if (d < Game::SPAWN_FAR_MIN && !los) nearUnseen++;
+        }
+        printf("  ENT-03 arrivals: %d%% inside %.0fm, %d%% out of sight, %d%% BOTH, range %.1f-%.1f m\n",
+               near*100/total, (double)Game::SPAWN_FAR_MIN, unseen*100/total,
+               nearUnseen*100/total, dmin, dmax);
+        // The frightening case — close, and already behind something — has to be
+        // a real share of arrivals, and the old walk-out-of-the-fog one has to
+        // survive alongside it: replacing one fixed ritual with another buys
+        // nothing.
+        CHECK(nearUnseen > total/5 && near < total*9/10);
+        CHECK(dmax >= Game::SPAWN_FAR_MIN);
+        g.ent.st=EState::Hidden;
+    }
+
+    // ---- the pack hunts by sound, not by what you are standing behind (ENT-04)
+    {
+        g.still=true;  g.deck.playing=false; g.deck.carried=true;
+        CHECK(g.packDeaf());                    // dead still: they lose you, cover or not
+        g.still=false; CHECK(!g.packDeaf());    // moving: they have you
+        g.still=true;  g.deck.playing=true;      // still, but the tape is running in your coat
+        CHECK(!g.packDeaf());
+        g.deck.carried=false; CHECK(g.packDeaf());   // ...set it down and it is the deck they want
+        g.deck.playing=false; g.deck.carried=true;
+    }
+
+    // ---- the building moves when you are not looking (PAC-03)
+    {
+        g.applyLevel(0); g.beginDescent(0); g.inMenu=false;
+        g.px=40; g.pz=40; g.py=0; g.eyeY=1.62f; g.updateLook();
+        size_t before = g.world.shifted.size();
+        int moved=0;
+        for (int i=0;i<40;++i) if (g.shiftAWall()) moved++;
+        CHECK(moved > 0 && g.world.shifted.size() == before + (size_t)moved);
+        // every edge it shifted must now read as a wall through the same
+        // accessors collision, the pathfinder and the mesher all use...
+        for (uint64_t k : g.world.shifted) {
+            bool west = (k & 1ull) != 0;
+            int a = (int)(uint32_t)((k >> 1) >> 32), b = (int)(uint32_t)((k >> 1) & 0xFFFFFFFFull);
+            CHECK(blocksEdge(west ? g.world.wallWVal(a,b) : g.world.wallNVal(a,b)));
+            // ...and it must not have been one you could see it happen to
+            float cx=a*CELL+1.0f, cz=b*CELL+1.0f;
+            CHECK(!g.world.lineOfSight(g.px,g.pz,cx,cz));
+        }
+        printf("  PAC-03: %d doorways walled off out of sight, all opaque to wallNVal/wallWVal\n", moved);
+        g.world.shifted.clear();
+    }
+
+    // ---- and the grip meter is an ending now, not a difficulty setting (STK-03)
+    {
+        g.applyLevel(0); g.beginDescent(0); g.inMenu=false; g.deathT=0; g.deathCount=0;
+        g.sanity=0.0f;
+        g.updateAmbience(0.001f, 200.0);
+        CHECK(g.inMenu && g.deathT>0);
+        CHECK(strcmp(g.deathBy,"THE PLACE ITSELF")==0);
+        CHECK(strcmp(g.deathTitle,"YOU STOPPED KEEPING TRACK")==0);   // its own card, not the catch's
+        CHECK(g.sanity>0.9f);   // beginDescent gave it back
+        g.deathT=0; g.inMenu=false;
+        // and the last tenth is a slide you can feel, not a cliff
+        g.sanity=0.05f; g.updateAmbience(0.001f, 300.0);
+        CHECK(g.slide>0.4f && g.slide<1.0f);
+        g.sanity=0.5f; g.updateAmbience(0.001f, 300.0);
+        CHECK(g.slide==0.0f);
+    }
+
+    // ---- headless captures must not be able to black out (BUG-08)
+    CHECK(g.noBlackout && g.nextBlackout >= Game::BLACKOUT_NEVER);
+
+    printf("PASS sprint recovery, crouch/stationary gating, restart reset, battery retention,\n"
+           "     animation continuity, held aim/reload gating, step-height blocking,\n"
+           "     pitch-aware hit tests, the catch ending the run only out of a committed\n"
+           "     lunge, arrivals that are not all from the fog, a pack that hunts by sound,\n"
+           "     a building that moves out of sight, the grip meter as an ending,\n"
+           "     deterministic captures; %d visual captures\n", captureCount);
     g.shutdown();
 }

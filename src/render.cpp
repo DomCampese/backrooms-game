@@ -1,4 +1,5 @@
 #include "game.h"
+#include "textures.h"   // ENT_FRAMES / ENT_ROWS / DOG_FRAMES: the sprite-sheet layout
 #include "raymath.h"
 #include <cmath>
 #include "textures.h"   // ENT_FRAMES / DOG_FRAMES: how many frames each walk sheet holds
@@ -25,6 +26,41 @@ static void gaitFrames(float phase, int frames, int &f0, int &f1, float &t) {
     f0 = (int)u % frames;
     f1 = (f0 + 1) % frames;
     t = u - floorf(u);
+}
+
+// Every size and offset on the HUD was authored against the 1440x850 window the
+// game opens in, and only the title card ever branched on resolution — so on a
+// 4K display the whole thing shrank to an unreadable smear along the edges.
+// hud() scales one of those numbers to the window in hand; every DrawText size
+// and every offset measured from a screen edge goes through it. Fractions of the
+// screen (sh/2, sw/3) are already resolution-independent and must not.
+//
+// The viewmodel scale (k = 1.25f in the draw* functions) is deliberately NOT
+// this: that one is in gun-local metres and has nothing to do with pixels.
+static int hud(float px) {
+    int v = (int)(px * GetScreenHeight() / 850.0f + 0.5f);
+    return v < 1 ? 1 : v;
+}
+
+// Nothing on the HUD sat on anything, so the bottom-left inventory block was
+// already illegible over the Poolrooms' white tile at the window's own size.
+// One dark offset behind every string — scaled with the text, and carrying the
+// text's own alpha so a line fading in doesn't leave its shadow behind.
+static void hudText(const char *t, int x, int y, int px, Color c) {
+    int o = hud(1);
+    DrawText(t, x + o, y + o, px, Fade(BLACK, c.a / 255.0f * 0.7f));
+    DrawText(t, x, y, px, c);
+}
+
+// Centred on cx. Measuring at the scaled size rather than the authored one is
+// the whole point: measure at 16 and draw at 38 and the line sits off-centre.
+static void hudTextC(const char *t, int cx, int y, int px, Color c) {
+    hudText(t, cx - MeasureText(t, px) / 2, y, px, c);
+}
+
+// Right-aligned so its right edge lands on rx.
+static void hudTextR(const char *t, int rx, int y, int px, Color c) {
+    hudText(t, rx - MeasureText(t, px), y, px, c);
 }
 
 void Game::renderScene(double now) {
@@ -234,10 +270,14 @@ void Game::renderScene(double now) {
             DrawCube(c.pos, 0.05f, 0.05f, 0.05f, cc);
         }
     }
-    for (const auto &mark : chalk) {
+    for (const auto &mark : chalk[level]) {
         const Vector3 &cm = mark.pos;
         if (fabsf(cm.x-px) > 30 || fabsf(cm.z-pz) > 30) continue;
-        Color cc = lit({228,228,218,210}, propLum(cm.x,cm.y+0.1f,cm.z));
+        // The stranger's chalk has been down longer than yours: duller, yellower,
+        // further gone. Same arrow, so it reads as a mark first and as somebody
+        // else's a moment later, which is the order that lands.
+        Color cc = mark.mine ? lit({228,228,218,210}, propLum(cm.x,cm.y+0.1f,cm.z))
+                             : lit({186,180,156,150}, propLum(cm.x,cm.y+0.1f,cm.z));
         Vector3 along{cosf(mark.yaw),0,sinf(mark.yaw)}, side{-along.z,0,along.x};
         Vector3 tip = Vector3Add(cm,Vector3Scale(along,0.25f));
         Vector3 tail = Vector3Subtract(cm,Vector3Scale(along,0.25f));
@@ -347,11 +387,16 @@ void Game::renderScene(double now) {
         unsigned char al = cl8(255 * clampf(fogf * 1.6f, 0, 1) * dieA);
         // LEVEL FUN has its own resident; everywhere else it's Pirate Clark
         Texture2D &spr = (level == 4) ? texPartygoer : texEntity;
-        // The gait rides entStepAcc, which is also what fires his footfalls, so
-        // the foot plants on the sound rather than near it. That accumulator
-        // wraps once per step and a walk is two steps, hence the parity bit.
+        // The gait rides ent.gait, which is also what fires his footfalls, so
+        // the foot plants on the sound rather than near it — by construction,
+        // off one number, rather than by two accumulators agreeing.
+        //
+        // ent.gait counts strides (an integer is a foot landing) and a walk
+        // cycle is two of them, hence the halving. It counts distance actually
+        // covered, in every state, so a Clark grinding against a wall no longer
+        // walks on the spot and a fleeing one has legs at all.
         int ef0, ef1; float et;
-        float gph = ((float)entStepAcc / ENT_STRIDE + entStepPar) * 0.5f;
+        float gph = ent.gait * 0.5f;
         gaitFrames(gph, ENT_FRAMES, ef0, ef1, et);
         // A walk rises and falls twice a cycle, once per step, highest at
         // mid-stance and lowest as a foot lands — so the bob is |sin| of the
@@ -471,6 +516,25 @@ void Game::renderUI(double now) {
 
     int sw = GetScreenWidth(), sh = GetScreenHeight();
 
+    if (inMenu && deathT > 0) {   // the run just ended; the card holds the title screen
+        DrawRectangle(0, 0, sw, sh, Fade(Color{ 10, 3, 3, 255 }, 0.88f));
+        float a = clampf(deathT > DEATH_CARD - 0.6f ? (DEATH_CARD - deathT) / 0.6f : deathT / 1.0f, 0, 1);
+        hudTextC(deathTitle, sw / 2, sh / 3, hud(54), Fade({ 178, 34, 24, 255 }, a));
+        hudTextC(TextFormat("%s took you on %s", deathBy, LEVELS[deathLevel].name),
+                 sw / 2, sh / 3 + hud(74), hud(20), Fade({ 176, 132, 122, 255 }, a * 0.95f));
+        hudTextC(TextFormat("%02d:%02d   ·   %d m wandered   ·   %d clark%s put down",
+                            (int)deathTime / 60, (int)deathTime % 60, deathM,
+                            deathKills, deathKills == 1 ? "" : "s"),
+                 sw / 2, sh / 3 + hud(106), hud(18), Fade({ 150, 118, 110, 255 }, a * 0.9f));
+        hudTextC(TextFormat("run %d   ·   deepest ever  %s   ·   longest run  %02d:%02d",
+                            deathCount, LEVELS[bestDeep].name, bestRun / 60, bestRun % 60),
+                 sw / 2, sh / 3 + hud(140), hud(16), Fade({ 130, 106, 100, 255 }, a * 0.8f));
+        if (deathT < DEATH_CARD - 1.6f)
+            hudTextC("press any key to descend again", sw / 2, sh * 2 / 3 + hud(30), hud(18),
+                     Fade({ 168, 144, 112, 255 }, a * (0.45f + 0.55f * (0.5f + 0.5f * sinf(timeF * 3.0f)))));
+        EndDrawing();
+        return;
+    }
     if (inMenu) {   // title card over the drifting world
         // darken the top and bottom so the type reads over any hall
         DrawRectangleGradientV(0, 0, sw, sh / 2, Fade(BLACK, 0.62f), Fade(BLACK, 0.12f));
@@ -478,33 +542,40 @@ void Game::renderUI(double now) {
         const char *t1 = "T H E   B A C K R O O M S";
         // faint flicker on the title, like a tired fluorescent
         float fl = 0.86f + 0.14f * sinf(timeF * 27.0f) * sinf(timeF * 41.3f + 0.7f);
-        int ts = sh > 720 ? 66 : 48;
+        int ts = hud(62);
         int tw = MeasureText(t1, ts);
-        DrawText(t1, sw / 2 - tw / 2 + 2, sh / 3 + 2, ts, Fade(BLACK, 0.55f));   // drop shadow
+        DrawText(t1, sw / 2 - tw / 2 + hud(2), sh / 3 + hud(2), ts, Fade(BLACK, 0.55f));   // drop shadow
         DrawText(t1, sw / 2 - tw / 2, sh / 3, ts, Fade({ 228, 214, 158, 255 }, fl));
         const char *sub = "Level 0 · and everything under it";
-        DrawText(sub, sw / 2 - MeasureText(sub, 20) / 2, sh / 3 + ts + 16, 20, { 150, 142, 108, 220 });
+        hudTextC(sub, sw / 2, sh / 3 + ts + hud(16), hud(20), { 150, 142, 108, 220 });
         // pulsing prompt
         float pl = 0.45f + 0.55f * (0.5f + 0.5f * sinf(timeF * 3.0f));
         const char *pr = "press any key to descend";
-        DrawText(pr, sw / 2 - MeasureText(pr, 24) / 2, sh * 2 / 3, 24, Fade({ 210, 198, 150, 255 }, pl));
+        hudTextC(pr, sw / 2, sh * 2 / 3, hud(24), Fade({ 210, 198, 150, 255 }, pl));
         if (bestEsc || bestKill || bestM || bestWins) {
             const char *tb = bestTapes > 0
                 ? TextFormat("best:  %d got out   ·   %d clark%s put down   ·   %d m wandered   ·   %d tape%s found",
                              bestWins, bestKill, bestKill == 1 ? "" : "s", bestM, bestTapes, bestTapes == 1 ? "" : "s")
                 : TextFormat("best:  %d got out   ·   %d clark%s put down   ·   %d m wandered",
                              bestWins, bestKill, bestKill == 1 ? "" : "s", bestM);
-            DrawText(tb, sw / 2 - MeasureText(tb, 16) / 2, sh * 2 / 3 + 40, 16, { 140, 132, 100, 200 });
+            hudTextC(tb, sw / 2, sh * 2 / 3 + hud(40), hud(16), { 140, 132, 100, 200 });
         }
+        if (bestDeep > 0 || bestRun > 0)
+            hudTextC(TextFormat("deepest  %s   ·   longest run  %02d:%02d", LEVELS[bestDeep].name,
+                                bestRun / 60, bestRun % 60),
+                     sw / 2, sh * 2 / 3 + hud(62), hud(16), { 140, 132, 100, 200 });
         const char *tc = TextFormat("WASD move    SHIFT run    F flashlight    1/2/4 item    bank %d doubloons to leave",
                                     ESCAPE_COST);
-        DrawText(tc, sw / 2 - MeasureText(tc, 15) / 2, sh - 42, 15, { 128, 122, 96, 170 });
+        hudTextC(tc, sw / 2, sh - hud(42), hud(15), { 128, 122, 96, 170 });
         EndDrawing();
         return;
     }
 
     if (drinkT <= 0 && (weapon == WEAPON_REVOLVER || (weapon == WEAPON_FLARE && flares > 0)))
-        DrawCircle(sw / 2, sh / 2, 1.5f, Fade({230,220,190,110}, 1-aimBlend));
+        // Scaled like every other HUD element (BUG-10), and faded out as the
+        // sights come up (the iron-sight work): with the revolver aimed the
+        // blade is the sight, and a dot floating over it reads as a smudge.
+        DrawCircle(sw / 2, sh / 2, hud(1.5f), Fade({230,220,190,110}, 1-aimBlend));
 
     if (elapsed < 9.0 && winT <= 0) {   // intro (suppressed while the escape screen is up)
         float a = 1.0f - clampf((float)elapsed / 3.0f, 0, 1);
@@ -518,126 +589,114 @@ void Game::renderUI(double now) {
             if (*p == ' ') t1[ti++] = ' ';
         }
         t1[ti ? ti - 1 : 0] = 0;
-        DrawText(t1, sw / 2 - MeasureText(t1, 52) / 2, sh / 3, 52, Fade({ 220, 205, 150, 255 }, ta));
+        hudTextC(t1, sw / 2, sh / 3, hud(52), Fade({ 220, 205, 150, 255 }, ta));
         const char *t2 = "if you're reading this, you've already noclipped";
-        DrawText(t2, sw / 2 - MeasureText(t2, 18) / 2, sh / 3 + 66, 18, Fade({ 160, 150, 110, 255 }, ta * 0.9f));
+        hudTextC(t2, sw / 2, sh / 3 + hud(66), hud(18), Fade({ 160, 150, 110, 255 }, ta * 0.9f));
         const char *t3 = "WASD walk   SHIFT run   CTRL crouch   SPACE jump   F flashlight   1/2/4 item   3 drink   M chalk   E vend/pick up";
-        DrawText(t3, sw / 2 - MeasureText(t3, 16) / 2, sh - 60, 16, Fade({ 140, 132, 100, 255 }, ta * 0.8f));
+        hudTextC(t3, sw / 2, sh - hud(60), hud(16), Fade({ 140, 132, 100, 255 }, ta * 0.8f));
         if (bestEsc || bestKill || bestM || bestWins) {
             const char *tb = bestTapes > 0
                 ? TextFormat("best: %d got out  ·  %d clark%s put down  ·  %d m wandered  ·  %d tape%s found",
                              bestWins, bestKill, bestKill == 1 ? "" : "s", bestM, bestTapes, bestTapes == 1 ? "" : "s")
                 : TextFormat("best: %d got out  ·  %d clark%s put down  ·  %d m wandered",
                              bestWins, bestKill, bestKill == 1 ? "" : "s", bestM);
-            DrawText(tb, sw / 2 - MeasureText(tb, 16) / 2, sh / 3 + 98, 16, Fade({ 150, 140, 105, 255 }, ta * 0.8f));
+            hudTextC(tb, sw / 2, sh / 3 + hud(98), hud(16), Fade({ 150, 140, 105, 255 }, ta * 0.8f));
         }
         const char *tg = TextFormat("bank %d doubloons · fight Clark for them · then take a door out", ESCAPE_COST);
-        DrawText(tg, sw / 2 - MeasureText(tg, 16) / 2, sh / 3 + 128, 16, Fade({ 120, 200, 140, 255 }, ta * 0.75f));
+        hudTextC(tg, sw / 2, sh / 3 + hud(128), hud(16), Fade({ 120, 200, 140, 255 }, ta * 0.75f));
     }
     if (winT > 0) {   // you bought your way out and found a true door
         float a = clampf(winT > 7.2f ? (8.0f - winT) / 0.8f : winT / 7.2f, 0, 1);
         DrawRectangle(0, 0, sw, sh, Fade(Color{ 6, 12, 8, 255 }, a * 0.93f));
         const char *t = "YOU ESCAPED THE BACKROOMS";
-        DrawText(t, sw / 2 - MeasureText(t, 54) / 2, sh / 3, 54, Fade({ 120, 235, 145, 255 }, a));
+        hudTextC(t, sw / 2, sh / 3, hud(54), Fade({ 120, 235, 145, 255 }, a));
         const char *t2 = TextFormat("out the true door   ·   %02d:%02d   ·   %d m wandered   ·   %d clark%s put down",
                                     (int)winTime / 60, (int)winTime % 60, winM, winKills, winKills == 1 ? "" : "s");
-        DrawText(t2, sw / 2 - MeasureText(t2, 20) / 2, sh / 3 + 74, 20, Fade({ 150, 200, 160, 255 }, a * 0.95f));
+        hudTextC(t2, sw / 2, sh / 3 + hud(74), hud(20), Fade({ 150, 200, 160, 255 }, a * 0.95f));
         const char *t3 = TextFormat("escape #%d   ·   best %d", winCount, bestWins);
-        DrawText(t3, sw / 2 - MeasureText(t3, 18) / 2, sh / 3 + 106, 18, Fade({ 130, 175, 140, 255 }, a * 0.9f));
+        hudTextC(t3, sw / 2, sh / 3 + hud(106), hud(18), Fade({ 130, 175, 140, 255 }, a * 0.9f));
         const char *t4 = "...but the backrooms are patient. a new descent begins.";
-        DrawText(t4, sw / 2 - MeasureText(t4, 16) / 2, sh - 78, 16, Fade({ 120, 150, 125, 255 }, a * 0.8f));
-    }
-    if (caughtT > 0) {
-        DrawRectangle(0, 0, sw, sh, Fade(BLACK, clampf(caughtT / 2.4f * 1.8f, 0, 1)));
-        if (caughtT > 0.5f) {
-            const char *t = (level == 4) ? "THE PARTYGOER FOUND YOU" : "PIRATE CLARK FOUND YOU";
-            DrawText(t, sw / 2 - MeasureText(t, 60) / 2, sh / 2 - 30, 60, { 170, 20, 12, 255 });
-            const char *t2 = TextFormat("you wake up somewhere else   ·   %d m wandered   ·   taken %d time%s",
-                                        (int)distWalked, caughtCount, caughtCount == 1 ? "" : "s");
-            DrawText(t2, sw / 2 - MeasureText(t2, 18) / 2, sh / 2 + 46, 18, { 120, 90, 80, 255 });
-        }
+        hudTextC(t4, sw / 2, sh - hud(78), hud(16), Fade({ 120, 150, 125, 255 }, a * 0.8f));
     }
     if (fellT > 0) {   // the carpet gave way
         float a = clampf(fellT / 4.0f, 0, 1);
         DrawRectangle(0, 0, sw, sh, Fade(BLACK, a * 0.5f * clampf((fellT - 3.4f) / 0.6f, 0, 1)));
         const char *t = "THE FLOOR GIVES WAY";
-        DrawText(t, sw / 2 - MeasureText(t, 46) / 2, sh / 2 - 30, 46, Fade({ 200, 180, 120, 255 }, a));
+        hudTextC(t, sw / 2, sh / 2 - hud(30), hud(46), Fade({ 200, 180, 120, 255 }, a));
         const char *t2 = "...there was another floor under this one";
-        DrawText(t2, sw / 2 - MeasureText(t2, 18) / 2, sh / 2 + 30, 18, Fade({ 150, 138, 110, 255 }, a * 0.9f));
+        hudTextC(t2, sw / 2, sh / 2 + hud(30), hud(18), Fade({ 150, 138, 110, 255 }, a * 0.9f));
     }
     if (escapeT > 0) {
         float a = clampf(escapeT > 5.4f ? (6.0f - escapeT) / 0.6f : escapeT / 5.4f, 0, 1);
         DrawRectangle(0, 0, sw, sh, Fade(WHITE, a * (escapeT > 5.4f ? 0.9f : 0.12f)));
         const char *t = "YOU FOUND AN EXIT";
-        DrawText(t, sw / 2 - MeasureText(t, 48) / 2, sh / 2 - 60, 48, Fade({ 235, 228, 200, 255 }, a));
+        hudTextC(t, sw / 2, sh / 2 - hud(60), hud(48), Fade({ 235, 228, 200, 255 }, a));
         const char *t2 = TextFormat("...it leads to %s.  %d m wandered  ·  %d escape%s  ·  %s",
                                     LEVELS[level].name, (int)distWalked, escapeCount, escapeCount == 1 ? "" : "s",
                                     TextFormat("%02d:%02d", (int)elapsed / 60, (int)elapsed % 60));
-        DrawText(t2, sw / 2 - MeasureText(t2, 18) / 2, sh / 2 + 4, 18, Fade({ 180, 170, 140, 255 }, a));
+        hudTextC(t2, sw / 2, sh / 2 + hud(4), hud(18), Fade({ 180, 170, 140, 255 }, a));
     }
     if (killT > 0) {
         float a = clampf(killT / 3.0f, 0, 1);
         const char *t = (level == 4) ? "THE PARTYGOER IS DOWN" : "PIRATE CLARK IS DOWN";
-        DrawText(t, sw / 2 - MeasureText(t, 44) / 2, sh / 2 - 96, 44, Fade({ 205, 60, 40, 255 }, a));
+        hudTextC(t, sw / 2, sh / 2 - hud(96), hud(44), Fade({ 205, 60, 40, 255 }, a));
         const char *t2 = TextFormat("...but nothing stays down, down here   ·   %d put down", killCount);
-        DrawText(t2, sw / 2 - MeasureText(t2, 18) / 2, sh / 2 - 44, 18, Fade({ 150, 122, 100, 255 }, a * 0.9f));
+        hudTextC(t2, sw / 2, sh / 2 - hud(44), hud(18), Fade({ 150, 122, 100, 255 }, a * 0.9f));
     }
     if (closeCallT > 0) {   // it stood right beside you, and never knew
         float a = clampf(closeCallT > 2.3f ? (3.0f - closeCallT) / 0.7f : closeCallT / 1.4f, 0, 1);
         const char *t = "IT STOOD RIGHT THERE";
-        DrawText(t, sw / 2 - MeasureText(t, 30) / 2, sh / 2 - 130, 30, Fade({ 200, 70, 60, 255 }, a));
+        hudTextC(t, sw / 2, sh / 2 - hud(130), hud(30), Fade({ 200, 70, 60, 255 }, a));
         const char *t2 = "...and never saw you";
-        DrawText(t2, sw / 2 - MeasureText(t2, 15) / 2, sh / 2 - 98, 15, Fade({ 160, 130, 120, 220 }, a * 0.9f));
+        hudTextC(t2, sw / 2, sh / 2 - hud(98), hud(15), Fade({ 160, 130, 120, 220 }, a * 0.9f));
     }
-    if (deckNoteT > 0 && winT <= 0 && caughtT <= 0) {   // the deck just did something
+    if (deckNoteT > 0 && winT <= 0 && deathT <= 0) {   // the deck just did something
         float a = clampf(deckNoteT > 2.0f ? (2.6f - deckNoteT) / 0.6f : deckNoteT / 1.2f, 0, 1);
-        DrawText(deckNote, sw / 2 - MeasureText(deckNote, 16) / 2, sh - 150, 16,
-                 Fade({ 196, 168, 214, 230 }, a * 0.9f));
+        hudTextC(deckNote, sw / 2, sh - hud(150), hud(16), Fade({ 196, 168, 214, 230 }, a * 0.9f));
     }
     if (tapeFoundT > 0) {   // a cassette recovered — someone else's fragment of the descent
         float a = clampf(tapeFoundT > 2.6f ? (3.2f - tapeFoundT) / 0.6f : tapeFoundT / 1.6f, 0, 1);
         const char *t = "TAPE RECOVERED";
-        DrawText(t, sw / 2 - MeasureText(t, 22) / 2, sh - 150, 22, Fade({ 190, 178, 150, 255 }, a));
-        DrawText(tapeLine, sw / 2 - MeasureText(tapeLine, 15) / 2, sh - 122, 15, Fade({ 150, 140, 118, 230 }, a * 0.9f));
+        hudTextC(t, sw / 2, sh - hud(150), hud(22), Fade({ 190, 178, 150, 255 }, a));
+        hudTextC(tapeLine, sw / 2, sh - hud(122), hud(15), Fade({ 150, 140, 118, 230 }, a * 0.9f));
     }
     if (!IsCursorHidden() && !shotPath) {
         const char *t = "click to capture mouse";
-        DrawText(t, sw / 2 - MeasureText(t, 20) / 2, sh / 2 + 80, 20, { 200, 190, 150, 200 });
+        hudTextC(t, sw / 2, sh / 2 + hud(80), hud(20), { 200, 190, 150, 200 });
     }
-    DrawText(TextFormat("%d", GetFPS()), sw - MeasureText(TextFormat("%d", GetFPS()), 16) - 14, 12, 16, { 190, 180, 140, 150 });
+    hudTextR(TextFormat("%d", GetFPS()), sw - hud(14), hud(12), hud(16), { 190, 180, 140, 150 });
     // persistent flashlight reminder until first use; small state dot + charge bar after
     if (flashOn) everFlashed = true;
     if (!everFlashed && elapsed > 9.0)
         // NOT an em dash: raylib's default font stops at Latin-1, and anything
         // past it draws as a literal "?" on the HUD. U+00B7 is inside the range.
-        DrawText("F · flashlight", sw - MeasureText("F · flashlight", 16) - 16, sh - 28, 16, { 190, 180, 140, 160 });
+        hudTextR("F · flashlight", sw - hud(16), sh - hud(28), hud(16), { 190, 180, 140, 160 });
     else if (flashOn)
-        DrawText("[ flashlight ]", sw - MeasureText("[ flashlight ]", 14) - 16, sh - 26, 14, { 235, 225, 180, 120 });
+        hudTextR("[ flashlight ]", sw - hud(16), sh - hud(26), hud(14), { 235, 225, 180, 120 });
     {   // your grip on the place: always up, because it is always going down
-        const int w = 90, x = sw - w - 16, y = sh - 60;
-        DrawRectangle(x - 1, y - 1, w + 2, 7, { 0, 0, 0, 120 });
+        const int w = hud(90), x = sw - w - hud(16), y = sh - hud(60), th = hud(5);
+        DrawRectangle(x - hud(1), y - hud(1), w + hud(2), th + hud(2), { 0, 0, 0, 120 });
         // steady cream, souring toward red as it empties; the last stretch pulses
         Color bar = sanity > 0.5f  ? Color{ 168, 196, 176, 165 }
                   : sanity > 0.25f ? Color{ 214, 190, 120, 180 }
                                    : Color{ 214, 96, 84, 200 };
         if (sanity < 0.25f) bar.a = (unsigned char)(150 + 80 * (0.5f + 0.5f * sinf((float)now * 4.2f)));
-        DrawRectangle(x, y, (int)(w * sanity), 5, bar);
-        DrawText("grip", x - MeasureText("grip", 12) - 6, y - 4, 12, { 150, 142, 122, 120 });
+        DrawRectangle(x, y, (int)(w * sanity), th, bar);
+        hudTextR("grip", x - hud(6), y - hud(4), hud(12), { 150, 142, 122, 120 });
     }
-    if (sanityWarnT > 0 && winT <= 0 && caughtT <= 0) {   // it just slipped a notch
+    if (sanityWarnT > 0 && winT <= 0 && deathT <= 0) {   // it just slipped a notch
         float a = clampf(sanityWarnT / 1.2f, 0, 1) * clampf((4.0f - sanityWarnT) / 0.4f, 0, 1);
-        DrawText(sanityLine, sw / 2 - MeasureText(sanityLine, 19) / 2, sh / 2 + 96, 19,
-                 Fade({ 206, 176, 176, 255 }, a * 0.9f));
+        hudTextC(sanityLine, sw / 2, sh / 2 + hud(96), hud(19), Fade({ 206, 176, 176, 255 }, a * 0.9f));
     }
     if (flashOn || battery < 0.99f) {   // charge bar, once it's been used or spent at all
-        const int w = 90, x = sw - w - 16, y = sh - 44;   // one row below the grip meter
-        DrawRectangle(x - 1, y - 1, w + 2, 7, { 0, 0, 0, 120 });
+        const int w = hud(90), x = sw - w - hud(16), y = sh - hud(44), th = hud(5);   // one row below the grip meter
+        DrawRectangle(x - hud(1), y - hud(1), w + hud(2), th + hud(2), { 0, 0, 0, 120 });
         Color bar = battery < 0.15f ? Color{ 220, 90, 70, 190 } : Color{ 200, 190, 150, 150 };
-        DrawRectangle(x, y, (int)(w * battery), 5, bar);
+        DrawRectangle(x, y, (int)(w * battery), th, bar);
         if (flashOn && battery < 0.15f) {
             const char *t = "battery low";
             float pulse = 0.5f + 0.5f * sinf((float)now * 5.0f);
-            DrawText(t, sw - MeasureText(t, 13) - 16, sh - 78, 13, Fade({ 220, 120, 100, 220 }, pulse));   // clear of the grip meter
+            hudTextR(t, sw - hud(16), sh - hud(78), hud(13), Fade({ 220, 120, 100, 220 }, pulse));   // clear of the grip meter
         }
     }
     {   // inventory, bottom-left; the selected weapon is lit
@@ -647,7 +706,7 @@ void Game::renderUI(double now) {
         // there are slots, so a held pointer comes back as a later line's text.
         Color selc = { 235, 200, 130, 210 }, dimc = { 150, 138, 112, 110 };
         if (tapes > 0)
-            DrawText(TextFormat("tapes  ×%d", tapes), 16, sh - 138, 16, { 172, 162, 190, 170 });
+            hudText(TextFormat("tapes  ×%d", tapes), hud(16), sh - hud(138), hud(16), { 172, 162, 190, 170 });
         if (coins > 0 || wayOpen())   // doubloons double as your ticket out (ESCAPE_COST to leave)
             DrawText(TextFormat("doubloons  ×%d / %d", coins, ESCAPE_COST), 16, sh - 116, 16,
                      wayOpen() ? Color{ 120, 230, 140, 210 } : Color{ 214, 178, 92, 170 });
@@ -663,20 +722,20 @@ void Game::renderUI(double now) {
                  : deck.playing ? TextFormat("4  tape player  [playing  %ds]", (int)deck.t + 1)
                  : tapes > 0    ? "4  tape player  [tape ready]"
                                 : "4  tape player  [no tape]",
-                 16, sh - 28, 16,
-                 weapon == WEAPON_DECK ? (deck.playing ? Color{ 205, 150, 235, 220 } : selc) : dimc);
+                hud(16), sh - hud(28), hud(16),
+                weapon == WEAPON_DECK ? (deck.playing ? Color{ 205, 150, 235, 220 } : selc) : dimc);
     }
-    if (wayOpen() && winT <= 0 && caughtT <= 0 && escapeT <= 0) {   // you can leave now — go find a door
+    if (wayOpen() && winT <= 0 && deathT <= 0 && escapeT <= 0) {   // you can leave now — go find a door
         const char *t = "the doors know you now  ·  find one that isn't cursed";
         float pl = 0.55f + 0.45f * sinf((float)now * 2.5f);
-        DrawText(t, sw / 2 - MeasureText(t, 20) / 2, 70, 20, Fade({ 120, 235, 145, 255 }, pl));
+        hudTextC(t, sw / 2, hud(70), hud(20), Fade({ 120, 235, 145, 255 }, pl));
     }
     if (stamina < 0.98f) {   // sprint bar, bottom centre
-        const int w = 220, x = sw / 2 - w / 2, y = sh - 42;
-        DrawRectangle(x - 1, y - 1, w + 2, 8, { 0, 0, 0, 120 });
-        DrawRectangle(x, y, (int)(w * stamina), 6,
+        const int w = hud(220), x = sw / 2 - w / 2, y = sh - hud(42), th = hud(6);
+        DrawRectangle(x - hud(1), y - hud(1), w + hud(2), th + hud(2), { 0, 0, 0, 120 });
+        DrawRectangle(x, y, (int)(w * stamina), th,
                       sprintExhausted ? Color{190,100,66,180} : Color{200,180,120,160});
-        if (sprintExhausted) DrawText("catch your breath", x+48, y+11, 12, {195,156,119,180});
+        if (sprintExhausted) hudText("catch your breath", x + hud(48), y + hud(11), hud(12), {195,156,119,180});
     }
     // Say which of the three states you are actually in. This line used to read
     // "hold still" whether or not stillness did anything, which was the one
@@ -696,39 +755,39 @@ void Game::renderUI(double now) {
         coverCol = { 180, 170, 140, 120 };
     }
     if (coverLine)
-        DrawText(coverLine, sw / 2 - MeasureText(coverLine, 14) / 2, sh - 62, 14, coverCol);
+        hudTextC(coverLine, sw / 2, sh - hud(62), hud(14), coverCol);
     if (level == 3 && valveT > 0) {   // just closed one
         float a = clampf(valveT / 1.6f, 0, 1);
         if (pipesShut) {
             const char *t = "THE PIPES GO QUIET";
-            DrawText(t, sw / 2 - MeasureText(t, 34) / 2, sh / 2 - 110, 34, Fade({ 120, 230, 145, 255 }, a));
+            hudTextC(t, sw / 2, sh / 2 - hud(110), hud(34), Fade({ 120, 230, 145, 255 }, a));
             const char *t2 = "...and the halls give up what they were holding";
-            DrawText(t2, sw / 2 - MeasureText(t2, 16) / 2, sh / 2 - 74, 16, Fade({ 150, 200, 160, 255 }, a * 0.9f));
+            hudTextC(t2, sw / 2, sh / 2 - hud(74), hud(16), Fade({ 150, 200, 160, 255 }, a * 0.9f));
         } else {
             const char *t = TextFormat("VALVE SHUT   %d / %d", (int)valvesTurned.size(), VALVES_NEEDED);
-            DrawText(t, sw / 2 - MeasureText(t, 26) / 2, sh / 2 - 100, 26, Fade({ 210, 180, 120, 255 }, a));
+            hudTextC(t, sw / 2, sh / 2 - hud(100), hud(26), Fade({ 210, 180, 120, 255 }, a));
         }
     }
     if (level == 3 && !valvesTurned.empty() && !pipesShut)   // standing tally
-        DrawText(TextFormat("valves  %d / %d", (int)valvesTurned.size(), VALVES_NEEDED),
-                 16, sh - 138, 16, { 198, 150, 96, 175 });
+        hudText(TextFormat("valves  %d / %d", (int)valvesTurned.size(), VALVES_NEEDED),
+                hud(16), sh - hud(138), hud(16), { 198, 150, 96, 175 });
     if (paused) {
         DrawRectangle(0, 0, sw, sh, Fade(BLACK, 0.55f));
         const char *t = "P A U S E D";
-        DrawText(t, sw / 2 - MeasureText(t, 46) / 2, sh / 2 - 42, 46, { 225, 212, 160, 235 });
+        hudTextC(t, sw / 2, sh / 2 - hud(42), hud(46), { 225, 212, 160, 235 });
         const char *t2 = "P to resume";
-        DrawText(t2, sw / 2 - MeasureText(t2, 18) / 2, sh / 2 + 16, 18, { 165, 155, 120, 200 });
+        hudTextC(t2, sw / 2, sh / 2 + hud(16), hud(18), { 165, 155, 120, 200 });
     }
     if (debugHud) {
-        DrawText(TextFormat("%d fps  pos(%.0f, %.0f)  chunks %d  entity %s  d=%.0fm  hidden=%d  batt=%.2f",
+        hudText(TextFormat("%d fps  pos(%.0f, %.0f)  chunks %d  entity %s  d=%.0fm  hidden=%d  batt=%.2f",
                             GetFPS(), px, pz, (int)world.chunks.size(),
                             ent.st == EState::Hidden ? "hidden" : ent.st == EState::Stalk ? "STALKING"
                                 : ent.st == EState::Chase ? "CHASING"
                                 : ent.st == EState::Flee ? "FLEEING" : "DYING",
                             entDist > 1e8 ? 0.0f : entDist, hidden ? 1 : 0, battery),
-                 12, 12, 18, { 230, 220, 160, 220 });
-        DrawText("dev: B blackout   E spawn   C chase   H hide   G flares   N next level",
-                 12, 34, 16, { 200, 190, 140, 180 });
+                hud(12), hud(12), hud(18), { 230, 220, 160, 220 });
+        hudText("dev: B blackout   E spawn   C chase   H hide   G flares   N next level",
+                hud(12), hud(34), hud(16), { 200, 190, 140, 180 });
     }
     EndDrawing();
 }

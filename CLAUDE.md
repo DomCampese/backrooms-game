@@ -62,7 +62,8 @@
   brightness unrelated to where they actually stood.
 - The prop atlas is 1024x512: original cardboard/metal occupies the left half;
   veneer and fabric occupy the right. Flat metal UV is (0.375,0.75).
-- Fluorescent emissive geometry is at wallH-0.12, matching the light height.
+- Fluorescent emissive geometry is 0.12 below the ceiling of the cell it hangs
+  in (`ceilY`, not a fixed wallH), matching the light height.
 - Revolver and flare are now 3D; their geometry shares the viewmodel shadow and
   ambient handling. Preserve depth testing and wall clearance.
 - Native macOS startup checks for an active display before InitWindow: raylib
@@ -184,6 +185,7 @@ Environment variables, all read at startup:
 | `BACKROOMS_SHOT=out.png` | headless: run, capture one frame, exit |
 | `BACKROOMS_SHOTFRAME=n` | which frame to capture (default 600); use ~150 for quick sweeps |
 | `BACKROOMS_SEED=n` | fix the world seed — repeatable maze |
+| `BACKROOMS_NOBLACKOUT=1` | never schedule a blackout (on by default under `BACKROOMS_SHOT`; pass `0` to shoot one) |
 | `BACKROOMS_LEVEL=n` | start on level n (0–4) |
 | `BACKROOMS_POS="x,z,yaw"` | start at a specific spot and heading, in world metres/radians |
 | `BACKROOMS_EXITS=1` | exit doors everywhere, for visual testing |
@@ -215,13 +217,21 @@ generation, run all five levels plus the menu and check for shader errors:
 tools/sweep.sh
 ```
 
-Then **look at the images**. Note that a Level 3 frame is *supposed* to look
-almost black — the Red Halls sit at a mean luma around 12 out of 255, so the
-regression shot for it is genuinely near-black and is not a broken shader or a
-blackout. Confirming that cost a build of the previous commit; take this line's
-word for it instead. (It was 16 before the fog started taking its brightness
-from the local light instead of a constant; an unlit corridor no longer glows
-at the far end, which is most of where the difference went.)
+It now **exits non-zero** on a shot that failed, on a shader-error line in any
+run log, and on any frame whose mean luma falls outside the per-level band in
+its own header. A failed shader compile does not crash — the frame goes black
+and the frame rate goes *up* — and until this landed the sweep exited 0 on a
+completely broken build. A clean exit is necessary, not sufficient: still
+**look at the images**.
+
+Note that a Level 3 frame is *supposed* to look almost black — the Red Halls sit
+at a mean luma around 12 out of 255, so the regression shot for it is genuinely
+near-black and is not a broken shader or a blackout. Confirming that cost a
+build of the previous commit; take this line's word for it, and the band table
+in `tools/sweep.sh` where the same number is written down. (It was 16 before the
+fog started taking its brightness from the local light instead of a constant; an
+unlit corridor no longer glows at the far end, which is most of where the
+difference went.)
 
 The sweep is a fixed spot in a corridor and it will not show you everything.
 Two shots worth taking by hand when you touch lighting, because each exercises
@@ -348,6 +358,25 @@ splits any rect at least `2*MINR - 1` wide computes its cut range as
 exits with a bare `Floating point exception` and no other output, from a line
 that looks like arithmetic on room sizes rather than a division. A side needs
 `2*MINR` to hold two rooms, not `2*MINR - 1`.
+**Replacing one quad with a quad per cell costs 4% of the frame, for nothing.**
+The ceiling used to be a single chunk-wide quad. Making it per-cell so a raised
+deck could carry its ceiling up turned 1 quad per chunk into 256 coplanar ones,
+and elevation touches about 5% of cells, so 95% of that was the same flat
+ceiling drawn 256 times: `tools/bench.sh` read 1.043 on Level 0, which has no
+raised cells at all. Greedy-meshing equal-height runs back together gives a flat
+chunk its single quad back (0.986, i.e. noise) and only pays where the ceiling
+actually steps. Any per-cell surface that is usually uniform wants the same
+treatment — and `bench.sh` will tell you, where a screenshot will not.
+
+**A cross-chunk lookup in the mesher pulls neighbouring chunks into existence.**
+`ceilY(gi + 1, gk)` at a chunk edge calls `data()` on the neighbour and
+generates it. That is correct and the floor mesher already did it, but it moved
+`chunks=` in the capture banner from 40 to 45, and what a capture contains at a
+given frame follows from that. If a frame gains distant geometry after a mesher
+change and you cannot see why, check `chunks=` before you go looking in the
+renderer. It is *not*, however, where Level 4's differing pixels in a
+regression diff come from: those are its balloons, which bob on wall-clock time
+and move with any frame-rate wobble.
 **A guard written against absolute zero breaks the moment the floor moves.**
 The trapdoor's trigger was `py > -0.05f`, meaning "you are standing at floor
 level and not falling into a pit". Dishing the rotten patches 8.5 cm put the
@@ -390,19 +419,46 @@ four metres away — which is exactly when it had a job to do. Stand small decal
 geometry ~1.5 mm off its host surface. A close-up screenshot will not catch
 this; check the thing at the distance it is actually used.
 
-**Blackouts are scheduled off wall-clock time, not frame count.** `applyLevel`
-sets `nextBlackout = GetTime() + 30 + rand*60`, so a headless capture is only
-repeatable if it lands before that window. The software rasteriser runs about
-2.5 fps, so `BACKROOMS_SHOTFRAME=150` is already ~60 s in and can capture a
-pitch-black frame that looks exactly like a broken shader. For iteration use
-`BACKROOMS_SHOTFRAME=80` (~30 s), which is inside the guaranteed-lit window
-and twice as fast. Level 2 never blacks out at all.
+**Blackouts are scheduled off wall-clock time, not frame count, and frame 80 is
+not safe from them.** `applyLevel` sets `nextBlackout = GetTime() + 30 + rand*60`,
+so the earliest one is 30 s in; the software rasteriser runs 2-3 fps, which puts
+`BACKROOMS_SHOTFRAME=80` at roughly 30-40 s — *inside* that window, not before
+it. This file used to claim frame 80 was "the guaranteed-lit window". It never
+was: two identical `tools/shot.sh` runs at seed 1337 produced one frame at mean
+luma 100 and one at 15, and the dark one looks exactly like the silent shader
+fallback, which is how it costs someone an hour.
+
+So headless captures no longer schedule blackouts at all — `BACKROOMS_SHOT`
+turns `noBlackout` on, and everything that sets `nextBlackout` goes through
+`Game::blackoutIn`, which returns `BLACKOUT_NEVER` in that mode. Pass
+`BACKROOMS_NOBLACKOUT=0` to shoot one on purpose; the F3 `B` key still forces
+one either way, because that is explicit. `blackoutIn` still *draws* its random
+number before discarding it, so a capture's `grng` stream stays aligned with a
+normal run's. Level 2 never blacks out regardless. Before this, `tools/shot.sh`
+at frame 200 came back at mean luma 3.4 — the frame was simply a blackout.
 
 **`pkill -f "some pattern"` can kill your own shell.** If the pattern appears
 in the command line of the shell running it — which it does whenever you type
 the command inline, or write a heredoc containing it — `pkill` matches itself
 and the shell dies with no output. Use `pkill -x Xvfb`, or put the command in
 a script file and run the file.
+
+**`tools/shot.sh`'s shader-error grep used to match a line nothing was wrong
+with.** Every headless run in this sandbox prints `error: XDG_RUNTIME_DIR is
+invalid or not set in the environment` from the audio/GLFW stack, and the filter
+was `grep -iE '...|ERROR:'` — case-insensitive, so it matched, so `shot.sh`
+exited 1, so `set -e` killed the sweep after level 0 with no output that looked
+like a cause. The `ERROR:` half is now case-sensitive, which is right anyway:
+`ERROR:` in capitals is raylib's own TraceLog prefix. Keep it that way, and
+never widen this filter with `-i` — it is the only thing that catches a silently
+failed shader compile.
+
+**`beginDescent` clears the per-run tallies, and `dieRun` calls it.** So
+anything you increment in `dieRun` before that call is wiped a line later:
+`deathCount` did exactly that and the death card cheerfully reported your first
+death on every run. A count that is supposed to outlive a descent — deaths, and
+the records — must be kept out of that reset list, with a comment saying why,
+because the reset list is otherwise the obvious place to add it.
 
 **Do not run two sweeps at once.** `tools/shot.sh` reuses a running Xvfb
 rather than killing and restarting one — the older scripts here killed it,
@@ -429,6 +485,22 @@ keyframes interpolate to themselves and are safe on both versions.
 `src/model_asset.cpp` is the only file allowed to know any of this — ask
 `ModelAsset` for the skeleton rather than reaching through `Model`.
 
+That interpolation also moves the *poses*, not just the API. The sampled reload
+reaches about 5% further at its extreme on 6.0 than on 5.5 — measured 0.2942 m
+model-space against the old 0.28 the regression harness asserted — so landing
+the 6.0 fix turned `make regression` red on `main` with nothing actually wrong:
+the rule is that the viewmodel stays inside 0.34 m, and `0.155 + 0.2942 × 0.48`
+is 0.296. **Assert the rule, not a proxy for it**, and give any threshold that
+stands in for a real constraint a stated margin. A check that fails on a rule
+the code does not have is worse than no check, because the next person relaxes
+the number instead of reading it.
+
+`tools/regression.cpp` also needs `BACKROOMS_TEST_ASSET_DIR` pointing at
+`tests/fixtures` or it exits immediately on its first `CHECK` — which reads as
+a broken build rather than a missing variable. `tools/sandbox-build.sh` has no
+regression target, so nothing in the repo tells you that; build it by hand with
+`src/*.cpp` minus `main.cpp` plus `tools/regression.cpp`.
+
 **raylib 6.0 redefined `SetSoundPan`'s argument without renaming it.** 5.5 took
 0..1 with **0 = hard right**; 6.0 takes -1..1 with **-1 = hard left**. The
 signature is identical and the mixer accepts any float, so old values keep
@@ -448,9 +520,11 @@ so a clip meant to loop has to begin and end somewhere quiet and be
 crossfaded, or the join clicks audibly.
 
 **`tools/pixdiff.py` needs Pillow, which a fresh sandbox does not have.**
-`pip install pillow` first, or every diff you try to run dies with
-`ModuleNotFoundError: No module named 'PIL'` — after the sweep you just waited
-fifteen minutes for.
+`tools/sandbox-setup.sh` now installs it, and pixdiff prints a one-line
+instruction instead of a traceback if it is still missing. Before that, every
+diff died with `ModuleNotFoundError: No module named 'PIL'` — after the sweep
+you had just waited fifteen minutes for. `pixdiff.py luma IMG...` prints each
+frame's mean luma, which is what `tools/sweep.sh` reads to catch a black frame.
 
 **A cross-run pixel diff is only meaningful if both runs hit the same frame
 rate.** The light flicker is `sin(t*31)*sin(t*47.3)` on wall-clock `GetTime()`,
@@ -463,6 +537,14 @@ binary against a changed one, both at 4 fps, produced 4 pixels out of 1.22 M.
 a diff, and re-shoot rather than reason about a mismatched pair. The frame rate
 varies with what else is running on the box, so this is not something you set —
 it is something you check.
+
+**Level 4 has a noise floor of its own, and it is about 0.014%.** Its balloons
+bob on `sinf(now * 0.8f + ...)` — wall clock, not frame count — so every balloon
+in the frame moves with any run-to-run frame-rate wobble, and the regression
+capture lands ~170 differing pixels in the middle-left bands against an
+*unchanged* binary. Twice now that has been read as evidence for a change that
+had nothing to do with it. The other four levels sit at single-digit pixels, so
+do not carry Level 4's floor over to them, or the reverse.
 
 **Game time is not wall-clock time.** `dt` is clamped, so each headless frame
 advances the simulation about 0.05 s while the wall clock advances ~0.25-0.3 s.
@@ -505,6 +587,114 @@ the lit surfaces looking fine, which does not present as a tone-curve problem �
 it presents as "why is Level 3 completely black now". Whatever compensates for
 that has to decay as ambient rises, or the one level whose ambient was never in
 the toe (the poolrooms, four times any other) blows out to white paper instead.
+
+**A HUD authored in pixels is a HUD that only works at one resolution.** Every
+`DrawText` size and every offset from a screen edge in `render.cpp` goes through
+`hud(px)`, which scales from `GetScreenHeight() / 850` — 850 being the height
+the window opens at, which is what all those numbers were eyeballed against.
+Fractions of the screen (`sh / 2`, `sw / 3`) are already independent of it and
+must *not* be scaled, or the layout drifts off centre. Draw HUD strings with
+`hudText` / `hudTextC` / `hudTextR` rather than `DrawText`: they put a scaled
+dark offset behind the string first, which is the only reason the bottom-left
+inventory block is legible over the Poolrooms' white tile. `hudTextC` measures
+at the *scaled* size — measure at 16 and draw at 38 and the line sits off
+centre. The viewmodel's `k = 1.25f` is not this: that one is in gun-local metres.
+
+**An actor's floor height is not the same number as the height it is drawn at.**
+`ent.dispY` / `Dog::dispY` are smoothed floor heights, and they now feed
+`collideCircle` and the shot hit tests as well as the billboard — the six actor
+`collideCircle` calls used to pass the default `feetY = 0`, so Clark crossed a
+drop as if it were flat and stood inside a loading dock. They are smoothed
+*after* movement each frame, so collision sees last frame's value; that is safe
+only because `canStep` refuses to route across anything taller than `MAX_STEP`
+and a spawn sets `dispY` exactly, so nothing ever legitimately stands on a cell
+whose riser it would otherwise be pushed off.
+
+**Vertical faces need three separate things to agree, or terrain is decorative.**
+`MAX_STEP` (world.h) is the whole rule: `gatherCellAABBs` emits a full-height
+blocker on any cell more than that above a neighbour, `canStep` refuses to route
+across one, and the mover leaves the floor instead of gliding down one. The
+generator *also* relaxes its own elevations to within `MAX_STEP` — without that
+pass, enforcing the rule seals every sunken lounge in the game into a pit you
+can fall into and not climb out of, because there are no stair meshes yet
+(WORLD-06). Two traps around it: `lineOfSight` walks the same AABB list, so a
+riser box would make an elevated cell opaque and blind anything standing on it —
+it tests `top >= wallH` to look at full-height blockers only. And pools are
+exempt on both sides: a pool floor is 0.6 m down, and a blocker there would
+override the `poolAt` branches that are what getting in and out of one *is*.
+
+**A rule the generator can no longer trigger still has to be tested.** The
+elevation relaxation means nothing the world produces is taller than `MAX_STEP`,
+so the riser blocker never fires in a normal run — exactly the shape of failure
+the relief-bump opt-out had. `tools/regression.cpp` therefore writes a 2.5 m
+terrace into a chunk by hand and asserts the box appears, that a body below is
+pushed back and a body on top is not, and that `canStep` refuses both ways.
+Assert the mechanism, not the map.
+
+**The head bob and the footstep are one phase, and it counts footfalls.**
+`bobPhase` gains 1 per stride, so an integer value is a foot landing: the step
+sound fires on the integer crossing and the bob is `-cos(2*PI*bobPhase)`, whose
+low point is exactly there. They used to be two unrelated numbers — a 2.32 m
+stride against a 1.21 m bob cycle, 1.92 bobs per step and the ratio drifting
+with speed — and the result read as a floaty, sluggish walk rather than as a
+bug. Two things depend on the units now: `render.cpp`'s viewmodel sway reads
+`sinf(bobPhase * PI)`, which on this phase is one lateral cycle per *two*
+footfalls, which is what lateral sway actually tracks; and the wrap at 4096 has
+to stay an even integer or both the crossing test and that sway jump at it.
+
+**A hit test that only measures horizontal distance ignores where you aimed.**
+Both actor hit tests projected onto `f2x`/`f2z` and measured the miss distance
+in the plane, so you could aim at the ceiling and still land the round.
+`shotHitsBody` takes the 3D `fwd`, walks the aim line out to the target's
+horizontal distance and checks the height it has reached against the body's
+span. Falls out of that: the eye rides at 1.62 m and a dog stands 0.92 m, so a
+dead-level shot goes over a dog's back at any range — you have to put the
+crosshair on it, which is the point. `popBalloonsAlongAim` had no sight test at
+all and popped the party through walls; it gates on `lineOfSight` per balloon.
+
+**An `osc()` index is an ownership claim, not a scratch slot.** `AudioSynth::ph[]`
+is one running phase per oscillator, and two signals sharing an index advance it
+at *both* their frequencies — so each one gets the other's detune folded in and
+both come out subtly wrong rather than obviously broken. The hum's new beat
+frequency and the blackout ring were written against 9-12 first, which the L1
+drone and the poolroom water already owned. The header now lists the owners; add
+slots to `ph[]` rather than borrowing one.
+
+**The actors' sprites are sheets now, and the frame count lives in two files.**
+`ENT_FRAMES` / `ENT_ROWS` / `DOG_FRAMES` (textures.h) size the atlas in
+textures.cpp and index the source rect in render.cpp. Disagree and you get a
+sliver of the neighbouring frame down one edge of every sprite, which reads as a
+texture-bleed bug rather than as a count bug. One row is a *full* stride, not
+half of one mirrored: Clark has a real leg and a peg leg, so the halves of his
+gait genuinely differ.
+
+**`DrawBillboardRec` is `DrawBillboardPro` with `origin = size*0.5`.** So any
+draw that wants rotation has to pass exactly that to stay where it was. Both
+`{0,0}` and the obvious "pivot about his boots" of `{0, -size.y/2}` slide the
+sprite most of a body height up the screen and leave it hanging off the ceiling,
+perfectly upright — which reads as a height or a lighting bug and sends you
+looking in the wrong file. Rotation is then about the sprite's middle; on a
+1.96 m billboard at 7 degrees the feet swing about 12 cm, which is not worth
+fighting the API over.
+
+**An actor's gait must come from distance travelled, not from intended speed.**
+`Entity::gait` and `Dog::gait` count footfalls the way the player's `bobPhase`
+does — 1 per stride, an integer is a foot landing — and they drive the walk-cycle
+frame and the footfall sound off the same number, so the frame his boot lands on
+is the frame you hear it. The old `entStepAcc` accumulated `chaseSpd * dt`, so a
+Clark grinding against a wall still sounded like one crossing the room; and it
+lived inside the Chase block, so nothing could animate him in any other state.
+
+**Walls are read through `wallNVal` / `wallWVal`, and that is where the
+non-Euclidean overlay has to land.** `World::shifted` is the set of doorways the
+building has closed behind you (PAC-03). Collision, the pathfinder, line of
+sight, the occupancy grid the shader marches, and the mesher all come through
+those two accessors — put the overlay anywhere else and the lighting and Clark
+disagree with the geometry the player can see. Two consequences to keep: shifting
+an edge must rebake *both* chunks that touch it (`World::shiftEdge` does), and it
+must set `occValid = false`, because `updateOccupancy` only rebuilds after you
+have walked six cells and a wall that appears in between lights as though it
+were not there.
 
 **A pattern inside a tiling texture must have a period that divides its size.**
 The textures are 512 square and repeat. A feature grid at any other pitch —
@@ -564,11 +754,18 @@ the scanline loop and the stamps go through.
 **A build failure looks exactly like a passing build if you only read the last
 line.** `tools/sandbox-build.sh` prints its error and then exits, so
 `build.sh 2>&1 | tail -1` shows you a compiler note rather than the word
-"built" — and the previous binary is still sitting there, so the next capture
-runs happily and shows you the *old* behaviour. Two separate sessions of
+"built" — and the previous binary *used to be* still sitting there, so the next
+capture ran happily and showed you the *old* behaviour. Two separate sessions of
 "why is the entity missing" were this, both times from a missing `#include
 <cstdio>` for a temporary `printf`. Check that the last line actually starts
 with "built", or grep the output for "error".
+
+`sandbox-build.sh` now deletes its target before compiling, so a failed build
+leaves **no** binary rather than a stale one: `tools/shot.sh` fails outright
+instead of capturing code you did not write. That closes the trap rather than
+the habit — the compiler error still scrolls past, and a build you did not
+notice failing now reads as a missing file, so it is still worth checking for
+the word "built".
 
 **Temporary test hooks must be removed by exact string, not by slicing.**
 Cutting from `s.index(start)` to `s.index(end)` is dangerous when the end
@@ -577,6 +774,19 @@ in three places, and slicing to the first one deletes hundreds of lines of
 real code. Use a unique multi-line anchor, and `git diff --stat` afterwards.
 
 ## Architecture invariants
+
+**Chalk is per level and per descent.** `Game::chalk` is an array indexed by
+level, not one list: `applyLevel` no longer clears it, `beginDescent` does. The
+marks are the only counter-play the game has to not knowing where you are, and
+finding one of your own again is the good moment — clearing them at every
+doorway deleted it. Two of the marks on each level were not made by you
+(`ChalkMark::mine` is false, and they draw duller and yellower); they are laid
+once per level per descent, on the first frame *after* arrival rather than
+inside `applyLevel`, because `applyLevel` runs before the transition has moved
+the player and would seed them around the last floor's position. The 128 cap is
+`MAXCHALK`, per level, and eviction drops your own oldest rather than the front
+of the list — the stranger's arrows are at the front, and evicting those would
+quietly delete the rarest thing on the floor.
 
 ### The shader's alpha coding
 
@@ -628,6 +838,51 @@ separate from the array size, so bumping the array and forgetting the loop left
 the new material with no shader and no occupancy texture — a failure that looks
 nothing like a material problem. Both now come from `MAT_COUNT`; leave it that
 way.
+
+### Height
+
+`int8_t ChunkData::elev` is one floor height per cell, in decimetres. The whole
+engine rests on there being exactly one: `floorY` returns a scalar,
+`buildOccupancy` is a byte per cell with no height in it, `lightVis` is a 2D DDA
+and `pathStep` a 2D BFS. Extending height *upward* keeps all of that and still
+buys stairwells, mezzanines and drops; walkable floor directly over walkable
+floor is the one thing it cannot express, and nothing in the fiction needs it.
+
+The ceiling is `World::ceilY`, not `wallH`. It follows the floor **up only**:
+`max(floorY, 0) + wallH`. A raised deck has to carry its ceiling with it or its
+floor comes through the slab, which is the whole reason the ceiling is per-cell.
+A sunken cell is the other case and is *not* a lower storey — a pool basin and a
+sunken lounge are depressions in the floor of the room they are in, and they
+keep that room's ceiling. Dropping it with them hangs a soffit round every pool
+in the Poolrooms 0.6 m below the tile grid, which reads as a broken mesh.
+Telling a depression from a genuine lower storey needs something the cell does
+not store yet.
+
+Two rules fall out of this, and both have already been broken once:
+
+- **Anything attached to the ceiling takes `ceilY` of the cell it is in**, not
+  `wallH`: the light trays, the diffusers and sprinklers, the conduit runs, the
+  Level 3 pipework, the Level 4 streamers and the ceiling crease AO strips. A
+  crease left at a fixed `wallH` hangs in clear air under a ceiling that moved,
+  which reads as a smear rather than a shadow.
+- **A wall stands between two cells that may differ in height.** It is based on
+  the lower floor and taken to the higher ceiling, and everything fixed to it —
+  sill, door head, architrave, skirting, scrawl — is measured off that same
+  base. Base a wall on its own cell instead and a step leaves a gap under it on
+  the low side and a slot over it on the high side, both of which you see
+  straight through.
+
+What has *not* moved is the shader's light plane. `uLY` is still one constant
+per level (`wallH - 0.12`), and `lightAtCPU` mirrors that constant, so a fitting
+hanging in a raised bay is drawn where it is but lights the room from where the
+base ceiling is. That is invisible at Level 1's 0.6-1.2 m decks and would not be
+at a whole storey; it needs the panel grid to carry a height, which is a
+different ticket. Move it and `lightAtCPU` moves with it.
+
+Where two neighbouring cells' ceilings differ, the lower one draws a soffit
+closing the slot. Only the lower of each pair draws it, so a shared edge is
+drawn exactly once, including across a chunk seam where both sides read the same
+global heights.
 
 ### Lighting
 

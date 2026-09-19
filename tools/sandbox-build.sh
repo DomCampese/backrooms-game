@@ -14,16 +14,26 @@ PYV=$(basename "$SO" | sed -n 's/.*cpython-\([0-9]\)\([0-9]*\)-.*/\1.\2/p')
 FLAGS=(-std=c++17 -O2 -Wall -Wno-missing-field-initializers -Irlshim)
 LINK=("$SO" "-Wl,-rpath,$(dirname "$SO")" "-lpython$PYV" -lm -ldl -lpthread)
 
-# Second target: the map harness. It links the game's own world generation and
-# calls generate() directly — no window, no GL, no Xvfb — so it needs neither
-# embed-materials.py nor the rest of src/. Under a second, against exactly the
-# code the game ships.
+# Delete the target before compiling, so a failed build cannot leave a working
+# binary behind. c++ only replaces its output on success, so without this the
+# previous ./backrooms survives the failure and the next tools/shot.sh captures
+# THE OLD BUILD — a green-looking screenshot of code that is not the code you
+# just wrote. That has cost this project two separate debugging sessions (see
+# CLAUDE.md, "A build failure looks exactly like a passing build if you only
+# read the last line"), because the compiler error scrolls past and the capture
+# afterwards works perfectly.
+#
+# Belt and braces with `set -e`: this way the failure is visible as a missing
+# binary even when someone pipes the build's output through a filter and only
+# reads the tail.
 build_mapdump() {
+    rm -f mapdump
     c++ "${FLAGS[@]}" tools/mapdump.cpp src/world.cpp src/util.cpp src/levels.cpp \
         src/textures.cpp -o mapdump "${LINK[@]}"
     echo "built ./mapdump (python$PYV)"
 }
 build_game() {
+    rm -f backrooms
     python3 tools/embed-materials.py
     c++ "${FLAGS[@]}" src/*.cpp -o backrooms "${LINK[@]}"
     echo "built ./backrooms (python$PYV)"

@@ -63,7 +63,9 @@ enum MatSlot {
     MAT_COUNT,
 };
 
-struct ChalkMark { Vector3 pos; float yaw; };
+// `mine` separates the marks you drew from the ones that were already there.
+// They are the same arrow; only the chalk has aged.
+struct ChalkMark { Vector3 pos; float yaw; bool mine; };
 
 struct Game {
     // tuning
@@ -82,6 +84,20 @@ struct Game {
     static constexpr float TAPE_RUN = 26.0f;    // one side of a tape, as far as you'll listen
     static constexpr float TAPE_NOISE = 32.0f;  // how far a playing deck carries, in metres
     static constexpr int   ESCAPE_COST = 12;  // doubloons that buy your way out for good
+    // The catch, and the windup you get to react to. He commits from LUNGE_REACH
+    // and can only take you inside CATCH_REACH while that commit is still
+    // running, which is LUNGE_TIME long and announced when it starts.
+    static constexpr float LUNGE_REACH = 2.5f;
+    static constexpr float LUNGE_TIME = 0.6f;
+    static constexpr float CATCH_REACH = 1.25f;
+    static constexpr float DEATH_CARD = 7.0f;   // seconds the death card holds the title screen
+    // Where he arrives from. The near band is inside the fog and close enough
+    // to matter; the far band is the old behaviour, kept in the mix because
+    // replacing one fixed ritual with another buys nothing.
+    static constexpr float SPAWN_NEAR_MIN = 6.0f;
+    static constexpr float SPAWN_NEAR_MAX = 17.0f;
+    static constexpr float SPAWN_FAR_MIN = 20.0f;
+    static constexpr float SPAWN_FAR_SPAN = 10.0f;
 
     // env/test knobs (BACKROOMS_* — see README)
     bool benchmark = false, cleanShot = false;
@@ -89,6 +105,7 @@ struct Game {
     std::vector<float> frameSamples;
     const char *shotPath = nullptr;
     int shotFrame = 600;                      // BACKROOMS_SHOTFRAME: capture earlier, for quick looks
+    bool noBlackout = false;                  // BACKROOMS_NOBLACKOUT: suppress the random schedule
 
     // resources
     Texture2D texEntity{}, texPartygoer{}, texProps{}, texScrawl{}, texFixtures{}, texAO{}, texOcc{}, texDog{},
@@ -121,6 +138,13 @@ struct Game {
     static constexpr int NBARKS = 3;
     Sound sndBarks[NBARKS]{};                   // the pack, panned to whichever one spoke
     Sound entSteps[4]{};                        // the thing's own footfalls, panned + attenuated
+    // The same two sets again, as heard through geometry. Picked on
+    // lineOfSight at the moment of playback — see AUD-02. Knowing a thing is
+    // near is worth much less than knowing where it is, and a game that plays
+    // the open-corridor sample through two walls is telling you the second
+    // thing when it only knows the first.
+    Sound sndBarksThrough[NBARKS]{};
+    Sound entStepsThrough[4]{};
     AudioSynth synth;
     World world;
     Rng grng{1};
@@ -132,7 +156,8 @@ struct Game {
     float velx = 0, velz = 0;
     float py = 0, vy = 0;                     // feet height (0 = dry floor, -0.6 = pool bottom)
     bool grounded = true;
-    float stamina = 1.0f, fov = 70.0f, stepAcc = 0, bobPhase = 0;
+    float stamina = 1.0f, fov = 70.0f;
+    float bobPhase = 0;                       // counts footfalls: an integer is a foot landing
     bool flashOn = false;
     float flashCur = 0;
     float battery = 1.0f;                     // flashlight charge, 0..1 — drains while on, dead at 0
@@ -145,15 +170,21 @@ struct Game {
     bool captureClick = false;                // this click grabbed the mouse; don't also fire
     float leanCur = 0, landDip = 0;           // camera feel: strafe lean + landing dip
     float strafeInput = 0;                    // -1..1, set by movement, read by render lean
-    double entStepAcc = 0;                    // spacing of the thing's audible footfalls
-    // Which foot is leading. entStepAcc wraps once per *step*, so on its own it
-    // cannot tell a left stride from a right one; the walk cycle is two steps
-    // long and needs to know. Flipped on every wrap, including the ones that are
-    // too far away to be heard.
-    int entStepPar = 0;
     float entPrevX = 0, entPrevZ = 0;         // last frame's position, to derive his velocity
     static constexpr float ENT_STRIDE = 1.05f;   // metres per step — also the footfall spacing
     static constexpr float DOG_STRIDE = 0.85f;   // the pack's, which is quicker and shorter
+    // How far the reverb's room-size probe marches in each of four directions.
+    // 10 cells is 20 m, which is past anything Level 0 has and short of the
+    // Level 1 halls — so a corridor reads near 0 and a warehouse near 1.
+    static constexpr int ROOM_PROBE = 10;
+    // STK-03: the fraction of the grip meter that is the terminal slide.
+    static constexpr float SLIDE_FROM = 0.10f;
+    // PAC-03: how far out the building is allowed to rearrange itself, and how
+    // often. The gap shortens as the slide deepens, so it starts as something
+    // you are not sure happened and ends as something you cannot keep up with.
+    static constexpr int   SHIFT_RING = 8;
+    static constexpr double SHIFT_GAP_MIN = 9.0;
+    static constexpr double SHIFT_GAP_SPAN = 22.0;
     float muzzleSmoke = 0;                    // powder haze lingering after a shot
 
     // flare weapon: thrown, burns orange, Pirate Clark won't go near one.
@@ -188,13 +219,33 @@ struct Game {
     double nextHowl = 0;
     float entDist = 1e9f;                     // distance to Clark this frame
     float entDarkCur = 0;                     // how hard it's smothering the lights (ramps with the hunt)
+    // 1e18 is "never": far enough out that the schedule can never fire. The
+    // poolrooms have always used it; headless captures now borrow it too.
+    static constexpr double BLACKOUT_NEVER = 1e18;
     double nextBlackout = 0, blackoutEnd = -1;
     float blackoutCur = 1.0f, fear = 0.0f;
-    float caughtT = 0, escapeT = 0, killT = 0, fellT = 0, winT = 0;
+    float deathT = 0, escapeT = 0, killT = 0, fellT = 0, winT = 0;
+    // Stats frozen for the death card. Being caught used to cost nothing at all
+    // — it teleported you 800 m and you kept every item — so there was nothing
+    // in the game that could be lost, which is most of why none of it was
+    // frightening. Now it ends the run, and the card says what took you.
+    const char *deathBy = "";
+    const char *deathTitle = "YOU DID NOT GET OUT";
+    float deathTime = 0; int deathM = 0, deathLevel = 0, deathKills = 0;
     float softTimer = 0;                      // how long you've stood on a soft patch
     float softSag = 0;                        // ...and how far it has let you down while you did
     double nextGroan = 0;                     // the subfloor complaining, re-triggered as it worsens
-    int caughtCount = 0, escapeCount = 0, killCount = 0, winCount = 0;
+    int deathCount = 0, escapeCount = 0, killCount = 0, winCount = 0;
+    int deepest = 0;                          // deepest level this descent reached
+    bool still = false;                       // under HIDE_ENTER this frame — what the pack listens for
+    float slide = 0;                          // STK-03: how far into the terminal slide, 0..1
+    double nextShift = 0;                     // PAC-03: when the building next moves on you
+    int visits[NLEVELS] = { 0 };              // how many times this descent has entered each level
+    // Shutting the standpipes pays out a cache of doubloons. That used to be
+    // per visit, and the cursed exit (1 in 6) drops you straight back into the
+    // Red Halls — 9 doubloons a lap against an ESCAPE_COST of 12, so you could
+    // bank your way out without ever meeting Clark. Once per descent.
+    bool pipesPaid = false;
     float winTime = 0; int winM = 0, winKills = 0;   // stats frozen for the escape screen
     float distWalked = 0;
     double runStart = 0;
@@ -205,7 +256,14 @@ struct Game {
     // pickups, currency, chalk, ambient events, records
     std::unordered_set<uint64_t> taken;       // world pickups already grabbed (reset per level)
     std::vector<Vector3> coinsWorld;          // doubloons Clark spills when he goes down
-    std::vector<ChalkMark> chalk;               // navigation marks
+    // Navigation marks, kept per level for the whole descent. A mark is the only
+    // counter-play the game offers to not knowing where you are, and finding one
+    // of your own again is the good moment; clearing them at every doorway threw
+    // that away. Cleared by beginDescent, not by applyLevel.
+    std::vector<ChalkMark> chalk[NLEVELS];
+    bool chalkSeeded[NLEVELS]{};              // the stranger's marks are laid once per level per descent
+    bool chalkSeedPending = false;            // ...and on the first frame after arrival, once px/pz are real
+    static constexpr int MAXCHALK = 128;      // per level
     std::unordered_set<uint64_t> poppedBalloons;     // LEVEL FUN ceiling balloons already shot
     std::unordered_set<uint64_t> poppedTableBunches; // and party-table balloon bunches
     struct Confetti { Vector3 pos, vel; float life; Color col; };
@@ -236,6 +294,7 @@ struct Game {
     const char *tapeLine = "";                 // which recovered-tape line to show
     char bestPath[512] = {};
     int bestEsc = 0, bestKill = 0, bestM = 0, bestWins = 0, bestTapes = 0;
+    int bestDeep = 0, bestRun = 0;            // deepest level reached, longest run in seconds
     bool everFlashed = false;                 // HUD: flashlight reminder until first use
     bool inMenu = false;                      // title screen up, world drifting behind it
     bool paused = false;                      // P: the world holds its breath
@@ -248,18 +307,30 @@ struct Game {
     bool pipesShut = false;                   // all three closed on this descent
 
     void winRun(double now);                  // stepped through the true way out — reset the descent
+    // Something got you: end the run and go back to the title. `title` is the
+    // card's headline — the place taking you is not the same ending as being
+    // caught, and it should not use the same words.
+    void dieRun(double now, const char *by, const char *title = "YOU DID NOT GET OUT");
+    bool shiftAWall();                        // PAC-03: wall off one doorway you cannot see
+    bool packDeaf() const;                    // ENT-04: are you quiet enough for the pack to lose you
     void updateMenu(double now);              // drift the title-screen camera; any key begins
     void startRun(double now);                // leave the menu and start a fresh descent
     // Throw away the current descent and set up a fresh one from Level 0: a new
     // maze, you back at the start of it, gear and tallies reset. Records and the
     // win count survive, because those belong to the player rather than the run.
     void beginDescent(double now);
+    // Salt for the loose-item hashes: the seed, plus which level and which
+    // visit. It was world.seed alone, so every level put its cartons and
+    // doubloons in the same cells and every revisit put them all back.
+    uint32_t pickupSalt() const;
+    double blackoutIn(double now, double lead, double span);   // next blackout, or never
 
     void init();
     bool tick();                              // one frame; false = run ended (headless shot taken)
     void shutdown();
 
     void applyLevel(int lv);
+    void seedStrangerChalk();
     void saveBest();
 
     // deterministic world pickups, keyed by cell
@@ -289,6 +360,9 @@ struct Game {
     // knot point, and returns the count (0 = no bunch). Shared by render + aim.
     int tableBalloonBunch(int a, int b, Vector3 *pos, Color *cols, Vector3 &tie);
     void popBalloonsAlongAim();               // revolver vs. balloons, when you fire in LEVEL FUN
+    // a round from the eye against an actor's body cylinder — pitch included
+    bool shotHitsBody(float ax, float az, float feetY, float bodyH,
+                      float radius, float maxRange) const;
 
     // update, in frame order (game.cpp)
     void updateLook();

@@ -28,7 +28,14 @@ static inline float panFor(float bearing) {
 #endif
 }
 
-Sound makeFootstep(uint32_t seed);
+// `through` builds the same one-shot as heard through geometry: two poles of
+// low-pass, a softened transient and a level drop. Every positional sound in
+// the game was pitch, volume and pan only, so a footfall 20 m away through two
+// walls sounded exactly like one 20 m away down an open corridor — and on
+// Level 0 a point 20 m out is occluded 83% of the time, so that was most of
+// what the player ever heard. Two sample sets pick up most of what a real
+// filter bus would, and fit the synthesize-everything-at-startup design.
+Sound makeFootstep(uint32_t seed, bool through = false);
 Sound makeJumpscare();
 Sound makeSplash(uint32_t seed, bool big);
 Sound makeClick();
@@ -39,7 +46,7 @@ Sound makeWinChime();
 Sound makeHeartbeat();
 Sound makeTapeChime();
 Sound makeValveTurn();             // seized iron giving way, then the clunk of it seating
-Sound makeDogBark(uint32_t seed);  // the pack, somewhere in the red dark
+Sound makeDogBark(uint32_t seed, bool through = false);  // the pack, somewhere in the red dark
 Sound makeDogHowl();
 Sound makeGulp();                   // three swallows of almond water, and the empty can ringing
 Sound makeTapeVoice();              // a voice off a worn cassette — garbled, hissing, and looping
