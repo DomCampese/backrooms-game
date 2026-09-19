@@ -3,7 +3,10 @@ name: Deploy web build to Pages
 
 on:
   push:
-    branches: [main]
+    # The deploy branch builds too, so the site can be put up and looked at
+    # before main takes the change. Pages serves one site per repository, so
+    # this publishes the real thing, not a separate preview.
+    branches: [main, 'claude/game-github-pages-deploy-*']
   workflow_dispatch:
 
 # GITHUB_TOKEN needs to mint a Pages deployment; nothing here writes to the repo.
@@ -41,6 +44,14 @@ jobs:
 
       - name: Build
         run: tools/web-build.sh
+
+      # enablement turns Pages on and sets its source to Actions through the
+      # API, so deploying needs no one to visit the repository settings first.
+      # Without it the deploy job fails with "Get Pages site failed" on a
+      # repository that has never published.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
