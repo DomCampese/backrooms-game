@@ -79,11 +79,28 @@ their original terms.
   [Bundled raylib 5.5 license notice](LICENSES/raylib-5.5.txt).
   Retain the applicable upstream notices for the raylib version and any bundled
   dependencies used in a distributed build.
+- **Libraries bundled inside raylib** — cgltf, miniaudio, the dr_libs, the stb
+  libraries, qoi/qoa, par_shapes and others, under MIT, MIT-0, public domain,
+  zlib and WTFPL terms. raylib compiles these into the library, so they are
+  statically linked into everything released here, the `.wasm` included.
+  [Authors and licenses](LICENSES/raylib-bundled-libraries.txt).
+- **Emscripten**, by the Emscripten authors, MIT / University of Illinois NCSA.
+  The web build ships Emscripten's generated JavaScript runtime alongside the
+  `.wasm`, so that notice is distributed too.
+  [License](LICENSES/emscripten.txt).
+
+The raylib notice above names the version the **desktop** release is built
+against. The web build pins its own raylib in `tools/web-build.sh`; keep that
+tag and the notice in `LICENSES/` in step, because the notice is what ships.
 
 ## Distributing a build
 
 Include LICENSE, CREDITS.md, LICENSES, and the asset provenance notices with native
 releases. On a web demo, provide visible License, Credits and Source links.
+`tools/web-build.sh` copies LICENSE, CREDITS.md and LICENSES/ into the published
+directory, and `web/shell.html` carries the copyright, the warranty disclaimer
+and those three links on the page itself — which is also what GPLv3 section 5(d)
+asks of an interactive interface. A build that drops either is not distributable.
 Provide the complete corresponding source for the exact released version,
 including necessary build scripts and asset-generation inputs, at no extra charge.
 Tag the source revision used for a release and link that revision from its download

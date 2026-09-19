@@ -13,3 +13,7 @@ src/revolver.generated.h
 
 src/models.generated.h
 mapdump
+
+# web build outputs
+web/dist/
+.raylib-web/

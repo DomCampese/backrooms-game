@@ -11,6 +11,9 @@
 #ifdef __APPLE__
 #include <CoreGraphics/CGDisplayConfiguration.h>
 #endif
+#ifdef PLATFORM_WEB
+#include <emscripten/emscripten.h>
+#endif
 
 // found cassette tapes: someone else's days down here, in fragments
 static const char *TAPE_LINES[] = {
@@ -269,6 +272,19 @@ void Game::saveBest() {
     if (up) if (FILE *bf = fopen(bestPath, "w"))
         { fprintf(bf, "%d %d %d %d %d\n%d %d\n", bestEsc, bestKill, bestM, bestWins, bestTapes,
                   bestDeep, bestRun); fclose(bf); }
+#ifdef PLATFORM_WEB
+    // A browser tab's filesystem is a heap that dies with the page, so the
+    // write above reaches nothing on its own and every reload would greet a
+    // returning player with a blank records card. Flush it to IndexedDB, which
+    // web/shell.html mounted over $HOME and loaded before main() ran.
+    //
+    // shutdown() is unreachable here — the main loop never returns — so this is
+    // the ONLY point at which records are persisted on the web. Keep the flush
+    // attached to saveBest rather than to any exit path.
+    if (up) EM_ASM({
+        FS.syncfs(false, function (err) { if (err) console.warn("records not saved:", err); });
+    });
+#endif
 }
 
 // You've banked enough doubloons and found a real door: escape the backrooms.

@@ -1,8 +1,32 @@
 #include "shaders.h"
 
+// The shader bodies below are shared verbatim by both targets: GLSL 330 and
+// GLSL ES 3.00 agree on everything they use (in/out, texture(), texelFetch,
+// dFdx). Only the version line and ES's mandatory precision declarations
+// differ, so that prologue — and nothing else — is per-platform.
+//
+// ES gives samplers a default precision of lowp, which is not enough for the
+// occupancy grid: texelFetch there returns a cell code scaled by 255 and
+// rounded to an int, and lowp carries about 8 distinct values, so every wall
+// code collapses into its neighbours and the shadows come out of the wrong
+// cells. Declare the sampler precision rather than inheriting it.
+//
+// The native string keeps the leading newline that the raw literal used to
+// contribute, so the GLSL the desktop build compiles is unchanged to the byte
+// (prove it with the assembly diff in CLAUDE.md). The web string must NOT have
+// it: #version has to be the first token, and ANGLE is entitled to reject a
+// shader whose directive is preceded by anything at all.
+#ifdef PLATFORM_WEB
+#define GLSL_VERSION_HEADER "#version 300 es\n" \
+                            "precision highp float;\n" \
+                            "precision highp int;\n" \
+                            "precision highp sampler2D;"
+#else
+#define GLSL_VERSION_HEADER "\n#version 330"
+#endif
+
 // ---------------------------------------------------------------- shaders
-const char *WORLD_VS = R"GLSL(
-#version 330
+const char *WORLD_VS = GLSL_VERSION_HEADER R"GLSL(
 in vec3 vertexPosition; in vec2 vertexTexCoord; in vec3 vertexNormal; in vec4 vertexColor;
 uniform mat4 mvp; uniform mat4 matModel; uniform mat4 matNormal;
 out vec3 fragPos; out vec2 fragUV; out vec3 fragN; out vec4 fragC;
@@ -13,8 +37,7 @@ void main(){
 }
 )GLSL";
 
-const char *WORLD_FS = R"GLSL(
-#version 330
+const char *WORLD_FS = GLSL_VERSION_HEADER R"GLSL(
 in vec3 fragPos; in vec2 fragUV; in vec3 fragN; in vec4 fragC;
 uniform sampler2D texture0; uniform vec4 colDiffuse;
 uniform float uTime; uniform float uBlackout; uniform vec3 uViewPos;
@@ -429,8 +452,7 @@ void main(){
 }
 )GLSL";
 
-const char *POST_FS = R"GLSL(
-#version 330
+const char *POST_FS = GLSL_VERSION_HEADER R"GLSL(
 in vec2 fragTexCoord; in vec4 fragColor;
 uniform sampler2D texture0; uniform vec4 colDiffuse;
 uniform float uTime; uniform float uFear;

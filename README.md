@@ -18,6 +18,29 @@ available in this repository; released builds must include access to their
 corresponding source. This project is not affiliated with or endorsed by the wiki
 or other Backrooms creators.
 
+## Play it in a browser
+
+The game compiles to WebAssembly and runs on WebGL 2. Every deploy of `main`
+publishes it to GitHub Pages via `.github/workflows/pages.yml`.
+
+```bash
+source /path/to/emsdk/emsdk_env.sh   # emscripten on PATH
+tools/web-build.sh                   # -> web/dist/index.{html,js,wasm}
+cd web/dist && python3 -m http.server 8099
+```
+
+The first run compiles raylib for the browser from the tag the script pins; it
+is cached in `.raylib-web/` afterwards. Both are gitignored.
+
+The dev knobs are URL query parameters rather than environment variables:
+`?seed=1337`, `?level=2`, `?pos=95,79,1.2`, `?flash=1`, `?exits=1`,
+`?noblackout=1`. Pass `noblackout=1` for any screenshot — there is no
+`BACKROOMS_SHOT` on the web to turn blackouts off for you, and a capture that
+lands in one is a black frame that looks exactly like a failed shader compile.
+
+Records are kept in IndexedDB rather than `$HOME`, so they survive a reload but
+are per-browser.
+
 ![screenshot](docs/screenshot.png)
 
 ## Model asset pipeline

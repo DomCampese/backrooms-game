@@ -1,0 +1,57 @@
+# Build the WebAssembly release and publish it to GitHub Pages.
+name: Deploy web build to Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# GITHUB_TOKEN needs to mint a Pages deployment; nothing here writes to the repo.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a running deploy finish rather than cancelling it: a half-published Pages
+# site serves a new index.html against the previous .wasm, which fails to
+# instantiate for every visitor until the next successful run.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 4.0.6
+          actions-cache-folder: emsdk-cache
+
+      # raylib is compiled from the tag tools/web-build.sh pins, so the bytes we
+      # ship match the zlib notice in LICENSES/.
+      - name: Cache raylib web build
+        uses: actions/cache@v4
+        with:
+          path: .raylib-web
+          key: raylib-web-5.5-${{ runner.os }}-es3
+
+      - name: Build
+        run: tools/web-build.sh
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

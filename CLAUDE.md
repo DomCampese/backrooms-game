@@ -146,6 +146,70 @@ Two things in there are load-bearing and non-obvious:
   "cannot open shared object file" the moment anything runs it from elsewhere,
   which `tools/shot.sh` does on every screenshot.
 
+## Building for the web
+
+`tools/web-build.sh` produces `web/dist/index.{html,js,wasm}` and the GitHub
+Pages workflow runs exactly that script, so if it works locally it works in CI.
+It compiles raylib for the browser itself, from a pinned tag, into `.raylib-web/`.
+
+Everything platform-specific is behind `PLATFORM_WEB`, which the script defines.
+The native build is untouched by all of it — `src/shaders.cpp`'s split was
+verified with the assembly diff above, which came back identical.
+
+Three things about that port are load-bearing:
+
+- **`main()` cannot loop.** A browser tab owns its event loop, so
+  `while (!WindowShouldClose())` hangs the page before the first frame is
+  presented. `src/main.cpp` hands `tick()` to `emscripten_set_main_loop`
+  instead. `shutdown()` is therefore unreachable on the web — anything that has
+  to happen before the player leaves cannot live there.
+- **It must be WebGL 2, not WebGL 1.** The world shader uses `dFdx` and
+  `texelFetch`, which are core in GLSL ES 3.00 and simply absent from ES 2.0 —
+  so an ES2 build fails to compile the shader, and a failed compile does not
+  crash, it falls back to raylib's default and renders a black frame *faster*.
+  raylib's own Makefile defaults PLATFORM_WEB to ES2; the build script overrides
+  it with `GRAPHICS=GRAPHICS_API_OPENGL_ES3`, and `-sMIN_WEBGL_VERSION=2`.
+- **Records live in IndexedDB.** A tab's filesystem is a heap that dies with the
+  page. `web/shell.html` mounts IDBFS over `$HOME` in `preRun` and holds main()
+  back with `addRunDependency` until the load finishes, because `Game::init()`
+  reads the records file during startup. `Game::saveBest` flushes with
+  `FS.syncfs` — and since `shutdown()` never runs, that is the only place on the
+  web where records are written.
+
+**`emcc` will compile this and then fail to link it.** Every C++ symbol comes
+back undefined — `operator new`, `operator delete`, `std::__2::__next_prime` —
+which reads as a missing stdlib or a broken sysroot. It is neither: `emcc` is
+the C driver and does not link libc++. Use `em++`. (Emscripten's own hint about
+this is the last line of a hundred-line error, well past where you stop
+reading.)
+
+**Emscripten stopped hanging the heap views off `Module`, and miniaudio still
+reaches for them.** raylib's audio callback does `Module.HEAPF32.buffer`, so
+without `-sEXPORTED_RUNTIME_METHODS=...,HEAPF32` every audio callback throws
+`Cannot read properties of undefined (reading 'buffer')` — about forty times a
+second, from a stack that names only `device.scriptNode.onaudioprocess`. The
+game renders perfectly throughout and is completely silent, so if you are
+looking at the picture you will not notice at all.
+
+**A browser capture can land in a blackout, and there is no `BACKROOMS_SHOT` to
+stop it.** Natively, headless captures turn blackouts off; on the web nothing
+does, so a screenshot taken 30-90 s in is a black world with a live HUD — which
+looks exactly like the silent shader fallback. Four of five level captures in
+the first sweep were this. Pass `?noblackout=1`. A luma timeline settles it in
+one run: the world sat at ~100, dropped to 13 for one sample, and came back to
+87.
+
+**The env knobs do not survive the title screen, on either platform.**
+`BACKROOMS_LEVEL` is applied in `init()`, and then `startRun` calls
+`beginDescent`, which puts you on Level 0 — and `updateMenu` clears `flashOn`
+every frame it runs. Natively this never shows, because `BACKROOMS_SHOT` skips
+the menu (`inMenu = shotPath == nullptr`); on the web there is no way to skip
+it, so `?level=3` genuinely starts a run on Level 0. Three separate sweeps
+"proved" the ES3 shader worked on every level and were all photographing
+Level 0. To reach another level in a browser you have to descend, or use the F3
+debug keys — and note that synthetic `F3`/`N` key events from a test driver do
+not reach raylib, so this is not scriptable the way the native sweep is.
+
 ## Running headless, and taking screenshots
 
 There is no display in a sandbox, so everything runs under Xvfb. Use the
