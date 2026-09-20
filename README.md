@@ -1,4 +1,4 @@
-# THE BACKROOMS — Level 0
+# THE BACKROOMS
 
 ### ▶ [Play it in your browser](https://domcampese.github.io/backrooms-game/)
 
