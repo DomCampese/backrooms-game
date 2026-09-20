@@ -1,9 +1,14 @@
 # THE BACKROOMS — Level 0
 
+### ▶ [Play it in your browser](https://domcampese.github.io/backrooms-game/)
+
+No install, no download. Works on a phone — touch controls appear automatically.
+
 Disclaimer: just for fun, mostly generated with Claude models
 
-A native, procedurally-infinite backrooms horror game in a small C++ codebase.
-Procedural worlds and sound, with an animated CC0 revolver and compact texture assets embedded at build time.
+A procedurally-infinite backrooms horror game in a small C++ codebase, running
+natively and on WebAssembly. Procedural worlds and sound, with an animated CC0
+revolver and compact texture assets embedded at build time.
 
 ## License and credits
 
@@ -20,8 +25,11 @@ or other Backrooms creators.
 
 ## Play it in a browser
 
-The game compiles to WebAssembly and runs on WebGL 2. Every deploy of `main`
-publishes it to GitHub Pages via `.github/workflows/pages.yml`.
+**https://domcampese.github.io/backrooms-game/**
+
+The game compiles to WebAssembly and runs on WebGL 2. Every push to `main`
+publishes it to GitHub Pages via `.github/workflows/pages.yml`, which runs the
+same `tools/web-build.sh` you would run locally.
 
 ```bash
 source /path/to/emsdk/emsdk_env.sh   # emscripten on PATH
