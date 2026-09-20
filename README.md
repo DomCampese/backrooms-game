@@ -56,9 +56,26 @@ in the lower left (push it all the way to run), drag anywhere else to look, and
 a button cluster for fire, aim, reload, jump, use, torch, item, throw, chalk and
 drink. Force them on or off with `?touch=1` / `?touch=0`.
 
+AIM is a tap-on/tap-off toggle rather than a hold — holding it costs the thumb
+that would otherwise be looking or firing, which are the two things aiming is
+for. Every other button is a hold.
+
 They are drawn by the page, not the game; `src/input.h` folds them into the same
 input questions the desktop build asks, so the game itself does not know which
 it is running on.
+
+The layout is a table of `vmin` offsets in `web/shell.html`, and the way it goes
+wrong is one button quietly sitting on top of another at one screen size only.
+`tools/mobile-layout-test.mjs` loads the page in headless Chromium and asserts
+that no two controls collide and none escapes the stage. It needs no wasm build:
+
+```bash
+node tools/mobile-layout-test.mjs          # portrait, landscape, 360×640
+node tools/mobile-layout-test.mjs --all    # plus 320, 412, a folded 280, tablet, wide
+```
+
+It needs `playwright` — installed globally or as a local dev dependency, either
+works. CI runs it in the Pages build job, before the deploy.
 
 ![screenshot](docs/screenshot.png)
 

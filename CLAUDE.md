@@ -227,8 +227,36 @@ never sprint.
 **Lay the buttons out from the corners they sit in, never from the far edge.**
 `DUCK` addressed as `left: 42vmin` and `USE` as `right: 40vmin` are nowhere near
 each other on a desktop and directly on top of each other on a 412px phone.
-`tools/`-style checking does not catch this; the mobile test asserts that no two
-controls' bounding boxes intersect, at portrait, landscape and 360×640.
+`tools/`-style checking does not catch this, and for a long time nothing else
+did either: this paragraph claimed a mobile test asserted it, and no such test
+existed. `tools/mobile-layout-test.mjs` is now that test. It loads
+`web/shell.html` with `?touch=1` in headless Chromium — no wasm, because the
+control layer is built by the shell's own inline script and comes up whether or
+not the game module ever loads — and at each viewport asserts that every control
+is inside the stage and that no two of them intersect:
+
+```bash
+node tools/mobile-layout-test.mjs          # portrait, landscape, 360×640
+node tools/mobile-layout-test.mjs --all    # plus 320, 412, a folded 280, tablet, wide
+```
+
+**Assert the gap in vmin, not in pixels.** The button table is authored in vmin
+and every deliberate neighbour gap in it is exactly 1vmin, so that is the rule;
+a pixel floor is a number someone picked, and at 280px wide 1vmin is 2.8px, so
+any honest pixel threshold either fails the whole layout or is met by a pair
+that shares an edge. The first version of the test used 6px and reported eight
+false failures next to the one real one.
+
+**A zero gap is a collision the bounding boxes do not report.** `AIM` at
+`right: 25vmin`, `size: 14vmin` ended exactly where `USE` began at
+`right: 39vmin` — flush, at every viewport, so an intersection test alone passed
+it while a thumb on the seam got whichever the hit test picked first. Worse
+after `AIM` grew its toggle ring, which is 0.5vmin of `box-shadow` and therefore
+in no bounding box at all. `USE` moved to `40vmin`. Assert the table's 1vmin
+minimum, not merely non-intersection.
+
+CI runs it in the Pages build job, before the deploy: the published site is what
+thumbs actually touch.
 
 **`setPointerCapture` throws if the pointer is already gone** — a fast tap, or a
 synthetic event from a test driver. The throw aborts the rest of the handler,

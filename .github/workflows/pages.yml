@@ -69,6 +69,17 @@ jobs:
           em++ --version | head -1
           tools/web-build.sh
 
+      # The on-screen controls are a hand-written table of vmin offsets, and the
+      # way it fails is a button silently sitting under another button on one
+      # screen size only — invisible on a desktop and to every other check here.
+      # It gates the deploy because the published site is the thing thumbs
+      # actually touch.
+      - name: Touch-control layout
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+          node tools/mobile-layout-test.mjs --all
+
       # enablement turns Pages on and sets its source to Actions through the
       # API, so deploying needs no one to visit the repository settings first.
       # Without it the deploy job fails with "Get Pages site failed" on a

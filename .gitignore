@@ -17,3 +17,8 @@ mapdump
 # web build outputs
 web/dist/
 .raylib-web/
+
+# tools/mobile-layout-test.mjs, when playwright is installed locally rather
+# than globally
+/node_modules/
+/package-lock.json
