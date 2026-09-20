@@ -484,6 +484,14 @@ change and you cannot see why, check `chunks=` before you go looking in the
 renderer. It is *not*, however, where Level 4's differing pixels in a
 regression diff come from: those are its balloons, which bob on wall-clock time
 and move with any frame-rate wobble.
+**A guard written against absolute zero breaks the moment the floor moves.**
+The trapdoor's trigger was `py > -0.05f`, meaning "you are standing at floor
+level and not falling into a pit". Dishing the rotten patches 8.5 cm put the
+player *below* zero while standing squarely on one, so the test stopped firing
+and the trapdoor quietly stopped being a trapdoor. Nothing errored, nothing
+looked wrong, and the only symptom was a capture at frame 60 that was still the
+same yellow carpet it had been at frame 12. Anything comparing `py` against a
+constant wants the floor height it is actually standing on.
 
 **A failed shader compile does not crash — it goes black and gets faster.**
 raylib silently falls back to its default shader. The frame rate goes *up*,
@@ -1127,6 +1135,15 @@ pass, and both obey the same three rules, learned the hard way:
   builds it (world.cpp), `gatherCellAABBs` gives it a collision box, and
   `Game::bottleShelfY` says how high a carton stands on it. Change one, change
   all three, or you get furniture you fall through or cartons floating.
+- **The rotten floor patches are a shortcut, not an accident, and three things
+  say so.** `World::softDip` is the single source of the bowl's shape: the floor
+  mesher builds the cell out of it and `groundAt` walks the player down the same
+  curve, so what you see and what you stand in cannot drift. On top of that the
+  camera sags further as `softTimer` builds, and `sndGroan` re-triggers faster
+  and higher as it does. The 0.9 s grace window is unchanged — it was always the
+  good part; what was missing was anything to spend it on. Subdivision is a real
+  parameter here, not a detail: `MB::quad` carries one colour and one normal per
+  quad, so 8 across the cell reads as a chequerboard and 12 still quilts.
 - Comments explain *why*, not *what*. Several in here record a bug that a
   reasonable-looking change would reintroduce; keep those.
 - Prefer procedural world content; licensed external models and textures are user-authorized. Keep provenance beside each asset.

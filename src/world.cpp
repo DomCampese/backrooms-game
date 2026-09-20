@@ -472,6 +472,18 @@ bool World::softAt(int ci, int ck) {
     return !pillarAt(ci, ck) && propAt(ci, ck) == PROP_NONE && floorY(ci, ck) == 0.0f;
 }
 
+float World::softDip(float x, float z) {
+    int ci = cellOf(x), ck = cellOf(z);
+    if (!softAt(ci, ck)) return 0.0f;
+    // Squared falloff rather than linear: it reaches the cell edge at exactly
+    // zero *and* with zero slope, so the bowl meets its neighbours without a
+    // crease, and the middle is flat enough to stand in.
+    float ax = (x - ci * CELL) / (CELL * 0.5f) - 1.0f;
+    float az = (z - ck * CELL) / (CELL * 0.5f) - 1.0f;
+    float r2 = ax * ax + az * az;
+    return r2 >= 1.0f ? 0.0f : SOFT_DEPTH * (1.0f - r2) * (1.0f - r2);
+}
+
 bool World::cursedExit(int ci, int ck) {
     return ih(ci, ck, (uint32_t)seed ^ 0xC0DEu) % 6 == 0;
 }
@@ -943,18 +955,55 @@ void World::ensureMesh(int cx, int cz) {
         for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
             float gx = wx + i * CELL, gz = wz + kk * CELL;
             float fy = d.elev[i][kk] * ELEV_UNIT;
+            if (level == 0 && softAt(cx * CCELLS + i, cz * CCELLS + kk)) {
+                // A rotten patch, and the one thing on Level 0 that will drop you
+                // a floor. It used to be two flat decal quads: a black rectangle
+                // with a blacker rectangle inside it, which you can certainly see
+                // but which reads as a hole already there, or as a rug — not as a
+                // floor that is about to stop being one.
+                //
+                // So it is geometry. The cell is built as a shallow bowl and the
+                // dip catches the ceiling light along its far rim the way a real
+                // sag does; the darkening is damp carpet over a backing that has
+                // gone, not a painted-on square. It still reads across a room.
+                //
+                // SOFT_DEPTH and the falloff live in World::softDip, because
+                // groundAt walks the player down the same bowl and the two must
+                // not drift.
+                const int SOFTSUB = 24;
+                auto dipAt = [&](float u, float v) { return softDip(gx + u * CELL, gz + v * CELL); };
+                for (int a = 0; a < SOFTSUB; a++) for (int b = 0; b < SOFTSUB; b++) {
+                    float u0 = a / (float)SOFTSUB, u1 = (a + 1) / (float)SOFTSUB;
+                    float v0 = b / (float)SOFTSUB, v1 = (b + 1) / (float)SOFTSUB;
+                    float x0 = gx + u0 * CELL, x1 = gx + u1 * CELL;
+                    float z0 = gz + v0 * CELL, z1 = gz + v1 * CELL;
+                    float y00 = fy - dipAt(u0, v0), y10 = fy - dipAt(u1, v0);
+                    float y11 = fy - dipAt(u1, v1), y01 = fy - dipAt(u0, v1);
+                    // The bowl has to shade as a bowl, so take the normal from the
+                    // height field's own slope across this patch rather than
+                    // leaving every quad pointing at (0,1,0).
+                    float dydx = ((y10 + y11) - (y00 + y01)) / (2 * (x1 - x0));
+                    float dydz = ((y01 + y11) - (y00 + y10)) / (2 * (z1 - z0));
+                    float nl = sqrtf(dydx * dydx + 1 + dydz * dydz);
+                    Vector3 n = { -dydx / nl, 1 / nl, -dydz / nl };
+                    // Damp and dark toward the middle, where the backing has gone.
+                    // MB::quad carries one colour and one normal per quad, so both
+                    // the tint ramp and the bowl's shading are banded at the
+                    // subdivision. 8 across two metres came out as a visible
+                    // chequerboard — worse than the flat decal it replaced — and
+                    // 12 still quilted. 24 puts the step at 8 cm, under the noise
+                    // in the carpet, at 576 quads on a patch that occurs once per
+                    // 2660 m2.
+                    float md = 1.0f - dipAt((u0 + u1) * 0.5f, (v0 + v1) * 0.5f) / SOFT_DEPTH;
+                    float k2 = 0.34f + 0.66f * md * md;
+                    Color sc = { (unsigned char)(wcol.r * k2), (unsigned char)(wcol.g * k2),
+                                 (unsigned char)(wcol.b * k2), wcol.a };
+                    fl.quad({x0,y00,z0},{x1,y10,z0},{x1,y11,z1},{x0,y01,z1}, n,
+                            {x0/2,z0/2},{x1/2,z0/2},{x1/2,z1/2},{x0/2,z1/2}, sc);
+                }
+            } else
             fl.quad({gx,fy,gz},{gx+CELL,fy,gz},{gx+CELL,fy,gz+CELL},{gx,fy,gz+CELL},{0,1,0},
                     {gx/2,gz/2},{(gx+CELL)/2,gz/2},{(gx+CELL)/2,(gz+CELL)/2},{gx/2,(gz+CELL)/2},wcol);
-            if (level == 0 && softAt(cx * CCELLS + i, cz * CCELLS + kk)) {
-                // the carpet has gone dark and soft here. don't linger.
-                float mx3 = gx + 1.0f, mz3 = gz + 1.0f;
-                fl.quad({mx3-0.85f,fy+0.006f,mz3-0.85f},{mx3+0.85f,fy+0.006f,mz3-0.85f},
-                        {mx3+0.85f,fy+0.006f,mz3+0.85f},{mx3-0.85f,fy+0.006f,mz3+0.85f},{0,1,0},
-                        {0.75f,0.75f},{0.75f,0.75f},{0.75f,0.75f},{0.75f,0.75f}, Color{ 16, 13, 10, 165 });
-                fl.quad({mx3-0.5f,fy+0.008f,mz3-0.5f},{mx3+0.5f,fy+0.008f,mz3-0.5f},
-                        {mx3+0.5f,fy+0.008f,mz3+0.5f},{mx3-0.5f,fy+0.008f,mz3+0.5f},{0,1,0},
-                        {0.75f,0.75f},{0.75f,0.75f},{0.75f,0.75f},{0.75f,0.75f}, Color{ 10, 8, 6, 205 });
-            }
             if (d.elev[i][kk] == 0) continue;
             // true cross-chunk heights, so terraces spanning a chunk border don't
             // grow phantom risers (the old lookup assumed 0 beyond the edge)
@@ -1598,7 +1647,11 @@ void World::collideCircle(float &px, float &pz, float r, float feetY) {
 
 // floor height here, counting prop tops at or below your feet (so you can stand on furniture)
 float World::groundAt(float x, float z, float feetY) {
-    float g = floorY(cellOf(x), cellOf(z));
+    // A rotten patch is dished in the mesh, so walk into it rather than across
+    // the top of it: the give underfoot is the warning, and a player standing
+    // level on a floor that is visibly bowed under them is not warned of
+    // anything. Furniture tops below still win, as they always did.
+    float g = floorY(cellOf(x), cellOf(z)) - softDip(x, z);
     AABB boxes[MAX_NEARBY_AABBS];
     int cnt = 0;
     int ci = cellOf(x), ck = cellOf(z);

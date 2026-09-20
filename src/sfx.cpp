@@ -480,3 +480,32 @@ Sound makeTapeVoice() {
 
     Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
 }
+
+// The sound a floor makes just before it stops being one. No impact and no
+// resolution: a low resonant groan with a stick-slip stutter over it, which is
+// what deflecting timber actually does and, more to the point, is a sound with
+// no end — it tells you something is still happening and gives you nothing to
+// relax about. A creak that resolves would read as scenery.
+Sound makeFloorGroan() {
+    int n = (int)(1.30f * SAMPLE_RATE);
+    Wave w = makeWaveBuf(n);
+    short *d = (short *)w.data;
+    Rng r(0x50F7ULL);
+    float lp = 0, lp2 = 0;
+    for (int i = 0; i < n; i++) {
+        float t = i / (float)SAMPLE_RATE;
+        float wn = r.f01() * 2 - 1;
+        lp += 0.08f * (wn - lp);        // the body of it: timber, not air
+        lp2 += 0.35f * (wn - lp2);
+        // stick-slip: the joint holds, slips a little, holds again. The rate
+        // climbs across the sound so it reads as getting worse, not as a loop.
+        float ph = t * (5.0f + 6.0f * t); ph -= floorf(ph);
+        float slip = ph < 0.22f ? 1.0f : 0.25f;
+        float body = (sinf(TAU * (74.0f - 12.0f * t) * t) * 0.55f
+                    + sinf(TAU * (113.0f - 18.0f * t) * t) * 0.25f) * slip;
+        float fibre = (lp2 - lp) * 0.30f * slip;          // dry splitting over the top
+        float env = (1.0f - expf(-t * 12.0f)) * (t < 1.12f ? 1.0f : expf(-(t - 1.12f) * 14.0f));
+        d[i] = (short)(clampf1(tanhf((body + lp * 1.4f + fibre) * 1.25f)) * env * 26000);
+    }
+    Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
+}

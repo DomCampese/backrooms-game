@@ -50,3 +50,4 @@ Sound makeDogBark(uint32_t seed, bool through = false);  // the pack, somewhere 
 Sound makeDogHowl();
 Sound makeGulp();                   // three swallows of almond water, and the empty can ringing
 Sound makeTapeVoice();              // a voice off a worn cassette — garbled, hissing, and looping
+Sound makeFloorGroan();             // rotten subfloor taking your weight, and not liking it

@@ -134,7 +134,7 @@ struct Game {
     Material mats[MAT_COUNT]{};
     Sound steps[4]{}, splashes[2]{}, sndBigSplash{}, sndClick{}, sndScare{}, sndWin{},
           sndFlare{}, sndShot{}, sndHit{}, sndKill{}, sndPop{}, sndHeartbeat{}, sndTape{},
-          sndValve{}, sndHowl{}, sndGulp{}, sndVoice{};
+          sndValve{}, sndHowl{}, sndGulp{}, sndVoice{}, sndGroan{};
     static constexpr int NBARKS = 3;
     Sound sndBarks[NBARKS]{};                   // the pack, panned to whichever one spoke
     Sound entSteps[4]{};                        // the thing's own footfalls, panned + attenuated
@@ -233,6 +233,8 @@ struct Game {
     const char *deathTitle = "YOU DID NOT GET OUT";
     float deathTime = 0; int deathM = 0, deathLevel = 0, deathKills = 0;
     float softTimer = 0;                      // how long you've stood on a soft patch
+    float softSag = 0;                        // ...and how far it has let you down while you did
+    double nextGroan = 0;                     // the subfloor complaining, re-triggered as it worsens
     int deathCount = 0, escapeCount = 0, killCount = 0, winCount = 0;
     int deepest = 0;                          // deepest level this descent reached
     bool still = false;                       // under HIDE_ENTER this frame — what the pack listens for
