@@ -137,4 +137,6 @@ bool inCursorHidden() {
     return touchOn() || IsCursorHidden();
 }
 
+bool inTouchActive() { return touchOn(); }
+
 #endif

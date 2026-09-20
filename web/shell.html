@@ -113,6 +113,9 @@
   }
   .tbtn.held { background: rgba(201,180,88,.55); color: #14130f; }
   .tbtn.sm { font-size: 2.1vmin; }
+  /* A held button is lit only while a thumb is on it; a toggle stays lit with
+     nothing touching it, so it needs to read as on from across the screen. */
+  .tbtn[data-hold].held { box-shadow: 0 0 0 0.5vmin rgba(243, 236, 210, .5); }
 </style>
 </head>
 <body>
@@ -135,8 +138,8 @@
       </p>
       <p id="keys-touch" hidden>
         <b>LEFT STICK</b> move, push it all the way to run &middot; <b>DRAG</b> anywhere to look<br>
-        <b>FIRE</b> shoot &middot; <b>AIM</b> hold to sight &middot; <b>LOAD</b> reload &middot; <b>USE</b> interact<br>
-        <b>LAMP</b> torch &middot; <b>ITEM</b> cycle what you hold &middot; <b>THROW</b> flare &middot; <b>MARK</b> chalk<br>
+        <b>FIRE</b> shoot &middot; <b>AIM</b> tap to sight, tap again to lower &middot; <b>LOAD</b> reload &middot; <b>USE</b> interact<br>
+        <b>LIGHT</b> torch &middot; <b>ITEM</b> cycle what you hold &middot; <b>THROW</b> flare &middot; <b>MARK</b> chalk<br>
         Tap <b>FIRE</b> on the title screen to begin.
       </p>
       <p id="legal">
@@ -257,11 +260,11 @@
   // 42vmin and USE at 40vmin from the other edge did exactly that.
   var BUTTONS = [
     { t:'FIRE',  bit:BTN.FIRE,     r:'4vmin',    b:'10vmin',   size:'19vmin', max:104 },
-    { t:'AIM',   bit:BTN.AIM,      r:'25vmin',   b:'11vmin',   size:'14vmin', max:78  },
+    { t:'AIM',   bit:BTN.AIM,      r:'25vmin',   b:'11vmin',   size:'14vmin', max:78, hold:1 },
     { t:'JUMP',  bit:BTN.JUMP,     r:'5vmin',    b:'31vmin',   size:'13vmin', max:72  },
     { t:'LOAD',  bit:BTN.RELOAD,   r:'24vmin',   b:'27vmin',   size:'13vmin', max:72  },
     { t:'USE',   bit:BTN.INTERACT, r:'39vmin',   b:'10vmin',   size:'13vmin', max:72  },
-    { t:'LAMP',  bit:BTN.FLASH,    r:'4vmin',    t2:'4vmin',   size:'12vmin', max:66, sm:1 },
+    { t:'LIGHT', bit:BTN.FLASH,    r:'4vmin',    t2:'4vmin',   size:'12vmin', max:66, sm:1 },
     { t:'ITEM',  bit:BTN.WEAPON,   r:'17.5vmin', t2:'4vmin',   size:'12vmin', max:66, sm:1 },
     { t:'THROW', bit:BTN.THROW,    r:'31vmin',   t2:'4vmin',   size:'12vmin', max:66, sm:1 },
     { t:'DRINK', bit:BTN.DRINK,    r:'4vmin',    t2:'17.5vmin',size:'12vmin', max:66, sm:1 },
@@ -280,6 +283,7 @@
     if (b.b !== undefined)  el.style.bottom = b.b;
     if (b.t2 !== undefined) el.style.top    = b.t2;
     el.dataset.bit = b.bit;
+    if (b.hold) el.dataset.hold = '1';   // stays down until tapped again
     byBit[b.bit] = el;
     layer.appendChild(el);
   });
@@ -362,9 +366,17 @@
     var b = e.target.closest ? e.target.closest('.tbtn') : null;
     if (b) {
       var bit = +b.dataset.bit;
-      roles[e.pointerId] = { kind: 'btn', bit: bit, el: b };
-      press(bit, b);
-      if (bit === BTN.WEAPON) touch.wheel += 1;   // ITEM cycles, as the wheel does
+      var toggles = b.dataset.hold === '1';
+      roles[e.pointerId] = { kind: 'btn', bit: bit, el: b, toggles: toggles };
+      if (toggles) {
+        // Aiming is held down for as long as you are lining up a shot, which
+        // on a phone means a thumb parked on the button and unavailable for
+        // looking or firing — the two things aiming is for. Tap on, tap off.
+        if (touch.down & bit) release(bit, b); else press(bit, b);
+      } else {
+        press(bit, b);
+        if (bit === BTN.WEAPON) touch.wheel += 1;   // ITEM cycles, as the wheel does
+      }
       try { b.setPointerCapture(e.pointerId); } catch (err) {}
       e.preventDefault();
       return;
@@ -400,7 +412,7 @@
   function lift(e) {
     var r = roles[e.pointerId];
     if (!r) return;
-    if (r.kind === 'btn') release(r.bit, r.el);
+    if (r.kind === 'btn') { if (!r.toggles) release(r.bit, r.el); }
     else if (r.kind === 'stick') {
       touch.moveX = touch.moveY = 0;
       knob.style.transform = '';
