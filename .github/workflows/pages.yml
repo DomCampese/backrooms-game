@@ -1,0 +1,91 @@
+# Build the WebAssembly release and publish it to GitHub Pages.
+name: Deploy web build to Pages
+
+on:
+  push:
+    # The deploy branch builds too, so the site can be put up and looked at
+    # before main takes the change. Pages serves one site per repository, so
+    # this publishes the real thing, not a separate preview.
+    branches: [main, 'claude/game-github-pages-deploy-*']
+  workflow_dispatch:
+
+# GITHUB_TOKEN needs to mint a Pages deployment; nothing here writes to the repo.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a running deploy finish rather than cancelling it: a half-published Pages
+# site serves a new index.html against the previous .wasm, which fails to
+# instantiate for every visitor until the next successful run.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  # Pinned to the toolchain the web build was verified against. Bumping it is a
+  # deliberate act: emscripten has changed what it exports onto Module before,
+  # and the failure mode for that was silent (see CLAUDE.md on HEAPF32).
+  EMSDK_VERSION: 6.0.9
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # emsdk is installed directly rather than through a wrapper action. The
+      # first attempt used mymindstorm/setup-emsdk and sat in "Install
+      # Emscripten" for over twenty minutes against the two this takes, with no
+      # output to say why, and had to be cancelled. This is the same two
+      # commands that work locally, pinned to the version the build was
+      # verified against.
+      - name: Cache Emscripten
+        id: emsdk-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/emsdk
+          key: emsdk-${{ env.EMSDK_VERSION }}-${{ runner.os }}
+
+      - name: Install Emscripten
+        if: steps.emsdk-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git ~/emsdk
+          ~/emsdk/emsdk install "$EMSDK_VERSION"
+          ~/emsdk/emsdk activate "$EMSDK_VERSION"
+
+      # raylib is compiled from the tag tools/web-build.sh pins, so the bytes we
+      # ship match the zlib notice in LICENSES/.
+      - name: Cache raylib web build
+        uses: actions/cache@v4
+        with:
+          path: .raylib-web
+          key: raylib-web-5.5-${{ runner.os }}-es3
+
+      - name: Build
+        run: |
+          source ~/emsdk/emsdk_env.sh
+          em++ --version | head -1
+          tools/web-build.sh
+
+      # enablement turns Pages on and sets its source to Actions through the
+      # API, so deploying needs no one to visit the repository settings first.
+      # Without it the deploy job fails with "Get Pages site failed" on a
+      # repository that has never published.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

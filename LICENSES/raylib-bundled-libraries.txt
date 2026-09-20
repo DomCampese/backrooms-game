@@ -1,0 +1,37 @@
+Third-party libraries bundled inside raylib
+===========================================
+
+raylib compiles these single-file libraries directly into libraylib, so they are
+statically linked into every binary this project distributes — including the
+.wasm served from the web build. Their notices are reproduced here because the
+compiled object code carries no notices of its own.
+
+Full license texts live at the end of each library's header in the raylib source
+tree (src/external/), at the raylib version pinned by tools/web-build.sh.
+
+  cgltf                 MIT                      Johannes Kuhlmann
+  dr_flac               public domain or MIT-0   David Reid
+  dr_mp3                public domain or MIT-0   David Reid
+  dr_wav                public domain or MIT-0   David Reid
+  jar_mod               public domain (CC0)      Joshua Reisenauer
+  jar_xm                WTFPL v2 (from libxm)    Romain Dalmaso, Joshua Reisenauer
+  m3d                   MIT                      bzt
+  miniaudio             public domain or MIT-0   David Reid
+  msf_gif               MIT                      Miles Fogle
+  par_shapes            MIT                      Philip Rideout
+  qoa                   MIT                      Dominic Szablewski
+  qoi                   MIT                      Dominic Szablewski
+  rprand                zlib/libpng              Ramon Santamaria
+  sdefl                 MIT or public domain     Micha Mettke
+  sinfl                 MIT or public domain     Micha Mettke
+  stb_image             public domain or MIT     Sean Barrett
+  stb_image_resize2     public domain or MIT     Sean Barrett, Jorge L Rodriguez, Jeff Roberts
+  stb_image_write       public domain or MIT     Sean Barrett
+  stb_perlin            public domain or MIT     Sean Barrett
+  stb_rect_pack         public domain or MIT     Sean Barrett
+  stb_truetype          public domain or MIT     Sean Barrett
+  tinyobj_loader_c      MIT                      Syoyo Fujita and contributors
+  vox_loader            MIT                      Johann Nadalutti
+
+Not every library above is reachable from this game's code paths, but they are
+part of the linked library and are listed rather than guessed at.

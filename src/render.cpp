@@ -1,4 +1,5 @@
 #include "game.h"
+#include "input.h"
 #include "textures.h"   // ENT_FRAMES / ENT_ROWS / DOG_FRAMES: the sprite-sheet layout
 #include "raymath.h"
 #include <cmath>
@@ -660,7 +661,7 @@ void Game::renderUI(double now) {
         hudTextC(t, sw / 2, sh - hud(150), hud(22), Fade({ 190, 178, 150, 255 }, a));
         hudTextC(tapeLine, sw / 2, sh - hud(122), hud(15), Fade({ 150, 140, 118, 230 }, a * 0.9f));
     }
-    if (!IsCursorHidden() && !shotPath) {
+    if (!inCursorHidden() && !shotPath) {
         const char *t = "click to capture mouse";
         hudTextC(t, sw / 2, sh / 2 + hud(80), hud(20), { 200, 190, 150, 200 });
     }
