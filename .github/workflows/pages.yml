@@ -3,10 +3,11 @@ name: Deploy web build to Pages
 
 on:
   push:
-    # The deploy branch builds too, so the site can be put up and looked at
-    # before main takes the change. Pages serves one site per repository, so
-    # this publishes the real thing, not a separate preview.
-    branches: [main, 'claude/game-github-pages-deploy-*']
+    # main only. The github-pages environment refuses a deployment from any
+    # other branch anyway — the job fails in a second with no log at all, which
+    # looks like a broken workflow rather than a rule — so building elsewhere
+    # only burns a runner to produce an artifact nothing can publish.
+    branches: [main]
   workflow_dispatch:
 
 # GITHUB_TOKEN needs to mint a Pages deployment; nothing here writes to the repo.

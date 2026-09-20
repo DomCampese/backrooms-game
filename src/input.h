@@ -29,6 +29,9 @@ bool    inMousePressed(int button);
 Vector2 inMouseDelta();
 float   inWheel();
 bool    inCursorHidden();
+// True only when the on-screen controls are driving. HUD text that names a key
+// or a mouse button is wrong on that platform, so it has to ask.
+bool    inTouchActive();
 
 #else
 
@@ -42,5 +45,6 @@ inline bool    inMousePressed(int b)    { return IsMouseButtonPressed(b); }
 inline Vector2 inMouseDelta()           { return GetMouseDelta(); }
 inline float   inWheel()                { return GetMouseWheelMove(); }
 inline bool    inCursorHidden()         { return IsCursorHidden(); }
+inline bool    inTouchActive()          { return false; }
 
 #endif

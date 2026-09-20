@@ -54,7 +54,7 @@ void Game::init() {
         std::exit(EXIT_FAILURE);
     }
 #endif
-    InitWindow(1440, 850, "THE BACKROOMS — Level 0");
+    InitWindow(1440, 850, "THE BACKROOMS");
     SetExitKey(KEY_NULL);
     SetWindowMinSize(640, 400);
     InitAudioDevice();

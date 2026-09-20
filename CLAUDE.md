@@ -201,6 +201,22 @@ playing state.
 agree. Get them out of step and a button still works, it just does another
 button's job, which reads as a game bug rather than a mapping bug.
 
+**Aim is a toggle on touch, and a hold everywhere else.** Holding a button to
+aim costs the thumb that would otherwise be looking or firing — the two things
+aiming is for. `hold:1` in `web/shell.html`'s button table flips the bit instead
+of setting it, and releasing the finger leaves it set; `lift()` has to skip the
+release for those, or the toggle lasts exactly as long as the tap. A toggle also
+needs an on-state readable with nothing touching it, which the plain `.held`
+fill is not — `[data-hold].held` adds a ring.
+
+**HUD text that names a key or a mouse button is wrong on a phone.** The
+revolver line read `· hold RMB aim` on a device with neither, so it asks
+`inTouchActive()` and says `tap AIM` instead. Build it in ONE `TextFormat`
+call — its return is a slot in a small rotating buffer, so composing from two
+calls hands `DrawText` the second string twice. The rest of the bottom-left
+block still names number keys (`1 revolver`, `2 flare`) that a touch player
+cannot press; that is pre-existing and still worth fixing.
+
 **A fixed thumbstick is the wrong thing to build.** Anchored to one spot, every
 grab that lands slightly off it becomes a look-drag instead of a step, and on a
 phone that is most grabs. The stick floats to wherever the thumb lands in the
