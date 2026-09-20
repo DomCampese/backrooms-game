@@ -107,4 +107,5 @@ Tag the source revision used for a release and link that revision from its downl
 or demo page; do not rely only on a moving default branch.
 
 Source repository: https://github.com/DomCampese/backrooms-game
+Web build: https://domcampese.github.io/backrooms-game/
 Build instructions: [README](README.md#build--run).
