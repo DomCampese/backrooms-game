@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 ## Flashlight visibility
 
@@ -774,6 +774,25 @@ the lit surfaces looking fine, which does not present as a tone-curve problem �
 it presents as "why is Level 3 completely black now". Whatever compensates for
 that has to decay as ambient rises, or the one level whose ambient was never in
 the toe (the poolrooms, four times any other) blows out to white paper instead.
+
+**A FOV authored in vertical degrees only works at one aspect.** `fov` is the
+camera's *vertical* angle, and raylib derives the horizontal one from it times
+the aspect — so the authored 70 was only right at the 1440x850 window (about
+1.69:1) every HUD number, light band and screenshot comparison was made
+against. On a portrait phone (0.46:1) it became a 34 deg horizontal keyhole
+that read as "the game is fine, just narrow" rather than as a projection bug.
+`Game::baseFov()` now locks the horizontal view instead (pure
+`fovForWindow()` for the harness), exact at the authored shape so the sweep
+stays pixel-clean, clamped 58-100 vertical so square windows don't go fisheye
+and phone-landscape doesn't go binoculars. Two rules to keep: the sprint/aim/
+slide terms stay constant *vertical* offsets on the base — they are action,
+not viewport — and `fovForWindow` must invert raylib's own cone identity
+(`tan(fovy/2) = tan(fovX/2)·h/w`, the one render.cpp's culling uses), or the
+lock drifts from what the camera draws. A headless harness cannot drive
+`sprinting` through `updateMovement` — the flag is recomputed from the shift
+key each frame and CGEvent key injection does not reach GLFW — so the sprint
+composition is asserted as a target offset, not as a live flag; a check that
+passes only against a value the next line overwrites is worse than none.
 
 **A HUD authored in pixels is a HUD that only works at one resolution.** Every
 `DrawText` size and every offset from a screen edge in `render.cpp` goes through

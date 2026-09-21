@@ -19,7 +19,7 @@ LINK=("$SO" "-Wl,-rpath,$(dirname "$SO")" "-lpython$PYV" -lm -ldl -lpthread)
 # previous ./backrooms survives the failure and the next tools/shot.sh captures
 # THE OLD BUILD — a green-looking screenshot of code that is not the code you
 # just wrote. That has cost this project two separate debugging sessions (see
-# CLAUDE.md, "A build failure looks exactly like a passing build if you only
+# AGENTS.md, "A build failure looks exactly like a passing build if you only
 # read the last line"), because the compiler error scrolls past and the capture
 # afterwards works perfectly.
 #

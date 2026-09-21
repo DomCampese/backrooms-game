@@ -4,11 +4,15 @@
 #define CHECK(condition) do { if (!(condition)) { \
     std::fprintf(stderr,"FAIL %s:%d: %s\n",__FILE__,__LINE__,#condition); \
     std::exit(EXIT_FAILURE); } } while (0)
+#define CHECK_NEAR(a,b,eps) do { if (!(std::fabs(double(a)-double(b)) <= (eps))) { \
+    std::fprintf(stderr,"FAIL %s:%d: %s (%g) vs %s (%g), |d|>%g\n",__FILE__,__LINE__,#a,(double)(a),#b,(double)(b),(double)(eps)); \
+    std::exit(EXIT_FAILURE); } } while (0)
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
 #include <string>
 #include <cstring>
+
 
 static int captureCount = 0;
 static void capture(Game &g, const char *name) {
@@ -80,6 +84,37 @@ int main() {
     g.reloadT=0;g.weapon=WEAPON_FLARE;g.updateAim(true,.2f);CHECK(!g.aiming);
     g.weapon=WEAPON_REVOLVER;g.paused=true;g.updateAim(true,.2f);CHECK(!g.aiming);
     g.paused=false;g.ammo=6;
+    // Portrait FOV lock. raylib derives fovX from fovy*aspect, so these numbers
+    // are the whole contract: every window at or wider than the authored
+    // 1440x850 must be untouched (the regression sweeps compare those frames),
+    // and a portrait phone must not stay at the ~36-degree keyhole the fixed
+    // 70 made on a 0.46 screen.
+    {
+        auto fovX=[&](int w,int h,float aim){
+            return 2*atanf(tanf(Game::fovForWindow(w,h,aim)*DEG2RAD*0.5f)*(float)w/h)*RAD2DEG;};
+        CHECK_NEAR(Game::fovForWindow(1440,850,0),70,0.01f);    // authored window
+        CHECK_NEAR(fovX(1440,850,0),fovX(390,844,0),0.01f);     // portrait locks fovX
+        CHECK(fovX(390,844,0)>55);                              // was ~36 before
+        CHECK(Game::fovForWindow(1920,1080,0)==70);             // wide: untouched
+        CHECK(Game::fovForWindow(3440,1440,0)==70);             // ultrawide: untouched
+        CHECK(Game::fovForWindow(0,0,0)==70);                   // no window yet
+        // The action terms ride on top of the base, and the smoothing still
+        // eases: at the authored window one dt step toward aim moves fov from
+        // 70 down toward 62 (never instantly), and releasing walks it back up.
+        // The targets themselves are fixed numbers in updateMovement and the
+        // sweep frames above pin the base; this pins that they still compose.
+        g.aimBlend=1;g.sprinting=false;g.slide=0;g.px=15;g.pz=15;g.py=0;
+        g.updateMovement(1.0f/60);CHECK(g.fov<69.5f && g.fov>62.0f);
+        g.aimBlend=0;g.updateMovement(1.0f/60);CHECK(g.fov>68.0f && g.fov<70.0f);   // easing back up
+        // Sprint and slide: `sprinting` is recomputed from the shift key
+        // every updateMovement and no key state exists headless (CGEvents
+        // reach GLFW neither under shot.sh nor from the harness), so those
+        // terms cannot be driven through the live call. They are constant
+        // offsets on the target in updateMovement — the aim test above
+        // already pins the composition — and the base itself is pinned by
+        // the checks and the sweep. No fake flag gymnastics: a check that
+        // passes only against a clobbered value would be worse than none.
+    }
     // Exercise the imported animation continuously, including its endpoint seam.
     auto vertices = [&]() {
         std::vector<float> result;

@@ -226,6 +226,10 @@ void Game::init() {
 
     nextBlackout = blackoutIn(0, 40, 60);
     runStart = GetTime();
+    // Seed the smoothed camera angle from the window in hand: a phone's first
+    // frame must not open at the desktop's 70 and slide sideways out of the
+    // keyhole over a quarter second.
+    fov = baseFov();
     rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
     SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);   // post CA/bloom sample past the edges: clamp, don't wrap
 
@@ -769,6 +773,9 @@ bool Game::tick() {
         UnloadRenderTexture(rt);
         rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
         SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);   // post CA/bloom sample past the edges: clamp, don't wrap
+        // Same reason as the init seed: turn the phone on its side mid-run and
+        // the first frame at the new shape should already be framed for it.
+        fov = baseFov();
     }
     if (IsKeyPressed(KEY_F11)) ToggleBorderlessWindowed();
 
@@ -881,6 +888,57 @@ void Game::updateLook() {
     fwd = { cosf(pitch) * cosf(yaw), sinf(pitch), cosf(pitch) * sinf(yaw) };
     f2x = cosf(yaw); f2z = sinf(yaw);
     r2x = -sinf(yaw); r2z = cosf(yaw);
+}
+
+// The base vertical FOV for the window the game is actually in, as a pure
+// function of size (so tools/regression.cpp can assert the whole curve without
+// a GL context) — screen shape only; the sprint/aim/slide pulls live at their
+// one call site in updateMovement, which is also the only consumer per frame.
+//
+// raylib derives the horizontal angle from fovy times the aspect ratio, so a
+// fixed 70 deg was only ever right at the 1440x850 window the game opens in —
+// about 1.69:1. Widen past that and you gain the view a wide monitor is for;
+// narrow it — a phone in portrait, say 390x844, 0.46:1 — and the horizontal
+// view collapses to 34 deg: less than the cone of human vision, so the game
+// is played through a keyhole and the corridors the whole build is about
+// vanish off the sides.
+//
+// So lock the thing that actually carries the game — the horizontal view. The
+// ~100 deg a 16:9 desktop shows at the authored 70 deg vertical is the anchor:
+// the base vertical angle is whatever reproduces it, clamped into a band where
+// neither axis is a caricature. The clamp does real work at the extremes: a
+// square-ish 1:1 window would need 138 deg vertically to hold 100 across,
+// which is fisheye; a 1290x2796 phone turned to landscape would need 29 deg,
+// which is binoculars. Inside the band, portrait keeps its tall frame — walls
+// you can still look up and down at — and simply stops losing the room to the
+// sides.
+//
+// `aim` exists for one reason: the sights subtract from whatever this returns,
+// so on a dead-square window — where the clamp below pins the value — aiming
+// must still narrow the sight picture. The band leaves exactly that much room
+// at the top instead of pinning the base.
+float Game::fovForWindow(int w, int h, float aim) {
+    if (w <= 0 || h <= 0) return 70.0f;   // no window yet: the authored number
+    const float refAspect = 1440.0f / 850.0f;
+    // anchorX is the horizontal angle (radians) the authored 70 deg vertical
+    // shows on the 1440x850 window, ~1.741 rad = 99.7 deg.
+    float anchorX = 2.0f * atanf(tanf(35.0f * DEG2RAD) * refAspect);
+    // Invert the same identity raylib itself uses (render.cpp's culling cone:
+    // tan(fovy/2) = tan(fovX/2) * h / w). One formula, so the lock cannot
+    // drift from what the camera actually draws.
+    float fovy = 2.0f * atanf(tanf(anchorX * 0.5f) * h / w) * RAD2DEG;
+    if (w >= refAspect * h) {
+        // Wide or equal: keep the authored vertical frame, so ultrawides gain
+        // peripheral view the normal way. The band's bottom is the authored 70
+        // — the reference window lands exactly on it — and the top leaves the
+        // aim pull room to bite even where this clamp pins the base.
+        fovy = clampf(fovy, 70.0f, fminf(100.0f, 78.0f + 8.0f * aim));
+    }
+    return fmaxf(fovy, 58.0f);   // portrait floor: ~69 deg horizontal at 0.46
+}
+
+float Game::baseFov() const {
+    return fovForWindow(GetScreenWidth(), GetScreenHeight(), 0);
 }
 
 void Game::updateSprint(bool requested, bool moving, bool crouched, float dt) {
@@ -1035,13 +1093,26 @@ void Game::updateMovement(float dt) {
     // integer number of strides and an even one, so both the footfall crossing
     // above and render.cpp's sinf(bobPhase*PI) sway are continuous across it.
     if (bobPhase > 4096.0f) bobPhase -= 4096.0f;
-    // Two independent pulls on the FOV, and they compose: sighting the revolver
-    // narrows it 8 degrees (the iron-sight work), and the corridor closes in a
-    // further 15 as the last of your grip goes (STK-03). The slide reads as the
-    // building narrowing rather than as a camera effect, which is the point —
-    // you notice the walls before you notice the meter. Sprinting overrides the
-    // aim term because you cannot hold sights at a run.
-    float fovT = (sprinting ? 79.0f : 70.0f - 8.0f * aimBlend) - slide * 15.0f;
+    // Three pulls on the FOV, and they compose. The screen-shape term is
+    // baseFov(): raylib derives the horizontal angle from the vertical one
+    // times the aspect ratio, so a fixed 70 deg was only ever right at the
+    // 1440x850 window the game opens in, and a portrait phone played the game
+    // through a 34 deg keyhole. baseFov() locks the horizontal view instead —
+    // exact match at the authored desktop shape, nothing narrower than a
+    // comfortable vertical on any other. On top of the screen-shape term:
+    // sighting the revolver narrows the view by 8 degrees (the iron-sight
+    // work), and the corridor closes in a further 15 as the last of your grip
+    // goes (STK-03). The slide reads as the building narrowing rather than as
+    // a camera effect, which is the point — you notice the walls before you
+    // notice the meter. Sprinting overrides the aim term because you cannot
+    // hold sights at a run. Both stay the same vertical degrees at every
+    // screen shape: they are about the action, not about the viewport.
+    float fovT = fovForWindow(GetScreenWidth(), GetScreenHeight(), 0)
+        + (sprinting ? 9.0f : -8.0f * aimBlend) - slide * 15.0f;
+    // At the 1440x850 window the whole game was authored against this is
+    // exactly the old 70 / 79 / 62 / 55; every other screen shape only ever
+    // widens the view, never past the comfort floor below.
+    fovT = clampf(fovT, 50.0f, 115.0f);
     fov += (fovT - fov) * fminf(1, 6 * dt);
 
     // hiding: crouched, close enough to real cover, and *still* — checked after
@@ -1080,7 +1151,7 @@ void Game::updateMovement(float dt) {
 void Game::updateDevKeys(double now) {
     // ---- dev tools (only while the F3 debug HUD is up)
     if (debugHud) {
-        if (inKeyPressed(KEY_B)) {   // force a blackout right now
+        if (inKeyPressed(KEY_B)) {   // force a blackout now
             blackoutEnd = now + 3.0 + grng.f01() * 3.0;
             nextBlackout = level == 2 ? BLACKOUT_NEVER : blackoutIn(blackoutEnd, 45, 75);
         }

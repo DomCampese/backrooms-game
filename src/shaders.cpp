@@ -13,7 +13,7 @@
 //
 // The native string keeps the leading newline that the raw literal used to
 // contribute, so the GLSL the desktop build compiles is unchanged to the byte
-// (prove it with the assembly diff in CLAUDE.md). The web string must NOT have
+// (prove it with the assembly diff in AGENTS.md). The web string must NOT have
 // it: #version has to be the first token, and ANGLE is entitled to reject a
 // shader whose directive is preceded by anything at all.
 #ifdef PLATFORM_WEB

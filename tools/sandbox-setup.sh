@@ -4,7 +4,7 @@
 # There is no raylib package in the Claude Code web sandbox, but the Python
 # wheel ships a complete raylib shared object plus cffi-preprocessed headers,
 # and C++ links against both perfectly well. This turns the prose recipe in
-# CLAUDE.md into one command. Idempotent; safe to re-run.
+# AGENTS.md into one command. Idempotent; safe to re-run.
 #
 # Writes:  rlshim/{raylib,raymath,rlgl}.h   and   .rlwheel/  (both gitignored)
 set -euo pipefail
@@ -115,7 +115,7 @@ cat >> "$ROOT/rlshim/raylib.h" <<'COLORS'
 COLORS
 
 # tools/pixdiff.py — the only way to check a visual change numerically, and the
-# thing CLAUDE.md tells you to reach for — imports PIL, which a fresh sandbox
+# thing AGENTS.md tells you to reach for — imports PIL, which a fresh sandbox
 # does not have. Installing it here means the first diff anyone runs works
 # rather than dying on ModuleNotFoundError after a ten-minute sweep.
 if ! python3 -c 'import PIL' 2>/dev/null; then
