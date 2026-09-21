@@ -29,7 +29,10 @@ enum : uint32_t {
 };
 
 // One frame's worth of touch state, filled by the EM_ASM block below. Laid out
-// as 4-byte fields because that block addresses it through HEAPU32/HEAPF32.
+// as 4-byte fields because that block addresses it through HEAPU32/HEAPF32 —
+// so THE ORDER HERE IS THE INDEX THERE. Insert a field in the middle and every
+// field after it silently starts reading its neighbour's value, which reads as
+// a control that has gone haywire rather than as a layout mistake. Append.
 struct TouchFrame {
     uint32_t active;    // are the touch controls on at all
     uint32_t down;      // held this frame
@@ -39,6 +42,7 @@ struct TouchFrame {
     float    moveX;     // thumbstick, -1..1, already deadzoned by the shell
     float    moveY;
     float    wheel;     // weapon cycle steps
+    uint32_t startGesture;  // taps on open screen + pushes of the stick (edges)
 };
 TouchFrame g{};
 
@@ -84,6 +88,10 @@ void webInputPoll() {
         HEAPF32[p + 5] = t.moveX;
         HEAPF32[p + 6] = t.moveY;
         HEAPF32[p + 7] = t.wheel;   t.wheel = 0;
+        // Drained like `pressed`, and for the same reason: the title card is
+        // dismissed by an edge, and a tap that begins and ends between two of
+        // this sandbox's 4 fps frames still has to be seen exactly once.
+        HEAPU32[p + 8] = t.startGesture; t.startGesture = 0;
     }, &g);
 
     if (!touchOn()) { setAimLatch(false); return; }
@@ -169,5 +177,13 @@ bool inCursorHidden() {
 }
 
 bool inTouchActive() { return touchOn(); }
+
+// "I want to start" on a device with no keyboard: a tap on any open part of the
+// screen, or a real push of the thumbstick. Deliberately an EDGE on both, and
+// deliberately not the stick's held deflection — a thumb still resting on the
+// stick at the moment you die would otherwise dismiss the death card the
+// instant its read-it-first hold expires, which is the one thing that hold is
+// for. A finger already down when the card appears has to lift and act again.
+bool webStartGesture() { return touchOn() && g.startGesture != 0; }
 
 #endif
