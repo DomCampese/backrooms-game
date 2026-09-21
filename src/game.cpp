@@ -54,9 +54,19 @@ void Game::init() {
         std::exit(EXIT_FAILURE);
     }
 #endif
-    InitWindow(1440, 850, "THE BACKROOMS — Level 0");
+    InitWindow(1440, 850, "THE BACKROOMS");
     SetExitKey(KEY_NULL);
+#ifdef PLATFORM_WEB
+    // raylib's web resize callback clamps the canvas to screenMin before it
+    // sizes it, so a 640x400 floor renders a 412 px phone at 640 wide and lets
+    // CSS squash the result back down: the whole world comes out horizontally
+    // compressed, which reads as a bad FOV rather than as a window-size bug.
+    // The browser is the window manager here; it will not hand us anything
+    // absurd.
+    SetWindowMinSize(240, 240);
+#else
     SetWindowMinSize(640, 400);
+#endif
     InitAudioDevice();
     rlDisableBackfaceCulling();
 
@@ -335,6 +345,7 @@ void Game::updateMenu(double now) {
     r2x = -sinf(yaw); r2z = cosf(yaw);
     eyeY = 1.62f; bobAmt = 0; leanCur = 0; landDip = 0; softTimer = 0; softSag = 0;
     flashOn = false; flashCur = 0;
+    webReleaseAim();            // the aim latch must not survive into a new run
     ent.st = EState::Hidden; entDist = 1e9f; entDarkCur = 0;
     fear = 0.0f; blackoutCur = 1.0f;
     streamChunks();
@@ -1122,6 +1133,12 @@ void Game::updateWeapons(float dt, double now) {
         }
     }
     updateAim(inCursorHidden() && inMouseDown(MOUSE_BUTTON_RIGHT), dt);
+    // Touch latches the aim (input_web.cpp), so a refused aim has to drop the
+    // latch rather than leave the button lit over a gun that never comes up.
+    // A reload is the one refusal that is temporary — it finishes and the sights
+    // then rise, which is exactly what holding RMB through one does natively —
+    // so it keeps the latch.
+    if (!aiming && !(weapon == WEAPON_REVOLVER && reloadT > 0)) webReleaseAim();
     gunCd = fmaxf(0, gunCd - dt);
     muzzleT = fmaxf(0, muzzleT - dt);
     muzzleSmoke = fmaxf(0, muzzleSmoke - dt * 0.7f);   // powder haze drifts and thins

@@ -44,7 +44,29 @@ TouchFrame g{};
 
 bool touchOn() { return g.active != 0; }
 
+// AIM latches on a touch device: one tap raises the sights, another drops them.
+// Hold-to-aim is what the mouse does, and it is the wrong gesture here — the
+// right thumb has to stay on the AIM button for the length of a gunfight, which
+// leaves nothing to fire with while the left thumb is already walking.
+//
+// The latch lives here rather than in the shell because the game is what decides
+// whether an aim is legal at all (Game::updateAim), and a latch the game has
+// refused has to drop rather than sit lit. The shell only reports the tap and
+// draws whatever state it is told.
+bool aimLatch = false;
+
+void setAimLatch(bool on) {
+    if (aimLatch == on) return;
+    aimLatch = on;
+    // The button's lit state is not the finger's any more, so the shell cannot
+    // work it out on its own.
+    EM_ASM({ if (Module.__touch && Module.__touch.setHeld) Module.__touch.setHeld($0, $1 != 0); },
+           (int)BTN_AIM, on ? 1 : 0);
+}
+
 } // namespace
+
+void webReleaseAim() { setAimLatch(false); }
 
 void webInputPoll() {
     EM_ASM({
@@ -63,6 +85,15 @@ void webInputPoll() {
         HEAPF32[p + 6] = t.moveY;
         HEAPF32[p + 7] = t.wheel;   t.wheel = 0;
     }, &g);
+
+    if (!touchOn()) { setAimLatch(false); return; }
+    if (g.pressed & BTN_AIM) setAimLatch(!aimLatch);
+    // Reload is the one thing the latch can deadlock: Game::canReload refuses
+    // while the sights are up, so a latched aim would swallow every tap of LOAD
+    // and the gun could never be reloaded again. Dropping the sights is what a
+    // mouse player does before pressing R, so do it for them. Everything else
+    // that makes an aim illegal is caught by webReleaseAim from the game side.
+    if (g.pressed & BTN_RELOAD) setAimLatch(false);
 }
 
 float webMoveScale() {
@@ -107,7 +138,7 @@ bool inKeyPressed(int key) {
 bool inMouseDown(int button) {
     if (IsMouseButtonDown(button)) return true;
     if (!touchOn()) return false;
-    return button == MOUSE_BUTTON_RIGHT && (g.down & BTN_AIM) != 0;
+    return button == MOUSE_BUTTON_RIGHT && aimLatch;
 }
 
 bool inMousePressed(int button) {
@@ -136,5 +167,7 @@ float inWheel() {
 bool inCursorHidden() {
     return touchOn() || IsCursorHidden();
 }
+
+bool inTouchActive() { return touchOn(); }
 
 #endif

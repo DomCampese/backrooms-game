@@ -5,7 +5,7 @@ This is an unofficial hobby game, not an endorsed or official Backrooms release.
 
 ## Game license
 
-THE BACKROOMS — Level 0: a procedural horror game by Dominic Campese.
+THE BACKROOMS: a procedural horror game by Dominic Campese.
 Copyright (C) 2026 Dominic Campese, for the project's original copyrightable contributions.
 
 The game software is licensed under the GNU General Public License, version 3
