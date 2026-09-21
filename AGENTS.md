@@ -299,6 +299,14 @@ CommonJS, so it arrives under `.default` — the script handles both, and withou
 that the failure is a bare `ERR_MODULE_NOT_FOUND` that looks like a missing
 package.
 
+**`navigator.maxTouchPoints` describes capability, not the primary input.**
+Chrome on a touchscreen laptop can report several touch points while the player
+is using a mouse or trackpad, so treating any nonzero value as mobile covers a
+desktop game with the touch overlay. Default from `(pointer: coarse)`, which
+describes the primary pointer, and leave hybrid/tablet overrides to `?touch=1`
+and `?touch=0`. The mobile check simulates a fine-pointer desktop with ten touch
+points so this does not regress.
+
 **`emcc` will compile this and then fail to link it.** Every C++ symbol comes
 back undefined — `operator new`, `operator delete`, `std::__2::__next_prime` —
 which reads as a missing stdlib or a broken sysroot. It is neither: `emcc` is

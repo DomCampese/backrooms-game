@@ -172,6 +172,51 @@ for (const size of SIZES) {
   await page.close();
 }
 
+// A touchscreen laptop reports maxTouchPoints in Chrome even though its
+// primary pointer is a mouse or trackpad. Capability alone must not cover the
+// desktop game with mobile controls; the primary-pointer media query decides.
+const hybrid = await browser.newPage({ viewport: { width: 1440, height: 850 } });
+await hybrid.addInitScript(() => {
+  Object.defineProperty(Navigator.prototype, 'maxTouchPoints', {
+    configurable: true,
+    get: () => 10,
+  });
+});
+await hybrid.goto(url);
+const hybridTouch = await hybrid.evaluate(() => ({
+  active: Module.__touch.active,
+  visible: document.getElementById('touch').classList.contains('on'),
+  coarse: matchMedia('(pointer: coarse)').matches,
+  points: navigator.maxTouchPoints,
+}));
+if (hybridTouch.coarse)
+  note({ name: 'hybrid desktop', w: 1440, h: 850 }, 'test browser unexpectedly has a coarse primary pointer');
+if (hybridTouch.points !== 10)
+  note({ name: 'hybrid desktop', w: 1440, h: 850 }, `could not simulate maxTouchPoints (got ${hybridTouch.points})`);
+if (hybridTouch.active || hybridTouch.visible)
+  note({ name: 'hybrid desktop', w: 1440, h: 850 }, 'touch capability enabled mobile controls with a fine primary pointer');
+await hybrid.close();
+
+// The other half of the classifier: an actual coarse-primary phone still gets
+// controls automatically, without relying on the test-only query override.
+const phoneContext = await browser.newContext({
+  viewport: { width: 390, height: 844 },
+  isMobile: true,
+  hasTouch: true,
+});
+const phone = await phoneContext.newPage();
+await phone.goto(url);
+const phoneTouch = await phone.evaluate(() => ({
+  active: Module.__touch.active,
+  visible: document.getElementById('touch').classList.contains('on'),
+  coarse: matchMedia('(pointer: coarse)').matches,
+}));
+if (!phoneTouch.coarse)
+  note({ name: 'coarse phone', w: 390, h: 844 }, 'test browser did not expose a coarse primary pointer');
+if (!phoneTouch.active || !phoneTouch.visible)
+  note({ name: 'coarse phone', w: 390, h: 844 }, 'coarse primary pointer did not enable mobile controls');
+await phoneContext.close();
+
 await browser.close();
 
 if (fails.length) {

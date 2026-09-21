@@ -484,11 +484,13 @@
   layer.addEventListener('pointercancel', function (e) { lift(e, false); });
   layer.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 
-  // Touch by default on a coarse pointer; ?touch=1 forces it on for testing on
-  // a desktop, ?touch=0 forces it off on a tablet with a keyboard attached.
+  // Touch by default only when the primary pointer is coarse. maxTouchPoints
+  // means "touch is available", so using it here also catches touchscreen
+  // laptops whose primary input is still a mouse or trackpad. ?touch=1 forces
+  // controls on for testing; ?touch=0 forces them off on a tablet with keys.
   var forced = new URLSearchParams(location.search).get('touch');
   var useTouch = forced !== null ? forced !== '0'
-               : (matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0);
+               : matchMedia('(pointer: coarse)').matches;
 
   function setTouch(on) {
     touch.active = !!on;
