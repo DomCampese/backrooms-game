@@ -23,7 +23,7 @@ command -v em++ >/dev/null || {
 # which are core in GLSL ES 3.00 and simply absent from ES 2.0, so an ES2 build
 # fails to compile the shader — and a failed compile in raylib does not crash,
 # it silently falls back to the default shader and renders a black frame faster
-# than the real one (see CLAUDE.md). There is no partial-credit version of this.
+# than the real one (see AGENTS.md). There is no partial-credit version of this.
 if [ ! -f "$RAYLIB_SRC/libraylib.a" ]; then
     echo "building raylib $RAYLIB_TAG for web..."
     rm -rf "$ROOT/.raylib-web"

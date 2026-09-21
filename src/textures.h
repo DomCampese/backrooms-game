@@ -23,7 +23,7 @@ constexpr int DOG_FRAMES = 4;      // the pack, 192 px per frame
 // Rows 3-4 are the same front-on head, sheared: he tips into the direction he is
 // running. This is a shear in the sprite rather than a rotation at the draw call
 // because raylib's DrawBillboardPro does not place a billboard the way
-// DrawBillboardRec does — see CLAUDE.md.
+// DrawBillboardRec does — see AGENTS.md.
 enum EntRow { ENT_ROW_AWAY = 0, ENT_ROW_HALF, ENT_ROW_FACE, ENT_ROW_LEAN_L, ENT_ROW_LEAN_R, ENT_ROWS };
 
 Texture2D makeEntityTex();         // PIRATE CLARK billboard sprite, ENT_FRAMES wide

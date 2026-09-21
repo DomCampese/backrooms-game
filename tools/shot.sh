@@ -13,7 +13,7 @@ if [[ $(uname -s) == Linux ]]; then
     # asking for a second display (say two worktrees verifying side by side)
     # silently skipped the launch and every capture died at GLFW with nothing
     # but ALSA warnings in the log to go on. pgrep -f is read-only, so unlike
-    # the pkill -f trap in CLAUDE.md it cannot match and kill this shell.
+    # the pkill -f trap in AGENTS.md it cannot match and kill this shell.
     if ! pgrep -f "Xvfb ${DISPLAY} " >/dev/null; then
         # A dead Xvfb leaves its socket behind, and a stale socket is
         # indistinguishable from a live one by existence alone — so waiting for

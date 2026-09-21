@@ -156,7 +156,8 @@ struct Game {
     float velx = 0, velz = 0;
     float py = 0, vy = 0;                     // feet height (0 = dry floor, -0.6 = pool bottom)
     bool grounded = true;
-    float stamina = 1.0f, fov = 70.0f;
+    float stamina = 1.0f, fov = 70.0f;        // camera fovy, deg — the action pull;
+                                              // screen shape rides on top in baseFov()
     float bobPhase = 0;                       // counts footfalls: an integer is a foot landing
     bool flashOn = false;
     float flashCur = 0;
@@ -364,6 +365,12 @@ struct Game {
 
     // update, in frame order (game.cpp)
     void updateLook();
+    // Base camera fovy for the current window: locks the horizontal view so a
+    // narrow portrait phone does not play through a 34 deg keyhole. Called
+    // once a frame from the FOV smoothing in updateMovement — read `fov`.
+    float baseFov() const;
+    // The same mapping as a pure function of window size, for the harness.
+    static float fovForWindow(int w, int h, float aim);
     void updateMovement(float dt);
     void updateSprint(bool requested, bool moving, bool crouched, float dt);
     void updateDevKeys(double now);
