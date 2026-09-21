@@ -1,4 +1,4 @@
-# THE BACKROOMS — Level 0
+# THE BACKROOMS
 
 ### ▶ [Play it in your browser](https://domcampese.github.io/backrooms-game/)
 
@@ -56,9 +56,22 @@ in the lower left (push it all the way to run), drag anywhere else to look, and
 a button cluster for fire, aim, reload, jump, use, torch, item, throw, chalk and
 drink. Force them on or off with `?touch=1` / `?touch=0`.
 
+**AIM taps** rather than holds: one tap raises the sights, another drops them.
+Holding it is what a mouse does, and it asks the right thumb to stay parked on
+one button for the length of a gunfight — leaving nothing to fire with. The
+latch belongs to the game, not to the button, so anything that makes the aim
+illegal drops it, and tapping LOAD lowers the sights first (a reload cannot
+start while they are up).
+
 They are drawn by the page, not the game; `src/input.h` folds them into the same
 input questions the desktop build asks, so the game itself does not know which
 it is running on.
+
+`node tools/mobile-check.mjs` loads `web/shell.html` in Chromium at seven phone
+and desktop sizes and asserts the things a screenshot of the world will never
+show you: that no two on-screen controls overlap, that the splash fits or
+scrolls with ENTER on screen, and that the canvas keeps its aspect ratio
+whatever size raylib gives it.
 
 ![screenshot](docs/screenshot.png)
 

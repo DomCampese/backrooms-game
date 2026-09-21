@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>THE BACKROOMS &mdash; Level 0</title>
+<title>THE BACKROOMS</title>
 <meta name="description" content="A procedurally-infinite backrooms horror game, compiled to WebAssembly.">
 <style>
   :root {
@@ -22,56 +22,90 @@
     overflow: hidden;
   }
   #frame { position: fixed; inset: 0; display: flex; flex-direction: column; }
-  #stage { position: relative; flex: 1 1 auto; min-height: 0; background: #000; }
+  #stage {
+    position: relative; flex: 1 1 auto; min-height: 0; background: #000;
+    display: flex; align-items: center; justify-content: center;
+  }
+  /* The element's size is set from JS on every resize — see fitCanvas(). It is
+     NOT 100%/100%: raylib picks the backing-store size itself and stretching
+     that over a differently-shaped box distorts the whole world. */
   canvas.emscripten {
-    display: block; width: 100%; height: 100%;
-    border: 0; outline: none; background: #000;
+    display: block; border: 0; outline: none; background: #000;
   }
   /* The game owns the pointer once it is running; let it have every event. */
   canvas.emscripten:focus { outline: none; }
 
   /* ---- overlay: the click that buys pointer lock and an audio context ---- */
+  /* The gate SCROLLS. Centred with justify-content it does not: a flex container
+     centring content taller than itself overflows past both edges and clips,
+     and the edge that goes first is the bottom — which is where ENTER is. On a
+     landscape phone (about 740x330 of stage) the button was simply gone, and
+     the page looked like it had failed to load rather than like it had more to
+     show. `margin: auto` on the inner block centres it while it fits and hands
+     the overflow to the scroller when it does not. */
   #gate {
     position: absolute; inset: 0; z-index: 20;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 1.25rem; padding: 2rem 1rem;
+    display: flex; overflow-y: auto; overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    /* viewport-fit=cover puts the notch and the home indicator inside the page,
+       so the insets have to be paid back here or the type sits under them. */
+    padding: calc(1.5rem + env(safe-area-inset-top))  calc(1rem + env(safe-area-inset-right))
+             calc(1.5rem + env(safe-area-inset-bottom)) calc(1rem + env(safe-area-inset-left));
     background:
       radial-gradient(ellipse at 50% 40%, rgba(201,180,88,0.10), transparent 62%),
       var(--bg);
     text-align: center;
     transition: opacity .35s ease;
   }
+  #gate-in {
+    margin: auto; width: 100%; max-width: 44rem;
+    display: flex; flex-direction: column; align-items: center; gap: 1.25rem;
+  }
   #gate.hidden { opacity: 0; pointer-events: none; }
   #gate h1 {
-    margin: 0; font-size: clamp(1.5rem, 5.5vw, 2.75rem); letter-spacing: .22em;
+    margin: 0; font-size: clamp(1.35rem, 6.5vmin, 2.75rem); letter-spacing: .22em;
     font-weight: 600; color: var(--wall); text-shadow: 0 0 28px rgba(201,180,88,.25);
   }
-  #gate .sub { margin: 0; color: var(--ink-dim); font-size: clamp(.72rem, 2.4vw, .85rem); letter-spacing: .1em; }
+  #gate .sub { margin: 0; color: var(--ink-dim); font-size: clamp(.7rem, 2.6vmin, .85rem); letter-spacing: .1em; }
   #start {
-    appearance: none; cursor: pointer;
-    padding: .85rem 2.5rem; margin-top: .5rem;
-    font: inherit; font-size: clamp(.85rem, 3vw, 1rem); letter-spacing: .2em;
+    appearance: none; cursor: pointer; touch-action: manipulation;
+    padding: .85rem 2.5rem; margin-top: .25rem; min-height: 2.75rem;
+    font: inherit; font-size: clamp(.85rem, 3.2vmin, 1rem); letter-spacing: .2em;
     color: var(--bg); background: var(--wall); border: 0; border-radius: 2px;
     transition: background .15s ease, transform .15s ease;
   }
   #start:hover:not(:disabled) { background: #dfc96a; transform: translateY(-1px); }
   #start:disabled { background: var(--rule); color: var(--ink-dim); cursor: progress; }
-  #keys {
-    margin: .5rem 0 0; max-width: 34rem;
-    color: var(--ink-dim); font-size: clamp(.66rem, 2.2vw, .76rem); line-height: 1.9;
+  #keys, #keys-touch {
+    margin: 0; max-width: 34rem;
+    color: var(--ink-dim); font-size: clamp(.64rem, 2.4vmin, .76rem); line-height: 1.9;
   }
-  #keys b { color: var(--ink); font-weight: 600; }
+  #keys b, #keys-touch b { color: var(--ink); font-weight: 600; }
   #legal {
-    max-width: 40rem; margin: .75rem 0 0;
-    color: #6f6a58; font-size: clamp(.6rem, 2vw, .68rem); line-height: 1.75;
+    max-width: 40rem; margin: 0;
+    color: #6f6a58; font-size: clamp(.58rem, 2.1vmin, .68rem); line-height: 1.75;
   }
   #legal a { color: var(--wall-dim); }
+  /* A short viewport is a phone on its side. Nothing is dropped — the licence
+     notice has to stay on the screen the program starts on — it just packs in
+     so the button is above the fold rather than one scroll below it. */
+  @media (max-height: 620px) {
+    #gate { padding-top: calc(1rem + env(safe-area-inset-top));
+            padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
+    #gate-in { gap: .7rem; }
+    #keys, #keys-touch { line-height: 1.6; }
+    #legal { line-height: 1.5; }
+    #start { padding: .7rem 2rem; }
+  }
 
   /* ---- footer: the notices a conveyed binary has to carry ---- */
   #bar {
     flex: 0 0 auto; z-index: 10;
     display: flex; flex-wrap: wrap; align-items: center; gap: .4rem 1.1rem;
     padding: .45rem .9rem;
+    padding-left: calc(.9rem + env(safe-area-inset-left));
+    padding-right: calc(.9rem + env(safe-area-inset-right));
+    padding-bottom: calc(.45rem + env(safe-area-inset-bottom));
     border-top: 1px solid var(--rule); background: #100f0c;
     font-size: .68rem; letter-spacing: .05em; color: var(--ink-dim);
   }
@@ -79,7 +113,10 @@
   #bar a:hover { color: var(--wall); border-bottom-color: var(--wall-dim); }
   #bar .spacer { flex: 1 1 auto; }
   #bar .note { color: #5d5949; }
-  @media (max-width: 34rem) {
+  /* 44rem, not 34: the bar is the only thing between the viewport and the
+     canvas, so every line it wraps to is a line of game it takes away. A
+     640 px landscape phone was wrapping it to two. */
+  @media (max-width: 44rem) {
     #bar { font-size: .6rem; gap: .3rem .7rem; padding: .35rem .6rem; flex-wrap: nowrap; }
     #bar .note, #bar > span:first-child { display: none; }
   }
@@ -125,8 +162,9 @@
     </div>
 
     <div id="gate">
+     <div id="gate-in">
       <h1>THE BACKROOMS</h1>
-      <p class="sub">LEVEL 0 &middot; you noclipped out of reality</p>
+      <p class="sub">you noclipped out of reality</p>
       <button id="start" disabled>LOADING&hellip;</button>
       <p id="keys">
         <b>WASD</b> move &middot; <b>MOUSE</b> look &middot; <b>SHIFT</b> sprint &middot; <b>RMB</b> aim &middot; <b>LMB</b> fire<br>
@@ -135,12 +173,12 @@
       </p>
       <p id="keys-touch" hidden>
         <b>LEFT STICK</b> move, push it all the way to run &middot; <b>DRAG</b> anywhere to look<br>
-        <b>FIRE</b> shoot &middot; <b>AIM</b> hold to sight &middot; <b>LOAD</b> reload &middot; <b>USE</b> interact<br>
-        <b>LAMP</b> torch &middot; <b>ITEM</b> cycle what you hold &middot; <b>THROW</b> flare &middot; <b>MARK</b> chalk<br>
-        Tap <b>FIRE</b> on the title screen to begin.
+        <b>FIRE</b> shoot &middot; <b>AIM</b> tap to raise the sights, tap again to drop them<br>
+        <b>LOAD</b> reload &middot; <b>USE</b> interact &middot; <b>LAMP</b> torch &middot; <b>ITEM</b> cycle what you hold<br>
+        <b>THROW</b> flare &middot; <b>MARK</b> chalk &middot; tap <b>FIRE</b> on the title screen to begin
       </p>
       <p id="legal">
-        THE BACKROOMS &mdash; Level 0, Copyright &copy; 2026 Dominic Campese.
+        THE BACKROOMS, Copyright &copy; 2026 Dominic Campese.
         This program comes with <b>ABSOLUTELY NO WARRANTY</b>. It is free software, and you
         are welcome to redistribute it under the terms of the
         <a href="LICENSE" target="_blank" rel="noopener">GNU GPL version 3</a>.
@@ -148,11 +186,12 @@
         for the Backrooms authors and CC0 assets it builds on.
         Not affiliated with or endorsed by the Backrooms Wiki.
       </p>
+     </div>
     </div>
   </div>
 
   <div id="bar">
-    <span>THE BACKROOMS &mdash; Level 0</span>
+    <span>THE BACKROOMS</span>
     <a href="LICENSE" target="_blank" rel="noopener">License (GPLv3)</a>
     <a href="CREDITS.md" target="_blank" rel="noopener">Credits</a>
     <a id="src" href="https://github.com/DomCampese/backrooms-game" target="_blank" rel="noopener">Source</a>
@@ -257,7 +296,9 @@
   // 42vmin and USE at 40vmin from the other edge did exactly that.
   var BUTTONS = [
     { t:'FIRE',  bit:BTN.FIRE,     r:'4vmin',    b:'10vmin',   size:'19vmin', max:104 },
-    { t:'AIM',   bit:BTN.AIM,      r:'25vmin',   b:'11vmin',   size:'14vmin', max:78  },
+    // AIM latches: the game owns the state (src/input_web.cpp) and tells us how
+    // to draw it, so this button must not light itself up under the finger.
+    { t:'AIM',   bit:BTN.AIM,      r:'25vmin',   b:'11vmin',   size:'14vmin', max:78, latch:1 },
     { t:'JUMP',  bit:BTN.JUMP,     r:'5vmin',    b:'31vmin',   size:'13vmin', max:72  },
     { t:'LOAD',  bit:BTN.RELOAD,   r:'24vmin',   b:'27vmin',   size:'13vmin', max:72  },
     { t:'USE',   bit:BTN.INTERACT, r:'39vmin',   b:'10vmin',   size:'13vmin', max:72  },
@@ -270,6 +311,7 @@
   ];
 
   var byBit = {};
+  var latched = {};     // bits whose lit state the game sets, not the finger
   BUTTONS.forEach(function (b) {
     var el = document.createElement('button');
     el.className = 'tbtn' + (b.sm ? ' sm' : '');
@@ -281,18 +323,27 @@
     if (b.t2 !== undefined) el.style.top    = b.t2;
     el.dataset.bit = b.bit;
     byBit[b.bit] = el;
+    if (b.latch) latched[b.bit] = 1;
     layer.appendChild(el);
   });
+
+  // Called from src/input_web.cpp for a latching button. Its lit state is the
+  // game's answer — whether the sights are actually up — and not where a finger
+  // happens to be, so only the game may set it.
+  touch.setHeld = function (bit, on) {
+    var el = byBit[bit];
+    if (el) el.classList.toggle('held', !!on);
+  };
 
   function press(bit, el) {
     // A tap shorter than a frame still has to fire, so downs accumulate into
     // `pressed` and are drained by the C++ side rather than sampled.
     touch.down |= bit; touch.pressed |= bit;
-    if (el) el.classList.add('held');
+    if (el && !latched[bit]) el.classList.add('held');
   }
   function release(bit, el) {
     touch.down &= ~bit;
-    if (el) el.classList.remove('held');
+    if (el && !latched[bit]) el.classList.remove('held');
   }
 
   // pointerId -> what that finger is doing. Several fingers at once is the
@@ -428,6 +479,44 @@
   }
   setTouch(useTouch);
 
+  // ---- canvas geometry ---------------------------------------------------
+  // raylib sizes the canvas's own backing store, and it takes that size from
+  // window.innerWidth/innerHeight (rcore_web.c, EmscriptenResizeCallback) — not
+  // from the element's box. The element's box is #stage, the viewport minus the
+  // footer, so the two never agreed and the world was drawn stretched to cover
+  // the difference: a few percent vertically on a desktop, and a third
+  // horizontally on a phone narrower than the minimum window size the game used
+  // to ask for. Neither reads as a window-size bug; it reads as a bad field of
+  // view, which is why it survived this long.
+  //
+  // Rather than fight raylib for ownership of the size, let the element carry
+  // whatever raylib picked: scale it to fit inside the stage at its own aspect
+  // ratio and let the remainder go black. Nothing is stretched, nothing is
+  // clipped, and it stays right whatever the two sides decide independently.
+  var stage = document.getElementById('stage');
+  var lastFit = '';
+  function fitCanvas() {
+    var bw = canvas.width || 1, bh = canvas.height || 1;
+    var aw = stage.clientWidth, ah = stage.clientHeight;
+    if (!aw || !ah) return;
+    var k = Math.min(aw / bw, ah / bh);
+    var w = Math.max(1, Math.round(bw * k)), h = Math.max(1, Math.round(bh * k));
+    var key = w + 'x' + h;
+    if (key === lastFit) return;
+    lastFit = key;
+    canvas.style.width  = w + 'px';
+    canvas.style.height = h + 'px';
+  }
+  // The first sizing happens inside InitWindow, which is not a DOM event at all,
+  // and raylib's own handler runs synchronously inside the resize event — so
+  // follow it on the next frame rather than race it, and keep a slow poll for
+  // the changes nothing reports (a phone's URL bar sliding away does not
+  // reliably fire a resize).
+  addEventListener('resize', function () { requestAnimationFrame(fitCanvas); });
+  addEventListener('orientationchange', function () { setTimeout(fitCanvas, 150); });
+  setInterval(fitCanvas, 250);
+  fitCanvas();
+
   // Pointer lock and the audio context both require a real user gesture, and
   // the game asks for the pointer from inside its requestAnimationFrame loop,
   // which is not one. This click is what makes both of them legal.
@@ -435,6 +524,7 @@
     if (start.disabled) return;
     gate.classList.add('hidden');
     canvas.focus();
+    fitCanvas();
     if (!touch.active && canvas.requestPointerLock) canvas.requestPointerLock();
     status.textContent = touch.active ? 'drag to look \u00b7 FIRE begins the descent'
                                       : 'ESC releases the mouse';

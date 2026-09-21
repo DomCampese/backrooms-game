@@ -219,6 +219,56 @@ synthetic event from a test driver. The throw aborts the rest of the handler,
 so the press is registered and never released: the player ends up walking, or
 firing, forever. Both calls are wrapped.
 
+**raylib sizes the web canvas from `window.innerWidth`/`innerHeight`, not from
+the element's box** — `EmscriptenResizeCallback` in `rcore_web.c` reads the two
+and calls `emscripten_set_canvas_element_size`. The shell's canvas is stretched
+by CSS over `#stage`, which is the viewport *minus the footer bar*, so the two
+never agreed and the world was drawn squashed to cover the difference. Worse,
+that callback clamps to `CORE.Window.screenMin` first: `SetWindowMinSize(640,
+400)` rendered a 412 px phone at 640 wide and let CSS compress it by a third.
+Neither reads as a window-size bug — it reads as a bad field of view, which is
+why it shipped. The web build now asks for a 240 px minimum and `fitCanvas()` in
+the shell gives the element its backing store's own aspect ratio inside the
+stage, letterboxing the remainder, so nothing is stretched whatever raylib picks.
+
+**A flex container that centres content taller than itself clips it, both ends,
+and does not scroll.** The splash used `justify-content: center`, and on a
+landscape phone (about 640x330 of stage) the title went off the top and the
+ENTER button off the bottom: the page looked like it had failed to load rather
+than like it had more to show. `overflow-y: auto` on the scroller plus
+`margin: auto` on an inner block is the fix — `margin: auto` centres while the
+content fits and hands the overflow to the scroller when it does not, which
+`justify-content` will not do.
+
+**`hud()` scales type to the window's *height*, and a phone is short of width.**
+Every centred HUD line is a full-width row: at 412 px across, the title card's
+letter-spaced name measured about 700 px and ran off both edges, and the intro
+card's control list off the right. `hudTextC` now shrinks a line to 92% of the
+screen before drawing it (`fitSize`), so nothing clips; `hudText`/`hudTextR` are
+corner blocks and deliberately do not. The title itself draws through `DrawText`
+for its own drop shadow, so it calls `fitSize` by hand — change one, change both.
+
+**Hold-to-aim is the wrong gesture on a touch screen, and latching it deadlocks
+the reload.** A held AIM button parks the right thumb for the length of a
+gunfight, leaving nothing to fire with. The latch lives in `input_web.cpp`
+rather than the shell because the *game* decides whether an aim is legal
+(`Game::updateAim`), so `webReleaseAim()` drops a latch the game refused and the
+button cannot sit lit over a gun that never comes up. The trap: `canReload()`
+refuses while the sights are up, so a latched aim silently swallows every tap of
+LOAD and the revolver can never be reloaded again — the poll drops the latch on
+a RELOAD press for exactly that reason. A reload already running keeps the
+latch, because natively holding RMB through one raises the sights when it ends.
+
+**`node tools/mobile-check.mjs` is the only check that sees any of this.** It
+loads `web/shell.html` in Chromium at seven sizes and asserts no two controls
+overlap, that the splash fits or scrolls with ENTER on screen, and that the
+canvas keeps its aspect ratio at three different backing sizes. Run it for
+anything that touches the shell. Two notes on running it: ESM `import` ignores
+`NODE_PATH`, and the sandbox's playwright is installed *globally* and is
+CommonJS, so it arrives under `.default` — the script handles both, and without
+that the failure is a bare `ERR_MODULE_NOT_FOUND` that looks like a missing
+package.
+
 **`emcc` will compile this and then fail to link it.** Every C++ symbol comes
 back undefined — `operator new`, `operator delete`, `std::__2::__next_prime` —
 which reads as a missing stdlib or a broken sysroot. It is neither: `emcc` is
