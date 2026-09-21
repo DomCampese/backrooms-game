@@ -259,11 +259,41 @@ LOAD and the revolver can never be reloaded again — the poll drops the latch o
 a RELOAD press for exactly that reason. A reload already running keeps the
 latch, because natively holding RMB through one raises the sights when it ends.
 
+**"Begin" must be an edge, never a held state — the death card is what proves
+it.** The title screen starts a run on `webStartGesture()`: a tap on open
+screen, or the stick crossing into a real push. The obvious implementation is to
+read the stick's *deflection* instead, and it is wrong in a way that only shows
+up at the worst moment — a thumb still resting on a pushed stick at the instant
+you die is still pushed a second later, so the death card dismisses itself the
+frame its read-it-first hold expires, and the player never sees how the run
+ended. The crossing is recorded once per grab (`r.pushed` in the shell), so a
+finger already down when a card appears has to lift and act again. The same
+applies to the tap: it is counted on `pointerup`, not `pointerdown`.
+
+**A synthetic pointer event's target is whatever you dispatched it on, and this
+handler branches on the target.** `pointerdown` asks
+`e.target.closest('.tbtn')` to tell a button press from open screen, so a test
+that fires every event at `#touch` makes *every* gesture look like open screen —
+including the button press that must not start a run. Dispatch at
+`document.elementFromPoint(x, y)` and let it bubble. (The check caught this on
+its first run, which is the argument for writing the negative cases too: had it
+only asserted that taps start the game, it would have passed while proving
+nothing.)
+
+**`TouchFrame`'s field order in `input_web.cpp` is the `HEAPU32`/`HEAPF32` index
+in the `EM_ASM` block below it.** Insert a field in the middle rather than
+appending and every field after it reads its neighbour's value — the look drag
+becomes the thumbstick, which reads as a control gone haywire rather than as a
+struct layout mistake.
+
 **`node tools/mobile-check.mjs` is the only check that sees any of this.** It
 loads `web/shell.html` in Chromium at seven sizes and asserts no two controls
-overlap, that the splash fits or scrolls with ENTER on screen, and that the
-canvas keeps its aspect ratio at three different backing sizes. Run it for
-anything that touches the shell. Two notes on running it: ESM `import` ignores
+overlap, that the splash fits or scrolls with ENTER on screen, that the canvas
+keeps its aspect ratio at three different backing sizes, and that the seven
+title-screen gestures resolve the way they should — a middle tap, a slightly
+sloppy tap, a stick push and a stick tap all begin a run; a button press, a look
+drag and a cancelled press all do not. Run it for anything that touches the
+shell. Two notes on running it: ESM `import` ignores
 `NODE_PATH`, and the sandbox's playwright is installed *globally* and is
 CommonJS, so it arrives under `.default` — the script handles both, and without
 that the failure is a bare `ERR_MODULE_NOT_FOUND` that looks like a missing

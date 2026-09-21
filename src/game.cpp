@@ -356,7 +356,13 @@ void Game::updateMenu(double now) {
     // stretch of it, then let any key move on.
     if (deathT > DEATH_CARD - 1.6f) return;
     int k = GetKeyPressed();                    // F11 (fullscreen) shouldn't count as "begin"
-    if ((k != 0 && k != KEY_F11) || inMousePressed(MOUSE_BUTTON_LEFT)) startRun(now);
+    // On a phone the only other way in was one small button in the corner, and
+    // a title card that says "press any key" to a device with no keys is a dead
+    // end that reads as the game being broken. A tap on open screen or a push
+    // of the stick begins the run too — and a stick push leaves you already
+    // walking, which is the right thing to happen when "move" is what started it.
+    if ((k != 0 && k != KEY_F11) || inMousePressed(MOUSE_BUTTON_LEFT) || webStartGesture())
+        startRun(now);
 }
 
 // Can the pack still place you? Sound only: they do not care what you are

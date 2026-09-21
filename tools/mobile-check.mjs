@@ -116,6 +116,59 @@ for (const size of SIZES) {
       note(size, `canvas ${bw}x${bh} overflows the stage at ${fit.w}x${fit.h}`);
   }
 
+  // ---- the title card's "tap anywhere" has to be true --------------------
+  // Game::updateMenu starts a run on touch.startGesture. Every case below is a
+  // gesture a player makes on a title screen, and the last two are the ones
+  // that must NOT count: a button has its own job, and a look drag across the
+  // card is not a request to begin.
+  const gestures = await page.evaluate(async ([w, h]) => {
+    // The gate is what the player dismisses with ENTER; the controls are under
+    // it and get no events until it goes. Hide it the way enter() does.
+    document.getElementById('gate').classList.add('hidden');
+    const layer = document.getElementById('touch');
+    const t = Module.__touch;
+    let id = 1;
+    // Dispatch at the element actually under the point and let it bubble: the
+    // handler reads e.target to tell a button press from open screen, so firing
+    // everything at the layer would make every gesture look like open screen —
+    // which is exactly the false pass this check exists to avoid.
+    const send = (type, x, y, pid) => {
+      const el = document.elementFromPoint(x, y) || layer;
+      el.dispatchEvent(new PointerEvent(type, {
+        pointerId: pid, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+    };
+    const gesture = (steps) => {
+      t.startGesture = 0;
+      const pid = id++;
+      for (const [type, x, y] of steps) send(type, x, y, pid);
+      return t.startGesture;
+    };
+    const mid = [w / 2, h * 0.32];              // open screen, clear of every control
+    const btn = document.querySelector('#touch .tbtn').getBoundingClientRect();
+    // The stick zone is the lower left; push well past STICK_PUSH.
+    const sx = w * 0.18, sy = h * 0.78;
+    return {
+      midTap:   gesture([['pointerdown', ...mid], ['pointerup', ...mid]]),
+      // a tap is allowed to wander a few pixels — a thumb is not a stylus
+      sloppyTap: gesture([['pointerdown', ...mid],
+                          ['pointermove', mid[0] + 6, mid[1] + 5],
+                          ['pointerup', mid[0] + 6, mid[1] + 5]]),
+      stickPush: gesture([['pointerdown', sx, sy], ['pointermove', sx + 90, sy - 90],
+                          ['pointerup', sx + 90, sy - 90]]),
+      stickTap:  gesture([['pointerdown', sx, sy], ['pointerup', sx, sy]]),
+      button:    gesture([['pointerdown', btn.left + btn.width / 2, btn.top + btn.height / 2],
+                          ['pointerup',   btn.left + btn.width / 2, btn.top + btn.height / 2]]),
+      lookDrag:  gesture([['pointerdown', ...mid],
+                          ['pointermove', mid[0] + 140, mid[1] + 40],
+                          ['pointerup',   mid[0] + 140, mid[1] + 40]]),
+      cancelled: gesture([['pointerdown', ...mid], ['pointercancel', ...mid]]),
+    };
+  }, [size.w, size.h]);
+  for (const k of ['midTap', 'sloppyTap', 'stickPush', 'stickTap'])
+    if (!gestures[k]) note(size, `${k} does not start the game`);
+  for (const k of ['button', 'lookDrag', 'cancelled'])
+    if (gestures[k]) note(size, `${k} starts the game and must not`);
+
   await page.close();
 }
 

@@ -37,6 +37,9 @@ bool    inCursorHidden();
 // buttons the player actually has: a title card telling a phone to press WASD
 // is telling it to do something it cannot.
 bool    inTouchActive();
+// A tap on open screen or a push of the stick — what "tap anywhere to descend"
+// means on a device whose only other way in is one small button.
+bool    webStartGesture();
 
 #else
 
@@ -44,6 +47,7 @@ inline void    webInputPoll() {}
 inline float   webMoveScale() { return 1.0f; }
 inline void    webReleaseAim() {}
 inline bool    inTouchActive() { return false; }
+inline bool    webStartGesture() { return false; }
 
 inline bool    inKeyDown(int key)       { return IsKeyDown(key); }
 inline bool    inKeyPressed(int key)    { return IsKeyPressed(key); }

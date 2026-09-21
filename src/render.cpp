@@ -554,7 +554,7 @@ void Game::renderUI(double now) {
                             deathCount, LEVELS[bestDeep].name, bestRun / 60, bestRun % 60),
                  sw / 2, sh / 3 + hud(140), hud(16), Fade({ 130, 106, 100, 255 }, a * 0.8f));
         if (deathT < DEATH_CARD - 1.6f)
-            hudTextC(inTouchActive() ? "tap FIRE to descend again" : "press any key to descend again",
+            hudTextC(inTouchActive() ? "tap anywhere to descend again" : "press any key to descend again",
                      sw / 2, sh * 2 / 3 + hud(30), hud(18),
                      Fade({ 168, 144, 112, 255 }, a * (0.45f + 0.55f * (0.5f + 0.5f * sinf(timeF * 3.0f)))));
         EndDrawing();
@@ -577,7 +577,7 @@ void Game::renderUI(double now) {
         float pl = 0.45f + 0.55f * (0.5f + 0.5f * sinf(timeF * 3.0f));
         // A phone has no key to press, and telling it to press one reads as the
         // game being broken rather than as a line written for a keyboard.
-        const char *pr = inTouchActive() ? "tap FIRE to descend" : "press any key to descend";
+        const char *pr = inTouchActive() ? "tap anywhere to descend" : "press any key to descend";
         hudTextC(pr, sw / 2, sh * 2 / 3, hud(24), Fade({ 210, 198, 150, 255 }, pl));
         if (bestEsc || bestKill || bestM || bestWins) {
             const char *tb = bestTapes > 0

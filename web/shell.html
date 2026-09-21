@@ -175,7 +175,7 @@
         <b>LEFT STICK</b> move, push it all the way to run &middot; <b>DRAG</b> anywhere to look<br>
         <b>FIRE</b> shoot &middot; <b>AIM</b> tap to raise the sights, tap again to drop them<br>
         <b>LOAD</b> reload &middot; <b>USE</b> interact &middot; <b>LAMP</b> torch &middot; <b>ITEM</b> cycle what you hold<br>
-        <b>THROW</b> flare &middot; <b>MARK</b> chalk &middot; tap <b>FIRE</b> on the title screen to begin
+        <b>THROW</b> flare &middot; <b>MARK</b> chalk &middot; tap anywhere on the title screen to begin
       </p>
       <p id="legal">
         THE BACKROOMS, Copyright &copy; 2026 Dominic Campese.
@@ -275,8 +275,19 @@
   // A finger travels further than a mouse for the same intent.
   var LOOK_GAIN = 1.35;
 
+  // How far a finger may wander and still count as a tap rather than a drag.
+  var TAP_SLOP = 16;
+  // ...and how far the stick must go before it is a push rather than a thumb
+  // resting on the screen. Comfortably past the game's own 0.18 deadzone.
+  var STICK_PUSH = 0.35;
+
   var touch = { active: false, down: 0, pressed: 0,
-                lookX: 0, lookY: 0, moveX: 0, moveY: 0, wheel: 0 };
+                lookX: 0, lookY: 0, moveX: 0, moveY: 0, wheel: 0,
+                // "begin" on a device with no keys: taps on open screen and
+                // pushes of the stick, accumulated as edges and drained by the
+                // C++ side exactly as `pressed` is. Buttons are not counted —
+                // they have their own jobs, and FIRE already starts a run.
+                startGesture: 0 };
   Module.__touch = touch;
 
   var layer = document.getElementById('touch');
@@ -399,7 +410,11 @@
     return (x - r.left) < r.width * 0.46 && (y - r.top) > r.height * 0.42;
   }
 
-  function applyStick(v) {
+  function applyStick(v, r) {
+    // The first real push of a grab is a "begin" gesture, so moving starts the
+    // run — and because it is the crossing rather than the deflection, a thumb
+    // already holding the stick when the title card appears does not dismiss it.
+    if (r && !r.pushed && v.m > STICK_PUSH) { r.pushed = 1; touch.startGesture++; }
     touch.moveX = v.x;
     touch.moveY = -v.y;                 // screen y is down; forward is up
     knob.style.transform = 'translate(' + (v.x * STICK_R * 0.62) + 'px,'
@@ -421,23 +436,24 @@
       return;
     }
     if (!roleInUse('stick') && inMoveZone(e.clientX, e.clientY)) {
-      roles[e.pointerId] = { kind: 'stick' };
+      roles[e.pointerId] = { kind: 'stick', x0: e.clientX, y0: e.clientY };
       placeStick(e.clientX, e.clientY);
-      applyStick(stickVec(e.clientX, e.clientY));
+      applyStick(stickVec(e.clientX, e.clientY), roles[e.pointerId]);
       try { layer.setPointerCapture(e.pointerId); } catch (err) {}
       e.preventDefault();
       return;
     }
     // Anything else is a look drag. Starting one must not also fire the gun:
     // firing is the FIRE button's job and nothing else's.
-    roles[e.pointerId] = { kind: 'look', x: e.clientX, y: e.clientY };
+    roles[e.pointerId] = { kind: 'look', x: e.clientX, y: e.clientY,
+                           x0: e.clientX, y0: e.clientY };
     e.preventDefault();
   });
 
   layer.addEventListener('pointermove', function (e) {
     var r = roles[e.pointerId];
     if (!r) return;
-    if (r.kind === 'stick') applyStick(stickVec(e.clientX, e.clientY));
+    if (r.kind === 'stick') applyStick(stickVec(e.clientX, e.clientY), r);
     else if (r.kind === 'look') {
       // Reported in the same pixels a mouse delta is, so the game's existing
       // sensitivity — and its reduction while aiming — apply unchanged.
@@ -448,7 +464,7 @@
     e.preventDefault();
   });
 
-  function lift(e) {
+  function lift(e, released) {
     var r = roles[e.pointerId];
     if (!r) return;
     if (r.kind === 'btn') release(r.bit, r.el);
@@ -458,10 +474,17 @@
       homeStick();
       release(BTN.SPRINT);
     }
+    // A finger that went down and came up without going anywhere is a tap, on
+    // the stick's patch as much as on open screen. Only on a real release: a
+    // pointercancel is the browser taking the gesture away (a scroll, a call
+    // coming in), and its coordinates are wherever the finger was abandoned.
+    if (released && r.kind !== 'btn' &&
+        Math.hypot(e.clientX - r.x0, e.clientY - r.y0) <= TAP_SLOP)
+      touch.startGesture++;
     delete roles[e.pointerId];
   }
-  layer.addEventListener('pointerup', lift);
-  layer.addEventListener('pointercancel', lift);
+  layer.addEventListener('pointerup', function (e) { lift(e, true); });
+  layer.addEventListener('pointercancel', function (e) { lift(e, false); });
   layer.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 
   // Touch by default on a coarse pointer; ?touch=1 forces it on for testing on
