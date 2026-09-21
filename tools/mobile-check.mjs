@@ -195,6 +195,36 @@ if (hybridTouch.points !== 10)
   note({ name: 'hybrid desktop', w: 1440, h: 850 }, `could not simulate maxTouchPoints (got ${hybridTouch.points})`);
 if (hybridTouch.active || hybridTouch.visible)
   note({ name: 'hybrid desktop', w: 1440, h: 850 }, 'touch capability enabled mobile controls with a fine primary pointer');
+await hybrid.click('#touch-toggle');
+const hybridEnabled = await hybrid.evaluate(() => ({
+  active: Module.__touch.active,
+  visible: document.getElementById('touch').classList.contains('on'),
+  pressed: document.getElementById('touch-toggle').getAttribute('aria-pressed'),
+}));
+if (!hybridEnabled.active || !hybridEnabled.visible || hybridEnabled.pressed !== 'true')
+  note({ name: 'hybrid desktop', w: 1440, h: 850 }, 'toggle did not enable touch controls');
+await hybrid.evaluate(() => {
+  Object.assign(Module.__touch, {
+    down: 1, pressed: 1, lookX: 2, lookY: 3,
+    moveX: 1, moveY: -1, wheel: 1, startGesture: 1,
+  });
+  document.querySelector('#touch .tbtn').classList.add('held');
+});
+await hybrid.click('#touch-toggle');
+const hybridDisabled = await hybrid.evaluate(() => ({
+  active: Module.__touch.active,
+  visible: document.getElementById('touch').classList.contains('on'),
+  pressed: document.getElementById('touch-toggle').getAttribute('aria-pressed'),
+  state: [Module.__touch.down, Module.__touch.pressed,
+          Module.__touch.lookX, Module.__touch.lookY,
+          Module.__touch.moveX, Module.__touch.moveY,
+          Module.__touch.wheel, Module.__touch.startGesture],
+  held: document.querySelectorAll('#touch .held').length,
+}));
+if (hybridDisabled.active || hybridDisabled.visible || hybridDisabled.pressed !== 'false')
+  note({ name: 'hybrid desktop', w: 1440, h: 850 }, 'toggle did not disable touch controls');
+if (hybridDisabled.state.some(Boolean) || hybridDisabled.held)
+  note({ name: 'hybrid desktop', w: 1440, h: 850 }, 'toggle left touch input held after disabling controls');
 await hybrid.close();
 
 // The other half of the classifier: an actual coarse-primary phone still gets
@@ -215,6 +245,14 @@ if (!phoneTouch.coarse)
   note({ name: 'coarse phone', w: 390, h: 844 }, 'test browser did not expose a coarse primary pointer');
 if (!phoneTouch.active || !phoneTouch.visible)
   note({ name: 'coarse phone', w: 390, h: 844 }, 'coarse primary pointer did not enable mobile controls');
+await phone.click('#touch-toggle');
+const phoneDisabled = await phone.evaluate(() => ({
+  active: Module.__touch.active,
+  visible: document.getElementById('touch').classList.contains('on'),
+  pressed: document.getElementById('touch-toggle').getAttribute('aria-pressed'),
+}));
+if (phoneDisabled.active || phoneDisabled.visible || phoneDisabled.pressed !== 'false')
+  note({ name: 'coarse phone', w: 390, h: 844 }, 'toggle did not disable touch controls');
 await phoneContext.close();
 
 await browser.close();

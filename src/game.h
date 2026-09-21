@@ -167,6 +167,8 @@ struct Game {
     Vector3 fwd{ 1, 0, 0 };
     float f2x = 1, f2z = 0, r2x = 0, r2z = 1;
     bool sprinting = false, sprintExhausted = false;
+    float forwardTapAge = 1.0f;               // seconds since W went down; > window means no pending tap
+    bool forwardDoubleSprint = false;         // second W tap stays sprinting until W is released
     float bobAmt = 0, eyeY = 1.62f;
     bool captureClick = false;                // this click grabbed the mouse; don't also fire
     float leanCur = 0, landDip = 0;           // camera feel: strafe lean + landing dip
@@ -375,6 +377,7 @@ struct Game {
     static float fovForWindow(int w, int h, float aim);
     void updateMovement(float dt);
     void updateSprint(bool requested, bool moving, bool crouched, float dt);
+    bool updateForwardDoubleTap(bool pressed, bool down, float dt);
     void updateDevKeys(double now);
     void updateWeapons(float dt, double now);
     void updateFlare(float dt, double now);

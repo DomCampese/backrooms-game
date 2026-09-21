@@ -114,6 +114,12 @@
   }
   #bar a { color: var(--wall-dim); text-decoration: none; border-bottom: 1px solid transparent; }
   #bar a:hover { color: var(--wall); border-bottom-color: var(--wall-dim); }
+  #touch-toggle {
+    appearance: none; border: 0; padding: 0; background: none; cursor: pointer;
+    color: var(--wall-dim); font: inherit; letter-spacing: inherit; white-space: nowrap;
+  }
+  #touch-toggle:hover { color: var(--wall); }
+  #touch-toggle:focus-visible { outline: 1px solid var(--wall); outline-offset: 3px; }
   #bar .spacer { flex: 1 1 auto; }
   #bar .note { color: #5d5949; }
   /* 44rem, not 34: the bar is the only thing between the viewport and the
@@ -192,6 +198,7 @@
     <a href="LICENSE" target="_blank" rel="noopener">License (GPLv3)</a>
     <a href="CREDITS.md" target="_blank" rel="noopener">Credits</a>
     <a id="src" href="https://github.com/DomCampese/backrooms-game" target="_blank" rel="noopener">Source</a>
+    <button id="touch-toggle" type="button" aria-pressed="false">Touch controls: off</button>
     <span class="spacer"></span>
     <span class="note" id="status">no warranty &middot; unofficial fan work</span>
   </div>
@@ -203,6 +210,7 @@
   var gate   = document.getElementById('gate');
   var start  = document.getElementById('start');
   var status = document.getElementById('status');
+  var touchToggle = document.getElementById('touch-toggle');
 
   // Emscripten's runtime removes every run dependency before it calls main(),
   // which is the hook the records restore below hangs on.
@@ -496,12 +504,35 @@
     touch.active = !!on;
     layer.classList.toggle('on', !!on);
     layer.setAttribute('aria-hidden', on ? 'false' : 'true');
+    touchToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
+    touchToggle.textContent = 'Touch controls: ' + (on ? 'on' : 'off');
     // The key list is for the players who have keys. There is no touch
     // equivalent: the buttons say what they do, and the title card says how to
     // begin.
     document.getElementById('keys').hidden = !!on;
   }
   setTouch(useTouch);
+
+  touchToggle.addEventListener('click', function () {
+    var on = !touch.active;
+    // Hiding controls during a press prevents its pointerup from reaching the
+    // layer. Clear every sampled and accumulated input first, or switching to
+    // the keyboard can leave the player walking or firing forever.
+    touch.down = touch.pressed = touch.lookX = touch.lookY = 0;
+    touch.moveX = touch.moveY = touch.wheel = touch.startGesture = 0;
+    roles = {};
+    knob.style.transform = '';
+    homeStick();
+    for (var bit in byBit) byBit[bit].classList.remove('held');
+    setTouch(on);
+
+    canvas.focus();
+    if (on) {
+      if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
+    } else if (gate.classList.contains('hidden') && canvas.requestPointerLock) {
+      canvas.requestPointerLock();
+    }
+  });
 
   // ---- canvas geometry ---------------------------------------------------
   // raylib sizes the canvas's own backing store, and it takes that size from

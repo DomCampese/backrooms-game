@@ -13,7 +13,7 @@ struct LevelCfg {
     Vector3 lightCol; // colour of the fluorescents
     Vector3 amb;      // ambient floor, so unlit corners are not pure black
     Vector3 fogCol;   // what the fog fades to at range
-    const char *name; // shown on the intro card and in the window title
+    const char *name; // shown on the intro card and in the native window title
 };
 constexpr int NLEVELS = 5;
 extern const LevelCfg LEVELS[NLEVELS];

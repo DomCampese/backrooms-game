@@ -59,7 +59,17 @@ int main() {
     CHECK(sawRest && sawResume);
     g.updateSprint(true,true,true,1.0f/60); CHECK(!g.sprinting);
     g.updateSprint(true,false,false,1.0f/60); CHECK(!g.sprinting);
+    // Double-tap W: the first edge arms the window, the second latches sprint
+    // for as long as that second press is held. A slow second press does not.
+    g.forwardTapAge=1; g.forwardDoubleSprint=false;
+    CHECK(!g.updateForwardDoubleTap(true,true,.01f));
+    CHECK(!g.updateForwardDoubleTap(false,false,.10f));
+    CHECK(g.updateForwardDoubleTap(true,true,.10f));
+    CHECK(g.updateForwardDoubleTap(false,true,.50f));
+    CHECK(!g.updateForwardDoubleTap(false,false,.01f));
+    CHECK(!g.updateForwardDoubleTap(true,true,.31f));
     g.beginDescent(0); CHECK(g.stamina==1 && !g.sprintExhausted);
+    CHECK(!g.forwardDoubleSprint && g.forwardTapAge>0.30f);
 
     // A full battery does not consume a pickup; revisiting with charge missing does.
     bool testedBattery=false;
