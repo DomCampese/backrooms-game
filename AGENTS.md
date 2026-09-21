@@ -1201,6 +1201,17 @@ pass, and both obey the same three rules, learned the hard way:
   to a wall it otherwise falls inside that wall's shadow and goes black in
   your hands. `uOccN = 0` for the draw disables occlusion; both it and `uAmb`
   are restored immediately after.
+- **Web only: the held pass has its own depth buffer.** On a browser the
+  render-texture depth is ANGLE's 16-bit default, and with raylib's 0.01-to-
+  1000 m range a wall pressed against the gun sits within a few ulps of it —
+  GL_LEQUAL calls that a tie, and the gun (drawn last) punches through. The
+  fix is *not* disabling depth: `beginViewmodelPass`/`endViewmodelPass` in
+  `render.cpp` swap a private far-plane-cleared depth buffer and a nearer
+  projection (0.05–5 m) into the target around the held draw, so the view-
+  model never compares against world depths at all. Anything *additive* in
+  that pass relies on an ordering the private buffer does not provide — the
+  muzzle flash lives in `renderUI` for exactly this reason. Native is
+  untouched: the four methods are no-ops there.
 
 ## Conventions
 

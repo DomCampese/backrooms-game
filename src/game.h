@@ -402,4 +402,21 @@ struct Game {
     // render (render.cpp)
     void renderScene(double now);             // 3D world into the offscreen target
     void renderUI(double now);                // post pass, viewmodel, HUD, overlays
+    // The viewmodel draws inside the world's depth pass, and on the web that
+    // shared depth is where the revolver was clipping through walls: the
+    // browser's depth buffer is routinely shallower than the desktop's, and
+    // this game asks it to span 0.01 m to 1000 m, which leaves the gun and a
+    // touching wall one rounding apart. See render.cpp for the fix: the held
+    // draw gets a private depth buffer, pre-cleared, and its own projection.
+    // On the native build every one of these is a no-op — the desktop GL has
+    // no such hazard and never had this bug.
+    void ensureSceneDepth();                  // build it for the current rt
+    void beginViewmodelClear();               // refill it at the frame's top
+    void beginViewmodelPass();                // swap in the gun's own projection
+    void endViewmodelPass();                  // hand the depth slot back
+    // The web build's own view of the render target's depth (0/unused on
+    // native, where the four methods above are no-ops):
+    unsigned int vmViewDepth = 0;             // the held pass's private buffer
+    unsigned int vmWorldDepth = 0;            // whatever the world pass owns
+    float vmFovy = 70.0f;                     // the camera's fovy, per frame
 };

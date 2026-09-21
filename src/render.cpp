@@ -87,6 +87,130 @@ static void hudTextR(const char *t, int rx, int y, int px, Color c) {
     hudText(t, rx - MeasureText(t, px), y, px, c);
 }
 
+#ifdef PLATFORM_WEB
+#include "rlgl.h"       // raylib's GL wrapper: FBO attach, matrices, batch drain
+#include <GLES3/gl3.h>  // renderbuffer entry points rlgl compiles out for ES3
+// The web build drew the revolver *through* walls while the native build, on
+// the same renderer, never did. On a browser the scene's depth buffer is
+// routinely shallower than the desktop's — ANGLE's WebGL 2 default is
+// DEPTH_COMPONENT16 — and this game asks that buffer to span raylib's default
+// 0.01 m to 1000 m. Every wall therefore lands in the deepest fraction of a
+// percent of the range, and the held geometry, which shares the world's depth
+// pass by design, lands 400-600 ulps in front of them at 16 bits. A wall
+// pressed against the gun — the exact screenshot: the revolver against the
+// corner behind its barrel — is then a handfull of ulps from the gun's hull,
+// and raylib's depth function is GL_LEQUAL: on a tie the last draw wins, and
+// the gun always draws last. One rounding difference in a browser's
+// float-to-16-bit conversion is a tie, and the gun punches through.
+//
+// The fix gives the held draw a private depth buffer of its own, cleared to
+// the far plane at the top of every frame: it never compares against the
+// world's depths at all, so the held geometry is unconditionally in front —
+// which is the truth (collision keeps every surface 0.34 m away; nothing a
+// hand holds reaches 0.33 m), and the only occluders it ever legitimately
+// was in front of are the walls themselves. The held pass also gets a
+// projection of its own (nearer near, nearer far) so the 0.01-to-1000 m
+// squeeze never applies to it at all. The one thing that must not lean on
+// this: the muzzle-flash billboards, additive quads whose whole look wants
+// world-space ordering — they moved to the UI pass (see renderUI) rather
+// than inherit a depth relationship the private buffer does not provide.
+//
+// The buffers are created once per render-target size, and rebuilt whenever
+// the target is (LoadRenderTexture hands us a brand new FBO every resize).
+// If any of it fails to allocate we fall back silently to the old behaviour,
+// which is exactly what shipped before: a broken attempt here must never
+// take the frame down with it.
+#define VM_VIEW_NEAR 0.05        // well inside the gun's 0.28 m nearest vertex
+#define VM_VIEW_FAR  5.0         // nothing a held item must lose to is further
+#define VM_GL_DEPTH_COMPONENT16  0x81A5   // GL_DEPTH_COMPONENT16 (rlgl.h)
+
+void Game::ensureSceneDepth() {
+    const int w = rt.texture.width, h = rt.texture.height;
+    if (!rt.id || w <= 0 || h <= 0) return;
+    // rt.depth.id is whatever the *current* target's depth slot holds: the
+    // renderbuffer LoadRenderTexture made for it, which is also what every
+    // world draw this frame will compare against. The held pass borrows the
+    // slot, so remember what to hand back.
+    vmWorldDepth = rt.depth.id;
+    if (vmViewDepth) { glDeleteRenderbuffers(1, &vmViewDepth); vmViewDepth = 0; }
+    // rlgl's rlLoadRenderBuffer family is compiled out of the ES 3 web build,
+    // so this goes straight to GL: a 16-bit depth renderbuffer at target size
+    // — the same buffer a browser would hand raylib anyway.
+    GLuint rb = 0;
+    glGenRenderbuffers(1, &rb);
+    if (!rb) { vmWorldDepth = 0; return; }   // allocation failed: the old
+    glBindRenderbuffer(GL_RENDERBUFFER, rb); // target stays exactly as it was
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, w, h);
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    vmViewDepth = rb;
+}
+
+// Refill the held pass's private depth buffer with the far plane every
+// frame: a browser may discard attachment contents between frames, and the
+// fill is one small clear next to the frame's own. The buffer stays detached
+// until beginViewmodelPass, so the world's draws never see it.
+void Game::beginViewmodelClear() {
+    if (!vmViewDepth || !vmWorldDepth) return;
+    // A depth clear follows the FBO's *attached* buffer, not whichever
+    // renderbuffer happens to be bound, so the fill has to swap the slot in
+    // and out around the clear. BeginTextureMode has the target bound and
+    // nothing is pending in the batch at this point in the frame.
+    rlFramebufferAttach(rt.id, vmViewDepth, RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_RENDERBUFFER, 0);
+    rlClearColor(0, 0, 0, 0);
+    glClearDepthf(1.0f);
+    glClear(GL_DEPTH_BUFFER_BIT);
+    rlFramebufferAttach(rt.id, vmWorldDepth, RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_RENDERBUFFER, 0);
+}
+
+// Put the held geometry's own projection in place. Its private depth buffer
+// was cleared for it at the top of the frame. Called after the world has
+// finished drawing, inside the same BeginTextureMode/EndTextureMode.
+void Game::beginViewmodelPass() {
+    if (!vmViewDepth) return;   // allocation failed: the old, buggy path
+    // Drain the world's batch FIRST: its last quads must test against the
+    // world's depths, not the gun's. Same order discipline as the drain in
+    // endViewmodelPass, from the other side of the swap.
+    rlDrawRenderBatchActive();
+    rlFramebufferAttach(rt.id, vmViewDepth, RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_RENDERBUFFER, 0);
+    // The gun gets its own projection — same camera, same frustum *directions*
+    // (the x/y half of the matrix is identical: right and top both scale with
+    // the near plane), only the depth mapping changes. Pushing the old one
+    // keeps endViewmodelPass a pure restore.
+    const float aspect = (float)rt.texture.width/(float)rt.texture.height;
+    const double top = VM_VIEW_NEAR*tan(vmFovy*0.5*DEG2RAD);
+    const double right = top*aspect;
+    rlMatrixMode(RL_PROJECTION);
+    rlPushMatrix();
+    rlLoadIdentity();
+    rlFrustum(-right, right, -top, top, VM_VIEW_NEAR, VM_VIEW_FAR);
+    rlMatrixMode(RL_MODELVIEW);
+}
+
+void Game::endViewmodelPass() {
+    if (!vmViewDepth) return;
+    rlMatrixMode(RL_PROJECTION);
+    rlPopMatrix();
+    rlMatrixMode(RL_MODELVIEW);
+    // The held draw is batched like everything else: drain it *before* the
+    // slot goes back to the world, or its last quads would test against the
+    // world's depths — the exact bug, relocated by one draw call.
+    rlDrawRenderBatchActive();
+    rlFramebufferAttach(rt.id, vmWorldDepth, RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_RENDERBUFFER, 0);
+}
+#endif
+
+#ifndef PLATFORM_WEB
+// The desktop GL is not the browser: no 16-bit FBO depth behind our back, no
+// 0.01-to-1000 m squeeze that puts a wall and the gun one rounding apart.
+// The mechanism below is web-only; these are the no-ops the call sites bind
+// to natively, and the native frames prove it — pixel-identical, as every
+// web-only change in this port must be.
+void Game::ensureSceneDepth() {}
+void Game::beginViewmodelClear() {}
+void Game::beginViewmodelPass() {}
+void Game::endViewmodelPass() {}
+#endif
+
 void Game::renderScene(double now) {
     if (captureTime >= 0) now = captureTime;
     // ---- render 3D scene into rt
@@ -145,6 +269,8 @@ void Game::renderScene(double now) {
 
     BeginTextureMode(rt);
     ClearBackground(BLACK);
+    vmFovy = fov;                 // the held pass's projection matches this frame
+    beginViewmodelClear();        // refill the held pass's private depth (no-op native)
     BeginMode3D(cam);
     Matrix ident = MatrixIdentity();
     struct VisibleChunk { ChunkData *data; float distance2; };
@@ -461,9 +587,11 @@ void Game::renderScene(double now) {
         const Vector3 &la = LEVELS[level].amb;
         Vector3 vmAmb = { fmaxf(la.x, 0.150f), fmaxf(la.y, 0.142f), fmaxf(la.z, 0.128f) };
         SetShaderValue(worldShader, locAmb, &vmAmb, SHADER_UNIFORM_VEC3);
+        beginViewmodelPass();                     // own depth + projection (web)
         if (drinkT > 0) drawDrinkCan(cam);        // both hands are busy — the deck goes away
         else if (weapon == WEAPON_DECK) drawHeldDeck(cam);
         else drawHeldWeapon(cam);
+        endViewmodelPass();
         SetShaderValue(worldShader, locOccN, &occN, SHADER_UNIFORM_FLOAT);   // both as they were
         SetShaderValue(worldShader, locAmb, &la, SHADER_UNIFORM_VEC3);
     }
@@ -507,13 +635,11 @@ void Game::drawHeldWeapon(const Camera3D &cam) {
     SetShaderValue(worldShader, locGloss, &LEVELS[level].gloss, SHADER_UNIFORM_FLOAT);
     if (weapon == WEAPON_REVOLVER) {
         Vector3 muzzle = Vector3Transform(revolver.muzzlePosition,m);
-        if (muzzleT > 0) {
-            float life = muzzleT/0.09f;
-            BeginBlendMode(BLEND_ADDITIVE);
-            DrawBillboard(cam,texParticle,muzzle,0.07f*life,{255,175,70,230});
-            DrawBillboard(cam,texParticle,muzzle,0.025f*life,{255,245,190,255});
-            EndBlendMode();
-        }
+        // The flash billboards that used to be here now live in renderUI
+        // (screen-space at the crosshair): additive quads inside the held
+        // pass lean on an ordering the web viewmodel's private depth
+        // deliberately does not provide. The smoke puffs below — plain
+        // alpha-blended viewmodel geometry, like the gun itself — stay.
         if (muzzleSmoke > 0.02f) {
             for (int i=0;i<3;++i) {
                 Vector3 puff=Vector3Add(muzzle,Vector3Scale(up,(1-muzzleSmoke)*0.025f+i*0.009f));
@@ -606,6 +732,24 @@ void Game::renderUI(double now) {
         // sights come up (the iron-sight work): with the revolver aimed the
         // blade is the sight, and a dot floating over it reads as a smudge.
         DrawCircle(sw / 2, sh / 2, hud(1.5f), Fade({230,220,190,110}, 1-aimBlend));
+
+    if (weapon == WEAPON_REVOLVER && muzzleT > 0) {
+        // The muzzle flash, screen-space here at the crosshair: it used to be
+        // a pair of additive billboards inside the held-weapon draw, which on
+        // the web pass now leans on a depth relationship the viewmodel's
+        // private buffer deliberately does not provide (see beginViewmodelPass
+        // in this file). Same look, one honest guarantee less: the flare lit
+        // the room, this lights nothing but the screen.
+        float life = muzzleT/0.09f;
+        BeginBlendMode(BLEND_ADDITIVE);
+        DrawTexturePro(texParticle, {0,0,(float)texParticle.width,(float)texParticle.height},
+                       {(float)sw/2, (float)sh*0.72f, hud(96)*life, hud(96)*life},
+                       {hud(48)*life, hud(48)*life}, 0, Fade({255,175,70,230}, life));
+        DrawTexturePro(texParticle, {0,0,(float)texParticle.width,(float)texParticle.height},
+                       {(float)sw/2, (float)sh*0.72f, hud(34)*life, hud(34)*life},
+                       {hud(17)*life, hud(17)*life}, 0, Fade({255,245,190,255}, life));
+        EndBlendMode();
+    }
 
     if (elapsed < 9.0 && winT <= 0) {   // intro (suppressed while the escape screen is up)
         float a = 1.0f - clampf((float)elapsed / 3.0f, 0, 1);

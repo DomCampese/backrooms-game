@@ -232,6 +232,7 @@ void Game::init() {
     fov = baseFov();
     rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
     SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);   // post CA/bloom sample past the edges: clamp, don't wrap
+    ensureSceneDepth();   // the web pass owns its depth buffer — see render.cpp
 
     nextWhisper = runStart + 45 + grng.f01() * 60;
     snprintf(bestPath, sizeof(bestPath), "%s/.backrooms_best", getenv("HOME") ? getenv("HOME") : ".");
@@ -773,6 +774,7 @@ bool Game::tick() {
         UnloadRenderTexture(rt);
         rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
         SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);   // post CA/bloom sample past the edges: clamp, don't wrap
+        ensureSceneDepth();   // a new target needs its depth buffer rebuilt
         // Same reason as the init seed: turn the phone on its side mid-run and
         // the first frame at the new shape should already be framed for it.
         fov = baseFov();
