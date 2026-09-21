@@ -76,11 +76,14 @@
   }
   #start:hover:not(:disabled) { background: #dfc96a; transform: translateY(-1px); }
   #start:disabled { background: var(--rule); color: var(--ink-dim); cursor: progress; }
-  #keys, #keys-touch {
+  /* Desktop only — see setTouch. A phone's controls are labelled buttons on
+     the screen in front of you, so naming them here is a wall of type between
+     the player and the game. */
+  #keys {
     margin: 0; max-width: 34rem;
     color: var(--ink-dim); font-size: clamp(.64rem, 2.4vmin, .76rem); line-height: 1.9;
   }
-  #keys b, #keys-touch b { color: var(--ink); font-weight: 600; }
+  #keys b { color: var(--ink); font-weight: 600; }
   #legal {
     max-width: 40rem; margin: 0;
     color: #6f6a58; font-size: clamp(.58rem, 2.1vmin, .68rem); line-height: 1.75;
@@ -93,7 +96,7 @@
     #gate { padding-top: calc(1rem + env(safe-area-inset-top));
             padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
     #gate-in { gap: .7rem; }
-    #keys, #keys-touch { line-height: 1.6; }
+    #keys { line-height: 1.6; }
     #legal { line-height: 1.5; }
     #start { padding: .7rem 2rem; }
   }
@@ -170,12 +173,6 @@
         <b>WASD</b> move &middot; <b>MOUSE</b> look &middot; <b>SHIFT</b> sprint &middot; <b>RMB</b> aim &middot; <b>LMB</b> fire<br>
         <b>R</b> reload &middot; <b>F</b> flashlight &middot; <b>1/2/4</b> revolver, flare, tape deck &middot; <b>E</b> interact<br>
         <b>ESC</b> releases the mouse &middot; click the game to take it back
-      </p>
-      <p id="keys-touch" hidden>
-        <b>LEFT STICK</b> move, push it all the way to run &middot; <b>DRAG</b> anywhere to look<br>
-        <b>FIRE</b> shoot &middot; <b>AIM</b> tap to raise the sights, tap again to drop them<br>
-        <b>LOAD</b> reload &middot; <b>USE</b> interact &middot; <b>LAMP</b> torch &middot; <b>ITEM</b> cycle what you hold<br>
-        <b>THROW</b> flare &middot; <b>MARK</b> chalk &middot; tap anywhere on the title screen to begin
       </p>
       <p id="legal">
         THE BACKROOMS, Copyright &copy; 2026 Dominic Campese.
@@ -497,8 +494,10 @@
     touch.active = !!on;
     layer.classList.toggle('on', !!on);
     layer.setAttribute('aria-hidden', on ? 'false' : 'true');
+    // The key list is for the players who have keys. There is no touch
+    // equivalent: the buttons say what they do, and the title card says how to
+    // begin.
     document.getElementById('keys').hidden = !!on;
-    document.getElementById('keys-touch').hidden = !on;
   }
   setTouch(useTouch);
 
@@ -549,8 +548,9 @@
     canvas.focus();
     fitCanvas();
     if (!touch.active && canvas.requestPointerLock) canvas.requestPointerLock();
-    status.textContent = touch.active ? 'drag to look \u00b7 FIRE begins the descent'
-                                      : 'ESC releases the mouse';
+    // Same again: nothing to tell a touch player that the screen is not
+    // already telling them.
+    status.textContent = touch.active ? '' : 'ESC releases the mouse';
   }
   start.addEventListener('click', enter);
 
