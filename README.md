@@ -1,4 +1,4 @@
-# THE BACKROOMS — Level 0
+# THE BACKROOMS
 
 ### ▶ [Play it in your browser](https://domcampese.github.io/backrooms-game/)
 
@@ -56,9 +56,30 @@ in the lower left (push it all the way to run), drag anywhere else to look, and
 a button cluster for fire, aim, reload, jump, use, torch, item, throw, chalk and
 drink. Force them on or off with `?touch=1` / `?touch=0`.
 
+**Tap anywhere to begin**, or just push the stick — the title card and the
+death card both start a run on any tap of open screen, and a stick push starts
+one with you already walking. Hunting for one small button in a corner was the
+only way in before. Both are edges rather than held states, so a thumb still
+resting on the stick when you die cannot dismiss the death card before you have
+read it.
+
+**AIM taps** rather than holds: one tap raises the sights, another drops them.
+Holding it is what a mouse does, and it asks the right thumb to stay parked on
+one button for the length of a gunfight — leaving nothing to fire with. The
+latch belongs to the game, not to the button, so anything that makes the aim
+illegal drops it, and tapping LOAD lowers the sights first (a reload cannot
+start while they are up).
+
 They are drawn by the page, not the game; `src/input.h` folds them into the same
 input questions the desktop build asks, so the game itself does not know which
 it is running on.
+
+`node tools/mobile-check.mjs` loads `web/shell.html` in Chromium at seven phone
+and desktop sizes and asserts the things a screenshot of the world will never
+show you: that no two on-screen controls overlap, that the splash fits or
+scrolls with ENTER on screen, that the canvas keeps its aspect ratio whatever
+size raylib gives it, and that the title-screen gestures resolve correctly — a
+tap or a stick push begins a run, a button press or a look drag does not.
 
 ![screenshot](docs/screenshot.png)
 

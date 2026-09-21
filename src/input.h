@@ -21,6 +21,10 @@ void webInputPoll();
 // 1.0 unless a thumbstick is pushed part way, so movement stays analog on a
 // stick and unchanged for anything that returns booleans.
 float webMoveScale();
+// The touch AIM button latches rather than being held (input_web.cpp). The game
+// decides when an aim is legal, so it needs a way to drop a latch it has
+// refused — otherwise the button sits lit over a gun that never comes up.
+void webReleaseAim();
 
 bool    inKeyDown(int key);
 bool    inKeyPressed(int key);
@@ -29,11 +33,21 @@ bool    inMousePressed(int button);
 Vector2 inMouseDelta();
 float   inWheel();
 bool    inCursorHidden();
+// True only when the on-screen controls are up. The HUD asks so it can name the
+// buttons the player actually has: a title card telling a phone to press WASD
+// is telling it to do something it cannot.
+bool    inTouchActive();
+// A tap on open screen or a push of the stick — what "tap anywhere to descend"
+// means on a device whose only other way in is one small button.
+bool    webStartGesture();
 
 #else
 
 inline void    webInputPoll() {}
 inline float   webMoveScale() { return 1.0f; }
+inline void    webReleaseAim() {}
+inline bool    inTouchActive() { return false; }
+inline bool    webStartGesture() { return false; }
 
 inline bool    inKeyDown(int key)       { return IsKeyDown(key); }
 inline bool    inKeyPressed(int key)    { return IsKeyPressed(key); }

@@ -177,6 +177,8 @@ int main() {
         g.updateAim(false,.2f);testedWall=true;
     }
     CHECK(testedWall);
+    // Chalk is per level and per descent (Game::chalk is an array, not a list);
+    // this harness had not caught up and would not compile at all.
     g.chalk[g.level].push_back({{g.px,g.py+0.016f,g.pz},g.yaw});
     g.pitch=-0.9f;capture(g,"chalk-arrow.png");
     // Model-space shading must place a dropped deck at the same exposure as the floor.

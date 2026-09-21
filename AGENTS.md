@@ -219,6 +219,86 @@ synthetic event from a test driver. The throw aborts the rest of the handler,
 so the press is registered and never released: the player ends up walking, or
 firing, forever. Both calls are wrapped.
 
+**raylib sizes the web canvas from `window.innerWidth`/`innerHeight`, not from
+the element's box** — `EmscriptenResizeCallback` in `rcore_web.c` reads the two
+and calls `emscripten_set_canvas_element_size`. The shell's canvas is stretched
+by CSS over `#stage`, which is the viewport *minus the footer bar*, so the two
+never agreed and the world was drawn squashed to cover the difference. Worse,
+that callback clamps to `CORE.Window.screenMin` first: `SetWindowMinSize(640,
+400)` rendered a 412 px phone at 640 wide and let CSS compress it by a third.
+Neither reads as a window-size bug — it reads as a bad field of view, which is
+why it shipped. The web build now asks for a 240 px minimum and `fitCanvas()` in
+the shell gives the element its backing store's own aspect ratio inside the
+stage, letterboxing the remainder, so nothing is stretched whatever raylib picks.
+
+**A flex container that centres content taller than itself clips it, both ends,
+and does not scroll.** The splash used `justify-content: center`, and on a
+landscape phone (about 640x330 of stage) the title went off the top and the
+ENTER button off the bottom: the page looked like it had failed to load rather
+than like it had more to show. `overflow-y: auto` on the scroller plus
+`margin: auto` on an inner block is the fix — `margin: auto` centres while the
+content fits and hands the overflow to the scroller when it does not, which
+`justify-content` will not do.
+
+**`hud()` scales type to the window's *height*, and a phone is short of width.**
+Every centred HUD line is a full-width row: at 412 px across, the title card's
+letter-spaced name measured about 700 px and ran off both edges, and the intro
+card's control list off the right. `hudTextC` now shrinks a line to 92% of the
+screen before drawing it (`fitSize`), so nothing clips; `hudText`/`hudTextR` are
+corner blocks and deliberately do not. The title itself draws through `DrawText`
+for its own drop shadow, so it calls `fitSize` by hand — change one, change both.
+
+**Hold-to-aim is the wrong gesture on a touch screen, and latching it deadlocks
+the reload.** A held AIM button parks the right thumb for the length of a
+gunfight, leaving nothing to fire with. The latch lives in `input_web.cpp`
+rather than the shell because the *game* decides whether an aim is legal
+(`Game::updateAim`), so `webReleaseAim()` drops a latch the game refused and the
+button cannot sit lit over a gun that never comes up. The trap: `canReload()`
+refuses while the sights are up, so a latched aim silently swallows every tap of
+LOAD and the revolver can never be reloaded again — the poll drops the latch on
+a RELOAD press for exactly that reason. A reload already running keeps the
+latch, because natively holding RMB through one raises the sights when it ends.
+
+**"Begin" must be an edge, never a held state — the death card is what proves
+it.** The title screen starts a run on `webStartGesture()`: a tap on open
+screen, or the stick crossing into a real push. The obvious implementation is to
+read the stick's *deflection* instead, and it is wrong in a way that only shows
+up at the worst moment — a thumb still resting on a pushed stick at the instant
+you die is still pushed a second later, so the death card dismisses itself the
+frame its read-it-first hold expires, and the player never sees how the run
+ended. The crossing is recorded once per grab (`r.pushed` in the shell), so a
+finger already down when a card appears has to lift and act again. The same
+applies to the tap: it is counted on `pointerup`, not `pointerdown`.
+
+**A synthetic pointer event's target is whatever you dispatched it on, and this
+handler branches on the target.** `pointerdown` asks
+`e.target.closest('.tbtn')` to tell a button press from open screen, so a test
+that fires every event at `#touch` makes *every* gesture look like open screen —
+including the button press that must not start a run. Dispatch at
+`document.elementFromPoint(x, y)` and let it bubble. (The check caught this on
+its first run, which is the argument for writing the negative cases too: had it
+only asserted that taps start the game, it would have passed while proving
+nothing.)
+
+**`TouchFrame`'s field order in `input_web.cpp` is the `HEAPU32`/`HEAPF32` index
+in the `EM_ASM` block below it.** Insert a field in the middle rather than
+appending and every field after it reads its neighbour's value — the look drag
+becomes the thumbstick, which reads as a control gone haywire rather than as a
+struct layout mistake.
+
+**`node tools/mobile-check.mjs` is the only check that sees any of this.** It
+loads `web/shell.html` in Chromium at seven sizes and asserts no two controls
+overlap, that the splash fits or scrolls with ENTER on screen, that the canvas
+keeps its aspect ratio at three different backing sizes, and that the seven
+title-screen gestures resolve the way they should — a middle tap, a slightly
+sloppy tap, a stick push and a stick tap all begin a run; a button press, a look
+drag and a cancelled press all do not. Run it for anything that touches the
+shell. Two notes on running it: ESM `import` ignores
+`NODE_PATH`, and the sandbox's playwright is installed *globally* and is
+CommonJS, so it arrives under `.default` — the script handles both, and without
+that the failure is a bare `ERR_MODULE_NOT_FOUND` that looks like a missing
+package.
+
 **`emcc` will compile this and then fail to link it.** Every C++ symbol comes
 back undefined — `operator new`, `operator delete`, `std::__2::__next_prime` —
 which reads as a missing stdlib or a broken sysroot. It is neither: `emcc` is
@@ -484,6 +564,14 @@ change and you cannot see why, check `chunks=` before you go looking in the
 renderer. It is *not*, however, where Level 4's differing pixels in a
 regression diff come from: those are its balloons, which bob on wall-clock time
 and move with any frame-rate wobble.
+**A guard written against absolute zero breaks the moment the floor moves.**
+The trapdoor's trigger was `py > -0.05f`, meaning "you are standing at floor
+level and not falling into a pit". Dishing the rotten patches 8.5 cm put the
+player *below* zero while standing squarely on one, so the test stopped firing
+and the trapdoor quietly stopped being a trapdoor. Nothing errored, nothing
+looked wrong, and the only symptom was a capture at frame 60 that was still the
+same yellow carpet it had been at frame 12. Anything comparing `py` against a
+constant wants the floor height it is actually standing on.
 
 **A failed shader compile does not crash — it goes black and gets faster.**
 raylib silently falls back to its default shader. The frame rate goes *up*,
@@ -1146,6 +1234,15 @@ pass, and both obey the same three rules, learned the hard way:
   builds it (world.cpp), `gatherCellAABBs` gives it a collision box, and
   `Game::bottleShelfY` says how high a carton stands on it. Change one, change
   all three, or you get furniture you fall through or cartons floating.
+- **The rotten floor patches are a shortcut, not an accident, and three things
+  say so.** `World::softDip` is the single source of the bowl's shape: the floor
+  mesher builds the cell out of it and `groundAt` walks the player down the same
+  curve, so what you see and what you stand in cannot drift. On top of that the
+  camera sags further as `softTimer` builds, and `sndGroan` re-triggers faster
+  and higher as it does. The 0.9 s grace window is unchanged — it was always the
+  good part; what was missing was anything to spend it on. Subdivision is a real
+  parameter here, not a detail: `MB::quad` carries one colour and one normal per
+  quad, so 8 across the cell reads as a chequerboard and 12 still quilts.
 - Comments explain *why*, not *what*. Several in here record a bug that a
   reasonable-looking change would reintroduce; keep those.
 - Prefer procedural world content; licensed external models and textures are user-authorized. Keep provenance beside each asset.

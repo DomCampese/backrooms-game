@@ -53,9 +53,32 @@ static void hudText(const char *t, int x, int y, int px, Color c) {
     DrawText(t, x, y, px, c);
 }
 
+// hud() scales type to the window's *height*, which is what the HUD corners
+// need — but every centred line in here is a full-width row, and a phone held
+// upright is short of width, not of height. At 412 px across, the letter-spaced
+// title measured about 700 and ran off both edges, and the intro card's control
+// list off the right. Shrink a line that does not fit rather than clipping it.
+//
+// 92% of the screen leaves a margin that reads as deliberate rather than as
+// type touching the bezel. MeasureText is very nearly linear in size, so one
+// proportional step lands within a pixel or two; the loop only rounds it down,
+// because rounding up is the case that still overflows.
+static int fitSize(const char *t, int px, int maxW) {
+    if (px < 1) px = 1;
+    if (maxW <= 0) return px;
+    int w = MeasureText(t, px);
+    if (w <= maxW) return px;
+    px = px * maxW / (w > 0 ? w : 1);
+    while (px > 1 && MeasureText(t, px) > maxW) px--;
+    return px < 1 ? 1 : px;
+}
+
+static int hudFitW() { return (int)(GetScreenWidth() * 0.92f); }
+
 // Centred on cx. Measuring at the scaled size rather than the authored one is
 // the whole point: measure at 16 and draw at 38 and the line sits off-centre.
 static void hudTextC(const char *t, int cx, int y, int px, Color c) {
+    px = fitSize(t, px, hudFitW());
     hudText(t, cx - MeasureText(t, px) / 2, y, px, c);
 }
 
@@ -531,7 +554,8 @@ void Game::renderUI(double now) {
                             deathCount, LEVELS[bestDeep].name, bestRun / 60, bestRun % 60),
                  sw / 2, sh / 3 + hud(140), hud(16), Fade({ 130, 106, 100, 255 }, a * 0.8f));
         if (deathT < DEATH_CARD - 1.6f)
-            hudTextC("press any key to descend again", sw / 2, sh * 2 / 3 + hud(30), hud(18),
+            hudTextC(inTouchActive() ? "tap anywhere to descend again" : "press any key to descend again",
+                     sw / 2, sh * 2 / 3 + hud(30), hud(18),
                      Fade({ 168, 144, 112, 255 }, a * (0.45f + 0.55f * (0.5f + 0.5f * sinf(timeF * 3.0f)))));
         EndDrawing();
         return;
@@ -543,15 +567,17 @@ void Game::renderUI(double now) {
         const char *t1 = "T H E   B A C K R O O M S";
         // faint flicker on the title, like a tired fluorescent
         float fl = 0.86f + 0.14f * sinf(timeF * 27.0f) * sinf(timeF * 41.3f + 0.7f);
-        int ts = hud(62);
+        int ts = fitSize(t1, hud(62), hudFitW());
         int tw = MeasureText(t1, ts);
         DrawText(t1, sw / 2 - tw / 2 + hud(2), sh / 3 + hud(2), ts, Fade(BLACK, 0.55f));   // drop shadow
         DrawText(t1, sw / 2 - tw / 2, sh / 3, ts, Fade({ 228, 214, 158, 255 }, fl));
-        const char *sub = "Level 0 · and everything under it";
+        const char *sub = "and everything under it";
         hudTextC(sub, sw / 2, sh / 3 + ts + hud(16), hud(20), { 150, 142, 108, 220 });
         // pulsing prompt
         float pl = 0.45f + 0.55f * (0.5f + 0.5f * sinf(timeF * 3.0f));
-        const char *pr = "press any key to descend";
+        // A phone has no key to press, and telling it to press one reads as the
+        // game being broken rather than as a line written for a keyboard.
+        const char *pr = inTouchActive() ? "tap anywhere to descend" : "press any key to descend";
         hudTextC(pr, sw / 2, sh * 2 / 3, hud(24), Fade({ 210, 198, 150, 255 }, pl));
         if (bestEsc || bestKill || bestM || bestWins) {
             const char *tb = bestTapes > 0
@@ -565,8 +591,11 @@ void Game::renderUI(double now) {
             hudTextC(TextFormat("deepest  %s   ·   longest run  %02d:%02d", LEVELS[bestDeep].name,
                                 bestRun / 60, bestRun % 60),
                      sw / 2, sh * 2 / 3 + hud(62), hud(16), { 140, 132, 100, 200 });
-        const char *tc = TextFormat("WASD move    SHIFT run    F flashlight    1/2/4 item    bank %d doubloons to leave",
-                                    ESCAPE_COST);
+        const char *tc = inTouchActive()
+            ? TextFormat("STICK move    AIM taps the sights up and down    LAMP torch    ITEM cycle    bank %d doubloons to leave",
+                         ESCAPE_COST)
+            : TextFormat("WASD move    SHIFT run    F flashlight    1/2/4 item    bank %d doubloons to leave",
+                         ESCAPE_COST);
         hudTextC(tc, sw / 2, sh - hud(42), hud(15), { 128, 122, 96, 170 });
         EndDrawing();
         return;
@@ -593,7 +622,9 @@ void Game::renderUI(double now) {
         hudTextC(t1, sw / 2, sh / 3, hud(52), Fade({ 220, 205, 150, 255 }, ta));
         const char *t2 = "if you're reading this, you've already noclipped";
         hudTextC(t2, sw / 2, sh / 3 + hud(66), hud(18), Fade({ 160, 150, 110, 255 }, ta * 0.9f));
-        const char *t3 = "WASD walk   SHIFT run   CTRL crouch   SPACE jump   F flashlight   1/2/4 item   3 drink   M chalk   E vend/pick up";
+        const char *t3 = inTouchActive()
+            ? "STICK walk   push it to run   DUCK crouch   JUMP   LAMP torch   ITEM cycle   DRINK   MARK chalk   USE vend/pick up"
+            : "WASD walk   SHIFT run   CTRL crouch   SPACE jump   F flashlight   1/2/4 item   3 drink   M chalk   E vend/pick up";
         hudTextC(t3, sw / 2, sh - hud(60), hud(16), Fade({ 140, 132, 100, 255 }, ta * 0.8f));
         if (bestEsc || bestKill || bestM || bestWins) {
             const char *tb = bestTapes > 0
@@ -713,13 +744,20 @@ void Game::renderUI(double now) {
                      wayOpen() ? Color{ 120, 230, 140, 210 } : Color{ 214, 178, 92, 170 });
         DrawText(TextFormat("3  almond water  ×%d", almond), 16, sh - 94, 16,
                  almond > 0 ? Color{ 150, 190, 235, 170 } : dimc);
+        // One TextFormat call per line, drawn straight off it: the return is a
+        // slot in a small rotating buffer, so a second call before this one is
+        // drawn would hand the revolver the flare's string. Hence the ternaries
+        // inside the format arguments rather than a second TextFormat.
         DrawText(reloadT > 0 ? "1  revolver  [reloading]"
-                    : TextFormat("1  revolver  %d/%d%s  · hold RMB aim", ammo, MAXAMMO, ammo == 0 ? "  · R" : ""),
+                    : TextFormat("1  revolver  %d/%d%s  · %s", ammo, MAXAMMO,
+                                 ammo == 0 ? (inTouchActive() ? "  · LOAD" : "  · R") : "",
+                                 inTouchActive() ? "tap AIM" : "hold RMB aim"),
                     16, sh - 50, 16, weapon == WEAPON_REVOLVER ? selc : dimc);
         DrawText(TextFormat("2  flare  ×%d", flares), 16, sh - 72, 16, weapon == WEAPON_FLARE ? selc : dimc);
         DrawText(!deck.carried
                      ? (deck.playing ? "4  tape player  [running · left behind]"
-                                     : "4  tape player  [left behind · E]")
+                                     : inTouchActive() ? "4  tape player  [left behind · USE]"
+                                                       : "4  tape player  [left behind · E]")
                  : deck.playing ? TextFormat("4  tape player  [playing  %ds]", (int)deck.t + 1)
                  : tapes > 0    ? "4  tape player  [tape ready]"
                                 : "4  tape player  [no tape]",

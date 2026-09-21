@@ -54,9 +54,19 @@ void Game::init() {
         std::exit(EXIT_FAILURE);
     }
 #endif
-    InitWindow(1440, 850, "THE BACKROOMS — Level 0");
+    InitWindow(1440, 850, "THE BACKROOMS");
     SetExitKey(KEY_NULL);
+#ifdef PLATFORM_WEB
+    // raylib's web resize callback clamps the canvas to screenMin before it
+    // sizes it, so a 640x400 floor renders a 412 px phone at 640 wide and lets
+    // CSS squash the result back down: the whole world comes out horizontally
+    // compressed, which reads as a bad FOV rather than as a window-size bug.
+    // The browser is the window manager here; it will not hand us anything
+    // absurd.
+    SetWindowMinSize(240, 240);
+#else
     SetWindowMinSize(640, 400);
+#endif
     InitAudioDevice();
     rlDisableBackfaceCulling();
 
@@ -188,6 +198,7 @@ void Game::init() {
     sndHowl = makeDogHowl();       SetSoundVolume(sndHowl, 0.5f);
     sndGulp = makeGulp();          SetSoundVolume(sndGulp, 0.75f);
     sndVoice = makeTapeVoice();    SetSoundVolume(sndVoice, 0.9f);
+    sndGroan = makeFloorGroan();   SetSoundVolume(sndGroan, 0.85f);
     for (int i = 0; i < NBARKS; i++) {
         sndBarks[i] = makeDogBark(400 + i * 31);
         sndBarksThrough[i] = makeDogBark(400 + i * 31, true);
@@ -336,8 +347,9 @@ void Game::updateMenu(double now) {
     fwd = { cosf(pitch) * cosf(yaw), sinf(pitch), cosf(pitch) * sinf(yaw) };
     f2x = cosf(yaw); f2z = sinf(yaw);
     r2x = -sinf(yaw); r2z = cosf(yaw);
-    eyeY = 1.62f; bobAmt = 0; leanCur = 0; landDip = 0;
+    eyeY = 1.62f; bobAmt = 0; leanCur = 0; landDip = 0; softTimer = 0; softSag = 0;
     flashOn = false; flashCur = 0;
+    webReleaseAim();            // the aim latch must not survive into a new run
     ent.st = EState::Hidden; entDist = 1e9f; entDarkCur = 0;
     fear = 0.0f; blackoutCur = 1.0f;
     streamChunks();
@@ -348,7 +360,13 @@ void Game::updateMenu(double now) {
     // stretch of it, then let any key move on.
     if (deathT > DEATH_CARD - 1.6f) return;
     int k = GetKeyPressed();                    // F11 (fullscreen) shouldn't count as "begin"
-    if ((k != 0 && k != KEY_F11) || inMousePressed(MOUSE_BUTTON_LEFT)) startRun(now);
+    // On a phone the only other way in was one small button in the corner, and
+    // a title card that says "press any key" to a device with no keys is a dead
+    // end that reads as the game being broken. A tap on open screen or a push
+    // of the stick begins the run too — and a stick push leaves you already
+    // walking, which is the right thing to happen when "move" is what started it.
+    if ((k != 0 && k != KEY_F11) || inMousePressed(MOUSE_BUTTON_LEFT) || webStartGesture())
+        startRun(now);
 }
 
 // Can the pack still place you? Sound only: they do not care what you are
@@ -970,9 +988,29 @@ void Game::updateMovement(float dt) {
     leanCur += (strafeInput - leanCur) * fminf(1, 6 * dt);
     landDip = fmaxf(0.0f, landDip - dt * 2.4f);   // the knees straightening after a landing
 
-    // the floor is a lie: linger on a soft patch and it gives way to Level 1
-    if (level == 0 && grounded && py > -0.05f && world.softAt(cellOf(px), cellOf(pz))) {
+    // The floor is a lie: linger on a soft patch and it gives way to Level 1.
+    //
+    // It is the fastest way down in the game, and a shortcut nobody can see is
+    // just an accident. So it tells you three times before it goes, in the 0.9 s
+    // the grace timer already allowed: the carpet is visibly dished (the floor
+    // mesher builds these cells as a bowl rather than a flat quad), it takes you
+    // down with it as you stand there, and the subfloor groans — sooner each
+    // time as it worsens. Step off and the sag springs back twice as fast as it
+    // formed. Taking one is now a decision.
+    // `py > -SOFT_DEPTH - 0.05f` and not `py > -0.05f`: the patch is dished now,
+    // so standing in the middle of one puts you 8.5 cm *below* zero and the old
+    // test refused to fire at all — the trapdoor silently stopped being a
+    // trapdoor, and the only symptom was a screenshot that never changed level.
+    if (level == 0 && grounded && py > -SOFT_DEPTH - 0.05f && world.softAt(cellOf(px), cellOf(pz))) {
+        double tnow = GetTime();
+        if (softTimer <= 0.0f) nextGroan = tnow;      // the first complaint is immediate
         softTimer += dt;
+        if (tnow >= nextGroan && fellT <= 0) {
+            SetSoundPitch(sndGroan, 0.88f + softTimer * 0.30f);
+            SetSoundVolume(sndGroan, 0.55f + softTimer * 0.45f);
+            PlaySound(sndGroan);
+            nextGroan = tnow + 0.55 - softTimer * 0.30;  // and it comes faster the longer you stay
+        }
         if (softTimer > 0.9f && fellT <= 0 && escapeT <= 0 && deathT <= 0) {
             fellT = 4.0f;
             SetSoundVolume(sndBigSplash, 0.5f); SetSoundPitch(sndBigSplash, 0.5f);
@@ -983,6 +1021,11 @@ void Game::updateMovement(float dt) {
             ent.st = EState::Hidden; ent.nextSpawn = GetTime() + 20;
         }
     } else softTimer = fmaxf(0.0f, softTimer - dt * 2.0f);
+    // The bowl is 8.5 cm deep in the mesh; standing in it adds most of that again,
+    // the last of it comes fastest — the give is not linear, and neither is the
+    // floor's. Eased rather than driven straight off softTimer, so stepping off
+    // is a rise rather than a snap.
+    softSag += (softTimer / 0.9f * softTimer / 0.9f * 0.065f - softSag) * fminf(1, 9 * dt);
 
     // jump + floor height (groundY recomputed after collision; furniture tops count)
     groundY = world.groundAt(px, pz, py);
@@ -1039,7 +1082,7 @@ void Game::updateMovement(float dt) {
     // seasickness. The viewmodel sway in render.cpp reads sinf(bobPhase*PI),
     // which on this phase is one lateral cycle per two footfalls — a gait
     // cycle, which is what lateral sway actually tracks.
-    eyeY = 1.62f - 0.55f * crouchCur - landDip + py - cosf(bobPhase * 6.28318f) * 0.032f * bobAmt;
+    eyeY = 1.62f - 0.55f * crouchCur - landDip - softSag + py - cosf(bobPhase * 6.28318f) * 0.032f * bobAmt;
     if (floorf(bobPhase) > floorf(lastPhase)) {
         Sound &s = inWater ? splashes[grng.ri(0, 1)] : steps[grng.ri(0, 3)];
         SetSoundPitch(s, 0.9f + grng.f01() * 0.22f);
@@ -1167,6 +1210,12 @@ void Game::updateWeapons(float dt, double now) {
         }
     }
     updateAim(inCursorHidden() && inMouseDown(MOUSE_BUTTON_RIGHT), dt);
+    // Touch latches the aim (input_web.cpp), so a refused aim has to drop the
+    // latch rather than leave the button lit over a gun that never comes up.
+    // A reload is the one refusal that is temporary — it finishes and the sights
+    // then rise, which is exactly what holding RMB through one does natively —
+    // so it keeps the latch.
+    if (!aiming && !(weapon == WEAPON_REVOLVER && reloadT > 0)) webReleaseAim();
     gunCd = fmaxf(0, gunCd - dt);
     muzzleT = fmaxf(0, muzzleT - dt);
     muzzleSmoke = fmaxf(0, muzzleSmoke - dt * 0.7f);   // powder haze drifts and thins

@@ -1,4 +1,4 @@
-// THE BACKROOMS — Level 0
+// THE BACKROOMS
 // raylib + OpenGL 3.3 natively; WebGL 2 (GLSL ES 3.00) under Emscripten.
 // Procedural worlds plus embedded CC0 materials and revolver.
 //
