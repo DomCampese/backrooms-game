@@ -744,13 +744,20 @@ void Game::renderUI(double now) {
                      wayOpen() ? Color{ 120, 230, 140, 210 } : Color{ 214, 178, 92, 170 });
         DrawText(TextFormat("3  almond water  ×%d", almond), 16, sh - 94, 16,
                  almond > 0 ? Color{ 150, 190, 235, 170 } : dimc);
+        // One TextFormat call per line, drawn straight off it: the return is a
+        // slot in a small rotating buffer, so a second call before this one is
+        // drawn would hand the revolver the flare's string. Hence the ternaries
+        // inside the format arguments rather than a second TextFormat.
         DrawText(reloadT > 0 ? "1  revolver  [reloading]"
-                    : TextFormat("1  revolver  %d/%d%s  · hold RMB aim", ammo, MAXAMMO, ammo == 0 ? "  · R" : ""),
+                    : TextFormat("1  revolver  %d/%d%s  · %s", ammo, MAXAMMO,
+                                 ammo == 0 ? (inTouchActive() ? "  · LOAD" : "  · R") : "",
+                                 inTouchActive() ? "tap AIM" : "hold RMB aim"),
                     16, sh - 50, 16, weapon == WEAPON_REVOLVER ? selc : dimc);
         DrawText(TextFormat("2  flare  ×%d", flares), 16, sh - 72, 16, weapon == WEAPON_FLARE ? selc : dimc);
         DrawText(!deck.carried
                      ? (deck.playing ? "4  tape player  [running · left behind]"
-                                     : "4  tape player  [left behind · E]")
+                                     : inTouchActive() ? "4  tape player  [left behind · USE]"
+                                                       : "4  tape player  [left behind · E]")
                  : deck.playing ? TextFormat("4  tape player  [playing  %ds]", (int)deck.t + 1)
                  : tapes > 0    ? "4  tape player  [tape ready]"
                                 : "4  tape player  [no tape]",
