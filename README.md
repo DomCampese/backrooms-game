@@ -54,7 +54,8 @@ are per-browser.
 Touch controls appear automatically on a coarse pointer: a floating thumbstick
 in the lower left (push it all the way to run), drag anywhere else to look, and
 a button cluster for fire, aim, reload, jump, use, torch, item, throw, chalk and
-drink. Force them on or off with `?touch=1` / `?touch=0`.
+drink. Toggle them from the footer at any time, or force their initial state
+with `?touch=1` / `?touch=0`.
 
 **Tap anywhere to begin**, or just push the stick — the title card and the
 death card both start a run on any tap of open screen, and a stick push starts
@@ -442,9 +443,9 @@ Details that reward paying attention:
 
 | key | action |
 |---|---|
-| WASD | walk |
+| WASD | walk (double-tap and hold W to sprint) |
 | mouse | look |
-| SHIFT | sprint (stamina) |
+| SHIFT | sprint (stamina; double-tap W also sprints) |
 | CTRL | crouch |
 | SPACE | jump |
 | F / L | flashlight |

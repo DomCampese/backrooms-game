@@ -307,6 +307,24 @@ describes the primary pointer, and leave hybrid/tablet overrides to `?touch=1`
 and `?touch=0`. The mobile check simulates a fine-pointer desktop with ten touch
 points so this does not regress.
 
+The footer toggle may change input modes while a run is active. Turning the
+touch layer off hides the element that would otherwise receive each finger's
+`pointerup`, so the toggle must clear `down`, `pressed`, stick/look deltas,
+gesture edges, pointer roles and held-button styling before hiding it. Missing
+that cleanup leaves walking or firing stuck on after the player switches back
+to keyboard and mouse.
+
+**On the web, `SetWindowTitle` writes `document.title`.** Updating the native
+window title with the current level therefore changed the browser tab from THE
+BACKROOMS to LEVEL 0 as soon as a run loaded. Keep the web title constant while
+retaining the useful per-level title in native builds.
+
+**Double-tap W is press-to-press and lasts only for the second hold.** Measure
+the 0.30 s window from `inKeyPressed(KEY_W)` edges, not from key-down frames, or
+holding W and browser/OS key repeat can manufacture a second tap. Once armed,
+the sprint latch survives past the timing window but clears immediately when W
+is released; Shift remains an independent way to request the same sprint.
+
 **`emcc` will compile this and then fail to link it.** Every C++ symbol comes
 back undefined — `operator new`, `operator delete`, `std::__2::__next_prime` —
 which reads as a missing stdlib or a broken sysroot. It is neither: `emcc` is

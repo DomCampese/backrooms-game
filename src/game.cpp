@@ -464,7 +464,8 @@ void Game::beginDescent(double now) {
     // and it used to be reset here, right after dieRun incremented it, which
     // showed up as the card claiming your first death every time.
     fear = 0; boostT = 0;
-    stamina = 1; sprintExhausted = false; aiming = false; aimBlend = 0;
+    stamina = 1; sprintExhausted = false; forwardTapAge = 1.0f; forwardDoubleSprint = false;
+    aiming = false; aimBlend = 0;
     sanity = 1.0f; sanityStage = 0; sanityWarnT = 0; sanityLine = "";
     drinkT = 0; drinkLanded = false; nextHeartbeat = now + 20;
     ent.st = EState::Hidden; ent.nextSpawn = now + 30;
@@ -552,7 +553,13 @@ void Game::applyLevel(int lv) {
     // which is the whole point of leaving a mark. beginDescent clears it.
     chalkSeedPending = !chalkSeeded[lv];
     poppedBalloons.clear(); poppedTableBunches.clear(); confetti.clear();
+#ifdef PLATFORM_WEB
+    // Emscripten maps the window title to document.title. Keep browser tabs
+    // branded with the game name instead of changing them to the current level.
+    SetWindowTitle("THE BACKROOMS");
+#else
     SetWindowTitle(TextFormat("THE BACKROOMS — %s", c.name));
+#endif
 }
 
 // Which furniture someone would actually have set a drink down on, and how high
@@ -949,10 +956,25 @@ void Game::updateSprint(bool requested, bool moving, bool crouched, float dt) {
     stamina = clampf(stamina + (sprinting ? -dt / 10.0f : dt / 6.0f), 0, 1);
 }
 
+bool Game::updateForwardDoubleTap(bool pressed, bool down, float dt) {
+    constexpr float DOUBLE_TAP_WINDOW = 0.30f;
+    forwardTapAge += dt;
+    if (pressed) {
+        // IsKeyPressed is an edge, so holding W (including keyboard repeat)
+        // cannot become the second tap. The second press latches sprint only
+        // for that hold; releasing W always returns to walking.
+        if (forwardTapAge <= DOUBLE_TAP_WINDOW) forwardDoubleSprint = true;
+        forwardTapAge = 0;
+    }
+    if (!down) forwardDoubleSprint = false;
+    return forwardDoubleSprint;
+}
+
 void Game::updateMovement(float dt) {
     // ---- move
     float ix = 0, iz = 0;
-    if (inKeyDown(KEY_W)) { ix += f2x; iz += f2z; }
+    bool forwardDown = inKeyDown(KEY_W);
+    if (forwardDown) { ix += f2x; iz += f2z; }
     if (inKeyDown(KEY_S)) { ix -= f2x; iz -= f2z; }
     if (inKeyDown(KEY_D)) { ix += r2x; iz += r2z; }
     if (inKeyDown(KEY_A)) { ix -= r2x; iz -= r2z; }
@@ -965,7 +987,8 @@ void Game::updateMovement(float dt) {
     if (moving) { float ms = webMoveScale(); ix *= ms; iz *= ms; }
     bool crouched = inKeyDown(KEY_LEFT_CONTROL);
     crouchCur += ((crouched ? 1.0f : 0.0f) - crouchCur) * fminf(1, 10 * dt);
-    updateSprint(inKeyDown(KEY_LEFT_SHIFT), moving, crouched, dt);
+    bool doubleTapSprint = updateForwardDoubleTap(inKeyPressed(KEY_W), forwardDown, dt);
+    updateSprint(inKeyDown(KEY_LEFT_SHIFT) || doubleTapSprint, moving, crouched, dt);
     boostT = fmaxf(0, boostT - dt);
     float groundY = world.groundAt(px, pz, py);
     bool inWater = grounded && py < -0.1f && world.poolAt(cellOf(px), cellOf(pz));
