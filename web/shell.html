@@ -269,8 +269,19 @@
   var BTN = { FIRE:1, AIM:2, RELOAD:4, FLASH:8, INTERACT:16, JUMP:32,
               WEAPON:64, CHALK:128, DRINK:256, SPRINT:512, CROUCH:1024, THROW:2048 };
 
-  // A finger travels further than a mouse for the same intent.
-  var LOOK_GAIN = 1.35;
+  // A finger travels further than a mouse for the same intent, and it has a
+  // hard stop the mouse does not: a mouse can be lifted and replaced, a thumb
+  // runs out of screen. So the number that matters is how far one drag turns
+  // you, and at 1.35 a swipe clean across a 412 px phone was 412 * 1.35 *
+  // 0.0030 rad/px = 1.67 rad, about 95 degrees — a quarter turn, so looking
+  // behind you took four swipes while something was walking at you.
+  //
+  // 2.4 makes that same swipe 2.97 rad, near enough half a turn, and an
+  // ordinary thumb drag of 200 px about 83 degrees. Retune it against that
+  // arithmetic rather than by feel: the game's own 0.0030 rad/px is the other
+  // half of it, and the aim-down-sights reduction still applies on top because
+  // the drag is reported in the same pixels a mouse delta is.
+  var LOOK_GAIN = 2.4;
 
   // How far a finger may wander and still count as a tap rather than a drag.
   var TAP_SLOP = 16;

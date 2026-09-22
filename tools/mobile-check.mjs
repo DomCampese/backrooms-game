@@ -169,6 +169,33 @@ for (const size of SIZES) {
   for (const k of ['button', 'lookDrag', 'cancelled'])
     if (gestures[k]) note(size, `${k} starts the game and must not`);
 
+  // ---- one drag has to turn you a useful amount ---------------------------
+  // The shell reports a look drag in the same pixels a mouse delta is, and
+  // Game::updateLook multiplies by 0.0030 rad/px. So how far one thumb drag
+  // turns you is LOOK_GAIN * px * 0.0030, and a thumb — unlike a mouse — cannot
+  // be lifted and replaced mid-gesture. At the original 1.35 a swipe clean
+  // across a phone was a quarter turn and looking behind you took four of them.
+  // Pin the product rather than the constant: either half can move.
+  const RAD_PER_PX = 0.0030;
+  const turn = await page.evaluate(async ([w, h]) => {
+    const t = Module.__touch;
+    const layer = document.getElementById('touch');
+    const mid = [w / 2, h * 0.32];
+    const send = (type, x, y) => {
+      const el = document.elementFromPoint(x, y) || layer;
+      el.dispatchEvent(new PointerEvent(type, {
+        pointerId: 900, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+    };
+    t.lookX = 0;
+    send('pointerdown', mid[0], mid[1]);
+    send('pointermove', mid[0] + 200, mid[1]);
+    send('pointerup',   mid[0] + 200, mid[1]);
+    return t.lookX;
+  }, [size.w, size.h]);
+  const deg = turn * RAD_PER_PX * 180 / Math.PI;
+  if (!(deg > 60 && deg < 110))
+    note(size, `a 200 px drag turns ${deg.toFixed(0)} deg, want 60-110`);
+
   await page.close();
 }
 
