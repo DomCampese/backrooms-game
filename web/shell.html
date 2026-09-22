@@ -142,6 +142,7 @@
     border-radius: 50%; border: 1px solid rgba(201,180,88,.30);
     background: radial-gradient(circle, rgba(201,180,88,.09), rgba(0,0,0,.20));
   }
+  #stick.run { border-color: rgba(230,208,120,.85); box-shadow: 0 0 0 2px rgba(201,180,88,.28); }
   #knob {
     position: absolute; left: 50%; top: 50%; width: 40%; height: 40%;
     margin: -20% 0 0 -20%; border-radius: 50%;
@@ -292,6 +293,8 @@
   // ...and how far the stick must go before it is a push rather than a thumb
   // resting on the screen. Comfortably past the game's own 0.18 deadzone.
   var STICK_PUSH = 0.35;
+  // Sprint, in ring radii: 1.0 is the drawn edge, so this is a little past it.
+  var SPRINT_ON = 1.08, SPRINT_OFF = 0.98;
 
   var touch = { active: false, down: 0, pressed: 0,
                 lookX: 0, lookY: 0, moveX: 0, moveY: 0, wheel: 0,
@@ -491,12 +494,16 @@
     if (!o) { var r = stick.getBoundingClientRect();
               o = { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
     var dx = (x - o.x) / STICK_R, dy = (y - o.y) / STICK_R;
-    // Full deflection well before the edge of the ring: a thumb pivots, it
-    // does not reach, so requiring the whole radius means never sprinting.
-    var m = Math.hypot(dx, dy) / 0.72;
+    // `raw` is how far the thumb is from where it landed, in ring radii, and
+    // it is NOT clamped: 1 is exactly the edge of the drawn ring and sprint
+    // lives past that. `m` is the movement magnitude and still saturates well
+    // inside the ring, because a thumb pivots rather than reaches and walking
+    // at full speed must not require the whole radius.
+    var raw = Math.hypot(dx, dy);
+    var m = raw / 0.72;
     if (m > 1) { var k = 1 / (m * 0.72); dx *= k; dy *= k; m = 1; }
     else { dx /= 0.72; dy /= 0.72; }
-    return { x: dx, y: dy, m: m };
+    return { x: dx, y: dy, m: m, raw: raw };
   }
 
   // Anything in the lower-left of the stage that is not a button drives the
@@ -515,9 +522,21 @@
     touch.moveY = -v.y;                 // screen y is down; forward is up
     knob.style.transform = 'translate(' + (v.x * STICK_R * 0.62) + 'px,'
                                         + (v.y * STICK_R * 0.62) + 'px)';
-    // Auto-sprint at the edge of the stick, so running costs no extra button
-    // and no extra thumb. The game still applies its own stamina rules.
-    if (v.m > 0.92) press(BTN.SPRINT); else release(BTN.SPRINT);
+    // Sprint is a deliberate push PAST the ring, not a hard shove inside it.
+    // It used to fire at 0.92 of the saturated magnitude, which is 0.66 of the
+    // ring radius — well within the circle, so you could not see where the
+    // line was and hit it by accident just walking briskly. Now the ring's own
+    // edge is the line: cross it and you run.
+    //
+    // The two thresholds are a dead band. A thumb resting exactly on the edge
+    // would otherwise flicker in and out of a sprint several times a second,
+    // which the stamina drain turns into a stutter rather than a run.
+    if (v.raw > SPRINT_ON) press(BTN.SPRINT);
+    else if (v.raw < SPRINT_OFF) release(BTN.SPRINT);
+    // ...and the ring lights up while it is held, because otherwise nothing on
+    // screen tells you the line is there: the knob has already saturated at
+    // 0.62 of the radius and stops moving long before your thumb does.
+    stick.classList.toggle('run', (touch.down & BTN.SPRINT) !== 0);
   }
 
   layer.addEventListener('pointerdown', function (e) {
@@ -569,6 +588,7 @@
       knob.style.transform = '';
       homeStick();
       release(BTN.SPRINT);
+      stick.classList.remove('run');   // the ring's lit state follows the sprint bit
     }
     // A finger that went down and came up without going anywhere is a tap, on
     // the stick's patch as much as on open screen. Only on a real release: a

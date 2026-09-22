@@ -286,6 +286,28 @@ appending and every field after it reads its neighbour's value — the look drag
 becomes the thumbstick, which reads as a control gone haywire rather than as a
 struct layout mistake.
 
+**Sprint is past the ring, and the ring is the only thing that can tell you
+where the line is.** The stick's movement magnitude saturates at 0.72 of the
+radius — a thumb pivots rather than reaches — and sprint used to fire at 0.92
+of *that*, which is 0.66 of the radius: inside the circle, invisible, and easy
+to cross while just walking briskly. It is now a deliberate push past the drawn
+edge (`SPRINT_ON` 1.08 radii, `SPRINT_OFF` 0.98 for a dead band, because a
+thumb resting on the line otherwise flickers in and out of a sprint several
+times a second and the stamina drain turns that into a stutter). The ring gains
+a `.run` class while it is held: the knob has already saturated at 0.62 of the
+radius and stops moving long before the thumb does, so without that nothing on
+screen says the line exists. Stamina is 16 seconds of running against 6 to
+recover, up from 10 — a sprint that ends before you have crossed a 6 m hall is
+a sprint nobody uses.
+
+**A probe point picked as a fraction of the viewport lands on a control.** The
+sprint check first grabbed at `(0.14w, 0.72h)`, which is DUCK on a tall phone:
+the reading came back with the crouch bit set and no stick role at all, which
+looks exactly like "sprint is broken" rather than "the test poked the wrong
+button". Grab the stick by its own bounding rect. And read the touch state
+*before* the `pointerup` — lifting zeroes `moveX`/`moveY` and releases the bit,
+so anything measured after it is 0.
+
 **Touch look sensitivity is a product, not a constant.** The shell reports a
 drag in the same pixels a mouse delta is and `updateLook` multiplies by 0.0030
 rad/px, so what a player feels is `LOOK_GAIN * px * 0.0030` — and a thumb,

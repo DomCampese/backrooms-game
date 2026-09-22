@@ -242,6 +242,49 @@ for (const size of SIZES) {
   if (!(deg > 60 && deg < 110))
     note(size, `a 200 px drag turns ${deg.toFixed(0)} deg, want 60-110`);
 
+  // ---- sprint is past the ring, and walking full-tilt is not ---------------
+  // The line has to be somewhere a player can see, which is the edge of the
+  // drawn ring — it used to be at 0.66 of the radius, invisible and easy to
+  // cross by accident. Two probes: a thumb at 0.8 of the radius is walking at
+  // full speed and must NOT be sprinting; one at 1.2 must be.
+  const sprint = await page.evaluate(async ([w, h]) => {
+    const t = Module.__touch, layer = document.getElementById('touch');
+    const SPRINT_BIT = 512;
+    const stick = document.getElementById('stick');
+    const R = stick.offsetWidth / 2;
+    // Grab the stick where a player grabs it. A point picked as a fraction of
+    // the viewport instead lands on DUCK on a tall phone — the probe came back
+    // with the crouch bit set and no stick role at all, which reads as "sprint
+    // is broken" rather than "the test poked the wrong control".
+    const sr = stick.getBoundingClientRect();
+    const gx = sr.left + sr.width / 2, gy = sr.top + sr.height / 2;
+    const send = (type, x, y, pid) => {
+      const el = document.elementFromPoint(x, y) || layer;
+      el.dispatchEvent(new PointerEvent(type, {
+        pointerId: pid, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+    };
+    const at = (frac, pid) => {
+      send('pointerdown', gx, gy, pid);
+      send('pointermove', gx, gy - R * frac, pid);       // straight up
+      // Read everything BEFORE the pointerup: lifting zeroes moveX/moveY and
+      // releases the bit, so a reading taken after it is always 0.
+      const out = { on: (t.down & SPRINT_BIT) !== 0,
+                    lit: stick.classList.contains('run'),
+                    move: Math.hypot(t.moveX, t.moveY) };
+      send('pointerup', gx, gy - R * frac, pid);
+      return out;
+    };
+    return { walk: at(0.8, 801), run: at(1.2, 802), R };
+  }, [size.w, size.h]);
+  if (sprint.walk.on) note(size, 'a thumb inside the ring sprints and must not');
+  if (!sprint.run.on)  note(size, 'a thumb past the ring does not sprint');
+  if (!sprint.run.lit) note(size, 'sprinting does not light the ring');
+  // ...and walking at 0.8 of the radius is still full speed, because the
+  // movement magnitude saturates at 0.72 and sprint must not be the only way
+  // to move properly.
+  if (sprint.walk.move < 0.99)
+    note(size, `at 0.8 of the ring the stick reads ${sprint.walk.move.toFixed(2)}, want full`);
+
   await page.close();
 }
 
