@@ -230,6 +230,109 @@ int main() {
         cd.elev[li][lk]=0;
     }
 
+    // ---- a doorway has jambs, and a locked door is a wall.
+    //
+    // Three separate things decide whether you can walk through a cell edge —
+    // blocksEdge, the jamb boxes, and the mesher that draws them — and they are
+    // written in different places. Force each case rather than hunting for one
+    // in the map: a rule that depends on the generator happening to produce a
+    // shape is a rule that stops being tested the day it stops producing it.
+    {
+        g.applyLevel(0);
+        int ci=28, ck=28;                        // clear of the spawn room
+        int cx=fdiv(ci,CCELLS), cz=fdiv(ck,CCELLS);
+        ChunkData &cd=g.world.data(cx,cz);
+        int li=ci-cx*CCELLS, lk=ck-cz*CCELLS;
+        // Snapshot before clearing. unlockEdge rebakes the chunk, so anything
+        // left flattened here is flattened in every capture taken afterwards —
+        // a harness that quietly edits the world it is also photographing.
+        struct Saved { uint8_t wn, ww, wn1, pi, pr, pi1, pr1; } saved[4];
+        for (int d=-1;d<=2;++d) {
+            Saved &s=saved[d+1];
+            s.wn=cd.wallN[li+d][lk]; s.ww=cd.wallW[li+d][lk]; s.wn1=cd.wallN[li+d][lk+1];
+            s.pi=cd.pillar[li+d][lk];   s.pr=cd.prop[li+d][lk];
+            s.pi1=cd.pillar[li+d][lk-1];s.pr1=cd.prop[li+d][lk-1];
+        }
+        for (int d=-1;d<=2;++d) {                // clear the neighbourhood
+            cd.pillar[li+d][lk]=cd.prop[li+d][lk]=0;
+            cd.pillar[li+d][lk-1]=cd.prop[li+d][lk-1]=0;
+            cd.wallN[li+d][lk]=cd.wallW[li+d][lk]=cd.wallN[li+d][lk+1]=WALL_NONE;
+        }
+        auto boxesAt=[&](int a,int b){ static AABB bx[MAX_NEARBY_AABBS];
+            return g.world.gatherCellAABBs(a,b,bx,MAX_NEARBY_AABBS,0); };
+        float z0=ck*CELL, x0=ci*CELL;
+
+        // A doorway: you go through the 1.3 m opening and not through the jambs.
+        cd.wallN[li][lk]=WALL_DOOR;
+        CHECK(!blocksEdge(g.world.wallNVal(ci,ck)));          // passable
+        CHECK(boxesAt(ci,ck)==2);                             // exactly its two jambs
+        float bx=x0+1.0f, bz=z0-0.25f, oz=bz;                 // dead centre of the opening
+        g.world.collideCircle(bx,bz,Game::PR,0.0f);
+        CHECK(fabsf(bz-oz)<0.001f);                           // walks straight through
+        bx=x0+0.1f; bz=z0-0.25f; oz=bz;                       // into the west jamb
+        g.world.collideCircle(bx,bz,Game::PR,0.0f);
+        CHECK(bz<oz-0.01f);                                   // pushed back out
+
+        // Two side by side are one wide opening: the mesher drops the jamb
+        // between them, so the collision has to drop it too or you walk into a
+        // pier that is not there.
+        cd.wallN[li+1][lk]=WALL_DOOR;
+        CHECK(boxesAt(ci,ck)==1 && boxesAt(ci+1,ck)==1);      // outer jambs only
+        bx=x0+CELL; bz=z0-0.25f; oz=bz;                       // the line between them
+        g.world.collideCircle(bx,bz,Game::PR,0.0f);
+        CHECK(fabsf(bz-oz)<0.001f);
+        cd.wallN[li+1][lk]=WALL_NONE;
+
+        // A locked door is a wall until its key turns, and it stops light too.
+        cd.wallN[li][lk]=WALL_LOCKED;
+        CHECK(blocksEdge(g.world.wallNVal(ci,ck)) && blocksLight(g.world.wallNVal(ci,ck)));
+        CHECK(!g.world.canStep(ci,ck-1,ci,ck));
+        bx=x0+1.0f; bz=z0-0.25f; oz=bz;                       // the middle is solid now
+        g.world.collideCircle(bx,bz,Game::PR,0.0f);
+        CHECK(bz<oz-0.01f);
+        g.world.unlockEdge(ci,ck,false);
+        CHECK(g.world.wallNVal(ci,ck)==WALL_DOOR);            // and opens for good
+        CHECK(g.world.canStep(ci,ck-1,ci,ck));
+        bx=x0+1.0f; bz=z0-0.25f; oz=bz;
+        g.world.collideCircle(bx,bz,Game::PR,0.0f);
+        CHECK(fabsf(bz-oz)<0.001f);
+        // ...and the *geometry* has to move with it. This is the half that was
+        // actually broken: the mesher read the raw wall array, so an unlocked
+        // door went on drawing its locked leaf over an edge you could now walk
+        // through, and a shifted doorway kept its opening on screen over an
+        // edge that had been sealed. Neither reads as a mesher bug — the first
+        // reads as "doors have no collision". Bake the chunk, change what the
+        // overlays say the wall is, bake again, and the wall mesh must differ.
+        g.world.unlockedDoors.clear();           // start from a clean overlay
+        cd.wallN[li][lk]=WALL_NONE;
+        g.world.rebuildChunk(cx,cz); g.world.ensureMesh(cx,cz);
+        int openVerts=cd.meshes[MESH_WALLS].vertexCount;
+        g.world.shiftEdge(ci,ck,false);          // the building closes it behind you
+        g.world.ensureMesh(cx,cz);
+        CHECK(cd.meshes[MESH_WALLS].vertexCount > openVerts);   // a wall appeared
+        g.world.shifted.clear();
+        // The locked and open branches emit the *same* three wall boxes — the
+        // jambs and the header are identical, and what differs is the leaf, its
+        // handle and the threshold strip, all of which go into MESH_PROPS. So
+        // watch the props slot here: asserted against MESH_WALLS this passes
+        // whatever the mesher does, which is the useless kind of green.
+        cd.wallN[li][lk]=WALL_LOCKED;
+        g.world.rebuildChunk(cx,cz); g.world.ensureMesh(cx,cz);
+        int lockedProps=cd.meshes[MESH_PROPS].vertexCount;
+        g.world.unlockEdge(ci,ck,false);         // and it rebakes both chunks itself
+        g.world.ensureMesh(cx,cz);
+        CHECK(cd.meshes[MESH_PROPS].vertexCount < lockedProps);   // the leaf went
+
+        g.world.unlockedDoors.clear();
+        for (int d=-1;d<=2;++d) {                // put the neighbourhood back
+            Saved &s=saved[d+1];
+            cd.wallN[li+d][lk]=s.wn; cd.wallW[li+d][lk]=s.ww; cd.wallN[li+d][lk+1]=s.wn1;
+            cd.pillar[li+d][lk]=s.pi;    cd.prop[li+d][lk]=s.pr;
+            cd.pillar[li+d][lk-1]=s.pi1; cd.prop[li+d][lk-1]=s.pr1;
+        }
+        g.world.rebuildChunk(cx,cz);
+    }
+
     // ---- shots respect pitch. Level aim through a body hits; the same shot
     // aimed at the ceiling misses, which it did not before — the hit test was
     // horizontal-only, so you could shoot the ceiling and still land the round.
@@ -410,7 +513,8 @@ int main() {
 
     printf("PASS sprint recovery, crouch/stationary gating, restart reset, battery retention,\n"
            "     animation continuity, held aim/reload gating, step-height blocking,\n"
-           "     pitch-aware hit tests, the catch ending the run only out of a committed\n"
+           "     pitch-aware hit tests, doorway jambs and locked doors you cannot walk\n"
+           "     through, the catch ending the run only out of a committed\n"
            "     lunge, arrivals that are not all from the fog, a pack that hunts by sound,\n"
            "     a building that moves out of sight, the grip meter as an ending,\n"
            "     deterministic captures; %d visual captures\n", captureCount);

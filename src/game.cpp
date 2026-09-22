@@ -949,12 +949,14 @@ void Game::updateSprint(bool requested, bool moving, bool crouched, float dt) {
     if (stamina <= 0.02f) sprintExhausted = true;
     if (stamina >= 0.25f) sprintExhausted = false;
     sprinting = moving && requested && !sprintExhausted && !crouched && !aiming;
-    // 16 seconds of running from full, against 6 to recover it. It was 10, and
-    // 10 is short once the corridors are 6 m wide and Clark arrives from
-    // further out — a sprint that ends before you have crossed the hall you
-    // started running down is a sprint you stop using. Recovery is unchanged:
-    // the cost of running is meant to be the wait afterwards.
-    stamina = clampf(stamina + (sprinting ? -dt / 16.0f : dt / 6.0f), 0, 1);
+    // Sprint limiting is OFF for now, by request: SPRINT_DRAIN is zero, so
+    // stamina never falls and sprintExhausted never latches. Nothing else is
+    // removed — the hysteresis above, the 6 s recovery, the HUD meter and the
+    // regression checks are all intact and still exercised, because the drain
+    // is the only thing that changed. Put a limit back by setting this to
+    // 1/seconds: it was 1/16, and 1/10 before that.
+    const float SPRINT_DRAIN = 0.0f;
+    stamina = clampf(stamina + (sprinting ? -SPRINT_DRAIN * dt : dt / 6.0f), 0, 1);
 }
 
 void Game::updateMovement(float dt) {

@@ -1366,7 +1366,16 @@ void World::ensureMesh(int cx, int cz) {
         float nt = std::max(ceilY(gi0, gk0 - 1), ceilY(gi0, gk0));
         float wb = std::min(floorY(gi0 - 1, gk0), floorY(gi0, gk0));
         float wt2 = std::max(ceilY(gi0 - 1, gk0), ceilY(gi0, gk0));
-        uint8_t nv = dd.wallN[i][kk];
+        // Through the accessors, not out of the array. Every overlay that
+        // changes what a wall IS lands in wallNVal/wallWVal — `shifted` for the
+        // doorways the building closes behind you, `unlockedDoors` for a door
+        // you have turned a key in — and reading the raw array here meant the
+        // geometry was the one system that never saw them. Both ways round:
+        // an unlocked door went on drawing its leaf while collision let you
+        // walk through it, and a shifted doorway kept its opening on screen
+        // while collision had already sealed it. AGENTS.md said the mesher came
+        // through here; it did not, until now.
+        uint8_t nv = wallNVal(gi0, gk0);
         if (nv == WALL_SOLID) {
             int sk = (blocksEdge(wallNVal(gi0 - 1, gk0)) ? 4 : 0) | (blocksEdge(wallNVal(gi0 + 1, gk0)) ? 8 : 0);
             addBoxSides(wa, gx - WT, nb, gz - WT, gx + CELL + WT, nt, gz + WT, false, sk);
@@ -1446,7 +1455,7 @@ void World::ensureMesh(int cx, int cz) {
                             gx + 1.50f, fy0 + 1.07f, zf + TRIM_T, LOCK_COL);
             }
         }
-        uint8_t wv = dd.wallW[i][kk];
+        uint8_t wv = wallWVal(gi0, gk0);
         if (wv == WALL_SOLID) {
             int sk = (blocksEdge(wallWVal(gi0, gk0 - 1)) ? 1 : 0) | (blocksEdge(wallWVal(gi0, gk0 + 1)) ? 2 : 0);
             addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wt2, gz + CELL + WT, false, sk);
@@ -1769,7 +1778,10 @@ void World::ensureMesh(int cx, int cz) {
             float gx = wx + i * CELL, gz = wz + kk * CELL;
             int gi = cx * CCELLS + i, gk = cz * CCELLS + kk;
             // pipes hug the walls they run beside
-            if (dd.wallN[i][kk] == WALL_SOLID) {
+            // Through the accessors, like the wall geometry above: a pipe hugs
+            // a wall, so an edge the building has closed behind you should grow
+            // one on the rebake rather than stay bare.
+            if (wallNVal(gi, gk) == WALL_SOLID) {
                 uint32_t rh = ih(gk, 7717, seed ^ 0x9191u);
                 if (rh % 4 == 0) {
                     float py = ceilY(gi, gk) - 0.22f - ((rh >> 5) & 3) * 0.09f;
@@ -1784,7 +1796,7 @@ void World::ensureMesh(int cx, int cz) {
                                     Color{ 96, 74, 56, 255 });
                 }
             }
-            if (dd.wallW[i][kk] == WALL_SOLID) {
+            if (wallWVal(gi, gk) == WALL_SOLID) {
                 uint32_t rh = ih(gi, 3313, seed ^ 0x9292u);
                 if (rh % 4 == 0) {
                     float py = ceilY(gi, gk) - 0.22f - ((rh >> 5) & 3) * 0.09f;
