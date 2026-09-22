@@ -131,9 +131,14 @@
   #touch.on { display: block; }
   #touch * { touch-action: none; user-select: none; -webkit-user-select: none; }
 
+  /* Every size and offset in here is written from JS by layoutControls(), in
+     px off the STAGE's own box. It used to be vmin, and vmin is the wrong unit:
+     it resolves against the viewport while the controls live inside #stage,
+     which is the viewport minus the footer — and on iOS Safari in landscape the
+     layout viewport is far taller than the visible stage, so JUMP (anchored to
+     the bottom) and DRINK (anchored to the top) met in the middle. */
   #stick {
-    position: absolute; left: 4.5vmin; bottom: 9vmin;
-    width: 34vmin; height: 34vmin; max-width: 190px; max-height: 190px;
+    position: absolute;
     border-radius: 50%; border: 1px solid rgba(201,180,88,.30);
     background: radial-gradient(circle, rgba(201,180,88,.09), rgba(0,0,0,.20));
   }
@@ -148,11 +153,10 @@
     position: absolute; display: flex; align-items: center; justify-content: center;
     border-radius: 50%; border: 1px solid rgba(201,180,88,.34);
     background: rgba(18,17,13,.46); color: #e8dfb8;
-    font: 600 2.6vmin/1 ui-monospace, Menlo, Consolas, monospace;
+    font: 600 12px/1 ui-monospace, Menlo, Consolas, monospace;
     letter-spacing: .04em; text-align: center; padding: 0;
   }
   .tbtn.held { background: rgba(201,180,88,.55); color: #14130f; }
-  .tbtn.sm { font-size: 2.1vmin; }
 </style>
 </head>
 <body>
@@ -301,6 +305,9 @@
   var layer = document.getElementById('touch');
   var stick = document.getElementById('stick');
   var knob  = document.getElementById('knob');
+  // Both layoutControls() and fitCanvas() measure this, and layoutControls is
+  // defined above where fitCanvas used to look it up.
+  var stage = document.getElementById('stage');
 
   // label, bit, and where it sits. Percentages of the stage, so the cluster
   // scales with the screen instead of colliding with itself on a small phone.
@@ -313,21 +320,28 @@
   // the middle, because a button addressed from the far side of a narrow
   // portrait screen lands on top of its neighbour. DUCK on the right at
   // 42vmin and USE at 40vmin from the other edge did exactly that.
+  // Offsets and sizes as fractions of U, the layout unit layoutControls()
+  // derives from the stage. They were vmin percentages and these are the same
+  // numbers over 100, so the desktop layout is unchanged; what moved is what
+  // they are a fraction *of*.
   var BUTTONS = [
-    { t:'FIRE',  bit:BTN.FIRE,     r:'4vmin',    b:'10vmin',   size:'19vmin', max:104 },
+    { t:'FIRE',  bit:BTN.FIRE,     r:.04,  b:.10,  size:.19 },
     // AIM latches: the game owns the state (src/input_web.cpp) and tells us how
     // to draw it, so this button must not light itself up under the finger.
-    { t:'AIM',   bit:BTN.AIM,      r:'25vmin',   b:'11vmin',   size:'14vmin', max:78, latch:1 },
-    { t:'JUMP',  bit:BTN.JUMP,     r:'5vmin',    b:'31vmin',   size:'13vmin', max:72  },
-    { t:'LOAD',  bit:BTN.RELOAD,   r:'24vmin',   b:'27vmin',   size:'13vmin', max:72  },
-    { t:'USE',   bit:BTN.INTERACT, r:'39vmin',   b:'10vmin',   size:'13vmin', max:72  },
-    { t:'LAMP',  bit:BTN.FLASH,    r:'4vmin',    t2:'4vmin',   size:'12vmin', max:66, sm:1 },
-    { t:'ITEM',  bit:BTN.WEAPON,   r:'17.5vmin', t2:'4vmin',   size:'12vmin', max:66, sm:1 },
-    { t:'THROW', bit:BTN.THROW,    r:'31vmin',   t2:'4vmin',   size:'12vmin', max:66, sm:1 },
-    { t:'DRINK', bit:BTN.DRINK,    r:'4vmin',    t2:'17.5vmin',size:'12vmin', max:66, sm:1 },
-    { t:'MARK',  bit:BTN.CHALK,    r:'17.5vmin', t2:'17.5vmin',size:'12vmin', max:66, sm:1 },
-    { t:'DUCK',  bit:BTN.CROUCH,   l:'4.5vmin',  b:'47vmin',   size:'13vmin', max:72 }
+    { t:'AIM',   bit:BTN.AIM,      r:.25,  b:.11,  size:.14, latch:1 },
+    { t:'JUMP',  bit:BTN.JUMP,     r:.05,  b:.31,  size:.13 },
+    { t:'LOAD',  bit:BTN.RELOAD,   r:.24,  b:.27,  size:.13 },
+    { t:'USE',   bit:BTN.INTERACT, r:.39,  b:.10,  size:.13 },
+    { t:'LAMP',  bit:BTN.FLASH,    r:.04,  t2:.04, size:.12, sm:1 },
+    { t:'ITEM',  bit:BTN.WEAPON,   r:.175, t2:.04, size:.12, sm:1 },
+    { t:'THROW', bit:BTN.THROW,    r:.31,  t2:.04, size:.12, sm:1 },
+    { t:'DRINK', bit:BTN.DRINK,    r:.04,  t2:.175,size:.12, sm:1 },
+    { t:'MARK',  bit:BTN.CHALK,    r:.175, t2:.175,size:.12, sm:1 },
+    { t:'DUCK',  bit:BTN.CROUCH,   l:.045, b:.47,  size:.13 }
   ];
+  // The stick is one of the controls for layout purposes, so the budget below
+  // counts it: it is left-anchored and the tallest thing on that side.
+  var STICK = { l:.045, b:.09, size:.34 };
 
   var byBit = {};
   var latched = {};     // bits whose lit state the game sets, not the finger
@@ -335,16 +349,85 @@
     var el = document.createElement('button');
     el.className = 'tbtn' + (b.sm ? ' sm' : '');
     el.textContent = b.t;
-    el.style.width = el.style.height = 'min(' + b.size + ', ' + b.max + 'px)';
-    if (b.r !== undefined)  el.style.right  = b.r;
-    if (b.l !== undefined)  el.style.left   = b.l;
-    if (b.b !== undefined)  el.style.bottom = b.b;
-    if (b.t2 !== undefined) el.style.top    = b.t2;
     el.dataset.bit = b.bit;
+    b.el = el;
     byBit[b.bit] = el;
     if (b.latch) latched[b.bit] = 1;
     layer.appendChild(el);
   });
+
+  // ---- control layout ----------------------------------------------------
+  // One unit, U, and every control is a fraction of it. U comes from the
+  // STAGE, not from vmin: the controls are absolutely positioned inside
+  // #stage, and vmin resolves against the viewport, which is a different box.
+  // On a desktop the two are within a footer's height of each other and the
+  // difference never showed; on iOS Safari in landscape the layout viewport is
+  // the full screen height while the visible stage is roughly two thirds of
+  // it, so a bottom-anchored JUMP at .31 and a top-anchored DRINK at .175 both
+  // reached further into the stage than their fractions implied and landed on
+  // top of each other. Photographed on an iPhone: JUMP over DRINK, MARK over
+  // LOAD, USE over AIM.
+  //
+  // 550 is the cap, and it is exactly where the old per-button `max` values
+  // came from: .19*550 = 104, .14*550 = 77, .13*550 = 72, .12*550 = 66. One
+  // number instead of four, and it caps the offsets too, which is what a
+  // tablet wants — the buttons used to keep drifting apart as the screen grew.
+  var U_MAX = 550;
+  // How much of the unit each edge has to give up, worked out from the table
+  // rather than written down, so a button added later cannot silently break
+  // the invariant this whole function exists to keep.
+  var ALL = BUTTONS.concat([STICK]);
+  function reach(set, pick) {
+    var m = 0;
+    set.forEach(function (b) { var v = pick(b); if (v !== undefined) m = Math.max(m, v + b.size); });
+    return m;
+  }
+  var lefts  = ALL.filter(function (b) { return b.l !== undefined; });
+  var rights = ALL.filter(function (b) { return b.r !== undefined; });
+  // Vertically the two sides are independent columns — the left stack is the
+  // stick with DUCK above it, the right is FIRE/AIM/LOAD/JUMP under the top
+  // cluster — and they never share a row, so taking one budget across both
+  // adds the left column's height to the right column's and shrinks every
+  // button by a fifth for a collision that cannot happen. Per side.
+  var V_BUDGET = Math.max(
+    reach(lefts,  function (b) { return b.b; })  + reach(lefts,  function (b) { return b.t2; }),
+    reach(rights, function (b) { return b.b; })  + reach(rights, function (b) { return b.t2; }));
+  // Horizontally they DO share rows, so this one is the sum.
+  var H_BUDGET = reach(lefts, function (b) { return b.l; }) + reach(rights, function (b) { return b.r; });
+  // Clearance between the two clusters. Without it the budgets are exact and
+  // the clusters come out touching to the pixel — JUMP's top edge landing on
+  // DRINK's bottom edge — which rounds into an overlap and is indistinguishable
+  // from the bug this replaced.
+  var GAP = .04;
+  V_BUDGET += GAP;
+  H_BUDGET += GAP;
+
+  var lastU = -1;
+  function layoutControls() {
+    var w = stage.clientWidth, h = stage.clientHeight;
+    if (!w || !h) return;
+    // Never let the two clusters meet: if the stage is short enough that the
+    // bottom stack and the top stack would overlap, the unit shrinks until
+    // they do not. Same for left against right.
+    // The budgets are the real constraint; min(w, h) was a proxy for them and
+    // a bad one on a stage three times wider than it is tall.
+    var u = Math.min(U_MAX, h / V_BUDGET, w / H_BUDGET);
+    if (Math.abs(u - lastU) < 0.5) return;
+    lastU = u;
+    var px = function (f) { return (f * u) + 'px'; };
+    BUTTONS.forEach(function (b) {
+      var e = b.el;
+      e.style.width = e.style.height = px(b.size);
+      e.style.fontSize = px(b.sm ? .021 : .026);
+      e.style.right  = b.r  !== undefined ? px(b.r)  : '';
+      e.style.left   = b.l  !== undefined ? px(b.l)  : '';
+      e.style.bottom = b.b  !== undefined ? px(b.b)  : '';
+      e.style.top    = b.t2 !== undefined ? px(b.t2) : '';
+    });
+    stick.style.width = stick.style.height = px(STICK.size);
+    stickHome = { left: px(STICK.l), bottom: px(STICK.b) };
+    if (!stickOrigin) homeStick();
+  }
 
   // Called from src/input_web.cpp for a latching button. Its lit state is the
   // game's answer — whether the sights are actually up — and not where a finger
@@ -392,8 +475,13 @@
     stickOrigin = { x: x, y: y };
   }
 
+  // Where the stick sits when no thumb is on it. layoutControls owns the
+  // numbers now, so "home" is whatever it last wrote rather than a CSS rule to
+  // fall back to by clearing the inline styles.
+  var stickHome = { left: '0px', bottom: '0px' };
   function homeStick() {
-    stick.style.left = ''; stick.style.top = ''; stick.style.bottom = '';
+    stick.style.left = stickHome.left; stick.style.top = '';
+    stick.style.bottom = stickHome.bottom;
     stickOrigin = null;
   }
 
@@ -528,7 +616,6 @@
   // whatever raylib picked: scale it to fit inside the stage at its own aspect
   // ratio and let the remainder go black. Nothing is stretched, nothing is
   // clipped, and it stays right whatever the two sides decide independently.
-  var stage = document.getElementById('stage');
   var lastFit = '';
   function fitCanvas() {
     var bw = canvas.width || 1, bh = canvas.height || 1;
@@ -547,10 +634,13 @@
   // follow it on the next frame rather than race it, and keep a slow poll for
   // the changes nothing reports (a phone's URL bar sliding away does not
   // reliably fire a resize).
-  addEventListener('resize', function () { requestAnimationFrame(fitCanvas); });
-  addEventListener('orientationchange', function () { setTimeout(fitCanvas, 150); });
-  setInterval(fitCanvas, 250);
-  fitCanvas();
+  // The controls follow the stage for the same reason the canvas does, and
+  // they are measured off the same box, so they resize together.
+  function refit() { fitCanvas(); layoutControls(); }
+  addEventListener('resize', function () { requestAnimationFrame(refit); });
+  addEventListener('orientationchange', function () { setTimeout(refit, 150); });
+  setInterval(refit, 250);
+  refit();
 
   // Pointer lock and the audio context both require a real user gesture, and
   // the game asks for the pointer from inside its requestAnimationFrame loop,
@@ -559,7 +649,7 @@
     if (start.disabled) return;
     gate.classList.add('hidden');
     canvas.focus();
-    fitCanvas();
+    refit();
     if (!touch.active && canvas.requestPointerLock) canvas.requestPointerLock();
     // Same again: nothing to tell a touch player that the screen is not
     // already telling them.
