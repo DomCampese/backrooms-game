@@ -286,6 +286,16 @@ appending and every field after it reads its neighbour's value — the look drag
 becomes the thumbstick, which reads as a control gone haywire rather than as a
 struct layout mistake.
 
+**Touch look sensitivity is a product, not a constant.** The shell reports a
+drag in the same pixels a mouse delta is and `updateLook` multiplies by 0.0030
+rad/px, so what a player feels is `LOOK_GAIN * px * 0.0030` — and a thumb,
+unlike a mouse, cannot be lifted and replaced mid-gesture, so the number that
+matters is how far *one drag* turns you. At the original 1.35 a swipe clean
+across a 412 px phone was about 95 degrees, so looking behind you took four of
+them while something walked at you. It is 2.4 now, and `mobile-check` asserts
+the product (a 200 px drag turns 60-110 degrees) rather than either half, because
+either half can move.
+
 **`node tools/mobile-check.mjs` is the only check that sees any of this.** It
 loads `web/shell.html` in Chromium at seven sizes and asserts no two controls
 overlap, that the splash fits or scrolls with ENTER on screen, that the canvas

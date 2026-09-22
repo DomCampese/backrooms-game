@@ -63,6 +63,11 @@ only way in before. Both are edges rather than held states, so a thumb still
 resting on the stick when you die cannot dismiss the death card before you have
 read it.
 
+**Look sensitivity** is set so one thumb drag across the screen turns you about
+half way round; it was a quarter turn, which made looking behind you a four-swipe
+job. `tools/mobile-check.mjs` asserts the resulting degrees-per-drag rather than
+the constant, since the game's own rad-per-pixel is the other half of it.
+
 **AIM taps** rather than holds: one tap raises the sights, another drops them.
 Holding it is what a mouse does, and it asks the right thumb to stay parked on
 one button for the length of a gunfight — leaving nothing to fire with. The
