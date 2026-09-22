@@ -949,7 +949,12 @@ void Game::updateSprint(bool requested, bool moving, bool crouched, float dt) {
     if (stamina <= 0.02f) sprintExhausted = true;
     if (stamina >= 0.25f) sprintExhausted = false;
     sprinting = moving && requested && !sprintExhausted && !crouched && !aiming;
-    stamina = clampf(stamina + (sprinting ? -dt / 10.0f : dt / 6.0f), 0, 1);
+    // 16 seconds of running from full, against 6 to recover it. It was 10, and
+    // 10 is short once the corridors are 6 m wide and Clark arrives from
+    // further out — a sprint that ends before you have crossed the hall you
+    // started running down is a sprint you stop using. Recovery is unchanged:
+    // the cost of running is meant to be the wait afterwards.
+    stamina = clampf(stamina + (sprinting ? -dt / 16.0f : dt / 6.0f), 0, 1);
 }
 
 void Game::updateMovement(float dt) {

@@ -637,7 +637,7 @@ void Game::renderUI(double now) {
         const char *t2 = "if you're reading this, you've already noclipped";
         hudTextC(t2, sw / 2, sh / 3 + hud(66), hud(18), Fade({ 160, 150, 110, 255 }, ta * 0.9f));
         const char *t3 = inTouchActive()
-            ? "STICK walk   push it to run   DUCK crouch   JUMP   LAMP torch   ITEM cycle   DRINK   MARK chalk   USE vend/pick up"
+            ? "STICK walk   push past its ring to run   DUCK crouch   JUMP   LAMP torch   ITEM cycle   DRINK   MARK chalk   USE vend/pick up"
             : "WASD walk   SHIFT run   CTRL crouch   SPACE jump   F flashlight   1/2/4 item   3 drink   M chalk   E vend/pick up";
         hudTextC(t3, sw / 2, sh - hud(60), hud(16), Fade({ 140, 132, 100, 255 }, ta * 0.8f));
         if (bestEsc || bestKill || bestM || bestWins) {

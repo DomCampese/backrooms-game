@@ -63,6 +63,10 @@ only way in before. Both are edges rather than held states, so a thumb still
 resting on the stick when you die cannot dismiss the death card before you have
 read it.
 
+**Sprint is a push past the ring**, not a hard shove inside it — the drawn edge
+of the thumbstick is the line, so you can see where it is. The ring lights up
+while you are running. A full tank is 16 seconds of sprint and 6 to recover it.
+
 **Look sensitivity** is set so one thumb drag across the screen turns you about
 half way round; it was a quarter turn, which made looking behind you a four-swipe
 job. `tools/mobile-check.mjs` asserts the resulting degrees-per-drag rather than
