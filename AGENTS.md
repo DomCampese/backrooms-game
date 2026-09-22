@@ -1,3 +1,19 @@
+# Web reflection and pillar shadow fixes (September 2026)
+
+- Desktop Chrome/ANGLE rendered black shards on the revolver when `lightState`
+  returned early for dead lamps inside the reflection branch. Keep its single
+  return with the dead-lamp mask; depth-buffer changes did not fix this.
+- Pillar shadows must intersect the actual 0.42–1.58 m footprint, including
+  the first and last ray cells. Skipping those cells made a bright square halo.
+  Keep `pillarBlocks` single-exit too: the native Metal compiler stalled with
+  an extra early return inside this nested lighting path.
+- Pillar contact shadows use the same fading AO skirt as furniture. A flat
+  dark quad in the wall mesh made a visible rectangular border.
+- `tools/web-render-check.mjs` needs Playwright (resolvable by Node/NODE_PATH),
+  a served web build in GAME_URL, and BROWSER_CHANNEL=chrome for hardware ANGLE.
+  It tests 13 GPU visibility cases and a fixed-seed barrel crop. The old build
+  fails the pixel check (16), while the corrected build passes (70).
+
 # AGENTS.md
 
 ## Flashlight visibility

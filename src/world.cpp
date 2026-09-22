@@ -747,6 +747,49 @@ bool World::valveAt(int ci, int ck) {
 // alpha channel, so wall creases and furniture shadows all share this one colour.
 static const Color AO_TINT = { 10, 9, 9, 255 };
 
+// A rounded contact shadow shared by props and pillars. Only the footprint
+// is solid; the skirt samples the AO gradient down to zero at its outer edge.
+static void addContactShadow(MB &ao, float pcx, float pcz, float ey, float rot,
+                             float hx2, float hz2) {
+    float ca = cosf(rot), sa = sinf(rot);
+    const float S = 0.24f;                    // how far the falloff reaches
+    const float d = S * 0.7071f;              // the corner, cut across
+    const Vector3 up = { 0, 1, 0 };
+    auto P = [&](float lx, float lz) {
+        return Vector3{ pcx + lx * ca - lz * sa, ey + 0.006f, pcz + lx * sa + lz * ca };
+    };
+    // core, right under the piece: darkest end of the gradient
+    ao.quad(P(-hx2,-hz2), P(hx2,-hz2), P(hx2,hz2), P(-hx2,hz2), up,
+            {0,0},{1,0},{1,0},{0,0}, AO_TINT);
+    // four skirts fading outward. Each inner edge runs so the quad
+    // stays wound the same way round as the core.
+    const float sd[4][6] = {
+        {  hx2,-hz2, -hx2,-hz2,  0,  -S },
+        {  hx2, hz2,  hx2,-hz2,  S,   0 },
+        { -hx2, hz2,  hx2, hz2,  0,   S },
+        { -hx2,-hz2, -hx2, hz2, -S,   0 },
+    };
+    for (auto &e : sd)
+        ao.quad(P(e[0], e[1]), P(e[2], e[3]),
+                P(e[2] + e[4], e[3] + e[5]), P(e[0] + e[4], e[1] + e[5]), up,
+                {0,0},{1,0},{1,1},{0,1}, AO_TINT);
+    // and the corners, so the skirt closes instead of leaving notches
+    const float cn[4][4] = {
+        {  hx2,  hz2,  1,  1 }, { -hx2,  hz2, -1,  1 },
+        { -hx2, -hz2, -1, -1 }, {  hx2, -hz2,  1, -1 },
+    };
+    for (auto &c2 : cn) {
+        Vector3 inner = P(c2[0], c2[1]);
+        Vector3 pxv = P(c2[0] + c2[2] * S, c2[1]);
+        Vector3 pmv = P(c2[0] + c2[2] * d, c2[1] + c2[3] * d);
+        Vector3 pzv = P(c2[0], c2[1] + c2[3] * S);
+        bool xFirst = (c2[2] * c2[3]) > 0;    // keeps the winding consistent
+        Vector3 a1 = xFirst ? pxv : pzv, b1 = xFirst ? pzv : pxv;
+        ao.tri(inner, a1, pmv, up, {0,0},{0,1},{1,1}, AO_TINT);
+        ao.tri(inner, pmv, b1, up, {0,0},{1,1},{0,1}, AO_TINT);
+    }
+}
+
 // rotated prop box: 4 sides + top, one UV region for sides, another for the top
 static void addPropBox(MB &mb, float cx, float cz, float yaw, float hx, float hz, float y0, float y1,
                        float u0, float v0, float u1, float v1,
@@ -871,49 +914,8 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
             pr.tri({cx,y1,cz},p3,p2,{0,1,0},uv,uv,uv,tint);
         }
     };
-    // Contact shadow under the piece. This used to be one flat quad with
-    // all four UVs pinned to a single texel, so it had no gradient at
-    // all — every piece of furniture stood on a hard black rectangle
-    // larger than itself, with a visible straight edge on the floor.
-    // Lay it into the AO mesh instead and use the same falloff the wall
-    // creases use: solid under the piece, fading to nothing past it.
-    auto blob = [&](float hx2, float hz2) {
-        const float S = 0.24f;                    // how far the falloff reaches
-        const float d = S * 0.7071f;              // the corner, cut across
-        const Vector3 up = { 0, 1, 0 };
-        auto P = [&](float lx, float lz) {
-            return Vector3{ pcx + lx * ca - lz * sa, ey + 0.006f, pcz + lx * sa + lz * ca };
-        };
-        // core, right under the piece: darkest end of the gradient
-        ao.quad(P(-hx2,-hz2), P(hx2,-hz2), P(hx2,hz2), P(-hx2,hz2), up,
-                {0,0},{1,0},{1,0},{0,0}, AO_TINT);
-        // four skirts fading outward. Each inner edge runs so the quad
-        // stays wound the same way round as the core.
-        const float sd[4][6] = {
-            {  hx2,-hz2, -hx2,-hz2,  0,  -S },
-            {  hx2, hz2,  hx2,-hz2,  S,   0 },
-            { -hx2, hz2,  hx2, hz2,  0,   S },
-            { -hx2,-hz2, -hx2, hz2, -S,   0 },
-        };
-        for (auto &e : sd)
-            ao.quad(P(e[0], e[1]), P(e[2], e[3]),
-                    P(e[2] + e[4], e[3] + e[5]), P(e[0] + e[4], e[1] + e[5]), up,
-                    {0,0},{1,0},{1,1},{0,1}, AO_TINT);
-        // and the corners, so the skirt closes instead of leaving notches
-        const float cn[4][4] = {
-            {  hx2,  hz2,  1,  1 }, { -hx2,  hz2, -1,  1 },
-            { -hx2, -hz2, -1, -1 }, {  hx2, -hz2,  1, -1 },
-        };
-        for (auto &c2 : cn) {
-            Vector3 inner = P(c2[0], c2[1]);
-            Vector3 pxv = P(c2[0] + c2[2] * S, c2[1]);
-            Vector3 pmv = P(c2[0] + c2[2] * d, c2[1] + c2[3] * d);
-            Vector3 pzv = P(c2[0], c2[1] + c2[3] * S);
-            bool xFirst = (c2[2] * c2[3]) > 0;    // keeps the winding consistent
-            Vector3 a1 = xFirst ? pxv : pzv, b1 = xFirst ? pzv : pxv;
-            ao.tri(inner, a1, pmv, up, {0,0},{0,1},{1,1}, AO_TINT);
-            ao.tri(inner, pmv, b1, up, {0,0},{1,1},{0,1}, AO_TINT);
-        }
+    auto blob = [&](float hx, float hz) {
+        addContactShadow(ao, pcx, pcz, ey, rot, hx, hz);
     };
     switch (kind) {
     case PROP_BOXES: {   // box stack — on LEVEL FUN they're wrapped like presents,
@@ -1746,9 +1748,7 @@ void World::ensureMesh(int cx, int cz) {
         }
         if (dd.pillar[i][kk]) {
             addBoxSides(wa, gx + 0.42f, fyc, gz + 0.42f, gx + 1.58f, cyc, gz + 1.58f);
-            wa.quad({gx+0.30f,fyc+0.004f,gz+0.30f},{gx+1.70f,fyc+0.004f,gz+0.30f},   // contact shadow
-                    {gx+1.70f,fyc+0.004f,gz+1.70f},{gx+0.30f,fyc+0.004f,gz+1.70f},
-                    {0,1,0},{0,0},{0.04f,0},{0.04f,0.04f},{0,0.04f}, Color{ 12, 12, 12, 160 });
+            addContactShadow(ao, gx + 1.0f, gz + 1.0f, fyc, 0.0f, 0.58f, 0.58f);
             // AO up the pillar's feet and a ceiling crease around its head
             float pfy = fyc + 0.005f;
             float px0 = gx + 0.42f, px1 = gx + 1.58f, pz0 = gz + 0.42f, pz1 = gz + 1.58f, cy = cyc - 0.005f;

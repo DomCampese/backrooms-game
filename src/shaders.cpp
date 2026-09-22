@@ -84,7 +84,6 @@ vec3 detailNormal(vec3 N, vec2 slope, vec3 dpdx, vec3 dpdy, vec2 duvdx, vec2 duv
 }
 float lightState(vec2 g){
     float h = lhash(g);
-    if (h < uDead) return 0.0;                      // dead tube
     float s = 1.0;
     if (h > 0.93){                                  // faulty tube: occasional gentle stutter
         float fh = fract(h*97.31);
@@ -94,13 +93,26 @@ float lightState(vec2 g){
             s = 0.62 + 0.38*step(0.5, n);
         }
     }
-    return s * uBlackout;
+    // A single exit matters on desktop WebGL/ANGLE: returning early for a
+    // dead tube inside the divergent reflection branch produced black shards
+    // across the revolver and decals. Apply the dead mask at the common exit.
+    return h < uDead ? 0.0 : s * uBlackout;
 }
 int occAt(ivec2 c){
     ivec2 t = c - ivec2(uOccOrigin);
     int n = int(uOccN);
     if (t.x < 0 || t.y < 0 || t.x >= n || t.y >= n) return 0;   // off-grid: assume open
     return int(texelFetch(texture2, t, 0).r * 255.0 + 0.5);
+}
+// Pillars occupy 1.16 m inside a 2 m cell (World::ensureMesh / collision).
+// Test that footprint even in the ray's first and last cells. Skipping those
+// cells left a bright square around every pillar, followed by oversized shadows.
+bool pillarBlocks(ivec2 c, vec2 a, vec2 invDir, float dist){
+    vec2 lo = (vec2(c)*2.0 + vec2(0.42) - a) * invDir;
+    vec2 hi = (vec2(c)*2.0 + vec2(1.58) - a) * invDir;
+    vec2 entry = min(lo, hi), leave = max(lo, hi);
+    return (occAt(c) & 4) != 0 &&
+           max(max(entry.x, entry.y), 0.001) < min(min(leave.x, leave.y), dist - 0.001);
 }
 // Does light from `a` reach `b`? Walls are a floorplan extruded to full height,
 // so this is a 2D grid march: step cell to cell and test the edge we cross.
@@ -113,6 +125,9 @@ float lightVis(vec2 a, vec2 b){
     if (dist < 0.05) return 1.0;
     vec2 dir = d / dist;
     ivec2 c = ivec2(floor(a / 2.0)), ec = ivec2(floor(b / 2.0));
+    vec2 invDir = mix(vec2(-1.0), vec2(1.0), greaterThanEqual(dir, vec2(0.0)))
+                  / max(abs(dir), vec2(1e-6));
+    if (pillarBlocks(c, a, invDir, dist)) return 0.0;
     if (c == ec) return 1.0;
     ivec2 stp = ivec2(sign(dir.x), sign(dir.y));
     vec2 inv = 1.0 / max(abs(dir), vec2(1e-6));
@@ -133,8 +148,8 @@ float lightVis(vec2 a, vec2 b){
             if ((occAt(ivec2(c.x, stp.y > 0 ? c.y : c.y + 1)) & 1) != 0) return 0.0;
             tMax.y += tDelta.y;
         }
+        if (pillarBlocks(c, a, invDir, dist)) return 0.0;
         if (c == ec) return 1.0;
-        if ((occAt(c) & 4) != 0) return 0.0;   // a pillar fills its whole cell
     }
     return 1.0;
 }

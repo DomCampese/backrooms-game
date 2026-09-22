@@ -508,6 +508,21 @@ int main() {
         CHECK(g.slide==0.0f);
     }
 
+    // Isolated pillar: exposes the old hard contact rectangle and the bright
+    // square where shadow rays skipped their first/last occupancy cells.
+    g.applyLevel(0); g.world.unloadAll();
+    auto &pillarRoom=g.world.data(0,0);
+    std::memset(pillarRoom.wallN,0,sizeof(pillarRoom.wallN));
+    std::memset(pillarRoom.wallW,0,sizeof(pillarRoom.wallW));
+    std::memset(pillarRoom.pillar,0,sizeof(pillarRoom.pillar));
+    std::memset(pillarRoom.prop,0,sizeof(pillarRoom.prop));
+    std::memset(pillarRoom.elev,0,sizeof(pillarRoom.elev));
+    pillarRoom.pillar[4][4]=1;
+    g.px=5.5f;g.pz=5.5f;g.py=0;g.eyeY=1.62f;g.yaw=PI/4;g.pitch=0;
+    g.inMenu=false;g.weapon=WEAPON_REVOLVER;g.fov=70;g.flashOn=false;g.flashCur=0;
+    g.blackoutCur=1;g.ent.st=EState::Hidden;g.entDarkCur=0;g.aimBlend=0;g.reloadT=0;
+    capture(g,"pillar-contact.png");
+
     // ---- headless captures must not be able to black out (BUG-08)
     CHECK(g.noBlackout && g.nextBlackout >= Game::BLACKOUT_NEVER);
 
