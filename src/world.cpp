@@ -12,6 +12,11 @@
 static const float TRIM_T = 0.024f;
 static const Color TRIM_COL = { 176, 170, 152, 254 };   // painted trim, no relief bump
 static const Color SILL_COL = { 138, 136, 130, 254 };   // dulled metal threshold
+// A locked door's leaf and its lock plate. Alpha 254: textured and opaque, but
+// below the shader's relief threshold, because a flat painted slab with the
+// world-space bump on it comes out looking like pebbledash (see CLAUDE.md).
+static const Color LEAF_COL = { 150, 128, 96, 254 };
+static const Color LOCK_COL = { 206, 194, 140, 254 };
 
 // mesh builder: accumulate textured quads, bake to a raylib Mesh
 struct MB {
@@ -147,7 +152,8 @@ void World::generate(ChunkData &d, int cx, int cz) {
         const int MINR = level == 2 ? 5 : 3;
         const int SPLIT = 2 * MINR;              // a side this wide still has room for two
         const float HALL = 0.06f;                // chance a splittable rect is left whole
-        const int px0 = 1, pz0 = 1, px1 = CCELLS - 2, pz1 = CCELLS - 2;
+        const int px0 = HALL_LO, pz0 = HALL_LO,
+                  px1 = CCELLS - 1 - HALL_HI, pz1 = CCELLS - 1 - HALL_HI;
         struct Rect { int x0, z0, x1, z1; };
         Rect stack[64];
         int sp = 0;
@@ -182,9 +188,33 @@ void World::generate(ChunkData &d, int cx, int cz) {
         // by a third of a percent and took the longest measured sightline from
         // 184 m to 50 m. A 184 m axis-aligned run reads alarming in a number and
         // plays fine, because fog density 0.055 closes it long before the end.
+        //
+        // Three separate things have to go for a ring to be one wide corridor
+        // rather than a set of narrow lanes, and only the first was going:
+        //   1. the blockers *along* each lane,
+        //   2. the dividers *between* this chunk's own lanes, and
+        //   3. the seam edge, which divides this chunk's ring from the ring of
+        //      the chunk across the seam.
+        // (3) is why corridors used to narrow to 2 m without warning: a segment
+        // laid across a seam was left there, and the connectivity pass punched
+        // only three doors through the whole line, so the hall became a wall
+        // with holes in it. The seam line lies entirely inside the ring, so
+        // clearing it costs nothing but the hall.
         for (int i = 0; i < CCELLS; i++) {
-            d.wallW[i][0] = d.wallW[i][CCELLS - 1] = WALL_NONE;
-            d.wallN[0][i] = d.wallN[CCELLS - 1][i] = WALL_NONE;
+            for (int w = 0; w < HALL_LO; w++) {                  // low-side lanes
+                d.wallW[i][w] = WALL_NONE;
+                d.wallN[w][i] = WALL_NONE;
+            }
+            for (int w = 0; w < HALL_HI; w++) {                  // high-side lanes
+                d.wallW[i][CCELLS - 1 - w] = WALL_NONE;
+                d.wallN[CCELLS - 1 - w][i] = WALL_NONE;
+            }
+            for (int w = 1; w < HALL_HI; w++) {                  // (2) between them
+                d.wallN[i][CCELLS - w] = WALL_NONE;
+                d.wallW[CCELLS - w][i] = WALL_NONE;
+            }
+            d.wallN[i][0] = WALL_NONE;                           // (3) the seams
+            d.wallW[0][i] = WALL_NONE;
         }
         while (sp > 0) {
             Rect r = stack[--sp];
@@ -214,7 +244,6 @@ void World::generate(ChunkData &d, int cx, int cz) {
             }
         }
     }
-
     int np = level == 0 ? 4 + rng.ri(0, 5) : level == 1 ? 10 + rng.ri(0, 8) : 2 + rng.ri(0, 3);
     for (int i = 0; i < np; i++) d.pillar[rng.ri(0, CCELLS - 1)][rng.ri(0, CCELLS - 1)] = 1;
     memset(d.prop, 0, sizeof(d.prop));
@@ -332,6 +361,194 @@ void World::generate(ChunkData &d, int cx, int cz) {
             }
         }
     }
+    // ---- doorways, thinned.
+    //
+    // Three passes punch doorways and none of them can see the others — the
+    // segment runs, the room partition, and the connectivity flood above — so
+    // they regularly leave two and three openings side by side in one wall.
+    // What that builds is not a room with doors in it: a 1.3 m opening in a 2 m
+    // cell leaves 0.7 m of plasterboard standing between each pair, and a wall
+    // of alternating holes and piers reads as unfinished geometry rather than
+    // as a building. It is the single thing that makes the rooms look sloppy
+    // from inside one, and no floorplan shows it — it took a screenshot.
+    //
+    // So close one of every adjacent pair. Only ever *close*, and only where
+    // the chunk stays exactly as reachable as the flood above left it, so this
+    // can take away a second doorway and can never take away the only one.
+    {
+        auto solidCell = [&](int x, int z) { return d.pillar[x][z] != 0 || d.prop[x][z] != PROP_NONE; };
+        // Is there still a way from one side of this edge to the other?
+        //
+        // That is the whole test, and it is exact: closing a single edge can
+        // split the floor into at most two pieces, and it does so precisely
+        // when its own two cells end up in different ones. Counting how many
+        // cells one flood reaches instead is NOT the same test and quietly gets
+        // it wrong — a chunk whose floor is already in two pieces (both reached
+        // from the world through different seams) has one of them outside the
+        // count, so every closure inside that piece looks free. Measured, that
+        // shipped 24 newly stranded cells and took the largest cut-off pocket
+        // from 2 cells to 8.
+        auto joined = [&](int ax, int az, int bx, int bz) {
+            bool seen[CCELLS][CCELLS] = {};
+            int qx[CCELLS * CCELLS], qz[CCELLS * CCELLS], head = 0, tail = 0;
+            qx[tail] = ax; qz[tail] = az; tail++; seen[ax][az] = true;
+            while (head < tail) {
+                int x = qx[head], z = qz[head]; head++;
+                if (x == bx && z == bz) return true;
+                const int dxs[4] = { 0, 0, -1, 1 }, dzs[4] = { -1, 1, 0, 0 };
+                for (int e = 0; e < 4; e++) {
+                    int nx = x + dxs[e], nz = z + dzs[e];
+                    if (nx < 0 || nz < 0 || nx >= CCELLS || nz >= CCELLS) continue;
+                    if (seen[nx][nz] || solidCell(nx, nz)) continue;
+                    uint8_t edge = e == 0 ? d.wallN[x][z] : e == 1 ? d.wallN[x][z + 1]
+                                 : e == 2 ? d.wallW[x][z] : d.wallW[x + 1][z];
+                    if (blocksEdge(edge)) continue;
+                    // The same riser rule canStep enforces, so this agrees with
+                    // the pathfinder about what a route is. Pools are exempt on
+                    // both sides, exactly as there.
+                    if (!d.pool[x][z] && !d.pool[nx][nz] &&
+                        abs((int)d.elev[nx][nz] - (int)d.elev[x][z]) > MAX_STEP_UNITS) continue;
+                    seen[nx][nz] = true; qx[tail] = nx; qz[tail] = nz; tail++;
+                }
+            }
+            return false;
+        };
+        // Never a seam edge (k == 0 on a north wall, i == 0 on a west one).
+        // Those are shared with a chunk generated blind of this one, so nothing
+        // here can tell whether closing or moving one strands the far side.
+        //
+        // Closing is only half of it. Most adjacent pairs are two rooms off the
+        // same corridor, each reached through its own door, so neither door is
+        // spare and refusing to close them leaves the wall exactly as it was —
+        // which is what the first version of this did, and the screenshot was
+        // unchanged. Give the door somewhere else to be instead: carve it into
+        // blank wall on the same line, as near its old place as will take it,
+        // and keep the move only if the room it served is still reachable.
+        auto tidyLine = [&](auto edgeAt, auto sideA, auto sideB, int n) {
+            for (int t = 1; t < n; t++) {
+                if (edgeAt(t) != WALL_DOOR || edgeAt(t - 1) != WALL_DOOR) continue;
+                int ax, az, bx, bz;
+                sideA(t, ax, az); sideB(t, bx, bz);
+                if (solidCell(ax, az) || solidCell(bx, bz)) continue;
+                edgeAt(t) = WALL_SOLID;
+                if (joined(ax, az, bx, bz)) continue;        // spare: the wall is better without it
+                bool moved = false;
+                for (int off = 2; off < n && !moved; off++)
+                    for (int sgn = -1; sgn <= 1 && !moved; sgn += 2) {
+                        int u = t + sgn * off;
+                        if (u < 0 || u >= n) continue;
+                        if (edgeAt(u) != WALL_SOLID) continue;   // only into blank wall
+                        // ...and not straight back into the problem
+                        if ((u > 0 && edgeAt(u - 1) == WALL_DOOR) ||
+                            (u + 1 < n && edgeAt(u + 1) == WALL_DOOR)) continue;
+                        int cx2, cz2, dx2, dz2;
+                        sideA(u, cx2, cz2); sideB(u, dx2, dz2);
+                        if (solidCell(cx2, cz2) || solidCell(dx2, dz2)) continue;
+                        edgeAt(u) = WALL_DOOR;
+                        if (joined(ax, az, bx, bz)) moved = true;
+                        else edgeAt(u) = WALL_SOLID;
+                    }
+                if (!moved) edgeAt(t) = WALL_DOOR;           // nowhere better; leave it alone
+            }
+        };
+        for (int k = 1; k < CCELLS; k++)
+            tidyLine([&](int t) -> uint8_t & { return d.wallN[t][k]; },
+                     [&](int t, int &x, int &z) { x = t; z = k; },
+                     [&](int t, int &x, int &z) { x = t; z = k - 1; }, CCELLS);
+        for (int i = 1; i < CCELLS; i++)
+            tidyLine([&](int t) -> uint8_t & { return d.wallW[i][t]; },
+                     [&](int t, int &x, int &z) { x = i;     z = t; },
+                     [&](int t, int &x, int &z) { x = i - 1; z = t; }, CCELLS);
+    }
+    // ---- one door that is actually shut, and the key to it.
+    //
+    // Every other "door" in the building is an empty frame. About a third of
+    // chunks get one with a leaf in it, locked, and the key lying loose within
+    // sight of it. Two rules make that a small find rather than a wall:
+    //
+    //   - the key goes on the side of the door you can already reach. Which
+    //     side that is cannot be hashed, because it depends on the floorplan
+    //     the passes above happened to build, so the flood works it out and the
+    //     answer is stored in the chunk.
+    //   - what the door shuts off stays small. Locking a bridge that strands
+    //     half a chunk is a wall with extra steps; locking one that strands a
+    //     closet is a cupboard worth opening. A door that strands nothing at
+    //     all is a shortcut, which is also fine.
+    if ((hash64(k ^ 0x10CCEDULL ^ (uint64_t)seed
+                ^ ((uint64_t)visit * 0x9E3779B97F4A7C15ULL)) % 3) == 0) {
+        auto solidCell = [&](int x, int z) { return d.pillar[x][z] != 0 || d.prop[x][z] != PROP_NONE; };
+        // Cells reachable from (sx,sz) with the walls exactly as they stand.
+        auto flood = [&](int sx, int sz, bool (&seen)[CCELLS][CCELLS]) {
+            memset(seen, 0, sizeof(seen));
+            int qx[CCELLS * CCELLS], qz[CCELLS * CCELLS], head = 0, tail = 0, n = 0;
+            qx[tail] = sx; qz[tail] = sz; tail++; seen[sx][sz] = true;
+            while (head < tail) {
+                int x = qx[head], z = qz[head]; head++; n++;
+                const int dxs[4] = { 0, 0, -1, 1 }, dzs[4] = { -1, 1, 0, 0 };
+                for (int e = 0; e < 4; e++) {
+                    int nx = x + dxs[e], nz = z + dzs[e];
+                    if (nx < 0 || nz < 0 || nx >= CCELLS || nz >= CCELLS) continue;
+                    if (seen[nx][nz] || solidCell(nx, nz)) continue;
+                    uint8_t edge = e == 0 ? d.wallN[x][z] : e == 1 ? d.wallN[x][z + 1]
+                                 : e == 2 ? d.wallW[x][z] : d.wallW[x + 1][z];
+                    if (blocksEdge(edge)) continue;
+                    if (!d.pool[x][z] && !d.pool[nx][nz] &&
+                        abs((int)d.elev[nx][nz] - (int)d.elev[x][z]) > MAX_STEP_UNITS) continue;
+                    seen[nx][nz] = true; qx[tail] = nx; qz[tail] = nz; tail++;
+                }
+            }
+            return n;
+        };
+        const int CLOSET_MAX = 12;               // cells a locked door may shut off
+        // Interior doorways only. A seam edge is shared with a chunk generated
+        // blind of this one, and a door locked there would be a wall the
+        // neighbour has no idea about.
+        int bi[128], bk[128], bw[128], nb = 0;
+        for (int x = 1; x < CCELLS && nb < 128; x++)
+            for (int z = 1; z < CCELLS && nb < 128; z++) {
+                if (d.wallN[x][z] == WALL_DOOR && !solidCell(x, z) && !solidCell(x, z - 1)) {
+                    bi[nb] = x; bk[nb] = z; bw[nb] = 0; nb++;
+                }
+                if (nb < 128 && d.wallW[x][z] == WALL_DOOR && !solidCell(x, z) && !solidCell(x - 1, z)) {
+                    bi[nb] = x; bk[nb] = z; bw[nb] = 1; nb++;
+                }
+            }
+        for (int attempt = 0; attempt < 12 && nb > 0 && d.lockI < 0; attempt++) {
+            int c = rng.ri(0, nb - 1);
+            int x = bi[c], z = bk[c], west = bw[c];
+            int ax = x, az = z, bx2 = west ? x - 1 : x, bz2 = west ? z : z - 1;
+            uint8_t &e = west ? d.wallW[x][z] : d.wallN[x][z];
+            e = WALL_LOCKED;
+            static bool seenA[CCELLS][CCELLS], seenB[CCELLS][CCELLS];
+            int na = flood(ax, az, seenA);
+            if (seenA[bx2][bz2]) {
+                // Not a bridge: the door is a shortcut. The key goes on either
+                // side, since both are the same side.
+                d.lockI = (int8_t)x; d.lockK = (int8_t)z; d.lockWest = (uint8_t)west;
+            } else {
+                int nbb = flood(bx2, bz2, seenB);
+                // Lock it only if one side is a closet rather than half the
+                // chunk, and put the key in the other one.
+                bool aCloset = na <= CLOSET_MAX, bCloset = nbb <= CLOSET_MAX;
+                if (!aCloset && !bCloset) { e = WALL_DOOR; continue; }
+                d.lockI = (int8_t)x; d.lockK = (int8_t)z; d.lockWest = (uint8_t)west;
+                // the open side is the one that is NOT the closet
+                if (aCloset) memcpy(seenA, seenB, sizeof(seenA));
+            }
+            // The key: the nearest cell on the open side that has nothing else
+            // in it. Near, because a key you cannot associate with its door is
+            // just another pickup.
+            int best = 1 << 30;
+            for (int qx2 = 0; qx2 < CCELLS; qx2++)
+                for (int qz2 = 0; qz2 < CCELLS; qz2++) {
+                    if (!seenA[qx2][qz2] || solidCell(qx2, qz2) || d.pool[qx2][qz2]) continue;
+                    int dd = (qx2 - x) * (qx2 - x) + (qz2 - z) * (qz2 - z);
+                    if (dd == 0 || dd >= best || dd > 36) continue;   // within 6 cells
+                    best = dd; d.keyI = (int8_t)qx2; d.keyK = (int8_t)qz2;
+                }
+            if (d.keyI < 0) { e = WALL_DOOR; d.lockI = d.lockK = -1; }   // no room for the key
+        }
+    }
     // rare exit door carved into an existing wall run
     if (hash64(k ^ 0xE717ULL ^ (uint64_t)seed) % (exitTest ? 1 : 16) == 0) {
         bool placed = false;
@@ -401,12 +618,41 @@ void World::generate(ChunkData &d, int cx, int cz) {
 uint8_t World::wallNVal(int ci, int ck) {
     if (!shifted.empty() && shifted.count(edgeKey(ci, ck, false))) return WALL_SOLID;
     int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
-    return data(cx, cz).wallN[ci - cx * CCELLS][ck - cz * CCELLS];
+    uint8_t v = data(cx, cz).wallN[ci - cx * CCELLS][ck - cz * CCELLS];
+    if (v == WALL_LOCKED && !unlockedDoors.empty() &&
+        unlockedDoors.count(edgeKey(ci, ck, false))) return WALL_DOOR;
+    return v;
 }
 uint8_t World::wallWVal(int ci, int ck) {
     if (!shifted.empty() && shifted.count(edgeKey(ci, ck, true))) return WALL_SOLID;
     int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
-    return data(cx, cz).wallW[ci - cx * CCELLS][ck - cz * CCELLS];
+    uint8_t v = data(cx, cz).wallW[ci - cx * CCELLS][ck - cz * CCELLS];
+    if (v == WALL_LOCKED && !unlockedDoors.empty() &&
+        unlockedDoors.count(edgeKey(ci, ck, true))) return WALL_DOOR;
+    return v;
+}
+
+// A key lies in at most one cell per chunk, and the generator put it on the
+// side of that chunk's locked door you can already get to.
+bool World::keyAt(int ci, int ck) {
+    int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
+    ChunkData &d = data(cx, cz);
+    if (d.keyI < 0) return false;
+    // ...and it stops being there once the door it opens is open, so a key you
+    // walked past cannot be picked up after it has nothing left to unlock.
+    if (unlockedDoors.count(edgeKey(cx * CCELLS + d.lockI, cz * CCELLS + d.lockK, d.lockWest != 0)))
+        return false;
+    return ci - cx * CCELLS == d.keyI && ck - cz * CCELLS == d.keyK;
+}
+
+// Open one for good. Same two-chunk rebake shiftEdge needs and for the same
+// reason: the chunk across the seam draws its half of a shared edge too.
+void World::unlockEdge(int ci, int ck, bool west) {
+    if (!unlockedDoors.insert(edgeKey(ci, ck, west)).second) return;
+    int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
+    rebuildChunk(cx, cz);
+    int nx = fdiv(west ? ci - 1 : ci, CCELLS), nz = fdiv(west ? ck : ck - 1, CCELLS);
+    if (nx != cx || nz != cz) rebuildChunk(nx, nz);
 }
 
 // Drop a chunk's baked meshes so streamChunks rebuilds it from the current
@@ -1148,21 +1394,57 @@ void World::ensureMesh(int cx, int cz) {
                     {0,1},{1,1},{1,0},{0,0},glow);
         }
         else if (nv == WALL_DOOR) {   // doorway on x-running wall
-            addBoxSides(wa, gx - WT, nb, gz - WT, gx + 0.35f, nt, gz + WT);
-            addBoxSides(wa, gx + 1.65f, nb, gz - WT, gx + CELL + WT, nt, gz + WT);
+            // Two doorways in neighbouring cells leave 0.35 m of jamb each side
+            // of the line between them: a 0.7 m sliver of plasterboard between
+            // two 1.3 m holes, which is the thing that reads as unfinished
+            // geometry rather than as a building. World::generate spaces
+            // doorways out where the floorplan allows it, but a room reached
+            // only through its own door cannot have that door moved — so where
+            // two must stay adjacent, take the sliver out and let them be one
+            // wide opening. The header still crosses it, so the wall above is
+            // unbroken and the opening reads as deliberate.
+            bool mW = wallNVal(gi0 - 1, gk0) == WALL_DOOR;
+            bool mE = wallNVal(gi0 + 1, gk0) == WALL_DOOR;
+            if (mW) addBoxSides(wa, gx - WT, nb + 2.3f, gz - WT, gx + 0.35f, nt, gz + WT, true);
+            else    addBoxSides(wa, gx - WT, nb, gz - WT, gx + 0.35f, nt, gz + WT);
+            if (mE) addBoxSides(wa, gx + 1.65f, nb + 2.3f, gz - WT, gx + CELL + WT, nt, gz + WT, true);
+            else    addBoxSides(wa, gx + 1.65f, nb, gz - WT, gx + CELL + WT, nt, gz + WT);
             addBoxSides(wa, gx + 0.35f, nb + 2.3f, gz - WT, gx + 1.65f, nt, gz + WT, true);
             // The architrave is what makes it read as a door rather than a hole:
             // it stands proud of both faces, so you can see it is a way through
-            // from either side and at a glancing angle.
+            // from either side and at a glancing angle. A merged side has no
+            // jamb to trim, so its post goes and the head runs on to meet the
+            // neighbour's.
+            float tx0 = mW ? gx - WT : gx + 0.29f, tx1 = mE ? gx + CELL + WT : gx + 1.71f;
             for (int sgn = -1; sgn <= 1; sgn += 2) {
+                float zf = (sgn < 0) ? gz - WT - TRIM_T : gz + WT;
+                if (!mW) addSolidBox(pr, gx + 0.29f, nb, zf, gx + 0.35f, nb + 2.36f, zf + TRIM_T, TRIM_COL);
+                if (!mE) addSolidBox(pr, gx + 1.65f, nb, zf, gx + 1.71f, nb + 2.36f, zf + TRIM_T, TRIM_COL);
+                addSolidBox(pr, tx0, nb + 2.30f, zf, tx1, nb + 2.36f, zf + TRIM_T, TRIM_COL);
+            }
+            // and a threshold strip underfoot, worn by whoever came through
+            float fy0 = floorY(cx * CCELLS + i, cz * CCELLS + kk);
+            addSolidBox(pr, mW ? gx : gx + 0.35f, fy0, gz - 0.07f,
+                        mE ? gx + CELL : gx + 1.65f, fy0 + 0.013f, gz + 0.07f, SILL_COL);
+        }
+        else if (nv == WALL_LOCKED) {   // a door with the leaf still in it
+            addBoxSides(wa, gx - WT, nb, gz - WT, gx + 0.35f, nt, gz + WT);
+            addBoxSides(wa, gx + 1.65f, nb, gz - WT, gx + CELL + WT, nt, gz + WT);
+            addBoxSides(wa, gx + 0.35f, nb + 2.3f, gz - WT, gx + 1.65f, nt, gz + WT, true);
+            float fy0 = floorY(cx * CCELLS + i, cz * CCELLS + kk);
+            // The leaf fills the opening. It is what tells you at a glance that
+            // this one is different from the hundred empty frames behind you,
+            // so it is a slab you can see from both sides, not a decal.
+            addSolidBox(pr, gx + 0.36f, fy0, gz - 0.025f, gx + 1.64f, nb + 2.28f, gz + 0.025f, LEAF_COL);
+            for (int sgn = -1; sgn <= 1; sgn += 2) {   // architrave, as on an open one
                 float zf = (sgn < 0) ? gz - WT - TRIM_T : gz + WT;
                 addSolidBox(pr, gx + 0.29f, nb, zf, gx + 0.35f, nb + 2.36f, zf + TRIM_T, TRIM_COL);
                 addSolidBox(pr, gx + 1.65f, nb, zf, gx + 1.71f, nb + 2.36f, zf + TRIM_T, TRIM_COL);
                 addSolidBox(pr, gx + 0.29f, nb + 2.30f, zf, gx + 1.71f, nb + 2.36f, zf + TRIM_T, TRIM_COL);
+                // handle and escutcheon, at 1.02 m on the latch side
+                addSolidBox(pr, gx + 1.34f, fy0 + 0.97f, zf - 0.02f,
+                            gx + 1.50f, fy0 + 1.07f, zf + TRIM_T, LOCK_COL);
             }
-            // and a threshold strip underfoot, worn by whoever came through
-            float fy0 = floorY(cx * CCELLS + i, cz * CCELLS + kk);
-            addSolidBox(pr, gx + 0.35f, fy0, gz - 0.07f, gx + 1.65f, fy0 + 0.013f, gz + 0.07f, SILL_COL);
         }
         uint8_t wv = dd.wallW[i][kk];
         if (wv == WALL_SOLID) {
@@ -1190,17 +1472,39 @@ void World::ensureMesh(int cx, int cz) {
                     {0,1},{1,1},{1,0},{0,0},glow);
         }
         else if (wv == WALL_DOOR) {   // doorway on z-running wall
+            // Merged the same way its x-running twin above is — see there.
+            bool mN = wallWVal(gi0, gk0 - 1) == WALL_DOOR;
+            bool mS = wallWVal(gi0, gk0 + 1) == WALL_DOOR;
+            if (mN) addBoxSides(wa, gx - WT, wb + 2.3f, gz - WT, gx + WT, wt2, gz + 0.35f, true);
+            else    addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wt2, gz + 0.35f);
+            if (mS) addBoxSides(wa, gx - WT, wb + 2.3f, gz + 1.65f, gx + WT, wt2, gz + CELL + WT, true);
+            else    addBoxSides(wa, gx - WT, wb, gz + 1.65f, gx + WT, wt2, gz + CELL + WT);
+            addBoxSides(wa, gx - WT, wb + 2.3f, gz + 0.35f, gx + WT, wt2, gz + 1.65f, true);
+            float tz0 = mN ? gz - WT : gz + 0.29f, tz1 = mS ? gz + CELL + WT : gz + 1.71f;
+            for (int sgn = -1; sgn <= 1; sgn += 2) {
+                float xf = (sgn < 0) ? gx - WT - TRIM_T : gx + WT;
+                if (!mN) addSolidBox(pr, xf, wb, gz + 0.29f, xf + TRIM_T, wb + 2.36f, gz + 0.35f, TRIM_COL);
+                if (!mS) addSolidBox(pr, xf, wb, gz + 1.65f, xf + TRIM_T, wb + 2.36f, gz + 1.71f, TRIM_COL);
+                addSolidBox(pr, xf, wb + 2.30f, tz0, xf + TRIM_T, wb + 2.36f, tz1, TRIM_COL);
+            }
+            float fy0 = floorY(cx * CCELLS + i, cz * CCELLS + kk);
+            addSolidBox(pr, gx - 0.07f, fy0, mN ? gz : gz + 0.35f,
+                        gx + 0.07f, fy0 + 0.013f, mS ? gz + CELL : gz + 1.65f, SILL_COL);
+        }
+        else if (wv == WALL_LOCKED) {   // a door with the leaf still in it
             addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wt2, gz + 0.35f);
             addBoxSides(wa, gx - WT, wb, gz + 1.65f, gx + WT, wt2, gz + CELL + WT);
             addBoxSides(wa, gx - WT, wb + 2.3f, gz + 0.35f, gx + WT, wt2, gz + 1.65f, true);
+            float fy0 = floorY(cx * CCELLS + i, cz * CCELLS + kk);
+            addSolidBox(pr, gx - 0.025f, fy0, gz + 0.36f, gx + 0.025f, wb + 2.28f, gz + 1.64f, LEAF_COL);
             for (int sgn = -1; sgn <= 1; sgn += 2) {
                 float xf = (sgn < 0) ? gx - WT - TRIM_T : gx + WT;
                 addSolidBox(pr, xf, wb, gz + 0.29f, xf + TRIM_T, wb + 2.36f, gz + 0.35f, TRIM_COL);
                 addSolidBox(pr, xf, wb, gz + 1.65f, xf + TRIM_T, wb + 2.36f, gz + 1.71f, TRIM_COL);
                 addSolidBox(pr, xf, wb + 2.30f, gz + 0.29f, xf + TRIM_T, wb + 2.36f, gz + 1.71f, TRIM_COL);
+                addSolidBox(pr, xf - 0.02f, fy0 + 0.97f, gz + 1.34f,
+                            xf + TRIM_T, fy0 + 1.07f, gz + 1.50f, LOCK_COL);
             }
-            float fy0 = floorY(cx * CCELLS + i, cz * CCELLS + kk);
-            addSolidBox(pr, gx - 0.07f, fy0, gz + 0.35f, gx + 0.07f, fy0 + 0.013f, gz + 1.65f, SILL_COL);
         }
         if (level == 0 || level == 4) {
             // Thin timber trim catches grazing light. Keep the extrusion within
@@ -1550,13 +1854,20 @@ int World::gatherCellAABBs(int ci, int ck, AABB *out, int cap, int cnt, bool inc
     // boxes you walk through the frame, which is worse than the bare gap the
     // doorway replaced. The opening they leave is 1.3 m, comfortably wider than
     // the player's 0.34 m radius and Clark's 0.38 m.
+    // The mesher drops the jamb between two doorways in neighbouring cells and
+    // makes them one wide opening, so the jamb boxes have to go with it. Leave
+    // them in and the player walks into a 0.7 m pier that is not there.
     if (nv == WALL_DOOR) {
-        if (cnt < cap) out[cnt++] = { x0 - WT, z0 - WT, x0 + 0.35f, z0 + WT, wallH };
-        if (cnt < cap) out[cnt++] = { x0 + 1.65f, z0 - WT, x0 + CELL + WT, z0 + WT, wallH };
+        if (cnt < cap && wallNVal(ci - 1, ck) != WALL_DOOR)
+            out[cnt++] = { x0 - WT, z0 - WT, x0 + 0.35f, z0 + WT, wallH };
+        if (cnt < cap && wallNVal(ci + 1, ck) != WALL_DOOR)
+            out[cnt++] = { x0 + 1.65f, z0 - WT, x0 + CELL + WT, z0 + WT, wallH };
     }
     if (wv == WALL_DOOR) {
-        if (cnt < cap) out[cnt++] = { x0 - WT, z0 - WT, x0 + WT, z0 + 0.35f, wallH };
-        if (cnt < cap) out[cnt++] = { x0 - WT, z0 + 1.65f, x0 + WT, z0 + CELL + WT, wallH };
+        if (cnt < cap && wallWVal(ci, ck - 1) != WALL_DOOR)
+            out[cnt++] = { x0 - WT, z0 - WT, x0 + WT, z0 + 0.35f, wallH };
+        if (cnt < cap && wallWVal(ci, ck + 1) != WALL_DOOR)
+            out[cnt++] = { x0 - WT, z0 + 1.65f, x0 + WT, z0 + CELL + WT, wallH };
     }
     if (cnt < cap && pillarAt(ci, ck)) out[cnt++] = { x0 + 0.42f, z0 + 0.42f, x0 + 1.58f, z0 + 1.58f, wallH };
     // A riser taller than one step is terrain, not a ramp. The box covers the
@@ -1698,8 +2009,8 @@ void World::buildOccupancy(int originI, int originK, int n, unsigned char *out) 
         for (int x = 0; x < n; x++) {
             int ci = originI + x, ck = originK + z;
             unsigned char v = 0;
-            if (wallNVal(ci, ck) == WALL_SOLID) v |= 1;
-            if (wallWVal(ci, ck) == WALL_SOLID) v |= 2;
+            if (blocksLight(wallNVal(ci, ck))) v |= 1;
+            if (blocksLight(wallWVal(ci, ck))) v |= 2;
             if (pillarAt(ci, ck)) v |= 4;
             out[z * n + x] = v;
         }

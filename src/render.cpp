@@ -245,6 +245,20 @@ void Game::renderScene(double now) {
             DrawCylinder({ bxx + 0.028f, gy + 0.041f + bob, bzz }, 0.014f, 0.014f, 0.002f, 8, lit({ 30, 28, 30, 255 }, pl));
             break;
         }
+        case Pickup::Key: {   // a brass mortice key, bit up, turning slowly
+            float bob = sinf((float)now * 1.9f + a * 1.3f + b) * 0.025f;
+            float spin = (float)now * 0.8f + a;
+            Color brass = lit({ 214, 172, 86, 255 }, pl);
+            float y = gy + 0.055f + bob;
+            // bow, shank, bit — small, so it reads by its glint and its turn
+            // rather than by its outline at four metres.
+            DrawCylinderEx({ bxx, y, bzz }, { bxx, y + 0.012f, bzz }, 0.035f, 0.035f, 10, brass);
+            DrawCube({ bxx + cosf(spin) * 0.045f, y, bzz + sinf(spin) * 0.045f },
+                     0.09f, 0.012f, 0.012f, brass);
+            DrawCube({ bxx + cosf(spin) * 0.082f, y + 0.014f, bzz + sinf(spin) * 0.082f },
+                     0.022f, 0.028f, 0.012f, brass);
+            break;
+        }
         case Pickup::None:
             break;
         }
@@ -739,6 +753,8 @@ void Game::renderUI(double now) {
         Color selc = { 235, 200, 130, 210 }, dimc = { 150, 138, 112, 110 };
         if (tapes > 0)
             hudText(TextFormat("tapes  ×%d", tapes), hud(16), sh - hud(138), hud(16), { 172, 162, 190, 170 });
+        if (keys > 0)
+            hudText(TextFormat("keys  ×%d", keys), hud(16), sh - hud(160), hud(16), { 214, 186, 110, 190 });
         if (coins > 0 || wayOpen())   // doubloons double as your ticket out (ESCAPE_COST to leave)
             DrawText(TextFormat("doubloons  ×%d / %d", coins, ESCAPE_COST), 16, sh - 116, 16,
                      wayOpen() ? Color{ 120, 230, 140, 210 } : Color{ 214, 178, 92, 170 });

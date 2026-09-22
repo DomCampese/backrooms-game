@@ -46,6 +46,7 @@ bool coinAt(World &w, int a, int b) {
 
 struct Args {
     int level = 0, cells = 129, samples = 4000;
+    unsigned visit = 0;
     unsigned seed = 1337;
     bool plan = true;
     int px = 0, pz = 0, pw = 48, ph = 32;
@@ -84,6 +85,7 @@ int main(int argc, char **argv) {
         auto num = [&](int def) { return (i + 1 < argc) ? atoi(argv[++i]) : def; };
         if      (k == "--level")   a.level = num(0);
         else if (k == "--seed")    a.seed = (unsigned)num(1337);
+        else if (k == "--visit")   a.visit = (unsigned)num(0);
         else if (k == "--cells")   a.cells = num(129);
         else if (k == "--samples") a.samples = num(4000);
         else if (k == "--no-plan") a.plan = false;
@@ -94,6 +96,7 @@ int main(int argc, char **argv) {
     World w;
     w.seed = a.seed;
     w.level = a.level;
+    w.visit = a.visit;
     // wallH would normally come from the level table via applyLevel; only
     // gatherCellAABBs uses it and nothing here reads the height.
     w.wallH = 3.0f;
@@ -101,14 +104,15 @@ int main(int argc, char **argv) {
     const int N = a.cells, half = N / 2;
     printf("mapdump  level %d  seed %u  %dx%d cells (%.0f x %.0f m)\n",
            a.level, a.seed, N, N, N * CELL, N * CELL);
+    if (a.visit) printf("  (visit %u)\n", a.visit);
 
     // ---- floorplan. Each cell is two characters wide so the west edge has
     // somewhere to live; the row above carries the north edges.
     if (a.plan) {
         printf("\nfloorplan  x %d..%d  z %d..%d"
-               "   | - wall   , doorway   = window   E exit   # pillar\n"
+               "   | - wall   , doorway   L locked door   = window   E exit   # pillar\n"
                "                                 H hide spot   p prop   V vending"
-               "   Y valve   ~ soft floor   o coin   w water   digits: floor height\n\n",
+               "   Y valve   ~ soft floor   o coin   k key   w water   digits: floor height\n\n",
                a.px, a.px + a.pw - 1, a.pz, a.pz + a.ph - 1);
         for (int b = a.pz; b < a.pz + a.ph; b++) {
             std::string top, mid;
@@ -116,11 +120,14 @@ int main(int argc, char **argv) {
                 uint8_t nv = w.wallNVal(x, b);
                 top += '+';
                 top += (nv == WALL_SOLID) ? "--" : (nv == WALL_DOOR) ? " ," :
+                       (nv == WALL_LOCKED) ? "LL" :
                        (nv == WALL_WINDOW) ? "==" : (nv == WALL_EXIT) ? "EE" : "  ";
                 uint8_t wv = w.wallWVal(x, b);
                 mid += (wv == WALL_SOLID) ? '|' : (wv == WALL_DOOR) ? ',' :
+                       (wv == WALL_LOCKED) ? 'L' :
                        (wv == WALL_WINDOW) ? '=' : (wv == WALL_EXIT) ? 'E' : ' ';
                 char g = cellGlyph(w, x, b);
+                if (g == ' ' && w.keyAt(x, b))   g = 'k';
                 if (g == ' ' && coinAt(w, x, b)) g = 'o';
                 if (g == ' ' && w.poolAt(x, b))  g = 'w';
                 float fy = w.floorY(x, b);
@@ -134,6 +141,9 @@ int main(int argc, char **argv) {
 
     // ---- enclosure. The headline number: how much of this is actually rooms.
     long edges = 0, solidEdges = 0, doorEdges = 0, windowEdges = 0, exitEdges = 0;
+    long lockedEdges = 0, keysFound = 0;
+    struct Lock { float dx, dz, kx, kz; bool west; };
+    std::vector<Lock> locks;
     long sides[5] = { 0, 0, 0, 0, 0 };   // cells with 0,1,2,3,4 solid sides
     long cells = 0, pillars = 0, props = 0, hides = 0, coins = 0, soft = 0, valves = 0, pools = 0;
     long raised = 0, sunk = 0;
@@ -148,10 +158,20 @@ int main(int argc, char **argv) {
             else if (v == WALL_DOOR) doorEdges++;
             else if (v == WALL_WINDOW) windowEdges++;
             else if (v == WALL_EXIT) exitEdges++;
+            else if (v == WALL_LOCKED) lockedEdges++;
         }
         int s = (w.wallNVal(x, b) == WALL_SOLID) + (w.wallWVal(x, b) == WALL_SOLID) +
                 (w.wallNVal(x, b + 1) == WALL_SOLID) + (w.wallWVal(x + 1, b) == WALL_SOLID);
         sides[s]++;
+        if (w.keyAt(x, b)) keysFound++;
+        for (int west = 0; west < 2; west++) {
+            if ((west ? w.wallWVal(x, b) : w.wallNVal(x, b)) != WALL_LOCKED) continue;
+            int cx = fdiv(x, CCELLS), cz = fdiv(b, CCELLS);
+            ChunkData &cd = w.data(cx, cz);
+            locks.push_back({ x * CELL + (west ? 0.0f : 1.0f), b * CELL + (west ? 1.0f : 0.0f),
+                              (cx * CCELLS + cd.keyI) * CELL + 1.0f,
+                              (cz * CCELLS + cd.keyK) * CELL + 1.0f, west != 0 });
+        }
         if (w.pillarAt(x, b)) pillars++;
         if (w.propAt(x, b)) props++;
         if (hideSpotAt(w, x, b)) hides++;
@@ -170,6 +190,21 @@ int main(int argc, char **argv) {
     printf("  doorway               %6.2f%%   (%ld)\n", 100.0 * doorEdges / edges, doorEdges);
     printf("  window                %6.2f%%   (%ld)\n", 100.0 * windowEdges / edges, windowEdges);
     printf("  exit                  %6.2f%%   (%ld)\n", 100.0 * exitEdges / edges, exitEdges);
+    // A locked door is meant to shut a closet off from the flood below, so a
+    // few cells per one of these are SUPPOSED to read as unreachable here.
+    // mapdump measures the floor, and does not know the player has a key.
+    printf("  locked door           %6.2f%%   (%ld)\n", 100.0 * lockedEdges / edges, lockedEdges);
+    printf("  key                             (%ld)\n", keysFound);
+    // Where they are, so a capture can actually be pointed at one. A locked
+    // door is one chunk in three and nothing else in the dump locates it.
+    if (!locks.empty()) {
+        printf("  locked doors (first %d of %d), as BACKROOMS_POS:\n",
+               (int)std::min<size_t>(locks.size(), 5), (int)locks.size());
+        for (size_t t = 0; t < locks.size() && t < 5; t++)
+            printf("    door at x %.1f z %.1f (%s edge)   key at x %.1f z %.1f\n",
+                   locks[t].dx, locks[t].dz, locks[t].west ? "west" : "north",
+                   locks[t].kx, locks[t].kz);
+    }
     for (int s = 0; s <= 4; s++)
         printf("  cells with %d solid    %6.2f%%\n", s, 100.0 * sides[s] / cells);
     printf("  cells with 2+ solid   %6.2f%%\n",

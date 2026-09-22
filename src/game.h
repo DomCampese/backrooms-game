@@ -45,7 +45,7 @@ enum Weapon {
 // A loose item lying in a cell, waiting to be walked over. Which one a cell
 // holds is a pure function of the cell and the world seed — see Game::pickupAt
 // — so the renderer and the pickup test always agree without storing anything.
-enum class Pickup { None, AlmondWater, Doubloon, Battery, Tape };
+enum class Pickup { None, AlmondWater, Doubloon, Battery, Tape, Key };
 
 // Slots in Game::mats. The first four line up with the chunk mesh slots of the
 // same name (MESH_FLOOR..MESH_PROPS), which is what lets renderScene draw them
@@ -269,6 +269,9 @@ struct Game {
     struct Confetti { Vector3 pos, vel; float life; Color col; };
     std::vector<Confetti> confetti;           // bursts from popped balloons
     int almond = 0, coins = 0, tapes = 0;
+    // Keys open the locked doors the generator leaves about one chunk in
+    // three. They are per descent, like everything else you are carrying.
+    int keys = 0;
     float boostT = 0, crouchCur = 0, whisperT = 0;
 
     // ---- your grip on the place. Drains the whole time you're down here, faster

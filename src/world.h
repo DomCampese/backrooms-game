@@ -31,6 +31,19 @@ constexpr uint32_t SCRAWL_RATE = 40;
 constexpr uint32_t SCRAWL_PHRASES = 32;
 constexpr float CHUNK = CELL * CCELLS;
 constexpr float WT = 0.11f;            // wall half-thickness
+// The corridor ring each chunk leaves around its rooms, in cells — one lane on
+// its low sides, two on its high ones. Every seam pairs one chunk's high ring
+// with the next one's low ring, so every corridor in the world comes out
+// HALL_LO + HALL_HI cells wide: 3, or 6 m, against the 4 m a symmetric one-lane
+// ring gave (and the 2 m it fell to wherever a segment crossed a seam).
+//
+// Asymmetric because the symmetric alternative doubles both sides at once. Two
+// lanes each way is 8 m and eats 44% of the floor, which took `hidden at 20 m`
+// from 98.4% to 93.4% — enclosure and sightlines are the same number, see
+// CLAUDE.md, so a hall that wide is paid for in Clark having nowhere to be
+// unseen. The room patch is what is left: CCELLS - HALL_LO - HALL_HI square.
+constexpr int HALL_LO = 1;
+constexpr int HALL_HI = 2;
 
 // What sits on one edge of a cell. Only WALL_SOLID and WALL_WINDOW are
 // floor-to-ceiling blockers; a doorway is a hole you (and light) walk through.
@@ -46,6 +59,12 @@ enum WallKind : uint8_t {
     // so blocksEdge() says no; but its jambs are solid, so gatherCellAABBs
     // gives them boxes and you have to go through the opening.
     WALL_DOOR   = 4,
+    // The same opening with a leaf in it, shut and locked. It blocks a body and
+    // it blocks light — it is a door, not a doorway — so blocksEdge says yes and
+    // so does blocksLight. World::unlockEdge turns one into a WALL_DOOR for
+    // good, through the same overlay the shifted walls use, which is what makes
+    // every system agree the moment it opens.
+    WALL_LOCKED = 5,
 };
 
 // Which piece of furniture, if any, stands in a cell. The generator picks these
@@ -107,6 +126,14 @@ struct ChunkData {
     uint8_t pool[CCELLS][CCELLS];
     int8_t elev[CCELLS][CCELLS];   // floor height in ELEV_UNIT steps: -5 sunken lounge, down to -25
                                    // in an L0 atrium's terraced heart; +6 loading dock, +12 upper tier (L1)
+    // At most one locked door per chunk, and the cell its key lies in. Both are
+    // -1 when the chunk has neither. They are stored rather than hashed because
+    // the two have to agree about something no hash knows: the key must be on
+    // the side of the door you can already reach, and only the flood inside
+    // generate() can say which side that is.
+    int8_t lockI = -1, lockK = -1;   // cell owning the locked edge, chunk-local
+    uint8_t lockWest = 0;            // 0: its north edge, 1: its west edge
+    int8_t keyI = -1, keyK = -1;     // where the key for it lies, chunk-local
     bool built = false;
     Mesh meshes[MESH_COUNT] = {};
 };
@@ -120,7 +147,14 @@ constexpr int MAX_NEARBY_AABBS = 48;
 // Collision, pathfinding, line of sight and the mesher all share this test.
 // Light is the exception and does NOT use it — buildOccupancy checks for
 // WALL_SOLID on its own, because glass blocks a body but not a fluorescent.
-inline bool blocksEdge(uint8_t wall) { return wall == WALL_SOLID || wall == WALL_WINDOW; }
+inline bool blocksEdge(uint8_t wall) {
+    return wall == WALL_SOLID || wall == WALL_WINDOW || wall == WALL_LOCKED;
+}
+// What stops a fluorescent, which is not the same list: glass and a doorway
+// both let light through a body cannot pass, and a shut door does the reverse.
+// buildOccupancy used to test WALL_SOLID inline; it goes through here now so
+// the locked doors cast the shadow the leaf in them obviously should.
+inline bool blocksLight(uint8_t wall) { return wall == WALL_SOLID || wall == WALL_LOCKED; }
 
 inline int fdiv(int a, int b) { return (a >= 0) ? a / b : -((-a + b - 1) / b); }
 inline int cellOf(float x) { return (int)floorf(x / CELL); }
@@ -212,10 +246,19 @@ struct World {
     // and the shadows disagreeing with the geometry. Game::shiftAWall is what
     // decides when, and only ever picks an edge you cannot currently see.
     std::unordered_set<uint64_t> shifted;
+    // Doors the player has unlocked, in the same edge-key space. Read in
+    // wallNVal/wallWVal for exactly the reason `shifted` is: collision, the
+    // pathfinder, line of sight, the light's occupancy grid and the mesher all
+    // come through those two, and a door that has opened for the player but not
+    // for Clark is worse than one that never opened.
+    std::unordered_set<uint64_t> unlockedDoors;
     static uint64_t edgeKey(int ci, int ck, bool west) {
         return (key(ci, ck) << 1) | (west ? 1ull : 0ull);
     }
     void shiftEdge(int ci, int ck, bool west);   // wall it off, and rebake the chunk that owns it
+    void unlockEdge(int ci, int ck, bool west);  // open a locked door for good, and rebake
+    // Is there a key lying loose in this cell? One per chunk at most.
+    bool keyAt(int ci, int ck);
     void rebuildChunk(int cx, int cz);           // drop its meshes so streamChunks bakes it again
 };
 
