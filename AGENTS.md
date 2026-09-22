@@ -296,9 +296,33 @@ thumb resting on the line otherwise flickers in and out of a sprint several
 times a second and the stamina drain turns that into a stutter). The ring gains
 a `.run` class while it is held: the knob has already saturated at 0.62 of the
 radius and stops moving long before the thumb does, so without that nothing on
-screen says the line exists. Stamina is 16 seconds of running against 6 to
+screen says the line exists. Stamina was 16 seconds of running against 6 to
 recover, up from 10 — a sprint that ends before you have crossed a 6 m hall is
 a sprint nobody uses.
+
+**Sprint limiting is currently off, and it is switched off in one number.**
+`SPRINT_DRAIN` in `Game::updateSprint` is 0, so stamina never falls and
+`sprintExhausted` never latches in normal play. Nothing was deleted to do it:
+the hysteresis, the 6 s recovery, the HUD meter and the regression check are
+all still there and still exercised — the check forces `stamina = 0` by hand
+rather than sprinting the meter down, so it tests the exhaustion *mechanism*
+rather than the drain rate, and it keeps passing with the drain at zero. That
+is deliberate: a check that only fires when a tuning number is nonzero tells
+you nothing the moment someone turns that number off, which is the same trap as
+the relief-bump opt-out. Put a limit back by setting `SPRINT_DRAIN` to
+1/seconds — it was 1/16, and 1/10 before that.
+
+**Two taps on iOS is a page zoom, and in a first-person game two taps is
+ordinary play.** A double tap on FIRE zoomed the whole shell instead of firing
+twice, which reads as the game freezing and the HUD growing rather than as a
+browser gesture. `touch-action: manipulation` on `html, body` keeps panning and
+pinch-zoom and drops only double-tap-to-zoom; the canvas takes `touch-action:
+none` because the game owns every gesture over the world. It has to sit on the
+document and not on `#touch` alone — the gesture is recognised on whatever the
+two taps land on, and half the screen is canvas, footer and gate.
+`user-scalable=no` in the viewport meta is *not* the fix: iOS has deliberately
+ignored it since iOS 10, so the obvious one-line change does nothing at all and
+looks like it should have worked.
 
 **A probe point picked as a fraction of the viewport lands on a control.** The
 sprint check first grabbed at `(0.14w, 0.72h)`, which is DUCK on a tall phone:
@@ -534,6 +558,16 @@ cells by how many solid sides they have), sightline percentiles and occlusion at
 densities in m² per instance for pillars, props, hide spots, doubloons, soft
 floor, valves, exits, pools and elevation.
 
+It also reports **how full the collision scratch gets**, which is the one thing
+in this engine that fails silently by design: `gatherCellAABBs` accumulates the
+3×3 of cells around a point into a single `MAX_NEARBY_AABBS` buffer and *drops*
+every box past the cap, so an overcrowded cell is a cell you walk through a wall
+in and nothing anywhere says so. mapdump prints the worst 3×3 count, where it is,
+and how many cells are over. Measured after the doors and 6 m halls landed:
+**worst 20-22 of 48, zero cells over** on Levels 0, 1 and 3 — so when a wall does
+not stop you, this is not why, and you can stop looking here. Check it again
+after anything that adds geometry per cell.
+
 **Use it for anything that touches the generator.** From screenshots alone the
 halls looked like they ran for hundreds of metres; measured, the median
 sightline was already 7.0 m. The defect the pictures hid was enclosure — 57% of
@@ -678,12 +712,39 @@ closets read as cut-off pockets: 19 locked doors cost about 0.2 points of
 `reached from centre` in a 129-cell sample. That is the feature, not a
 regression — check the *largest pocket* stays inside `CLOSET_MAX` instead.
 
-**The wall mesher reads `dd.wallN[i][kk]` raw, not through `wallNVal`.** So an
-overlay that changes what a wall *is* — `unlockedDoors`, and `shifted` before it
-— does not reach the geometry by itself. `World::unlockEdge` rebakes both chunks
-that touch the edge, and the mesher maps `WALL_LOCKED` to `WALL_DOOR` itself for
-edges in the set. Anything else added to those overlays needs the same, or the
-world will collide and light differently from how it looks.
+**The wall mesher used to read `dd.wallN[i][kk]` raw rather than through
+`wallNVal`, and that is exactly how a door ends up with no collision.** Every
+overlay that changes what a wall *is* lands in `wallNVal` / `wallWVal` —
+`unlockedDoors` for a door you have turned a key in, `shifted` for the doorways
+the building closes behind you — so reading the raw array made the geometry the
+one system in the game that never saw them, and it went wrong in both
+directions at once: an unlocked door went on *drawing* its locked leaf while
+collision happily let you walk through it, and a shifted doorway kept its
+opening on screen while collision had already sealed it. Neither reads as a
+mesher bug. The first reads as "doors have no collision"; the second as a
+corridor you can see down and cannot enter. The mesher now goes through the two
+accessors like everything else, which is what this file always claimed it did.
+`World::unlockEdge` still rebakes both chunks that touch the edge — the
+accessors decide what the geometry *is*, not when it is rebuilt — and anything
+added to those overlays still needs its own rebake.
+
+`tools/regression.cpp` pins both halves. Collision: a `WALL_DOOR` is passable
+and emits exactly its two jamb boxes, a body in the opening passes and a body
+in a jamb is pushed out, two adjacent doors emit only their outer jambs (the
+mesher drops the shared one, so the AABBs must too), and a `WALL_LOCKED` blocks
+bodies, light and `canStep` until `unlockEdge` turns it into a `WALL_DOOR`.
+Geometry: it bakes the chunk, changes what the overlays say the wall is, bakes
+again, and asserts the mesh moved. Reverting `nv` to the raw array fails that
+assert, which is the only reason to believe it.
+
+**Which mesh slot the difference lands in is not obvious, and guessing wrong
+gives you a check that can never fail.** Locking a door does not change
+`MESH_WALLS` at all: the locked and open branches emit the *same* three wall
+boxes — two jambs and a header — and what differs is the leaf, its handle and
+the threshold strip, which all go into `MESH_PROPS`. Asserted against
+`MESH_WALLS` that check passes whatever the mesher does. Shifting an edge from
+open to solid *is* a `MESH_WALLS` change, so the two halves of the same check
+watch two different slots on purpose.
 
 **Enclosure and sightlines are the same number, and you cannot have both.**
 A random sightline's mean free path is about one cell divided by the share of

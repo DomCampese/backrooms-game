@@ -195,6 +195,25 @@ int main(int argc, char **argv) {
     // mapdump measures the floor, and does not know the player has a key.
     printf("  locked door           %6.2f%%   (%ld)\n", 100.0 * lockedEdges / edges, lockedEdges);
     printf("  key                             (%ld)\n", keysFound);
+    // How full the collision scratch gets. gatherCellAABBs accumulates over the
+    // 3x3 around a point into one MAX_NEARBY_AABBS buffer and silently DROPS
+    // every box past the cap — so a cell that overflows is a cell you walk
+    // through a wall in, with nothing anywhere saying so.
+    {
+        int worst = 0, over = 0, wx = 0, wz = 0;
+        AABB boxes[512];
+        for (int x = -half; x <= half; ++x) for (int b = -half; b <= half; ++b) {
+            int cnt = 0;
+            for (int dx = -1; dx <= 1; ++dx) for (int dz = -1; dz <= 1; ++dz)
+                cnt = w.gatherCellAABBs(x + dx, b + dz, boxes, 512, cnt);
+            if (cnt > worst) { worst = cnt; wx = x; wz = b; }
+            if (cnt > MAX_NEARBY_AABBS) over++;
+        }
+        printf("\ncollision scratch (MAX_NEARBY_AABBS = %d)\n", MAX_NEARBY_AABBS);
+        printf("  worst 3x3 box count   %d  at x %d z %d\n", worst, wx, wz);
+        printf("  cells over the cap    %d%s\n", over,
+               over ? "   <-- boxes are being dropped: you can walk through walls there" : "");
+    }
     // Where they are, so a capture can actually be pointed at one. A locked
     // door is one chunk in three and nothing else in the dump locates it.
     if (!locks.empty()) {

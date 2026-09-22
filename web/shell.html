@@ -20,6 +20,18 @@
     background: var(--bg); color: var(--ink);
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
     overflow: hidden;
+    /* Two taps anywhere on iOS is a zoom gesture, and in a first-person game
+       two taps is ordinary play — a double tap on FIRE zoomed the page instead
+       of firing twice, and left the player looking at a magnified corner of the
+       world. `manipulation` keeps panning and pinch-zoom and drops only the
+       double-tap-to-zoom. It has to be here rather than on #touch alone: the
+       gesture is recognised on whatever the taps land on, and half the screen
+       is canvas, footer and gate. (user-scalable=no in the viewport meta is not
+       the fix — iOS has ignored it since 10, deliberately.) */
+    touch-action: manipulation;
+    /* And iOS inflates text on its own after a rotation, which moves the HUD
+       and the splash out from under a layout that measured them. */
+    -webkit-text-size-adjust: 100%;
   }
   #frame { position: fixed; inset: 0; display: flex; flex-direction: column; }
   #stage {
@@ -31,6 +43,7 @@
      that over a differently-shaped box distorts the whole world. */
   canvas.emscripten {
     display: block; border: 0; outline: none; background: #000;
+    touch-action: none;   /* the game owns every gesture over the world */
   }
   /* The game owns the pointer once it is running; let it have every event. */
   canvas.emscripten:focus { outline: none; }
