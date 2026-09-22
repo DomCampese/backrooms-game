@@ -36,6 +36,9 @@ const SIZES = [
   { name: 'iphone portrait',  w: 390, h: 844 },
   { name: 'pixel landscape',  w: 915, h: 412 },
   { name: 'small landscape',  w: 640, h: 360 },
+  // An iPhone on its side with Safari's bar AND the tab strip showing,
+  // which is the shape the overlap was photographed on.
+  { name: 'iphone landscape', w: 932, h: 300 },
   { name: 'tablet',           w: 820, h: 1180 },
   { name: 'desktop',          w: 1440, h: 850 },
 ];
@@ -53,24 +56,67 @@ for (const size of SIZES) {
   await page.waitForTimeout(120);
 
   // ---- the controls must not overlap ------------------------------------
-  const boxes = await page.$$eval('#touch .tbtn, #touch #stick', els =>
+  const readBoxes = () => page.$$eval('#touch .tbtn, #touch #stick', els =>
     els.map(e => {
       const r = e.getBoundingClientRect();
       return { t: e.id || e.textContent.trim(), x: r.left, y: r.top, w: r.width, h: r.height };
     }));
-  if (boxes.length < 12) note(size, `expected 12 controls, measured ${boxes.length}`);
-  for (let i = 0; i < boxes.length; i++)
-    for (let j = i + 1; j < boxes.length; j++) {
-      const a = boxes[i], b = boxes[j];
-      if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h)
-        note(size, `controls overlap: ${a.t} and ${b.t}`);
+  const checkBoxes = (boxes, stage, where, minTouch) => {
+    if (boxes.length < 12) note(size, `${where}: expected 12 controls, measured ${boxes.length}`);
+    for (let i = 0; i < boxes.length; i++)
+      for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i], b = boxes[j];
+        if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h)
+          note(size, `${where}: controls overlap: ${a.t} and ${b.t}`);
+      }
+    for (const b of boxes) {
+      if (b.x < stage.left - 0.5 || b.y < stage.top - 0.5 ||
+          b.x + b.w > stage.left + stage.w + 0.5 || b.y + b.h > stage.top + stage.h + 0.5)
+        note(size, `${where}: control ${b.t} is outside the stage`);
+      // A thumb needs something to land on. 40 CSS px is the usual floor, and
+      // it applies to stages a real device actually produces. The squeezed
+      // case below passes 0 deliberately: at 13 controls and a stage under
+      // ~330 px tall, 40 px targets and no overlap are arithmetically
+      // incompatible (40 / 0.12 = a 333 unit minimum), so that case exists to
+      // prove the no-overlap invariant survives an extreme, not to set a size.
+      if (minTouch && Math.min(b.w, b.h) < minTouch && b.t !== 'stick')
+        note(size, `${where}: control ${b.t} is only ${Math.round(Math.min(b.w, b.h))} px`);
     }
-  for (const b of boxes) {
-    if (b.x < 0 || b.y < 0 || b.x + b.w > size.w + 0.5 || b.y + b.h > size.h + 0.5)
-      note(size, `control ${b.t} is off screen`);
-    // A thumb needs something to land on. 40 CSS px is the usual floor.
-    if (Math.min(b.w, b.h) < 40 && b.t !== 'stick')
-      note(size, `control ${b.t} is only ${Math.round(Math.min(b.w, b.h))} px`);
+  };
+  const stageBox = () => page.evaluate(() => {
+    const r = document.getElementById('stage').getBoundingClientRect();
+    return { left: r.left, top: r.top, w: r.width, h: r.height };
+  });
+  checkBoxes(await readBoxes(), await stageBox(), 'full stage', 40);
+
+  // ...and not when the stage is much shorter than the viewport, which is the
+  // case the first version of this check could not see. Playwright's viewport
+  // IS the page viewport, so a stage here is a footer's height short of it and
+  // anything keyed to vmin looks fine. A real iPhone in landscape is not like
+  // that: Safari's layout viewport is the whole screen height while the
+  // visible stage is about two thirds of it, and controls laid out in vmin
+  // reached past their own fractions and piled up — photographed with JUMP on
+  // DRINK, MARK on LOAD and USE on AIM. Squeeze the stage to that ratio and
+  // demand the same invariants.
+  const squeezed = await page.evaluate(async () => {
+    const st = document.getElementById('stage');
+    // Measure BEFORE touching flex: `flex: 0 0 auto` collapses a flex item to
+    // its content height, so reading clientHeight afterwards gives 132 px
+    // rather than the 891 the stage actually had, and the "squeeze" becomes a
+    // crush that proves nothing about a phone.
+    const want = Math.round(st.clientHeight * 0.64);
+    st.style.flex = '0 0 auto';
+    st.style.height = want + 'px';
+    await new Promise(r => setTimeout(r, 320));    // the shell's layout poll
+    return st.clientHeight;
+  });
+  if (squeezed) {
+    checkBoxes(await readBoxes(), await stageBox(), 'stage squeezed to 64%', 0);
+    await page.evaluate(() => {
+      const st = document.getElementById('stage');
+      st.style.flex = ''; st.style.height = '';
+    });
+    await page.waitForTimeout(320);
   }
 
   // ---- the splash must not clip, and ENTER must be reachable -------------

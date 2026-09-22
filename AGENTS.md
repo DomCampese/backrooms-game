@@ -296,9 +296,51 @@ them while something walked at you. It is 2.4 now, and `mobile-check` asserts
 the product (a 200 px drag turns 60-110 degrees) rather than either half, because
 either half can move.
 
+**`vmin` is the wrong unit for anything positioned inside `#stage`, and iOS is
+where that shows.** The touch controls are absolutely positioned inside the
+stage, which is the viewport minus the footer — but `vmin` resolves against the
+*viewport*, and on iOS Safari in landscape the layout viewport is the whole
+screen height while the visible stage is about two thirds of it. So a
+bottom-anchored `JUMP` at `31vmin` and a top-anchored `DRINK` at `17.5vmin`
+both reached further into the stage than their numbers implied and landed on
+top of each other. Photographed on an iPhone: JUMP over DRINK, MARK over LOAD,
+USE over AIM. `layoutControls()` derives one unit from the stage's own box and
+writes px; nothing in the control CSS is a viewport unit any more.
+
+Two things fell out of fixing it, both of which shrank the buttons for nothing:
+
+- **The vertical budget is per side.** The left column is the stick with DUCK
+  above it; the right is FIRE/AIM/LOAD/JUMP under the top cluster. They never
+  share a row, so adding one column's height to the other's and calling it the
+  budget costs a fifth of every button's size to prevent a collision that
+  cannot happen. Horizontally they *do* share rows, so that one is a sum.
+- **Budgets that are exact come out touching.** With no clearance term the
+  clusters met to the pixel and rounded into an overlap, which is
+  indistinguishable from the bug. `GAP` is 4% of the unit.
+
+`min(stageW, stageH)` is also the wrong clamp on a stage three times wider than
+it is tall — the budgets are the real constraint and they already account for
+shape.
+
+**Below about a 330 px stage, 40 px touch targets and no overlap are
+arithmetically incompatible.** 13 controls, the smallest at 0.12 of the unit,
+need a unit of 333 to clear 40 px — and the unit is the stage height over the
+budget. So `mobile-check` asks for 40 px on stages a device really produces and
+asks the squeezed stress case only to stay non-overlapping and on-stage. Do not
+"fix" that by lowering the real floor; it is a statement about how many
+controls fit, not a tuning number.
+
+**`flex: 0 0 auto` collapses a flex item to its content height, so measure
+before you set it.** The stage-squeezing case read `clientHeight` after
+switching the stage out of `flex: 1`, got 132 px instead of 891, and reported
+every button as impossibly small — a broken test that looked exactly like a
+broken layout.
+
 **`node tools/mobile-check.mjs` is the only check that sees any of this.** It
-loads `web/shell.html` in Chromium at seven sizes and asserts no two controls
-overlap, that the splash fits or scrolls with ENTER on screen, that the canvas
+loads `web/shell.html` in Chromium at eight sizes — including an iPhone on its
+side with both Safari bars showing, which is the shape the control overlap was
+photographed on — and asserts no two controls overlap (at the full stage and
+again with the stage squeezed to 64%, because a short stage is its own case), that the splash fits or scrolls with ENTER on screen, that the canvas
 keeps its aspect ratio at three different backing sizes, and that the seven
 title-screen gestures resolve the way they should — a middle tap, a slightly
 sloppy tap, a stick push and a stick tap all begin a run; a button press, a look
