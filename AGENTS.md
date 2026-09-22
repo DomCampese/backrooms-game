@@ -480,6 +480,23 @@ Level 0, seed 1337, over 16641 cells, before and after the room partition:
 | reachable from the centre | 91.8% | 94.3% |
 | largest cut-off pocket | 41 cells | 3 cells |
 
+And again after the corridors were widened to `HALL_LO + HALL_HI` cells (6 m),
+at `--visit 1`, which is what a capture shows. Halls cost enclosure — that is
+the same arithmetic as above, not a bug to hunt:
+
+| measure | 4 m halls | 6 m halls |
+|---|---|---|
+| edges that are solid wall | 26.7% | 22.8% |
+| cells with zero solid sides | 23.1% | 33.5% |
+| median sightline | 3.5 m | 4.0 m |
+| 90th percentile sightline | 9.5 m | 13.5 m |
+| hidden at 20 m | 98.4% | 95.3% |
+
+A third of the cells having no wall on any side sounds like the wall-less world
+the partition was built to fix, and is not: the ring is 87 of a chunk's 256
+cells, so 34% of the floor *is* corridor, and a corridor has no walls. Compare
+the two numbers before reading anything into either.
+
 `hideSpotAt` and `coinAt` live on `Game`, which would drag the renderer into the
 harness, so mapdump mirrors those two rules. Change either in `game.cpp` and
 change it there too, or the harness quietly reports the old world.
@@ -524,6 +541,75 @@ sweeps concurrently — see the Xvfb note below.
 ## Things that will bite you
 
 These each cost real debugging time. They are not hypothetical.
+
+**`mapdump` defaults to visit 0 and a headless capture runs at visit 1, so the
+two describe different worlds at the same seed.** `Game::applyLevel` does
+`world.visit = visits[lv]++`, and by the time `BACKROOMS_SHOT` takes its frame
+that has already happened twice — while `tools/mapdump.cpp` constructs a World
+and leaves `visit` at 0. The aggregate numbers still describe the generator
+faithfully, because it is the same generator; but *positions* do not line up,
+and an afternoon went into pointing a camera at a locked door mapdump had
+reported at a spot where the game had put open floor. Pass `--visit 1` whenever
+you want mapdump to describe the world a capture will show you.
+
+**The doorways are punched by three passes that cannot see each other, and it
+shows from inside a room, not on the floorplan.** The segment runs, the room
+partition and the connectivity flood each open edges independently, and they
+regularly land two and three in the same wall. A 1.3 m opening in a 2 m cell
+leaves 0.7 m of plasterboard between each pair, so the wall becomes alternating
+holes and piers — which reads as unfinished geometry rather than as a building.
+Nothing in mapdump shows it; it took a screenshot. Two things now handle it, and
+both are needed because neither is enough:
+
+- `World::generate` closes one of every adjacent pair where the floor stays as
+  connected as the flood left it, and where it does not — which is most of them,
+  because a room reached only through its own door cannot lose it — *moves* the
+  door instead, into blank wall on the same line, as near its old place as will
+  take it. Measured over a 129-cell sample: 520 crowded pairs, 200 closed, 104
+  moved, 216 with nowhere on the line to go.
+- The mesher drops the jamb *between* two doorways that must stay adjacent, so
+  those 216 become one wide opening under a continuous header rather than two
+  holes with a sliver between them. `gatherCellAABBs` drops the matching jamb
+  boxes, or you walk into a 0.7 m pier that is not there.
+
+**"Does the floor stay connected" is a bridge test, and counting what one flood
+reaches is not the same question.** The first version of the door thinning
+compared the size of one flood before and after closing an edge. That is wrong
+whenever the chunk's floor is already in two pieces — both reachable from the
+world through different seams — because one of them is outside the count, so
+every closure inside *that* piece looks free. It shipped 24 newly stranded cells
+and took the largest cut-off pocket from 2 to 8. Closing one edge splits the
+graph into at most two pieces, and it does so exactly when that edge's own two
+cells end up in different ones: ask that, and nothing else.
+
+**A flood written to stand in for `canStep` has to enforce the riser rule too.**
+`canStep` refuses a step across more than `MAX_STEP`, so a flood that only tests
+walls walks up a terrace face the pathfinder will not, calls a closure safe, and
+strands what was behind it. Pools are exempt on both sides, exactly as there.
+
+**Widening the corridors moved Clark's arrivals, and the regression harness
+prints it rather than failing on it.** `ENT-03 arrivals` went from 78% inside
+20 m to 36% when the halls went from 4 m to 6 m, because a spawn has to be both
+close *and* out of sight and there is now less out-of-sight within 20 m — the
+same enclosure arithmetic again. The assert is `nearUnseen > total/5`, so 36%
+still passes with margin, but it is much nearer the floor than it was. If that
+number goes under 20 and the diff did not touch the entity, look at enclosure
+before you look at `updateEntity`.
+
+**A locked door is *supposed* to make mapdump's reachability look worse.** About
+one chunk in three gets a `WALL_LOCKED` door with its key nearby, and the door is
+only placed where it either strands nothing or strands a closet of at most 12
+cells. mapdump floods the floor and does not know the player has a key, so those
+closets read as cut-off pockets: 19 locked doors cost about 0.2 points of
+`reached from centre` in a 129-cell sample. That is the feature, not a
+regression — check the *largest pocket* stays inside `CLOSET_MAX` instead.
+
+**The wall mesher reads `dd.wallN[i][kk]` raw, not through `wallNVal`.** So an
+overlay that changes what a wall *is* — `unlockedDoors`, and `shifted` before it
+— does not reach the geometry by itself. `World::unlockEdge` rebakes both chunks
+that touch the edge, and the mesher maps `WALL_LOCKED` to `WALL_DOOR` itself for
+edges in the set. Anything else added to those overlays needs the same, or the
+world will collide and light differently from how it looks.
 
 **Enclosure and sightlines are the same number, and you cannot have both.**
 A random sightline's mean free path is about one cell divided by the share of

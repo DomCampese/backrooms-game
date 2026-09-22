@@ -451,7 +451,7 @@ void Game::beginDescent(double now) {
     Vector2 sp = world.findOpenSpot(15, 15);
     px = sp.x; pz = sp.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
     yaw = 0.8f; pitch = 0.0f;
-    coins = 0; almond = 0; tapes = 0; flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; battery = 1.0f;
+    coins = 0; almond = 0; tapes = 0; keys = 0; flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; battery = 1.0f;
     deck = TapeDeck{}; if (IsSoundPlaying(sndVoice)) StopSound(sndVoice);
     escapeCount = 0; killCount = 0; distWalked = 0;
     deepest = level;
@@ -612,6 +612,9 @@ void Game::updateDrink(float dt, double now) {
 // that looks at world pickups — the renderer and the pickup test — comes
 // through this one function, so the two can never place them differently.
 Pickup Game::pickupAt(int a, int b) {
+    // A key first: it is placed at one named cell rather than hashed, and it is
+    // the one pickup whose position means something, so nothing may mask it.
+    if (world.keyAt(a, b)) return Pickup::Key;
     if (bottleAt(a, b))  return Pickup::AlmondWater;
     if (coinAt(a, b))    return Pickup::Doubloon;
     if (batteryAt(a, b)) return Pickup::Battery;
@@ -1531,6 +1534,11 @@ void Game::updateInteraction() {
             tapeLine = TAPE_LINES[grng.ri(0, TAPE_LINE_COUNT - 1)];
             PlaySound(sndTape);
             break;
+        case Pickup::Key:
+            keys++;
+            deckNoteT = 2.4f; deckNote = "a key. something near here is locked.";
+            SetSoundPitch(sndClick, 1.45f); PlaySound(sndClick);
+            break;
         case Pickup::None:
             break;
         }
@@ -1600,6 +1608,33 @@ void Game::updateInteraction() {
                 if (ddx * ddx + ddz * ddz < 1.6f * 1.6f && coins >= 3) {
                     coins -= 3; almond++;
                     SetSoundPitch(sndClick, 0.8f); PlaySound(sndClick);
+                }
+            }
+        }
+        {   // a locked door: the key turns once and the door stays open
+            bool opened = false;
+            for (int dx = -1; dx <= 1 && !opened; dx++) for (int dz = -1; dz <= 1 && !opened; dz++) {
+                int a = pci + dx, b = pck + dz;
+                for (int west = 0; west < 2 && !opened; west++) {
+                    if ((west ? world.wallWVal(a, b) : world.wallNVal(a, b)) != WALL_LOCKED) continue;
+                    // the middle of the opening, which is what you stand in front of
+                    float ex = a * CELL + (west ? 0.0f : 1.0f), ez = b * CELL + (west ? 1.0f : 0.0f);
+                    float ddx = px - ex, ddz = pz - ez;
+                    if (ddx * ddx + ddz * ddz > 1.9f * 1.9f) continue;
+                    if (keys <= 0) {
+                        deckNoteT = 2.2f; deckNote = "locked. the key will be somewhere near.";
+                        opened = true;   // said our piece; don't repeat it for every edge
+                        break;
+                    }
+                    keys--;
+                    world.unlockEdge(a, b, west != 0);
+                    // The wall the light marches is a snapshot, and it only
+                    // rebuilds after six cells of walking — a door that opened
+                    // in front of you would otherwise go on casting its shadow.
+                    occValid = false;
+                    deckNoteT = 2.2f; deckNote = "the lock turns. the door swings in.";
+                    SetSoundPitch(sndClick, 0.7f); PlaySound(sndClick);
+                    opened = true;
                 }
             }
         }

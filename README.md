@@ -426,6 +426,10 @@ Details that reward paying attention:
 - **Footsteps in the dark** — when the entity chases, you *hear* it: heavy
   footfalls, panned to its bearing and fading with distance, even around
   corners you can't see past.
+- **Some doors are shut** — about one chunk in three has a door with a leaf
+  still in it, locked, and its key lying loose within a few metres on the side
+  you can already reach. Behind it is either a closet worth opening or a
+  shortcut. `E` / `USE` turns the key, and the door stays open.
 - **The floor is a lie** — Level 0 has rare soft, dark patches of carpet.
   Linger on one and it gives way — you drop through into Level 1.
 - **Cursed exits** — roughly one exit door in six glows red instead of warm.
