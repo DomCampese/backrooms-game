@@ -14,7 +14,7 @@ static const Color TRIM_COL = { 176, 170, 152, 254 };   // painted trim, no reli
 static const Color SILL_COL = { 138, 136, 130, 254 };   // dulled metal threshold
 // A locked door's leaf and its lock plate. Alpha 254: textured and opaque, but
 // below the shader's relief threshold, because a flat painted slab with the
-// world-space bump on it comes out looking like pebbledash (see CLAUDE.md).
+// world-space bump on it comes out looking like pebbledash (see AGENTS.md).
 static const Color LEAF_COL = { 150, 128, 96, 254 };
 static const Color LOCK_COL = { 206, 194, 140, 254 };
 

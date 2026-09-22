@@ -40,7 +40,7 @@ constexpr float WT = 0.11f;            // wall half-thickness
 // Asymmetric because the symmetric alternative doubles both sides at once. Two
 // lanes each way is 8 m and eats 44% of the floor, which took `hidden at 20 m`
 // from 98.4% to 93.4% — enclosure and sightlines are the same number, see
-// CLAUDE.md, so a hall that wide is paid for in Clark having nowhere to be
+// AGENTS.md, so a hall that wide is paid for in Clark having nowhere to be
 // unseen. The room patch is what is left: CCELLS - HALL_LO - HALL_HI square.
 constexpr int HALL_LO = 1;
 constexpr int HALL_HI = 2;

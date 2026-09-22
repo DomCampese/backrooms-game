@@ -747,7 +747,7 @@ Texture2D makeFixturesTex() {
             c.r = cl8(c.r * v); c.g = cl8(c.g * v); c.b = cl8(c.b * v);
         }
     };
-    const unsigned char OP = 254;   // textured, opaque, no relief bump — see CLAUDE.md
+    const unsigned char OP = 254;   // textured, opaque, no relief bump — see AGENTS.md
 
     // --- a duplex outlet, intact and with the cover torn off. Both fill their
     // rect: the plate *is* the fitting, so there is no margin to leave.

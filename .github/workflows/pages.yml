@@ -25,7 +25,7 @@ concurrency:
 env:
   # Pinned to the toolchain the web build was verified against. Bumping it is a
   # deliberate act: emscripten has changed what it exports onto Module before,
-  # and the failure mode for that was silent (see CLAUDE.md on HEAPF32).
+  # and the failure mode for that was silent (see AGENTS.md on HEAPF32).
   EMSDK_VERSION: 6.0.9
 
 jobs:
