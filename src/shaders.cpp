@@ -221,7 +221,10 @@ vec3 roomLight(vec3 P, vec3 N){
         if (st*atten < 0.004) continue;              // too faint to be worth tracing
         // Two taps across the panel up close for a little penumbra, one beyond.
         // Tracing across it at every range looked better and cost about three
-        // times as much, which was too much.
+        // times as much, which was too much. The taps must close up onto the
+        // centre before the switch: cutting from two taps to one at a fixed
+        // range drew a hard sphere around every panel, and that showed as big
+        // bright circles and arcs across the floor and walls.
         // The march gives up after a fixed number of cells, and where it gives up
         // the shadow simply stops — and because the DDA spends one step per cell
         // crossed, the contour where it runs out is |dx|+|dz| = const: a diamond,
@@ -240,7 +243,8 @@ vec3 roomLight(vec3 P, vec3 N){
             vec2 toFrag = shP - lc.xz;
             float toLen = length(toFrag);
             // directly overhead there's no meaningful direction to spread along
-            vec2 perp = (toLen > 0.001) ? vec2(-toFrag.y, toFrag.x) / toLen * 0.45 : vec2(0.45, 0.0);
+            float spread = 0.45 * (1.0 - smoothstep(16.0, 36.0, d2));   // 0 by the 6 m switch
+            vec2 perp = (toLen > 0.001) ? vec2(-toFrag.y, toFrag.x) / toLen * spread : vec2(spread, 0.0);
             vis = 0.5*(lightVis(lc.xz + perp, shP) + lightVis(lc.xz - perp, shP));
         } else vis = lightVis(lc.xz, shP);
         vis = mix(1.0, vis, sw);                         // ease the shadow off with range
