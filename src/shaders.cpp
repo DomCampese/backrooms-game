@@ -322,6 +322,23 @@ vec3 roomLight(vec3 P, vec3 N){
                 float d2 = dot(ld, ld);
                 float lobe = sheen(N, V, ld*inversesqrt(max(d2,1e-6)), shin)
                              *gGloss*st*2.6/(1.0 + 0.22*d2);
+                // Glaze. The lobe is a crisp panel-shaped highlight, and on its
+                // own the pool tile still read as matte: the highlight only lands
+                // where a panel mirrors exactly. Glazed ceramic also carries a
+                // soft bloom of each fitting around that point, strongest at a
+                // grazing angle, and that is what makes a tiled floor look wet.
+                // Only the Poolrooms' glaze clears 0.5 — its grout sits near
+                // 0.08, props top out at 0.42, the revolver at 0.48 — so no
+                // other surface in the game takes this path.
+                if (gGloss > 0.5){
+                    vec3 dh = hit - sp;
+                    float u = 1.0 - max(dot(V, N), 0.0), u2 = u*u;
+                    float fr = 0.04 + 0.96*(u2*u2*u);
+                    // A mirrored panel is as bright as the panel (5.2, as the
+                    // emissive pass draws it) however far away it hangs, so
+                    // unlike the lobe this does not fall off with distance.
+                    lobe += exp(-dot(dh, dh)*0.6) * fr * (gGloss - 0.5)*2.0 * st * 5.2;
+                }
                 // Work out the lobe before tracing whether the panel is visible,
                 // not after. It is a sharp highlight, so on any given frame it is
                 // nonzero over a small band of the screen — and the trace is a

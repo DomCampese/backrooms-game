@@ -10,7 +10,10 @@ const LevelCfg LEVELS[NLEVELS] = {
     // Poolrooms lightMul is down from 0.72: white tile at 0.87 albedo under a
     // grid of fluorescents was landing the whole floor above 240 and taking the
     // tile pattern with it. The level is meant to be bright, not blank.
-    { 3.6f,  8.0f, 0.06f, 0.55f, 0.045f, 0.55f, {1.00f,1.00f,0.97f}, {0.16f,0.18f,0.20f},    {0.19f,0.23f,0.27f},    "THE POOLROOMS" },
+    // Gloss is up from 0.55 so the tile reads as wet glaze: the glaze term in
+    // roomLight only fires above 0.5 and scales with how far past it this is.
+    // The ceramic detail map holds the grout near 0.08, so the joints stay matte.
+    { 3.6f,  8.0f, 0.06f, 0.55f, 0.045f, 0.85f, {1.00f,1.00f,0.97f}, {0.16f,0.18f,0.20f},    {0.19f,0.23f,0.27f},    "THE POOLROOMS" },
     // The Red Halls' ambient is up from 0.030 with the move to a filmic tone
     // curve. It is not a brightening: the curve's toe eats small values, and at
     // the old figure the level fell from "supposed to look almost black" to

@@ -13,6 +13,18 @@
   stamps a build id: index.js/index.wasm load with ?v=ID, and the shell fetches
   version.txt with no-store and reloads once under ?b=ID when it is stale.
 
+# Pool tile glaze and Level 1 ambience (September 2026)
+
+- Raising Poolrooms `gloss` alone (0.55 -> 0.85) changed 0.07% of a pool-hall
+  frame: the lobe only fires where a panel mirrors exactly, and the 8 m grid
+  rarely lines up with a corridor. The glaze term in `roomLight` is a blurred
+  mirror of the panel at the reflection hit, at the panel's emissive 5.2 and
+  with no distance falloff, gated `gGloss > 0.5` so only pool glaze (not grout
+  0.08, props <= 0.42, revolver 0.48) takes it.
+- Level 1 "sounded like the pool": its drone and the room tone both used lp1,
+  the same noise the Poolrooms water is made of, through a long reverb. The
+  drone is tones only now and room tone fades out as `wDrone` comes in.
+
 # Web reflection and pillar shadow fixes (September 2026)
 
 - Desktop Chrome/ANGLE rendered black shards on the revolver when `lightState`

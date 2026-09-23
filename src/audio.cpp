@@ -49,15 +49,19 @@ void AudioSynth::update() {
             // hearing, and it is why the panel grid is worth walking around.
             float swell = 0.78f + 0.55f * panel;
             float humS = (h + beat) * (0.85f + 0.15f * osc(4, 0.23f)) * 0.27f * swell * wHum;
-            // L1: cavernous drone
+            // L1: cavernous drone. Tones only: it used to carry a bed of lp1
+            // noise too, which is the same signal the Poolrooms water is made
+            // of, and Level 1's big rooms put it through a long wet reverb —
+            // so the warehouse sounded like it had the pool room running in it.
             float droneS = (osc(8, 41.2f) * 0.6f + osc(9, 55.3f) * 0.45f)
-                         * (0.55f + 0.45f * osc(10, 0.11f)) * 0.20f * wDrone
-                         + lp1 * 0.14f * wDrone;
+                         * (0.55f + 0.45f * osc(10, 0.11f)) * 0.20f * wDrone;
             // Poolrooms: moving water
             lp3 += 0.010f * (wn - lp3);
             float waterS = (lp3 * 3.2f * (0.55f + 0.45f * osc(11, 0.16f))
                           + lp1 * 0.55f * (0.5f + 0.5f * osc(12, 0.071f))) * 0.30f * wWater;
-            float room = lp1 * 0.08f;
+            // Room tone is the same rumble, so Level 1 fades it out with the
+            // drone coming in, for the same reason as above.
+            float room = lp1 * 0.08f * (1.0f - wDrone);
             // LEVEL FUN: a music box grinding through the birthday song, slightly flat, forever
             float partyS = 0;
             if (wParty > 0.001f) {
