@@ -58,6 +58,16 @@ em++ -std=c++17 -O2 -DPLATFORM_WEB \
 cp -f LICENSE CREDITS.md "$OUT/" 2>/dev/null || true
 mkdir -p "$OUT/LICENSES" && cp -f LICENSES/*.txt "$OUT/LICENSES/" 2>/dev/null || true
 
+# Stamp the build id for web/shell.html's cache busting: the page loads
+# index.js?v=ID, the runtime asks for index.wasm?v=ID, and version.txt lets
+# an old page cached by Pages notice that a newer build is live.
+BUILD_ID=$(cat "$OUT/index.js" "$OUT/index.wasm" | sha256sum | cut -c1-12)
+# emscripten minifies the shell, so the tag may be src=index.js or src="index.js"
+sed -i -E "s/__BUILD_ID__/$BUILD_ID/g; s/src=(\"?)index\.js\1([ >])/src=\"index.js?v=$BUILD_ID\"\2/" "$OUT/index.html"
+grep -q "index.js?v=$BUILD_ID" "$OUT/index.html" || {
+    echo "web-build: could not version the index.js script tag" >&2; exit 1; }
+echo "$BUILD_ID" > "$OUT/version.txt"
+
 # GitHub Pages serves this directory as-is; .nojekyll stops Pages' Jekyll pass
 # from dropping files it considers special. Nothing here starts with an
 # underscore today, but a future emscripten output could.

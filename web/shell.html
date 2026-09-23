@@ -224,8 +224,32 @@
 
   // Emscripten's runtime removes every run dependency before it calls main(),
   // which is the hook the records restore below hangs on.
+  // GitHub Pages sends every file with a ten-minute max-age and no way to
+  // change it, so a push could run in a browser as the old game, or as a new
+  // index.js against a cached index.wasm. web-build.sh stamps each build's id
+  // over __BUILD_ID__: the runtime files get it as a query string, which is a
+  // new cache entry per build, and version.txt (fetched past the cache) says
+  // whether this page itself is stale. If it is, load the page again under a
+  // URL the browser has never cached.
+  var BUILD_ID = '__BUILD_ID__';
+  if (BUILD_ID.indexOf('__') !== 0 && window.fetch) {
+    fetch('version.txt', { cache: 'no-store' }).then(function (r) {
+      return r.ok ? r.text() : '';
+    }).then(function (live) {
+      live = live.trim();
+      var q = new URLSearchParams(location.search);
+      if (live && live !== BUILD_ID && q.get('b') !== live) {
+        q.set('b', live);
+        location.replace(location.pathname + '?' + q.toString() + location.hash);
+      }
+    }).catch(function () {});
+  }
+
   var Module = {
     canvas: canvas,
+    locateFile: function (path, prefix) {
+      return prefix + path + (BUILD_ID.indexOf('__') !== 0 ? '?v=' + BUILD_ID : '');
+    },
     print: function (t) { console.log(t); },
     printErr: function (t) { console.warn(t); },
     setStatus: function (t) {

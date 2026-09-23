@@ -1,3 +1,14 @@
+# Texture filtering and Pages caching (September 2026)
+
+- raylib 5.5's SetTextureFilter(ANISOTROPIC_*) only sets the anisotropy level.
+  Set TRILINEAR first, or min/mag stay GL_NEAREST from LoadTexture and the
+  generated mips are never sampled.
+- Room lighting fades its two penumbra taps into the single far tap (4-6 m).
+  A hard switch at 6 m drew a sphere around every panel as rings on surfaces.
+- Pages serves everything with max-age=600 and no header control. web-build.sh
+  stamps a build id: index.js/index.wasm load with ?v=ID, and the shell fetches
+  version.txt with no-store and reloads once under ?b=ID when it is stale.
+
 # Web reflection and pillar shadow fixes (September 2026)
 
 - Desktop Chrome/ANGLE rendered black shards on the revolver when `lightState`
