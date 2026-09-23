@@ -3,8 +3,10 @@
 - raylib 5.5's SetTextureFilter(ANISOTROPIC_*) only sets the anisotropy level.
   Set TRILINEAR first, or min/mag stay GL_NEAREST from LoadTexture and the
   generated mips are never sampled.
-- Room lighting fades its two penumbra taps into the single far tap (4-6 m).
-  A hard switch at 6 m drew a sphere around every panel as rings on surfaces.
+- Panel centres are always cell corners. lightVis starts 1 cm along the ray,
+  or the DDA crosses corner edges at t = 0 and a wall touching the corner
+  falsely shadows the light: rings round every panel, dark ceiling patches.
+  Room lighting also fades the two penumbra taps into the far tap (4-6 m).
 - Pages serves everything with max-age=600 and no header control. web-build.sh
   stamps a build id: index.js/index.wasm load with ?v=ID, and the shell fetches
   version.txt with no-store and reloads once under ?b=ID when it is stale.
@@ -22,7 +24,7 @@
   dark quad in the wall mesh made a visible rectangular border.
 - `tools/web-render-check.mjs` needs Playwright (resolvable by Node/NODE_PATH),
   a served web build in GAME_URL, and BROWSER_CHANNEL=chrome for hardware ANGLE.
-  It tests 13 GPU visibility cases and a fixed-seed barrel crop. The old build
+  It tests 17 GPU visibility cases and a fixed-seed barrel crop. The old build
   fails the pixel check (16), while the corrected build passes (70).
 
 # AGENTS.md

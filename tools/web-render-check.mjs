@@ -44,6 +44,12 @@ try {
       ['west wall',[-1,1],[1,1],0,0,2,0],
       ['north wall',[1,-1],[1,1],0,0,1,0],
       ['clear cell',[-1,1],[3,1],0,0,0,255],
+      // Panel centres sit on cell corners. The walls of the cell at that
+      // corner must not shadow the light into the cells beside it.
+      ['corner start, diagonal cell',[0,0],[-1,-1],0,0,3,255],
+      ['corner start, west neighbour',[0,0],[-1,1],0,0,3,255],
+      ['corner start, north neighbour',[0,0],[1,-1],0,0,3,255],
+      ['corner start, far wall blocks',[0,0],[3,1.5],1,0,2,0],
     ];
     return cases.map(([name,a,b,x,z,code,expected])=>{
       const data=new Uint8Array(6*6*4); data[((z+2)*6+x+2)*4]=code;

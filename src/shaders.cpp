@@ -124,6 +124,14 @@ float lightVis(vec2 a, vec2 b){
     float dist = length(d);
     if (dist < 0.05) return 1.0;
     vec2 dir = d / dist;
+    // Every panel centre (ls/2 on an 8 or 12 m grid) is a cell corner. A ray
+    // starting exactly there "crosses" edges at t = 0, including a wall that
+    // only touches the corner, so the single centre tap beyond 6 m was
+    // falsely shadowed: a sphere round every light, seen as bright rings on
+    // floors and walls. Start inside the cell the ray heads into. The panel
+    // overhangs all four cells round its corner, so it lights each of them.
+    a += dir * 0.01;
+    dist -= 0.01;
     ivec2 c = ivec2(floor(a / 2.0)), ec = ivec2(floor(b / 2.0));
     vec2 invDir = mix(vec2(-1.0), vec2(1.0), greaterThanEqual(dir, vec2(0.0)))
                   / max(abs(dir), vec2(1e-6));
