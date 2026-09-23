@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>THE BACKROOMS</title>
 <meta name="description" content="A procedurally-infinite backrooms horror game, compiled to WebAssembly.">
 <style>
@@ -23,12 +23,16 @@
     /* Two taps anywhere on iOS is a zoom gesture, and in a first-person game
        two taps is ordinary play — a double tap on FIRE zoomed the page instead
        of firing twice, and left the player looking at a magnified corner of the
-       world. `manipulation` keeps panning and pinch-zoom and drops only the
-       double-tap-to-zoom. It has to be here rather than on #touch alone: the
-       gesture is recognised on whatever the taps land on, and half the screen
-       is canvas, footer and gate. (user-scalable=no in the viewport meta is not
-       the fix — iOS has ignored it since 10, deliberately.) */
-    touch-action: manipulation;
+       world. `manipulation` only dropped the double tap, and a stray pinch
+       while working the stick and the look drag at once still zoomed the page
+       and stranded it there. So zoom is off entirely: `pan-x pan-y` keeps the
+       gate scrollable and allows nothing else — no double-tap, no pinch. It
+       has to be here rather than on #touch alone: the gesture is recognised on
+       whatever the taps land on, and half the screen is canvas, footer and
+       gate. iOS Safari ignores user-scalable=no in the viewport meta (since
+       10, deliberately), so the page also swallows its gesture events — see
+       "no zoom" in the script. */
+    touch-action: pan-x pan-y;
     /* And iOS inflates text on its own after a rotation, which moves the HUD
        and the splash out from under a layout that measured them. */
     -webkit-text-size-adjust: 100%;
@@ -221,6 +225,45 @@
   var gate   = document.getElementById('gate');
   var start  = document.getElementById('start');
   var status = document.getElementById('status');
+
+  // ---- no zoom -------------------------------------------------------------
+  // The page never zooms. iOS Safari ignores user-scalable=no and treats
+  // touch-action as a hint for pinches, so a second finger landing mid-play —
+  // stick under one thumb, look drag under the other — could still scale the
+  // page and leave the game stuck behind a magnified corner. Safari's own
+  // gesture events are the pinch itself; cancelling them is what actually
+  // stops it. The touch events are the same gesture seen by everything else.
+  // None of this touches the pointer events the controls are built on.
+  function noZoom(e) { e.preventDefault(); }
+  var active = { passive: false };
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (t) {
+    document.addEventListener(t, noZoom, active);
+  });
+  document.addEventListener('touchmove', function (e) {
+    if (e.touches.length > 1 || (e.scale !== undefined && e.scale !== 1))
+      e.preventDefault();
+  }, active);
+  // A second tap inside the double-tap window is the zoom, whatever it lands
+  // on. Swallowing its touchend drops the zoom (and that tap's synthetic
+  // click); the pointer events the game reads have already been delivered.
+  var lastTouchEnd = 0;
+  document.addEventListener('touchend', function (e) {
+    var now = Date.now();
+    if (now - lastTouchEnd < 350) e.preventDefault();
+    lastTouchEnd = now;
+  }, active);
+  document.addEventListener('dblclick', noZoom, active);
+  // And if something zoomed it anyway (an accessibility zoom, a gesture that
+  // slipped through before the script ran), put it back: rewriting the
+  // viewport meta makes iOS re-apply its scale limits. Polled from refit().
+  var viewportMeta = document.querySelector('meta[name=viewport]');
+  function unzoom() {
+    var vv = window.visualViewport;
+    if (!vv || !viewportMeta || vv.scale <= 1.01) return;
+    var c = viewportMeta.getAttribute('content');
+    viewportMeta.setAttribute('content', c + ', ');
+    viewportMeta.setAttribute('content', c);
+  }
 
   // Emscripten's runtime removes every run dependency before it calls main(),
   // which is the hook the records restore below hangs on.
@@ -693,7 +736,7 @@
   // reliably fire a resize).
   // The controls follow the stage for the same reason the canvas does, and
   // they are measured off the same box, so they resize together.
-  function refit() { fitCanvas(); layoutControls(); }
+  function refit() { unzoom(); fitCanvas(); layoutControls(); }
   addEventListener('resize', function () { requestAnimationFrame(refit); });
   addEventListener('orientationchange', function () { setTimeout(refit, 150); });
   setInterval(refit, 250);
