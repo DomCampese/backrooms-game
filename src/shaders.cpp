@@ -161,6 +161,30 @@ float lightVis(vec2 a, vec2 b){
     }
     return 1.0;
 }
+// Light from the panel centred at `lc` reaching `p`, traced from two taps
+// `spread` apart across the ray (or one tap at the centre when spread is ~0).
+// The centre is a cell corner and corridor walls often run through it, so a
+// tap pushed straight across the ray could land beyond the wall: that tap was
+// blocked, the light halved inside 6 m and not beyond, and every such panel
+// drew a hard dark sphere on floors and walls. Keep both taps inside the cell
+// the centre ray heads into, the same cell lightVis starts the far tap in.
+float panelVis(vec2 lc, vec2 p, float spread){
+    vec2 toP = p - lc;
+    float toLen = length(toP);
+    // directly overhead there's no meaningful direction to spread along
+    vec2 dir = toLen > 0.001 ? toP / toLen : vec2(0.0, 1.0);
+    float vis;
+    if (spread < 0.01) {
+        vis = lightVis(lc, p);
+    } else {
+        vec2 q = floor((lc + dir * 0.01) / 2.0) * 2.0;
+        vec2 perp = vec2(-dir.y, dir.x) * spread;
+        vec2 ta = clamp(lc + perp, q + 0.01, q + 1.99);
+        vec2 tb = clamp(lc - perp, q + 0.01, q + 1.99);
+        vis = 0.5 * (lightVis(ta, p) + lightVis(tb, p));
+    }
+    return vis;
+}
 // the hunter is solid too: catch it in a beam and it throws a shadow down the
 // hall. It's a body, not a column — a ray that passes over its head still gets
 // through, so the beam clears it onto the ceiling behind.
@@ -247,14 +271,11 @@ vec3 roomLight(vec3 P, vec3 N){
         float vis;
         if (sw < 0.002) {
             vis = 1.0;                                   // too far to shadow; it's faint anyway
-        } else if (d2 < 36.0) {
-            vec2 toFrag = shP - lc.xz;
-            float toLen = length(toFrag);
-            // directly overhead there's no meaningful direction to spread along
-            float spread = 0.45 * (1.0 - smoothstep(16.0, 36.0, d2));   // 0 by the 6 m switch
-            vec2 perp = (toLen > 0.001) ? vec2(-toFrag.y, toFrag.x) / toLen * spread : vec2(spread, 0.0);
-            vis = 0.5*(lightVis(lc.xz + perp, shP) + lightVis(lc.xz - perp, shP));
-        } else vis = lightVis(lc.xz, shP);
+        } else {
+            // two taps for a little penumbra up close, closing onto one by 6 m
+            float spread = d2 < 36.0 ? 0.45 * (1.0 - smoothstep(16.0, 36.0, d2)) : 0.0;
+            vis = panelVis(lc.xz, shP, spread);
+        }
         vis = mix(1.0, vis, sw);                         // ease the shadow off with range
         // a wall kills the direct beam, never the light that bounces around it
         st *= mix(0.18, 1.0, vis);

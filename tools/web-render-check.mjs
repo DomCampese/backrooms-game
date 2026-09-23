@@ -23,7 +23,7 @@ try {
     }
     const p = gl.createProgram();
     gl.attachShader(p, shader(gl.VERTEX_SHADER, '#version 300 es\nvoid main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(p*2.0-1.0,0,1);}'));
-    gl.attachShader(p, shader(gl.FRAGMENT_SHADER, '#version 300 es\nprecision highp float; precision highp int; precision highp sampler2D;\nuniform float uOccN; uniform vec2 uOccOrigin; uniform sampler2D texture2; uniform vec2 a,b; out vec4 color;\n' + visibility + '\nvoid main(){color=vec4(vec3(lightVis(a,b)),1);}'));
+    gl.attachShader(p, shader(gl.FRAGMENT_SHADER, '#version 300 es\nprecision highp float; precision highp int; precision highp sampler2D;\nuniform float uOccN; uniform vec2 uOccOrigin; uniform sampler2D texture2; uniform vec2 a,b; uniform float spread; out vec4 color;\n' + visibility + '\nvoid main(){color=vec4(vec3(spread>0.0?panelVis(a,b,spread):lightVis(a,b)),1);}'));
     gl.linkProgram(p); if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(p));
     gl.useProgram(p); gl.uniform1f(gl.getUniformLocation(p,'uOccN'),6);
     gl.uniform2f(gl.getUniformLocation(p,'uOccOrigin'),-2,-2);
@@ -50,11 +50,16 @@ try {
       ['corner start, west neighbour',[0,0],[-1,1],0,0,3,255],
       ['corner start, north neighbour',[0,0],[1,-1],0,0,3,255],
       ['corner start, far wall blocks',[0,0],[3,1.5],1,0,2,0],
+      // Near a panel two taps straddle the ray. A wall through the panel's
+      // corner must not catch one of them: that halved the light inside 6 m.
+      ['taps beside wall through corner',[0,0],[1,1.5],0,0,2,255,0.45],
+      ['taps along wall through corner',[0,0],[0.2,1.8],0,0,2,255,0.45],
+      ['taps still stopped by far wall',[0,0],[3,1.5],1,0,2,0,0.3],
     ];
-    return cases.map(([name,a,b,x,z,code,expected])=>{
+    return cases.map(([name,a,b,x,z,code,expected,spread=0])=>{
       const data=new Uint8Array(6*6*4); data[((z+2)*6+x+2)*4]=code;
       gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,6,6,0,gl.RGBA,gl.UNSIGNED_BYTE,data);
-      gl.uniform2fv(gl.getUniformLocation(p,'a'),a);gl.uniform2fv(gl.getUniformLocation(p,'b'),b);
+      gl.uniform1f(gl.getUniformLocation(p,'spread'),spread);gl.uniform2fv(gl.getUniformLocation(p,'a'),a);gl.uniform2fv(gl.getUniformLocation(p,'b'),b);
       gl.drawArrays(gl.TRIANGLES,0,3);const pixel=new Uint8Array(4);
       gl.readPixels(0,0,1,1,gl.RGBA,gl.UNSIGNED_BYTE,pixel);
       return {name,actual:pixel[0],expected,error:gl.getError()};
