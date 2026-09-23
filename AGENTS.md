@@ -6,7 +6,9 @@
 - Panel centres are always cell corners. lightVis starts 1 cm along the ray,
   or the DDA crosses corner edges at t = 0 and a wall touching the corner
   falsely shadows the light: rings round every panel, dark ceiling patches.
-  Room lighting also fades the two penumbra taps into the far tap (4-6 m).
+  Near panels, panelVis clamps both penumbra taps into that same start cell:
+  a tap pushed across a wall through the corner halved the light inside 6 m
+  (hard dark ovals). The taps also fade into the single far tap (4-6 m).
 - Pages serves everything with max-age=600 and no header control. web-build.sh
   stamps a build id: index.js/index.wasm load with ?v=ID, and the shell fetches
   version.txt with no-store and reloads once under ?b=ID when it is stale.
@@ -24,7 +26,7 @@
   dark quad in the wall mesh made a visible rectangular border.
 - `tools/web-render-check.mjs` needs Playwright (resolvable by Node/NODE_PATH),
   a served web build in GAME_URL, and BROWSER_CHANNEL=chrome for hardware ANGLE.
-  It tests 17 GPU visibility cases and a fixed-seed barrel crop. The old build
+  It tests 20 GPU visibility cases and a fixed-seed barrel crop. The old build
   fails the pixel check (16), while the corrected build passes (70).
 
 # AGENTS.md
