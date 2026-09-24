@@ -22,15 +22,16 @@ revolver-specific preparation recipe.
 
 ## Artistic preparation
 
-- Seven gun objects and six cartridges are combined into two material batches:
-  2,334 vertices and 2,534 triangles. Loose props and duplicate spent-case meshes
+- Seven gun objects, six live cartridges and six spent cases are combined into
+  two material batches. Live rounds are hidden while the full-size spent cases
+  eject; spent cases are hidden during loading and normal firing. Loose props
   are omitted.
 - Source geometry, UVs, and normals are preserved, with the barrel rotated from
   +X to +Z and centered for the existing viewmodel. Prepared skin transforms are
   exported as independent named joints with identity binds and standard TRS clips.
 - The complete reload and first firing cycle are resampled to standard glTF keys.
   A 34 ms final-pose hold accommodates Raylib 5.5's 17 ms animation sampling.
-  Gameplay still controls the original 1.8-second reload and 0.42-second shot timing.
+  Gameplay still controls the original 1.8-second reload and 0.22-second shot timing.
 - Reload opens left: hinge and cartridge trajectories are reversed together in
   the handle's frame. The mesh and UVs are not mirrored. Cartridges remain in the
   cylinder during firing and follow individual reload paths; spent cases do not
@@ -40,6 +41,6 @@ revolver-specific preparation recipe.
   metallic/roughness maps are embedded in the GLB; the reusable renderer adapter
   converts those maps to packed slope/gloss textures at load time.
 
-The standard GLB is 741,988 bytes and can be inspected in glTF-capable tools.
+The standard GLB can be inspected in glTF-capable tools.
 Runtime uses Raylib's parser, with generic embedded-file packaging so it remains
 independent of its working directory. No Python or Blender runtime is required.

@@ -48,6 +48,7 @@ Sound makeTapeChime();
 Sound makeValveTurn();             // seized iron giving way, then the clunk of it seating
 Sound makeDogBark(uint32_t seed, bool through = false);  // the pack, somewhere in the red dark
 Sound makeDogHowl();
-Sound makeGulp();                   // three swallows of almond water, and the empty can ringing
+Wave makeGulpWave();               // deterministic PCM, also used by audio regression
+Sound makeGulp();                   // three soft swallows of almond water
 Sound makeTapeVoice();              // a voice off a worn cassette — garbled, hissing, and looping
 Sound makeFloorGroan();             // rotten subfloor taking your weight, and not liking it

@@ -26,6 +26,7 @@ enum : uint32_t {
     BTN_SPRINT   = 1u << 9,
     BTN_CROUCH   = 1u << 10,
     BTN_THROW    = 1u << 11,
+    BTN_SQUEEZE  = 1u << 12,
 };
 
 // One frame's worth of touch state, filled by the EM_ASM block below. Laid out
@@ -123,6 +124,7 @@ bool inKeyDown(int key) {
         case KEY_D:            return g.moveX >  DZ;
         case KEY_A:            return g.moveX < -DZ;
         case KEY_LEFT_SHIFT:   return (g.down & BTN_SPRINT) != 0;
+        case KEY_Z: return (g.down & BTN_SQUEEZE) != 0;
         case KEY_LEFT_CONTROL: return (g.down & BTN_CROUCH) != 0;
         default:               return false;
     }

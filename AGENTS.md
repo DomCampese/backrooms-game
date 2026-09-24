@@ -40,8 +40,8 @@
   in the handle’s local frame, to open left. Do not mirror the complete gun/UVs.
 - The source Reload clip already opens and closes the cylinder. Appending the
   separate open/close clips caused a visible snap. Shoot contains six shots;
-  play its first cycle and retain the accumulated cylinder index. Cartridges
-  stay attached during shooting because duplicate spent-case meshes are omitted.
+  play its first cycle and retain the accumulated cylinder index. Live cartridges
+  stay attached during shooting; spent cases are visible only during unloading.
 - make and sandbox-build.sh run tools/embed-materials.py. Do not commit generated
   headers; commit converted assets and the reproducible import script.
 - Authored metallic albedo needs diffuse attenuation in this renderer; importing
@@ -1487,3 +1487,26 @@ pass, and both obey the same three rules, learned the hard way:
   add it before you finish, in the same commit as the work that found it. Say
   what the symptom looked like, not just what the rule is: the symptom is what
   the next person will actually be holding when they come looking.
+
+## Projectiles and squeezing
+
+- `Revolver::SHOT_INTERVAL` controls both firing cadence and Shoot playback.
+  Keep those in sync when tuning the fire rate.
+- Revolver rounds advance at 220 m/s and ray-test the full frame segment against
+  solid world meshes and actor bounds. Keep nearest-hit selection shared across
+  actors and walls; separate damage loops let one round hit multiple targets.
+  Mesh bounds must accept a ray starting inside the box: rejecting it by the
+  distance to the box exit skips nearby interior triangles.
+- Z / touch SQUEEZE reduces the player radius to 0.12 m at 1.1 m/s. On release,
+  retain the narrow stance until the normal radius fits; expanding in a gap can
+  eject the player through a wall. Match the collider's height tolerance.
+- The source reload uses quarter-size live rounds as a visibility switch.
+  Export those as hidden and retain full-size spent cases during ejection;
+  omitting cases leaves tiny live bullets floating around the cylinder.
+- Drinking PCM uses smooth envelopes at the same swallow times as drawDrinkCan.
+  Test makeGulpWave directly for peaks and discontinuities; a loud white-noise
+  attack sounds like a click rather than a swallow.
+
+- Shadow lookup bias uses the geometric surface normal, not the detail-map
+  normal: tile relief pushed floor samples across walls and made bright strips
+  at Poolrooms corners. Occluded panels contribute no sharp reflected image.
