@@ -146,7 +146,7 @@ soundscape, and things that live there. Exits lead deeper — usually.
 | | |
 |---|---|
 | ![Level 0](docs/levels/level_0.png) **LEVEL 0** — yellowed office maze, humming fluorescents, mustard carpet. Home of Pirate Clark. | ![Level 1](docs/levels/level_1.png) **LEVEL 1** — cavernous concrete warehouse, sparse lights, loading docks. Where a Smiler waits in the dark. |
-| ![The Poolrooms](docs/levels/level_2.png) **THE POOLROOMS** — endless white tile and still water. No blackouts, no exit in a hurry. | ![The Red Halls](docs/levels/level_3.png) **THE RED HALLS** — oppressive dark-red brick, someone's abandoned bedroom furniture. |
+| ![The Poolrooms](docs/levels/level_2.png) **THE POOLROOMS** — endless white tile and still water: colonnaded halls, flooded tunnels, staircases sinking into deep water, windows onto white light. No blackouts, no exit in a hurry. | ![The Red Halls](docs/levels/level_3.png) **THE RED HALLS** — oppressive dark-red brick, someone's abandoned bedroom furniture. |
 | ![Level Fun](docs/levels/level_4.png) **LEVEL FUN =)** — the party that never ended: deep red carpet, a ceiling gone black so the lights hang like a party hall's, bunting, balloons, party tables, and a resident who is very glad you came. | |
 
 The wandering entity — **Pirate Clark** on Level 0, **a Smiler** on Level 1 and in the Red Halls, **the Partygoer =)**
@@ -528,7 +528,7 @@ Revolver rounds travel through the world and stop at the first surface or target
 
 ### Poolrooms and swimming
 
-The Poolrooms draw on [Level 37: Sublimity](https://backrooms-wiki.wikidot.com/level-37): pristine ceramic, blue-green water, broad tiled arches, submerged columns, and quiet isolation. The game retains its five-level progression; this is the Poolrooms destination within it. No entities spawn here, and your grip slowly recovers.
+The Poolrooms draw on [Level 37: Sublimity](https://backrooms-wiki.wikidot.com/level-37): pristine ceramic, blue-green water, broad tiled arches, oversized colonnaded halls, flooded tunnels, underwater staircases, windows into a light void, and quiet isolation. The game retains its five-level progression; this is the Poolrooms destination within it. No entities spawn here, and your grip slowly recovers.
 
 Pools have shallow shelves and deep centres. In deep water, hold **SPACE** to swim up and stay at the surface; let go and you sink, which is how you dive. **SHIFT** swims faster. On touch screens hold **JUMP**. Swim toward a shelf at the surface to climb out; submerged risers remain solid. There is no breath timer in this refuge.
 

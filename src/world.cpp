@@ -277,29 +277,145 @@ void World::generate(ChunkData &d, int cx, int cz) {
         }
     }
     if (level == 2) {
-        // Broad chambers, with six-metre arches instead of office door frames.
-        // Every seam stays open; the connectivity pass below still validates
-        // the columns. Basin treads are stored as actual floor heights.
+        // THE POOLROOMS, after Level 37 "Sublimity": interconnected rooms and
+        // corridors of identical white tile, flooded to varying depths, "ranging
+        // from uniform pools and hallways to more open, abnormally shaped areas".
+        // It used to be one layout stamped on every chunk (a cross of arched
+        // partitions over four identical stepped basins), which is why it read
+        // as boring: every 32 m looked like the last 32 m.
+        //
+        // Now a chunk is either one grand hall, or the arched cross with each
+        // quarter drawn from a set of lore room types. Cells 0 and 15 stay a dry
+        // walkway so chunks generated blind of each other always meet; the
+        // connectivity pass below still punches through anything sealed, and
+        // its doorways become bare tiled openings further down.
         memset(d.wallN, 0, sizeof(d.wallN));
         memset(d.wallW, 0, sizeof(d.wallW));
         memset(d.pillar, 0, sizeof(d.pillar));
-        for (int t = 0; t < CCELLS; ++t) {
-            bool opening = (t >= 3 && t <= 5) || (t >= 11 && t <= 13);
-            if (!opening) d.wallN[t][8] = d.wallW[8][t] = WALL_SOLID;
-        }
-        for (int i = 1; i < CCELLS-1; ++i) for (int z = 1; z < CCELLS-1; ++z) {
-            // Only a narrow perimeter promenade is dry. Water connects under
-            // the arches, while broad shallow shelves lead into deep centres.
-            int edge = std::min({i, z, CCELLS-1-i, CCELLS-1-z});
-            int cross = std::min(abs(i-8), abs(z-8));
-            int tread = std::min(edge, cross + 1);
-            d.pool[i][z] = 1;
-            d.elev[i][z] = tread == 1 ? -6 : tread == 2 ? -12 : -28;
-            // Some chambers are entirely shallow; others contain a column grove.
-            unsigned room = ih(cx*2+(i>=8), cz*2+(z>=8), seed ^ 0x37BAu);
-            if (room % 5 == 0) d.elev[i][z] = -6;
-            if (room % 3 == 0 && (i%8 == 3 || i%8 == 5) && (z%8 == 3 || z%8 == 5))
-                d.pillar[i][z] = 1;
+        memset(d.pool, 0, sizeof(d.pool));
+        memset(d.elev, 0, sizeof(d.elev));
+        auto setPool = [&](int x, int z, int e) { d.pool[x][z] = e < 0; d.elev[x][z] = (int8_t)e; };
+        // Stepped basin over a rectangle: a wading shelf, a waist-deep tread,
+        // then swimming depth. Pools are exempt from the riser rule, so these
+        // treads are what make the edge read as a pool rather than a pit.
+        auto basin = [&](int x0, int z0, int x1, int z1, bool grove, uint32_t h) {
+            for (int x = x0; x <= x1; ++x) for (int z = z0; z <= z1; ++z) {
+                int edge = std::min({x - x0, z - z0, x1 - x, z1 - z});
+                setPool(x, z, edge == 0 ? -6 : edge == 1 ? -12 : -28);
+                if (grove && edge >= 2 && ((x - x0) % 3 == 1) && ((z - z0) % 3 == 1)) d.pillar[x][z] = 1;
+            }
+            if (h % 4 == 0) {   // a tiled island in the deep end, reached by swimming
+                int mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
+                setPool(mx, mz, 0); d.pillar[mx][mz] = 0;
+            }
+        };
+        uint32_t ch = ih(cx, cz, seed ^ 0x37C0u);
+        bool grandHall = ch % 4 == 0 && !(cx == 0 && cz == 0);
+        if (grandHall) {
+            // One unnaturally large room that serves no purpose: a single basin
+            // under a colonnade, pillars marching through the deep water.
+            basin(1, 1, CCELLS - 2, CCELLS - 2, true, ch >> 3);
+        } else {
+            // The arched cross. Arches (mesher) span cells 3-5 and 11-13; the
+            // ends at 0 and 15 stay open so the perimeter walkway is continuous.
+            for (int t = 1; t < CCELLS - 1; ++t) {
+                bool opening = (t >= 3 && t <= 5) || (t >= 11 && t <= 13);
+                if (!opening) d.wallN[t][8] = d.wallW[8][t] = WALL_SOLID;
+            }
+            for (int qa = 0; qa < 2; ++qa) for (int qb = 0; qb < 2; ++qb) {
+                int x0 = qa ? 8 : 1, x1 = qa ? CCELLS - 2 : 7;
+                int z0 = qb ? 8 : 1, z1 = qb ? CCELLS - 2 : 7;
+                uint32_t qh = ih(cx * 2 + qa, cz * 2 + qb, seed ^ 0x37D1u);
+                Rng qr(hash64(((uint64_t)qh << 1) ^ 0x5EA5ULL));
+                int kind = (int)(qh % 10);   // 0-2 bath, 3-4 tunnels, 5-6 stairs, 7 gallery, 8 islands, 9 tubs
+                if (kind <= 2) {
+                    basin(x0, z0, x1, z1, qh % 3 == 0, qh >> 5);
+                } else if (kind <= 4) {
+                    // Flooded tiled tunnels: a braided maze of one-cell corridors.
+                    // Half are wading depth, half are submerged passages you swim.
+                    int depth = (qh >> 7) & 1 ? -20 : -6;
+                    int w = x1 - x0 + 1, hgt = z1 - z0 + 1;
+                    for (int x = x0; x <= x1; ++x) for (int z = z0; z <= z1; ++z) {
+                        setPool(x, z, depth);
+                        if (x > x0) d.wallW[x][z] = WALL_SOLID;
+                        if (z > z0) d.wallN[x][z] = WALL_SOLID;
+                    }
+                    bool seen[CCELLS][CCELLS] = {};
+                    int sx[CCELLS * CCELLS], sz[CCELLS * CCELLS], sp = 0;
+                    sx[sp] = x0 + qr.ri(0, w - 1); sz[sp] = z0 + qr.ri(0, hgt - 1);
+                    seen[sx[sp]][sz[sp]] = true; ++sp;
+                    while (sp) {
+                        int x = sx[sp - 1], z = sz[sp - 1];
+                        int opts[4], n = 0;
+                        if (x > x0 && !seen[x - 1][z]) opts[n++] = 0;
+                        if (x < x1 && !seen[x + 1][z]) opts[n++] = 1;
+                        if (z > z0 && !seen[x][z - 1]) opts[n++] = 2;
+                        if (z < z1 && !seen[x][z + 1]) opts[n++] = 3;
+                        if (!n) { --sp; continue; }
+                        int o = opts[qr.ri(0, n - 1)];
+                        int nx = x + (o == 1) - (o == 0), nz = z + (o == 3) - (o == 2);
+                        if (o == 0) d.wallW[x][z] = WALL_NONE;
+                        if (o == 1) d.wallW[x + 1][z] = WALL_NONE;
+                        if (o == 2) d.wallN[x][z] = WALL_NONE;
+                        if (o == 3) d.wallN[x][z + 1] = WALL_NONE;
+                        seen[nx][nz] = true; sx[sp] = nx; sz[sp] = nz; ++sp;
+                    }
+                    // Braid: knock out some dead ends so the tunnels loop back
+                    // on themselves instead of reading as a puzzle maze.
+                    for (int x = x0; x <= x1; ++x) for (int z = z0; z <= z1; ++z) {
+                        if (qr.f01() > 0.22f) continue;
+                        if (x > x0 && qr.f01() < 0.5f) d.wallW[x][z] = WALL_NONE;
+                        else if (z > z0) d.wallN[x][z] = WALL_NONE;
+                    }
+                } else if (kind <= 6) {
+                    // A broad staircase descending into deep water from one side,
+                    // real 0.4 m treads all the way down. The underwater stairs
+                    // are the lore's hint that the level was not always flooded.
+                    int dir = (int)((qh >> 9) & 3);
+                    for (int x = x0; x <= x1; ++x) for (int z = z0; z <= z1; ++z) {
+                        int step = dir == 0 ? x - x0 : dir == 1 ? x1 - x : dir == 2 ? z - z0 : z1 - z;
+                        setPool(x, z, -4 * std::min(step + 1, 7));
+                    }
+                    // flanking walls turn it into a stairwell rather than a ramp
+                    for (int t = 0; t <= 6; ++t) {
+                        if (t == 0 || t == 6) continue;
+                        if (dir <= 1) { d.wallN[x0 + t][z0 + 1] = WALL_SOLID; d.wallN[x0 + t][z1] = WALL_SOLID; }
+                        else          { d.wallW[x0 + 1][z0 + t] = WALL_SOLID; d.wallW[x1][z0 + t] = WALL_SOLID; }
+                    }
+                } else if (kind == 7) {
+                    // A dry gallery with rows of windows looking out into light
+                    // (the mesher draws Poolrooms windows as glowing panes, not
+                    // glass), pillars, and a small deep pool in the middle.
+                    for (int x = x0 + 2; x <= x1 - 2; ++x) for (int z = z0 + 2; z <= z1 - 2; ++z)
+                        setPool(x, z, (x == x0 + 2 || x == x1 - 2 || z == z0 + 2 || z == z1 - 2) ? -6 : -18);
+                    bool alongX = (qh >> 11) & 1;
+                    for (int t = 0; t < 7; ++t) {
+                        if (t == 3) continue;   // a gap mid-run to walk through
+                        if (alongX) { d.wallN[x0 + t][z0 + 1] = WALL_WINDOW; d.wallN[x0 + t][z1] = WALL_WINDOW; }
+                        else        { d.wallW[x0 + 1][z0 + t] = WALL_WINDOW; d.wallW[x1][z0 + t] = WALL_WINDOW; }
+                    }
+                    d.pillar[x0 + 1][z0 + 1] = d.pillar[x1 - 1][z0 + 1] = 1;
+                    d.pillar[x0 + 1][z1 - 1] = d.pillar[x1 - 1][z1 - 1] = 1;
+                } else if (kind == 8) {
+                    // Stepping stones: dry tiled platforms standing in deep water.
+                    for (int x = x0; x <= x1; ++x) for (int z = z0; z <= z1; ++z) {
+                        bool stone = ((x - x0) % 2 == 0 && (z - z0) % 2 == 0 && qr.f01() < 0.55f);
+                        setPool(x, z, stone ? 0 : -24);
+                    }
+                } else {
+                    // Private baths: small tiled rooms, each with its own deep tub.
+                    int mx = x0 + 3, mz = z0 + 3;
+                    for (int t = x0; t <= x1; ++t) if (t != x0 + 1 && t != x1 - 1) d.wallN[t][mz] = WALL_SOLID;
+                    for (int t = z0; t <= z1; ++t) if (t != z0 + 1 && t != z1 - 1) d.wallW[mx][t] = WALL_SOLID;
+                    int tubs[4][2] = { { x0 + 1, z0 + 1 }, { x1 - 1, z0 + 1 }, { x0 + 1, z1 - 1 }, { x1 - 1, z1 - 1 } };
+                    for (auto &tb : tubs) {
+                        int tx = tb[0], tz = tb[1];
+                        setPool(tx, tz, -16);
+                        int ox = tx < mx ? tx + 1 : tx - 1;
+                        setPool(ox, tz, -16);
+                    }
+                }
+            }
         }
     }
     if (level == 0 || level == 1) {   // sunken lounges (L0) / loading docks (L1), never under walls
@@ -582,6 +698,14 @@ void World::generate(ChunkData &d, int cx, int cz) {
                     d.wallW[i][kk + 1] == WALL_SOLID) {
                     d.wallW[i][kk] = WALL_EXIT; placed = true;
                 }
+    }
+    if (level == 2) {
+        // Tiled halls have no door frames. Whatever the connectivity pass and
+        // the thinning punched through, open it as a plain gap in the tile.
+        for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
+            if (d.wallN[i][kk] == WALL_DOOR) d.wallN[i][kk] = WALL_NONE;
+            if (d.wallW[i][kk] == WALL_DOOR) d.wallW[i][kk] = WALL_NONE;
+        }
     }
     if (cx == 0 && cz == 0 && level != 2) {   // clear spawn room
         for (int i = 5; i <= 10; i++) for (int kk = 5; kk <= 10; kk++) {
@@ -1206,6 +1330,11 @@ void World::ensureMesh(int cx, int cz) {
         // The lowest point is 4.6 m above the deck: all collision lives in the
         // full-height piers already represented by the wall grid.
         for (int axis=0; axis<2; ++axis) for (int start : {3,11}) {
+            // Only where the partition is actually there with this opening in
+            // it: grand halls have no partition, and an arch left hanging over
+            // open water reads as a bug, not a ruin.
+            auto wallAt = [&](int t) { return axis ? d.wallW[8][t] : d.wallN[t][8]; };
+            if (wallAt(start - 1) != WALL_SOLID || wallAt(start + 3) != WALL_SOLID) continue;
             auto pos = [&](float t,float y,float depth) -> Vector3 {
                 return axis ? Vector3{wx+16+depth,y,wz+t} : Vector3{wx+t,y,wz+16+depth};
             };
@@ -1428,10 +1557,20 @@ void World::ensureMesh(int cx, int cz) {
             addBoxSides(wa, gx + 1.55f, nb + 1.0f, gz - WT, gx + CELL + WT, nb + 2.1f, gz + WT);
             wa.quad({gx-WT,nb+1.0f,gz-WT},{gx+CELL+WT,nb+1.0f,gz-WT},{gx+CELL+WT,nb+1.0f,gz+WT},{gx-WT,nb+1.0f,gz+WT},
                     {0,1,0},{0,0},{1,0},{1,0.1f},{0,0.1f}, WHITE);   // sill top
+            if (level == 2) {
+                // Level 37's windows look out into a light void: an emissive
+                // pale pane (alpha 70 -> raw emissive), one per face.
+                Color sky = { 226, 241, 246, 70 };
+                wa.quad({gx+0.45f,nb+1.0f,gz-0.02f},{gx+1.55f,nb+1.0f,gz-0.02f},{gx+1.55f,nb+2.1f,gz-0.02f},{gx+0.45f,nb+2.1f,gz-0.02f},
+                        {0,0,-1},{0,1},{1,1},{1,0},{0,0}, sky);
+                wa.quad({gx+1.55f,nb+1.0f,gz+0.02f},{gx+0.45f,nb+1.0f,gz+0.02f},{gx+0.45f,nb+2.1f,gz+0.02f},{gx+1.55f,nb+2.1f,gz+0.02f},
+                        {0,0,1},{0,1},{1,1},{1,0},{0,0}, sky);
+            } else {
             // real glass now: translucent pane (alpha 100 -> glass branch), see the room beyond
             Color glass = { 20, 26, 32, 100 };
             gl.quad({gx+0.45f,nb+1.0f,gz},{gx+1.55f,nb+1.0f,gz},{gx+1.55f,nb+2.1f,gz},{gx+0.45f,nb+2.1f,gz},
                     {0,0,-1},{0,1},{1,1},{1,0},{0,0}, glass);
+            }
         }
         else if (nv == WALL_EXIT) {   // exit doorway on x-running wall
             addBoxSides(wa, gx - WT, nb, gz - WT, gx + 0.35f, nt, gz + WT);
@@ -1508,9 +1647,17 @@ void World::ensureMesh(int cx, int cz) {
             addBoxSides(wa, gx - WT, wb + 1.0f, gz + 1.55f, gx + WT, wb + 2.1f, gz + CELL + WT);
             wa.quad({gx-WT,wb+1.0f,gz-WT},{gx+WT,wb+1.0f,gz-WT},{gx+WT,wb+1.0f,gz+CELL+WT},{gx-WT,wb+1.0f,gz+CELL+WT},
                     {0,1,0},{0,0},{1,0},{1,0.1f},{0,0.1f}, WHITE);   // sill top
+            if (level == 2) {   // see the x-running case: light void, both faces
+                Color sky = { 226, 241, 246, 70 };
+                wa.quad({gx+0.02f,wb+1.0f,gz+0.45f},{gx+0.02f,wb+1.0f,gz+1.55f},{gx+0.02f,wb+2.1f,gz+1.55f},{gx+0.02f,wb+2.1f,gz+0.45f},
+                        {1,0,0},{0,1},{1,1},{1,0},{0,0}, sky);
+                wa.quad({gx-0.02f,wb+1.0f,gz+1.55f},{gx-0.02f,wb+1.0f,gz+0.45f},{gx-0.02f,wb+2.1f,gz+0.45f},{gx-0.02f,wb+2.1f,gz+1.55f},
+                        {-1,0,0},{0,1},{1,1},{1,0},{0,0}, sky);
+            } else {
             Color glass = { 20, 26, 32, 100 };
             gl.quad({gx,wb+1.0f,gz+0.45f},{gx,wb+1.0f,gz+1.55f},{gx,wb+2.1f,gz+1.55f},{gx,wb+2.1f,gz+0.45f},
                     {1,0,0},{0,1},{1,1},{1,0},{0,0}, glass);
+            }
         }
         else if (wv == WALL_EXIT) {   // exit doorway on z-running wall
             addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wt2, gz + 0.35f);
