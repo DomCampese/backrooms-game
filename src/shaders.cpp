@@ -84,7 +84,6 @@ vec3 detailNormal(vec3 N, vec2 slope, vec3 dpdx, vec3 dpdy, vec2 duvdx, vec2 duv
 }
 float lightState(vec2 g){
     float h = lhash(g);
-    if (h < uDead) return 0.0;                      // dead tube
     float s = 1.0;
     if (h > 0.93){                                  // faulty tube: occasional gentle stutter
         float fh = fract(h*97.31);
@@ -94,13 +93,26 @@ float lightState(vec2 g){
             s = 0.62 + 0.38*step(0.5, n);
         }
     }
-    return s * uBlackout;
+    // A single exit matters on desktop WebGL/ANGLE: returning early for a
+    // dead tube inside the divergent reflection branch produced black shards
+    // across the revolver and decals. Apply the dead mask at the common exit.
+    return h < uDead ? 0.0 : s * uBlackout;
 }
 int occAt(ivec2 c){
     ivec2 t = c - ivec2(uOccOrigin);
     int n = int(uOccN);
     if (t.x < 0 || t.y < 0 || t.x >= n || t.y >= n) return 0;   // off-grid: assume open
     return int(texelFetch(texture2, t, 0).r * 255.0 + 0.5);
+}
+// Pillars occupy 1.16 m inside a 2 m cell (World::ensureMesh / collision).
+// Test that footprint even in the ray's first and last cells. Skipping those
+// cells left a bright square around every pillar, followed by oversized shadows.
+bool pillarBlocks(ivec2 c, vec2 a, vec2 invDir, float dist){
+    vec2 lo = (vec2(c)*2.0 + vec2(0.42) - a) * invDir;
+    vec2 hi = (vec2(c)*2.0 + vec2(1.58) - a) * invDir;
+    vec2 entry = min(lo, hi), leave = max(lo, hi);
+    return (occAt(c) & 4) != 0 &&
+           max(max(entry.x, entry.y), 0.001) < min(min(leave.x, leave.y), dist - 0.001);
 }
 // Does light from `a` reach `b`? Walls are a floorplan extruded to full height,
 // so this is a 2D grid march: step cell to cell and test the edge we cross.
@@ -112,7 +124,18 @@ float lightVis(vec2 a, vec2 b){
     float dist = length(d);
     if (dist < 0.05) return 1.0;
     vec2 dir = d / dist;
+    // Every panel centre (ls/2 on an 8 or 12 m grid) is a cell corner. A ray
+    // starting exactly there "crosses" edges at t = 0, including a wall that
+    // only touches the corner, so the single centre tap beyond 6 m was
+    // falsely shadowed: a sphere round every light, seen as bright rings on
+    // floors and walls. Start inside the cell the ray heads into. The panel
+    // overhangs all four cells round its corner, so it lights each of them.
+    a += dir * 0.01;
+    dist -= 0.01;
     ivec2 c = ivec2(floor(a / 2.0)), ec = ivec2(floor(b / 2.0));
+    vec2 invDir = mix(vec2(-1.0), vec2(1.0), greaterThanEqual(dir, vec2(0.0)))
+                  / max(abs(dir), vec2(1e-6));
+    if (pillarBlocks(c, a, invDir, dist)) return 0.0;
     if (c == ec) return 1.0;
     ivec2 stp = ivec2(sign(dir.x), sign(dir.y));
     vec2 inv = 1.0 / max(abs(dir), vec2(1e-6));
@@ -133,10 +156,34 @@ float lightVis(vec2 a, vec2 b){
             if ((occAt(ivec2(c.x, stp.y > 0 ? c.y : c.y + 1)) & 1) != 0) return 0.0;
             tMax.y += tDelta.y;
         }
+        if (pillarBlocks(c, a, invDir, dist)) return 0.0;
         if (c == ec) return 1.0;
-        if ((occAt(c) & 4) != 0) return 0.0;   // a pillar fills its whole cell
     }
     return 1.0;
+}
+// Light from the panel centred at `lc` reaching `p`, traced from two taps
+// `spread` apart across the ray (or one tap at the centre when spread is ~0).
+// The centre is a cell corner and corridor walls often run through it, so a
+// tap pushed straight across the ray could land beyond the wall: that tap was
+// blocked, the light halved inside 6 m and not beyond, and every such panel
+// drew a hard dark sphere on floors and walls. Keep both taps inside the cell
+// the centre ray heads into, the same cell lightVis starts the far tap in.
+float panelVis(vec2 lc, vec2 p, float spread){
+    vec2 toP = p - lc;
+    float toLen = length(toP);
+    // directly overhead there's no meaningful direction to spread along
+    vec2 dir = toLen > 0.001 ? toP / toLen : vec2(0.0, 1.0);
+    float vis;
+    if (spread < 0.01) {
+        vis = lightVis(lc, p);
+    } else {
+        vec2 q = floor((lc + dir * 0.01) / 2.0) * 2.0;
+        vec2 perp = vec2(-dir.y, dir.x) * spread;
+        vec2 ta = clamp(lc + perp, q + 0.01, q + 1.99);
+        vec2 tb = clamp(lc - perp, q + 0.01, q + 1.99);
+        vis = 0.5 * (lightVis(ta, p) + lightVis(tb, p));
+    }
+    return vis;
 }
 // the hunter is solid too: catch it in a beam and it throws a shadow down the
 // hall. It's a body, not a column — a ray that passes over its head still gets
@@ -207,7 +254,10 @@ vec3 roomLight(vec3 P, vec3 N){
         if (st*atten < 0.004) continue;              // too faint to be worth tracing
         // Two taps across the panel up close for a little penumbra, one beyond.
         // Tracing across it at every range looked better and cost about three
-        // times as much, which was too much.
+        // times as much, which was too much. The taps must close up onto the
+        // centre before the switch: cutting from two taps to one at a fixed
+        // range drew a hard sphere around every panel, and that showed as big
+        // bright circles and arcs across the floor and walls.
         // The march gives up after a fixed number of cells, and where it gives up
         // the shadow simply stops — and because the DDA spends one step per cell
         // crossed, the contour where it runs out is |dx|+|dz| = const: a diamond,
@@ -222,13 +272,11 @@ vec3 roomLight(vec3 P, vec3 N){
         float vis;
         if (sw < 0.002) {
             vis = 1.0;                                   // too far to shadow; it's faint anyway
-        } else if (d2 < 36.0) {
-            vec2 toFrag = shP - lc.xz;
-            float toLen = length(toFrag);
-            // directly overhead there's no meaningful direction to spread along
-            vec2 perp = (toLen > 0.001) ? vec2(-toFrag.y, toFrag.x) / toLen * 0.45 : vec2(0.45, 0.0);
-            vis = 0.5*(lightVis(lc.xz + perp, shP) + lightVis(lc.xz - perp, shP));
-        } else vis = lightVis(lc.xz, shP);
+        } else {
+            // two taps for a little penumbra up close, closing onto one by 6 m
+            float spread = d2 < 36.0 ? 0.45 * (1.0 - smoothstep(16.0, 36.0, d2)) : 0.0;
+            vis = panelVis(lc.xz, shP, spread);
+        }
         vis = mix(1.0, vis, sw);                         // ease the shadow off with range
         // a wall kills the direct beam, never the light that bounces around it
         st *= mix(0.18, 1.0, vis);

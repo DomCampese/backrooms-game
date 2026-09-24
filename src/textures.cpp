@@ -11,6 +11,11 @@ static Texture2D finishTexture(Image img, bool tiled) {
     UnloadImage(img);
     if (tiled) {
         GenTextureMipmaps(&t);
+        // raylib's anisotropic filter only sets the anisotropy level. Without
+        // trilinear first, min/mag stay GL_NEAREST from LoadTexture: the mips
+        // go unused, and ANGLE draws the point/filtered switch as rings
+        // around the camera on floors and walls.
+        SetTextureFilter(t, TEXTURE_FILTER_TRILINEAR);
         SetTextureFilter(t, TEXTURE_FILTER_ANISOTROPIC_8X);
         SetTextureWrap(t, TEXTURE_WRAP_REPEAT);
     } else SetTextureFilter(t, TEXTURE_FILTER_BILINEAR);

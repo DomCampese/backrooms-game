@@ -1,3 +1,34 @@
+# Texture filtering and Pages caching (September 2026)
+
+- raylib 5.5's SetTextureFilter(ANISOTROPIC_*) only sets the anisotropy level.
+  Set TRILINEAR first, or min/mag stay GL_NEAREST from LoadTexture and the
+  generated mips are never sampled.
+- Panel centres are always cell corners. lightVis starts 1 cm along the ray,
+  or the DDA crosses corner edges at t = 0 and a wall touching the corner
+  falsely shadows the light: rings round every panel, dark ceiling patches.
+  Near panels, panelVis clamps both penumbra taps into that same start cell:
+  a tap pushed across a wall through the corner halved the light inside 6 m
+  (hard dark ovals). The taps also fade into the single far tap (4-6 m).
+- Pages serves everything with max-age=600 and no header control. web-build.sh
+  stamps a build id: index.js/index.wasm load with ?v=ID, and the shell fetches
+  version.txt with no-store and reloads once under ?b=ID when it is stale.
+
+# Web reflection and pillar shadow fixes (September 2026)
+
+- Desktop Chrome/ANGLE rendered black shards on the revolver when `lightState`
+  returned early for dead lamps inside the reflection branch. Keep its single
+  return with the dead-lamp mask; depth-buffer changes did not fix this.
+- Pillar shadows must intersect the actual 0.42–1.58 m footprint, including
+  the first and last ray cells. Skipping those cells made a bright square halo.
+  Keep `pillarBlocks` single-exit too: the native Metal compiler stalled with
+  an extra early return inside this nested lighting path.
+- Pillar contact shadows use the same fading AO skirt as furniture. A flat
+  dark quad in the wall mesh made a visible rectangular border.
+- `tools/web-render-check.mjs` needs Playwright (resolvable by Node/NODE_PATH),
+  a served web build in GAME_URL, and BROWSER_CHANNEL=chrome for hardware ANGLE.
+  It tests 20 GPU visibility cases and a fixed-seed barrel crop. The old build
+  fails the pixel check (16), while the corrected build passes (70).
+
 # AGENTS.md
 
 ## Flashlight visibility
