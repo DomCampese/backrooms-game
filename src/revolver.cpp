@@ -21,13 +21,14 @@ void Revolver::load() {
     }
     spinningBones.push_back(cylinder);
     for(int i=0;i<asset.boneCount();++i)
-        if(std::strncmp(asset.boneName(i),"DEF_Bullet",10)==0)spinningBones.push_back(i);
+        if(std::strncmp(asset.boneName(i),"DEF_Bullet",10)==0 &&
+           std::strncmp(asset.boneName(i),"DEF_BulletFired",15)!=0)spinningBones.push_back(i);
     pose(0,0,6);
 }
 void Revolver::pose(float reloadTime,float cooldown,int ammo) {
     int clip=idle;float progress=0;
     if(reloadTime>0) {clip=reload;progress=std::clamp(1-reloadTime/1.8f,0.0f,1.0f);}
-    else if(cooldown>0) {clip=shoot;progress=std::clamp(1-cooldown/.42f,0.0f,1.0f);}
+    else if(cooldown>0) {clip=shoot;progress=std::clamp(1-cooldown/SHOT_INTERVAL,0.0f,1.0f);}
     if(clip==lastClip && progress==lastProgress && ammo==lastAmmo)return;
     lastClip=clip;lastProgress=progress;lastAmmo=ammo;
     asset.sample(clip,progress);

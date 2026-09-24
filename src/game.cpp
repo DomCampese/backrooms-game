@@ -4,6 +4,7 @@
 #include "shaders.h"
 #include "input.h"
 #include "rlgl.h"
+#include "raymath.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -196,7 +197,7 @@ void Game::init() {
     sndTape = makeTapeChime();     SetSoundVolume(sndTape, 0.6f);
     sndValve = makeValveTurn();    SetSoundVolume(sndValve, 0.7f);
     sndHowl = makeDogHowl();       SetSoundVolume(sndHowl, 0.5f);
-    sndGulp = makeGulp();          SetSoundVolume(sndGulp, 0.75f);
+    sndGulp = makeGulp();          SetSoundVolume(sndGulp, 0.60f);
     sndVoice = makeTapeVoice();    SetSoundVolume(sndVoice, 0.9f);
     sndGroan = makeFloorGroan();   SetSoundVolume(sndGroan, 0.85f);
     for (int i = 0; i < NBARKS; i++) {
@@ -551,6 +552,8 @@ void Game::applyLevel(int lv) {
     // keyed by level, and it survives every doorway until the descent ends —
     // which is the whole point of leaving a mark. beginDescent clears it.
     chalkSeedPending = !chalkSeeded[lv];
+    squeezing=false; squeezeBlend=0;
+    bullets.clear(); bulletImpacts.clear();
     poppedBalloons.clear(); poppedTableBunches.clear(); confetti.clear();
     SetWindowTitle(TextFormat("THE BACKROOMS — %s", c.name));
 }
@@ -693,32 +696,8 @@ int Game::tableBalloonBunch(int a, int b, Vector3 *pos, Color *cols, Vector3 &ti
     return nb;
 }
 
-// Does a round fired from the eye pass through a body standing at (ax, az)?
-//
-// Both hit tests used to project onto the 2D forward vector and measure the
-// miss distance in the horizontal plane alone: aim at the ceiling, fire, and
-// the round still landed. The shot leaves the eye along the 3D aim, so a hit
-// needs the aim line inside the body's radius horizontally *and* inside its
-// height vertically.
-bool Game::shotHitsBody(float ax, float az, float feetY, float bodyH,
-                        float radius, float maxRange) const {
-    float ex = ax - px, ez = az - pz;
-    float along = ex * f2x + ez * f2z;              // horizontal metres down the aim line
-    if (along <= 0 || along > maxRange) return false;
-    if (fabsf(ex * r2x + ez * r2z) > radius) return false;
-    // How high the round is after `along` metres of horizontal travel. fwd is
-    // the 3D aim, so vertical-over-horizontal is the slope of the shot; aimed
-    // straight up or down there is no horizontal travel and nothing to hit.
-    float horiz = hypotf(fwd.x, fwd.z);
-    if (horiz < 1e-4f) return false;
-    float rayY = eyeY + (fwd.y / horiz) * along;
-    return rayY >= feetY && rayY <= feetY + bodyH;
-}
-
-// Fire the revolver in LEVEL FUN and the first balloon on the aim line bursts
-// into confetti — a ceiling balloon on its own, or a whole table bunch at once.
-void Game::popBalloonsAlongAim() {
-    if (level != 4) return;
+bool Game::popBalloonAt(Vector3 point) {
+    if (level != 4) return false;
     auto burst = [&](Vector3 at, Color base, int n) {
         for (int c2 = 0; c2 < n; c2++) {
             float aa = grng.f01() * TAU, sp = 1.2f + grng.f01() * 2.2f;
@@ -727,8 +706,8 @@ void Game::popBalloonsAlongAim() {
                                  grng.f01() < 0.5f ? base : PARTY[c2 % 5] });
         }
     };
-    for (float d = 0.6f; d < 22.0f; d += 0.35f) {
-        float wx = px + fwd.x * d, wy = eyeY + fwd.y * d, wz = pz + fwd.z * d;
+    {
+        float wx = point.x, wy = point.y, wz = point.z;
         int a = cellOf(wx), b = cellOf(wz);
         for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
             int ca = a + dx, cb = b + dz;
@@ -736,13 +715,10 @@ void Game::popBalloonsAlongAim() {
             if (balloonAt(ca, cb, bp)) {   // a lone ceiling balloon
                 float ex = bp.x - wx, ey = bp.y - wy, ez = bp.z - wz;
                 if (ex * ex + ey * ey + ez * ez <= 0.24f * 0.24f) {
-                    // The march never asked whether anything was in the way, so
-                    // you could pop the party through a wall from the corridor.
-                    if (!world.lineOfSight(px, pz, bp.x, bp.z)) continue;
                     poppedBalloons.insert(cellKey2(ca, cb));
                     SetSoundPitch(sndPop, 0.9f + grng.f01() * 0.3f); SetSoundPan(sndPop, panFor(0)); PlaySound(sndPop);
                     burst(bp, PARTY[(ih(ca, cb, pickupSalt() ^ 0xBA11u) >> 10) % 5], 16);
-                    return;
+                    return true;
                 }
             }
             if (!poppedTableBunches.count(cellKey2(ca, cb))) {   // a table bunch: all of it goes
@@ -751,15 +727,15 @@ void Game::popBalloonsAlongAim() {
                 for (int k = 0; k < nb; k++) {
                     float ex = bpos[k].x - wx, ey = bpos[k].y - wy, ez = bpos[k].z - wz;
                     if (ex * ex + ey * ey + ez * ez > 0.26f * 0.26f) continue;
-                    if (!world.lineOfSight(px, pz, bpos[k].x, bpos[k].z)) continue;
                     poppedTableBunches.insert(cellKey2(ca, cb));
                     SetSoundPitch(sndPop, 0.95f + grng.f01() * 0.3f); SetSoundPan(sndPop, panFor(0)); PlaySound(sndPop);
                     for (int j = 0; j < nb; j++) burst(bpos[j], bcol[j], 11);
-                    return;
+                    return true;
                 }
             }
         }
     }
+    return false;
 }
 
 // One frame: advance the simulation in a fixed order, then draw it.
@@ -850,6 +826,7 @@ bool Game::tick() {
     updateMovement(dt);
     updateDevKeys(now);
     updateWeapons(dt, now);
+    updateBullets(dt);
     updateFlare(dt, now);
     updateTapeDeck(dt, now);
     updateInteraction();
@@ -959,6 +936,27 @@ void Game::updateSprint(bool requested, bool moving, bool crouched, float dt) {
     stamina = clampf(stamina + (sprinting ? -SPRINT_DRAIN * dt : dt / 6.0f), 0, 1);
 }
 
+void Game::updateSqueeze(bool held, float dt) {
+    if (held) squeezing=true;
+    else if (squeezing) {
+        // Do not expand inside a gap: collision resolution could eject the
+        // player through the other side of a thin wall. Wait for real clearance.
+        AABB boxes[MAX_NEARBY_AABBS];
+        int n=0, a=cellOf(px), b=cellOf(pz);
+        for (int x=-1;x<=1;++x) for (int z=-1;z<=1;++z)
+            n=world.gatherCellAABBs(a+x,b+z,boxes,MAX_NEARBY_AABBS,n);
+        bool fits=true;
+        for (int i=0;i<n;++i) {
+            const AABB &box=boxes[i];
+            if (py>=box.top-0.02f) continue;
+            float dx=px-clampf(px,box.minx,box.maxx), dz=pz-clampf(pz,box.minz,box.maxz);
+            if (dx*dx+dz*dz<PR*PR) { fits=false; break; }
+        }
+        if (fits) squeezing=false;
+    }
+    squeezeBlend += ((squeezing ? 1.0f : 0.0f)-squeezeBlend)*fminf(1,10*dt);
+}
+
 void Game::updateMovement(float dt) {
     // ---- move
     float ix = 0, iz = 0;
@@ -973,21 +971,23 @@ void Game::updateMovement(float dt) {
     // webMoveScale returns 1 for keys and for a stick at full deflection, so
     // this multiplies nothing away on any other platform.
     if (moving) { float ms = webMoveScale(); ix *= ms; iz *= ms; }
+    updateSqueeze(inCursorHidden() && inKeyDown(KEY_Z),dt);
     bool crouched = inKeyDown(KEY_LEFT_CONTROL);
     crouchCur += ((crouched ? 1.0f : 0.0f) - crouchCur) * fminf(1, 10 * dt);
-    updateSprint(inKeyDown(KEY_LEFT_SHIFT), moving, crouched, dt);
+    updateSprint(inKeyDown(KEY_LEFT_SHIFT), moving, crouched || squeezing, dt);
     boostT = fmaxf(0, boostT - dt);
     float groundY = world.groundAt(px, pz, py);
     bool inWater = grounded && py < -0.1f && world.poolAt(cellOf(px), cellOf(pz));
-    float speed = (sprinting ? 6.8f : crouched ? 1.9f : 3.6f) * (inWater ? 0.55f : 1.0f)
+    float speed = (squeezing ? 1.1f : sprinting ? 6.8f : crouched ? 1.9f : 3.6f) * (inWater ? 0.55f : 1.0f)
                 * (boostT > 0 ? 1.12f : 1.0f);
     float tvx = ix * speed, tvz = iz * speed;
     float accel = moving ? 12.0f : 9.0f;
     velx += (tvx - velx) * fminf(1, accel * dt);
     velz += (tvz - velz) * fminf(1, accel * dt);
+    if (squeezing) { float v=hypotf(velx,velz); if (v>speed) { velx*=speed/v; velz*=speed/v; } }
     float oldX = px, oldZ = pz;
     px += velx * dt; pz += velz * dt;
-    world.collideCircle(px, pz, PR, py);
+    world.collideCircle(px, pz, squeezing ? 0.12f : PR, py);
     // Actual travel drives footsteps, bob and records. Running into a wall
     // should not sound like a sprint or bank metres toward the record.
     float spd = hypotf(px - oldX, pz - oldZ) / fmaxf(dt, 0.0001f);
@@ -1239,65 +1239,130 @@ void Game::updateWeapons(float dt, double now) {
         inMousePressed(MOUSE_BUTTON_LEFT)) {
         if (ammo <= 0) { SetSoundPitch(sndClick, 0.7f); PlaySound(sndClick); gunCd = 0.25f; }  // dry fire
         else {
-            ammo--; gunCd = 0.42f; muzzleT = 0.09f; recoil = 1.0f; muzzleSmoke = 1.0f;
+            ammo--; gunCd = Revolver::SHOT_INTERVAL; muzzleT = 0.09f; recoil = 1.0f; muzzleSmoke = 1.0f;
             PlaySound(sndShot);
-            popBalloonsAlongAim();   // in LEVEL FUN, the party takes hits too
-            for (int i = 0; i < MAXDOGS; i++) {   // and in the Red Halls, the pack does
-                Dog &d = dogs[i];
-                if (d.st == DState::Gone || d.st == DState::Yelp) continue;
-                // low and long: the sprite stands 0.97 m tall on its own floor
-                if (!shotHitsBody(d.x, d.z, d.dispY, 0.92f, 0.6f, 30.0f)) continue;
-                if (!world.lineOfSight(px, pz, d.x, d.z)) continue;
-                float ex = d.x - px, ez = d.z - pz;
-                if (--d.hp <= 0) {
-                    d.st = DState::Yelp; d.life = 0;
-                    SetSoundPitch(sndBarks[i % 3], 1.6f); SetSoundVolume(sndBarks[i % 3], 0.9f);
-                    PlaySound(sndBarks[i % 3]);
-                } else {
-                    PlaySound(sndHit);
-                    float dl = sqrtf(ex * ex + ez * ez) + 1e-4f;
-                    d.x += ex / dl * 0.8f; d.z += ez / dl * 0.8f;   // rocked, not repelled
-                    world.collideCircle(d.x, d.z, 0.3f, d.dispY);
-                }
-                break;   // one round, one dog
-            }
+            fireBullet();
             // the report carries down every hallway
             if (ent.st == EState::Hidden) ent.nextSpawn = fmin(ent.nextSpawn, now + 5 + grng.f01() * 6);
             else if (ent.st == EState::Stalk) ent.gaze += 0.8f;
-            if (ent.st == EState::Stalk || ent.st == EState::Chase || ent.st == EState::Flee) {
-                // 1.96 m of him, standing on whatever floor he is standing on
-                if (shotHitsBody(ent.x, ent.z, ent.dispY, 1.95f, 0.55f, 60.0f) &&
-                    world.lineOfSight(px, pz, ent.x, ent.z)) {
-                    ent.hp--;
-                    if (ent.hp <= 0) {   // put down
-                        PlaySound(sndKill);
-                        killT = 3.0f; killCount++;
-                        ent.st = EState::Die; ent.life = 0;
-                        for (int c2 = 0; c2 < 5; c2++) {   // he spills his doubloons
-                            float aa = c2 * 1.2566f + grng.f01();
-                            coinsWorld.push_back({ ent.x + cosf(aa) * 0.5f, 0, ent.z + sinf(aa) * 0.5f });
-                        }
-                        saveBest();
-                    } else {             // hurt, and now it knows exactly where you are
-                        PlaySound(sndHit);
-                        float ex = ent.x - px, ez = ent.z - pz;
-                        float dd = sqrtf(ex * ex + ez * ez);
-                        if (dd > 0.01f) { ent.x += ex / dd * 0.5f; ent.z += ez / dd * 0.5f; }
-                        world.collideCircle(ent.x, ent.z, 0.38f, ent.dispY);
-                        ent.stagger = 0.45f;
-                        if (ent.st != EState::Chase) {   // being shot at is a proper introduction
-                            ent.st = EState::Chase;
-                            ent.life = 0; ent.unseen = 0; ent.repathT = 0;
-                        }
-                    }
-                }
-            }
+
         }
     }
     if (inKeyPressed(KEY_R) && inCursorHidden() && canReload()) {
         reloadT = 1.8f;
         SetSoundPitch(sndClick, 0.95f); PlaySound(sndClick);
     }
+}
+
+void Game::fireBullet() {
+    // Keep the flight on the sight ray so the front blade remains the aim point.
+    Vector3 origin{px, eyeY, pz};
+    bullets.push_back({origin, origin, Vector3Normalize(fwd), 60.0f, 0.0f});
+}
+
+void Game::updateBullets(float dt) {
+    for (auto &impact : bulletImpacts) impact.life -= dt;
+    bulletImpacts.erase(std::remove_if(bulletImpacts.begin(), bulletImpacts.end(),
+        [](const BulletImpact &i) { return i.life <= 0; }), bulletImpacts.end());
+    for (auto &bullet : bullets) {
+        if (bullet.remaining <= 0) { bullet.fade -= dt; continue; }
+        float travel = fminf(220.0f * dt, bullet.remaining);
+        Ray ray{bullet.pos, bullet.direction};
+        float nearest = travel;
+        bool hit = false;
+        int target = -1;
+        Vector3 normal = Vector3Negate(bullet.direction);
+        auto consider = [&](RayCollision c, int id) {
+            if (c.hit && c.distance >= 0 && c.distance <= nearest) {
+                nearest = c.distance; normal = c.normal; target = id; hit = true;
+            }
+        };
+        // Test actual triangles, so door openings and the gaps under furniture
+        // remain open. Chunk bounds keep this local even in a large streamed maze.
+        for (auto &entry : world.chunks) {
+            int cx=(int32_t)(entry.first >> 32), cz=(int32_t)entry.first;
+            Vector3 end=Vector3Add(ray.position,Vector3Scale(ray.direction,travel));
+            if (fmaxf(ray.position.x,end.x)<cx*CHUNK-1 || fminf(ray.position.x,end.x)>(cx+1)*CHUNK+1 ||
+                fmaxf(ray.position.z,end.z)<cz*CHUNK-1 || fminf(ray.position.z,end.z)>(cz+1)*CHUNK+1) continue;
+            auto &chunk = entry.second;
+            if (!chunk.built) continue;
+            for (int m = MESH_FLOOR; m <= MESH_GLASS; ++m) {
+                if (m == MESH_SCRAWL || m == MESH_WATER) continue;
+                const Mesh &mesh = chunk.meshes[m];
+                if (!mesh.vertexCount) continue;
+                BoundingBox box=GetMeshBoundingBox(mesh);
+                bool inside=ray.position.x>=box.min.x && ray.position.x<=box.max.x &&
+                    ray.position.y>=box.min.y && ray.position.y<=box.max.y &&
+                    ray.position.z>=box.min.z && ray.position.z<=box.max.z;
+                RayCollision bounds = GetRayCollisionBox(ray, box);
+                if (!inside && (!bounds.hit || bounds.distance > travel)) continue;
+                consider(GetRayCollisionMesh(ray, mesh, MatrixIdentity()), -1);
+            }
+        }
+        auto body = [&](float x, float z, float y, float h, float radius, int id) {
+            consider(GetRayCollisionBox(ray, {{x-radius,y,z-radius}, {x+radius,y+h,z+radius}}), id);
+        };
+        for (int i=0; i<MAXDOGS; ++i) {
+            const Dog &d=dogs[i];
+            if (d.st != DState::Gone && d.st != DState::Yelp)
+                body(d.x,d.z,d.dispY,0.92f,0.6f,i);
+        }
+        if (ent.st == EState::Stalk || ent.st == EState::Chase || ent.st == EState::Flee)
+            body(ent.x,ent.z,ent.dispY,1.95f,0.55f,MAXDOGS);
+        // Sample balloons only up to the nearest solid hit, at less than their radius.
+        if (level == 4) for (float d=0; d<nearest; d+=0.1f) {
+            if (popBalloonAt(Vector3Add(ray.position, Vector3Scale(ray.direction,d)))) {
+                nearest=d; hit=true; target=-2; break;
+            }
+        }
+        bullet.tail = bullet.pos;
+        bullet.pos = Vector3Add(ray.position, Vector3Scale(ray.direction,nearest));
+        bullet.remaining -= nearest;
+        bullet.fade = 0.055f;
+        if (!hit) continue;
+        bullet.remaining = 0;
+        bulletImpacts.push_back({Vector3Add(bullet.pos,Vector3Scale(normal,0.012f)), normal, 0.24f, target >= 0});
+        if (target >= 0 && target < MAXDOGS) {
+            int i=target;
+            Dog &d=dogs[i];
+            float ex = d.x - px, ez = d.z - pz;
+            if (--d.hp <= 0) {
+                d.st = DState::Yelp; d.life = 0;
+                SetSoundPitch(sndBarks[i % 3], 1.6f); SetSoundVolume(sndBarks[i % 3], 0.9f);
+                PlaySound(sndBarks[i % 3]);
+            } else {
+                PlaySound(sndHit);
+                float dl = sqrtf(ex * ex + ez * ez) + 1e-4f;
+                d.x += ex / dl * 0.8f; d.z += ez / dl * 0.8f;   // rocked, not repelled
+                world.collideCircle(d.x, d.z, 0.3f, d.dispY);
+            }
+        } else if (target == MAXDOGS) {
+            ent.hp--;
+            if (ent.hp <= 0) {   // put down
+                PlaySound(sndKill);
+                killT = 3.0f; killCount++;
+                ent.st = EState::Die; ent.life = 0;
+                for (int c2 = 0; c2 < 5; c2++) {   // he spills his doubloons
+                    float aa = c2 * 1.2566f + grng.f01();
+                    coinsWorld.push_back({ ent.x + cosf(aa) * 0.5f, 0, ent.z + sinf(aa) * 0.5f });
+                }
+                saveBest();
+            } else {             // hurt, and now it knows exactly where you are
+                PlaySound(sndHit);
+                float ex = ent.x - px, ez = ent.z - pz;
+                float dd = sqrtf(ex * ex + ez * ez);
+                if (dd > 0.01f) { ent.x += ex / dd * 0.5f; ent.z += ez / dd * 0.5f; }
+                world.collideCircle(ent.x, ent.z, 0.38f, ent.dispY);
+                ent.stagger = 0.45f;
+                if (ent.st != EState::Chase) {   // being shot at is a proper introduction
+                    ent.st = EState::Chase;
+                    ent.life = 0; ent.unseen = 0; ent.repathT = 0;
+                }
+            }
+        }
+    }
+    bullets.erase(std::remove_if(bullets.begin(), bullets.end(),
+        [](const Bullet &b) { return b.remaining <= 0 && b.fade <= 0; }), bullets.end());
 }
 
 bool Game::anyFlareLit() const {
@@ -2057,7 +2122,7 @@ void Game::updateDogs(float dt, double now) {
         nsx = deck.carried ? px : deck.x;      // carried, the loud thing is still you
         nsz = deck.carried ? pz : deck.z;
     }
-    if (muzzleT > 0 || gunCd > 0.35f) { noise = 45.0f; nsx = px; nsz = pz; }   // a shot in here carries
+    if (muzzleT > 0 || gunCd > Revolver::SHOT_INTERVAL - 0.07f) { noise = 45.0f; nsx = px; nsz = pz; }   // a shot in here carries
     bool justStruck = false;   // the strike itself carries, whichever flare it was
     for (const FlareProj &f : litFlares) if (f.active && f.burn > FLAREBURN - 0.6f) justStruck = true;
     if (justStruck) { noise = 30.0f; nsx = px; nsz = pz; }

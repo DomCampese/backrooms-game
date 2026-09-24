@@ -3,6 +3,7 @@
 
 // Gameplay adapter only: standard asset loading/playback lives in ModelAsset.
 struct Revolver {
+    static constexpr float SHOT_INTERVAL = 0.22f;
     ModelAsset asset;
     Vector3 muzzlePosition{0,.0388f,.2371f};
     int idle=-1,reload=-1,shoot=-1,handle=-1;

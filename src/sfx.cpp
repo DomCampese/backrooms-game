@@ -326,42 +326,43 @@ Sound makeDogHowl() {
     Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
 }
 
-// Three swallows of almond water: each one a wet click opening into a short
-// resonant glug, the throat tightening a little further down the can.
-Sound makeGulp() {
-    int n = (int)(1.55f * SAMPLE_RATE);
-    Wave w = makeWaveBuf(n);
-    short *d = (short *)w.data;
+// Soft liquid movement and three short swallows, synchronized with drawDrinkCan.
+// Smooth attacks avoid the old full-amplitude noise discontinuity; integrating
+// frequency keeps the bubble pitch from reversing into an electronic bass chirp.
+Wave makeGulpWave() {
+    const int n=(int)(1.55f*SAMPLE_RATE);
+    Wave w=makeWaveBuf(n);
+    short *d=(short *)w.data;
     Rng r(0xA1B0ULL);
-    float lp = 0, bp = 0;
-    for (int i = 0; i < n; i++) {
-        float t = i / (float)SAMPLE_RATE;
-        float wn = r.f01() * 2 - 1;
-        lp += 0.22f * (wn - lp);
-        float sig = 0.0f;
-        for (int g = 0; g < 3; g++) {
-            float gt = t - (0.40f + g * 0.36f);   // timed to the carton reaching your lips
-            if (gt < 0.0f || gt > 0.40f) continue;
-            // the click of the throat opening
-            float click = (wn - lp) * 1.1f * expf(-gt * 150.0f);
-            // then a body that drops in pitch as the swallow goes down
-            float f = 168.0f - g * 22.0f - gt * 190.0f;
-            float body = sinf(TAU * fmaxf(46.0f, f) * gt)
-                       * (1.0f - expf(-gt * 90.0f)) * expf(-gt * 12.0f) * 0.72f;
-            // a little liquid rattle riding on top
-            bp += 0.5f * (lp * 0.5f - bp);
-            sig += (click + body + bp * 0.35f * expf(-gt * 16.0f)) * (1.0f - g * 0.16f);
+    float low=0, smooth=0, phase[3]={}, bubble[3]={};
+    for (int i=0;i<n;++i) {
+        float t=i/(float)SAMPLE_RATE;
+        float noise=r.f01()*2-1;
+        low+=0.045f*(noise-low);
+        smooth+=0.012f*(low-smooth);
+        float sig=0;
+        for (int g=0;g<3;++g) {
+            float gt=t-(0.40f+g*0.36f);
+            if (gt<0 || gt>0.26f) continue;
+            float env=sinf(PI*gt/0.26f);
+            env*=env;
+            float freq=310.0f+g*37.0f-90.0f*gt/0.26f;
+            phase[g]+=TAU*freq/SAMPLE_RATE;
+            bubble[g]+=TAU*(610.0f+70*sinf(gt*31+g))/SAMPLE_RATE;
+            // Mostly filtered liquid noise, with restrained, irregular bubbles.
+            float wet=(low-smooth)*0.48f+smooth*0.22f;
+            float throat=sinf(phase[g])*0.035f*(0.65f+0.35f*sinf(gt*47));
+            float bubbles=sinf(bubble[g])*0.025f*expf(-gt*18);
+            sig+=(wet+throat+bubbles)*env*(1-g*0.12f);
         }
-        // the empty can rings faintly as it comes away from your mouth
-        if (t > 1.24f) {
-            float et = t - 1.24f;
-            sig += (sinf(TAU * 1180.0f * et) * 0.055f
-                  + sinf(TAU * 2630.0f * et) * 0.030f) * expf(-et * 15.0f);
-            sig += (wn - lp) * 0.07f * expf(-et * 40.0f);   // the tap of it
-        }
-        d[i] = (short)(clampf1(tanhf(sig * 1.35f)) * 26000);
+        d[i]=(short)(clampf1(sig)*26000);
     }
-    Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
+    return w;
+}
+
+Sound makeGulp() {
+    Wave w=makeGulpWave();
+    Sound s=LoadSoundFromWave(w); UnloadWave(w); return s;
 }
 
 // Someone else's voice, off a cassette that has been played too many times.
