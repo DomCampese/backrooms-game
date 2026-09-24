@@ -96,7 +96,7 @@ void Game::renderScene(double now) {
     cam.position = { px, eyeY, pz };
     cam.target = Vector3Add(cam.position, fwd);
     // roll the up-vector a touch when strafing, so the camera leans into it
-    float roll = leanCur * -0.035f + squeezeBlend * 0.07f;
+    float roll = leanCur * -0.035f + squeezeBlend * 0.07f + floatRoll;
     cam.up = { r2x * sinf(roll), cosf(roll), r2z * sinf(roll) };
     cam.fovy = fov;
     cam.projection = CAMERA_PERSPECTIVE;
@@ -276,13 +276,16 @@ void Game::renderScene(double now) {
     if (level == 4) {   // balloons nose against the ceiling, strings hanging down
         for (int dx = -7; dx <= 7; dx++) for (int dz = -7; dz <= 7; dz++) {
             int a = pci + dx, b = pck + dz;
-            if (poppedBalloons.count(cellKey2(a, b))) continue;   // this one's been shot
-            uint32_t h = ih(a, b, (uint32_t)world.seed ^ 0xBA11u);
-            if (h % 17 != 0 || world.pillarAt(a, b)) continue;
-            float bxx = a * CELL + 1.0f + (((h >> 4) & 7) / 7.0f - 0.5f) * 0.9f;
-            float bzz = b * CELL + 1.0f + (((h >> 7) & 7) / 7.0f - 0.5f) * 0.9f;
+            // Placement comes from balloonAt, the same function the bullets test
+            // against. A copy of its hash here kept the old world.seed salt after
+            // levels began reseeding per visit, so the balloons you could see were
+            // never the ones a round could hit.
+            Vector3 bp;
+            if (!balloonAt(a, b, bp)) continue;   // none here, or already shot
+            uint32_t h = ih(a, b, pickupSalt() ^ 0xBA11u);
+            float bxx = bp.x, bzz = bp.z;
             float bob = sinf((float)now * 0.8f + a * 1.3f + b * 2.1f) * 0.05f;
-            float by = world.wallH - 0.21f + bob;
+            float by = bp.y + bob;
             float pl = propLum(bxx, by, bzz) * 0.85f;
             DrawSphere({ bxx, by, bzz }, 0.17f, lit(PARTY[(h >> 10) % 5], pl));
             DrawCylinderEx({ bxx, by - 0.15f, bzz }, { bxx + 0.04f, by - 0.95f, bzz + 0.02f },
@@ -816,15 +819,12 @@ void Game::renderUI(double now) {
         float pl = 0.55f + 0.45f * sinf((float)now * 2.5f);
         hudTextC(t, sw / 2, hud(70), hud(20), Fade({ 120, 235, 145, 255 }, pl));
     }
-    if (health < 0.98f && deathT <= 0) {   // health bar, just above the sprint bar
-        const int w = hud(220), x = sw / 2 - w / 2, y = sh - hud(54), th = hud(6);
-        bool regen = sinceHurt > REGEN_DELAY;
-        DrawRectangle(x - hud(1), y - hud(1), w + hud(2), th + hud(2), { 0, 0, 0, 120 });
-        DrawRectangle(x, y, (int)(w * health), th,
-                      regen ? Color{200,120,110,170} : Color{190,50,40,200});
-    }
-    if (hurtT > 0 || health < 0.4f) {   // red at the edges: just hit, or close to going down
-        float a = fmaxf(hurtT / HURT_GRACE * 0.55f, health < 0.4f ? (0.4f - health) * 0.6f : 0.0f);
+    // No health bar: there are only two states worth showing, whole and one
+    // hit from dead. A hit flashes the edges red, and they stay tinged for as
+    // long as you are wounded, fading as you heal. When the red is gone, you
+    // can take a hit again.
+    if ((hurtT > 0 || health < 0.999f) && deathT <= 0) {
+        float a = fmaxf(hurtT / HURT_GRACE * 0.55f, (1.0f - health) * 0.45f);
         Color r0 = Fade({120, 0, 0, 255}, a), r1 = Fade({120, 0, 0, 255}, 0);
         int e = sh / 4;
         DrawRectangleGradientV(0, 0, sw, e, r0, r1);

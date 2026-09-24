@@ -12,6 +12,7 @@
 src/revolver.generated.h
 
 src/models.generated.h
+src/sounds.generated.h
 mapdump
 
 # web build outputs
