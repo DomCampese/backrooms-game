@@ -72,6 +72,7 @@ void Game::init() {
     rlDisableBackfaceCulling();
 
     texParticle = makeParticleTex();
+    texClark = makeClarkTex();
     texEntity = makeSmilerTex(false); texEntityGlow = makeSmilerTex(true);
     texPartygoer = makePartygoerTex();
     texProps = makePropsTex();
@@ -190,7 +191,6 @@ void Game::init() {
     }
     for (int i = 0; i < 4; i++)
         swimStrokes[i] = loadEmbeddedSound(TextFormat("sounds/water/swim_%d.ogg", i + 1));
-    musPool = loadEmbeddedMusic("sounds/water/pool_ambience.ogg");
     musUnderwater = loadEmbeddedMusic("sounds/water/underwater.ogg");
     musParty = loadEmbeddedMusic("sounds/music/level_fun.ogg");
     sndClick = makeClick();
@@ -281,7 +281,7 @@ void Game::shutdown() {
     UnloadMesh(flareMesh);
     for (Texture2D map : surfaceDetails) UnloadTexture(map);
     UnloadTexture(neutralDetail);
-    UnloadMusicStream(musPool); UnloadMusicStream(musUnderwater); UnloadMusicStream(musParty);
+    UnloadMusicStream(musUnderwater); UnloadMusicStream(musParty);
     CloseAudioDevice();
     CloseWindow();
 }
@@ -364,10 +364,10 @@ bool Game::hurtPlayer(double now, float dmg, const char *by, float fromX, float 
 }
 
 void Game::updateLoopAudio(float dt) {
-    bool pools = level == 2 && !inMenu;
-    bool under = pools && eyeY < WATER_Y && world.poolAt(cellOf(px), cellOf(pz));
+    // The Poolrooms have no water bed: a running-water loop read as a tap left
+    // on, and the level is meant to be still. Only the muffled underwater loop.
+    bool under = level == 2 && !inMenu && eyeY < WATER_Y && world.poolAt(cellOf(px), cellOf(pz));
     float k = 1 - expf(-3.0f * dt);
-    poolVol += ((pools ? (under ? 0.12f : 0.55f) : 0.0f) - poolVol) * k;
     underwaterVol += ((under ? 0.5f : 0.0f) - underwaterVol) * (1 - expf(-8.0f * dt));
     auto feed = [](Music &m, float vol) {
         if (!m.stream.buffer) return;   // failed to load: stay silent rather than crash
@@ -377,7 +377,6 @@ void Game::updateLoopAudio(float dt) {
             UpdateMusicStream(m);
         } else if (IsMusicStreamPlaying(m)) StopMusicStream(m);
     };
-    feed(musPool, poolVol);
     feed(musUnderwater, underwaterVol);
     // LEVEL FUN: a cheerful loop played slow and flat, the pitch wandering like
     // a tape stretched on a failing motor. Ducks with the lights in a blackout.
@@ -2151,7 +2150,7 @@ void Game::updateEntity(float dt, double now) {
             // within 1.25 m, silently and with no windup, which is survivable
             // when being caught is free and simply unfair once it is not.
             if (entDist < CATCH_REACH && ent.lunge > 0 && !hidden && hurtT <= 0) {
-                if (hurtPlayer(now, ENTITY_HIT, level == 4 ? "THE PARTYGOER" : "A SMILER", ent.x, ent.z))
+                if (hurtPlayer(now, ENTITY_HIT, hunterName(), ent.x, ent.z))
                     return;   // beginDescent has already replaced the world under us
                 // He landed it: the lunge is spent and he reels from his own swing.
                 ent.lunge = 0; ent.lungeCd = HURT_GRACE + 1.0f; ent.stagger = 0.8f;

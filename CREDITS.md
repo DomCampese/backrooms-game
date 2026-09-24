@@ -34,7 +34,7 @@ are not permission to copy those assets.
 
 | Reference | Authors and version notes | Relationship to this game |
 | --- | --- | --- |
-| [Entity 3 — Smilers](https://backrooms-wiki.wikidot.com/entity-3) | Original by **Palico22**; rewritten by **Stretchsterz**, as cited for the page. | The hunter outside Level Fun: a procedurally drawn shadow body with glowing eyes and a toothed grin that shows in the dark. Its stalking, lunging, doubloon drops and weaknesses are the game's own. |
+| [Entity 3 — Smilers](https://backrooms-wiki.wikidot.com/entity-3) | Original by **Palico22**; rewritten by **Stretchsterz**, as cited for the page. | The hunter on Level 1 and in the Red Halls (Level 0 keeps the game's own Pirate Clark): a procedurally drawn shadow body with glowing eyes and a toothed grin that shows in the dark. Its stalking, lunging, doubloon drops and weaknesses are the game's own. |
 | [Entity 67 — Partygoers =)](https://backrooms-wiki.wikidot.com/entity-67) | Original by **1000dumplings**; current rewrite by **Robert Goerman** and **MC_Crafter_24_7**, as credited on the page. | A procedurally drawn yellow, smiling party-themed enemy. The game changes its appearance and uses its own stalking/chase behavior. |
 | [Level Fun / Level 26 — The SS Fun =)](https://backrooms-wiki.wikidot.com/level-26) | Original Level Fun by **1000dumplings**; current rewrite by **Robert Goerman** and **MC_Crafter_24_7**. | The game uses the older party-room motif and name, with generated banquet rooms, balloons and confetti; it does not reproduce the current cruise-ship setting. |
 | [Object 1 — Almond Water](https://backrooms-wiki.wikidot.com/object-1) | Original by **1000dumplings**; rewritten by **Natedagreat563** and **Poliacci**. | Adapted into a canned consumable with game-specific recovery effects, placement, artwork and drinking animation. |
@@ -71,8 +71,7 @@ Retain these credits and the applicable license notices when redistributing.
   [Individual source links and conversion details](assets/materials/README.md).
 
 - **Water sounds** — splashes, swim strokes and the underwater loop by the
-  **Red Eclipse Team**, CC BY-SA 4.0 or later; the Poolrooms water ambience by
-  **Paul Hertz ("ignotus")** via Red Eclipse, CC BY-SA 3.0.
+  **Red Eclipse Team**, CC BY-SA 4.0 or later.
   [Source files, commit and per-file licenses](assets/sounds/water/README.md).
 - **LEVEL FUN music** — "Sketchbook 2024-02-21_02" by **Abstraction / Tallbeard
   Studios (Ben Burnes)**, CC0 1.0, from the
