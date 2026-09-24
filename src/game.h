@@ -130,7 +130,7 @@ struct Game {
         locAmb = -1, locFogCol = -1, locFogDen = -1, locLightCol = -1, locLS = -1, locLY = -1,
         locDead = -1, locLightMul = -1, locFlarePos = -1, locFlareInt = -1, locGloss = -1,
         locEntPos = -1, locEntDark = -1, locOccOrigin = -1, locOccN = -1, locEntBlock = -1;
-    int locPTime = -1, locPFear = -1;
+    int locPTime = -1, locPFear = -1, locPWater = -1;
     Material mats[MAT_COUNT]{};
     Sound steps[4]{}, splashes[2]{}, sndBigSplash{}, sndClick{}, sndScare{}, sndWin{},
           sndFlare{}, sndShot{}, sndHit{}, sndKill{}, sndPop{}, sndHeartbeat{}, sndTape{},
@@ -154,8 +154,10 @@ struct Game {
     float px = 0, pz = 0;
     float yaw = 0.8f, pitch = 0.0f;
     float velx = 0, velz = 0;
-    float py = 0, vy = 0;                     // feet height (0 = dry floor, -0.6 = pool bottom)
+    float py = 0, vy = 0;                     // feet height relative to the dry deck
     bool grounded = true;
+    bool swimming = false;
+    float swimPhase = 0, swimClimb = 0;
     float stamina = 1.0f, fov = 70.0f;        // camera fovy, deg — the action pull;
                                               // screen shape rides on top in baseFov()
     float bobPhase = 0;                       // counts footfalls: an integer is a foot landing
@@ -383,6 +385,7 @@ struct Game {
     // The same mapping as a pure function of window size, for the harness.
     static float fovForWindow(int w, int h, float aim);
     void updateMovement(float dt);
+    bool updateSwimming(float dt, bool dive, bool rise);
     void updateSprint(bool requested, bool moving, bool crouched, float dt);
     void updateDevKeys(double now);
     void updateWeapons(float dt, double now);

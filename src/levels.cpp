@@ -7,10 +7,9 @@
 const LevelCfg LEVELS[NLEVELS] = {
     { 3.0f,  8.0f, 0.06f, 1.00f, 0.055f, 0.06f, {1.00f,0.94f,0.74f}, {0.045f,0.042f,0.030f}, {0.140f,0.125f,0.070f}, "LEVEL 0" },
     { 4.2f, 12.0f, 0.30f, 0.85f, 0.075f, 0.22f, {0.72f,0.80f,0.95f}, {0.016f,0.017f,0.022f}, {0.018f,0.020f,0.026f}, "LEVEL 1" },
-    // Poolrooms lightMul is down from 0.72: white tile at 0.87 albedo under a
-    // grid of fluorescents was landing the whole floor above 240 and taking the
-    // tile pattern with it. The level is meant to be bright, not blank.
-    { 3.6f,  8.0f, 0.06f, 0.55f, 0.045f, 0.55f, {1.00f,1.00f,0.97f}, {0.16f,0.18f,0.20f},    {0.19f,0.23f,0.27f},    "THE POOLROOMS" },
+    // Taller bathing halls: warm diffuse light over pristine ceramic, with
+    // restrained exposure so white grout and underwater steps stay readable.
+    { 4.8f,  8.0f, 0.06f, 0.78f, 0.026f, 0.55f, {1.00f,0.98f,0.89f}, {0.16f,0.18f,0.18f},    {0.16f,0.23f,0.22f},    "THE POOLROOMS" },
     // The Red Halls' ambient is up from 0.030 with the move to a filmic tone
     // curve. It is not a brightening: the curve's toe eats small values, and at
     // the old figure the level fell from "supposed to look almost black" to

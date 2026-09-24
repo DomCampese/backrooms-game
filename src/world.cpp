@@ -276,12 +276,30 @@ void World::generate(ChunkData &d, int cx, int cz) {
             d.prop[a + 1][b] = PROP_BOXES; d.propRot[a + 1][b] = (uint8_t)rng.ri(0, 3);
         }
     }
-    if (level == 2) {   // sunken pools where noise blobs say so, never under walls
-        for (int i = 1; i < CCELLS - 1; i++) for (int kk = 1; kk < CCELLS - 1; kk++) {
-            if (d.pillar[i][kk]) continue;
-            if (d.wallN[i][kk] || d.wallW[i][kk] || d.wallN[i][kk + 1] || d.wallW[i + 1][kk]) continue;
-            float gxc = (float)(cx * CCELLS + i), gzc = (float)(cz * CCELLS + kk);
-            if (fbm2(gxc * 0.11f, gzc * 0.11f, seed ^ 0x77AAu, 3) > 0.565f) d.pool[i][kk] = 1;
+    if (level == 2) {
+        // Broad chambers, with six-metre arches instead of office door frames.
+        // Every seam stays open; the connectivity pass below still validates
+        // the columns. Basin treads are stored as actual floor heights.
+        memset(d.wallN, 0, sizeof(d.wallN));
+        memset(d.wallW, 0, sizeof(d.wallW));
+        memset(d.pillar, 0, sizeof(d.pillar));
+        for (int t = 0; t < CCELLS; ++t) {
+            bool opening = (t >= 3 && t <= 5) || (t >= 11 && t <= 13);
+            if (!opening) d.wallN[t][8] = d.wallW[8][t] = WALL_SOLID;
+        }
+        for (int i = 1; i < CCELLS-1; ++i) for (int z = 1; z < CCELLS-1; ++z) {
+            // Only a narrow perimeter promenade is dry. Water connects under
+            // the arches, while broad shallow shelves lead into deep centres.
+            int edge = std::min({i, z, CCELLS-1-i, CCELLS-1-z});
+            int cross = std::min(abs(i-8), abs(z-8));
+            int tread = std::min(edge, cross + 1);
+            d.pool[i][z] = 1;
+            d.elev[i][z] = tread == 1 ? -6 : tread == 2 ? -12 : -28;
+            // Some chambers are entirely shallow; others contain a column grove.
+            unsigned room = ih(cx*2+(i>=8), cz*2+(z>=8), seed ^ 0x37BAu);
+            if (room % 5 == 0) d.elev[i][z] = -6;
+            if (room % 3 == 0 && (i%8 == 3 || i%8 == 5) && (z%8 == 3 || z%8 == 5))
+                d.pillar[i][z] = 1;
         }
     }
     if (level == 0 || level == 1) {   // sunken lounges (L0) / loading docks (L1), never under walls
@@ -474,7 +492,7 @@ void World::generate(ChunkData &d, int cx, int cz) {
     //     half a chunk is a wall with extra steps; locking one that strands a
     //     closet is a cupboard worth opening. A door that strands nothing at
     //     all is a shortcut, which is also fine.
-    if ((hash64(k ^ 0x10CCEDULL ^ (uint64_t)seed
+    if (level != 2 && (hash64(k ^ 0x10CCEDULL ^ (uint64_t)seed
                 ^ ((uint64_t)visit * 0x9E3779B97F4A7C15ULL)) % 3) == 0) {
         auto solidCell = [&](int x, int z) { return d.pillar[x][z] != 0 || d.prop[x][z] != PROP_NONE; };
         // Cells reachable from (sx,sz) with the walls exactly as they stand.
@@ -565,12 +583,21 @@ void World::generate(ChunkData &d, int cx, int cz) {
                     d.wallW[i][kk] = WALL_EXIT; placed = true;
                 }
     }
-    if (cx == 0 && cz == 0) {   // clear spawn room
+    if (cx == 0 && cz == 0 && level != 2) {   // clear spawn room
         for (int i = 5; i <= 10; i++) for (int kk = 5; kk <= 10; kk++) {
             d.wallN[i][kk] = d.wallW[i][kk] = d.pillar[i][kk] = d.prop[i][kk] = d.pool[i][kk] = 0;
             d.elev[i][kk] = 0;
         }
         if (exitTest) { d.wallN[6][11] = WALL_SOLID; d.wallN[7][11] = WALL_EXIT; d.wallN[8][11] = WALL_SOLID; }
+    }
+
+    if (level==2 && cx==0 && cz==0) {
+        // Arrival opens onto the baths, rather than facing the corner of the
+        // central partition. A dry landing leaves room to learn the controls.
+        for (int i=7;i<=9;++i) for (int z=7;z<=9;++z) {
+            d.pool[i][z]=0;d.elev[i][z]=0;
+            d.wallN[i][z]=d.wallW[i][z]=WALL_NONE;
+        }
     }
 
     // No edge of walkable terrain may be taller than one step. A 0.5 m lounge
@@ -588,7 +615,7 @@ void World::generate(ChunkData &d, int cx, int cz) {
     // always terminates; the chunk's border ring is elev 0 (the placement loops
     // start at 1), so chunk seams are flat and no pass ever needs to look into
     // the neighbouring chunk.
-    for (int pass = 0; pass < 10; pass++) {
+    for (int pass = 0; level != 2 && pass < 10; pass++) {
         bool changed = false;
         for (int i = 1; i < CCELLS - 1; i++) for (int kk = 1; kk < CCELLS - 1; kk++) {
             int e = d.elev[i][kk];
@@ -693,7 +720,6 @@ bool World::poolAt(int ci, int ck) {
     return data(cx, cz).pool[ci - cx * CCELLS][ck - cz * CCELLS] != 0;
 }
 float World::floorY(int ci, int ck) {
-    if (poolAt(ci, ck)) return -0.6f;
     int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
     return data(cx, cz).elev[ci - cx * CCELLS][ck - cz * CCELLS] * ELEV_UNIT;
 }
@@ -1153,37 +1179,50 @@ void World::ensureMesh(int cx, int cz) {
     const float AOW = 0.55f;   // reach across the floor / ceiling
     const float AOH = 0.48f;   // creep up / down the wall face
     const float AOC = 0.30f;   // ceiling creases start partway down the gradient (softer)
-    if (level == 2) {   // per-cell floor: pool basins sit 0.6m down, with tiled skirts
-        Color water = { 115, 190, 217, 128 };
+    if (level == 2) {
+        Color water = { 72, 172, 162, 128 };
         for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
-            float gx = wx + i * CELL, gz = wz + kk * CELL;
-            float fy = d.pool[i][kk] ? -0.6f : 0.0f;
+            int ci = cx*CCELLS+i, ck = cz*CCELLS+kk;
+            float gx = wx + i*CELL, gz = wz + kk*CELL, fy = floorY(ci,ck);
             fl.quad({gx,fy,gz},{gx+CELL,fy,gz},{gx+CELL,fy,gz+CELL},{gx,fy,gz+CELL},{0,1,0},
                     {gx/2,gz/2},{(gx+CELL)/2,gz/2},{(gx+CELL)/2,(gz+CELL)/2},{gx/2,(gz+CELL)/2},wcol);
-            if (!d.pool[i][kk]) continue;
-            auto dry = [&](int a, int b) { return a < 0 || a >= CCELLS || b < 0 || b >= CCELLS || !d.pool[a][b]; };
-            if (dry(i, kk-1)) fl.quad({gx,0,gz},{gx+CELL,0,gz},{gx+CELL,-0.6f,gz},{gx,-0.6f,gz},{0,0,1},
-                    {gx/2,0},{(gx+CELL)/2,0},{(gx+CELL)/2,0.3f},{gx/2,0.3f},wcol);
-            if (dry(i, kk+1)) fl.quad({gx,0,gz+CELL},{gx+CELL,0,gz+CELL},{gx+CELL,-0.6f,gz+CELL},{gx,-0.6f,gz+CELL},{0,0,-1},
-                    {gx/2,0},{(gx+CELL)/2,0},{(gx+CELL)/2,0.3f},{gx/2,0.3f},wcol);
-            if (dry(i-1, kk)) fl.quad({gx,0,gz},{gx,0,gz+CELL},{gx,-0.6f,gz+CELL},{gx,-0.6f,gz},{1,0,0},
-                    {gz/2,0},{(gz+CELL)/2,0},{(gz+CELL)/2,0.3f},{gz/2,0.3f},wcol);
-            if (dry(i+1, kk)) fl.quad({gx+CELL,0,gz},{gx+CELL,0,gz+CELL},{gx+CELL,-0.6f,gz+CELL},{gx+CELL,-0.6f,gz},{-1,0,0},
-                    {gz/2,0},{(gz+CELL)/2,0},{(gz+CELL)/2,0.3f},{gz/2,0.3f},wcol);
-            // submerged step along dry edges — tiled bench to walk down into the water
-            auto pstep = [&](float bx0, float bz0, float bx1, float bz1, float nx, float nz) {
-                float mid = -0.3f, ox = nx * 0.32f, oz = nz * 0.32f;
-                fl.quad({bx0,mid,bz0},{bx1,mid,bz1},{bx1+ox,mid,bz1+oz},{bx0+ox,mid,bz0+oz},{0,1,0},
-                        {0,0},{1,0},{1,0.16f},{0,0.16f},wcol);
-                fl.quad({bx0+ox,mid,bz0+oz},{bx1+ox,mid,bz1+oz},{bx1+ox,-0.6f,bz1+oz},{bx0+ox,-0.6f,bz0+oz},{nx,0,nz},
-                        {0,0},{1,0},{1,0.15f},{0,0.15f},wcol);
+            // Emit only the high side of a riser. Cross-chunk lookups avoid
+            // false walls at seams; physics reads these same terrace heights.
+            auto skirt = [&](float x0,float z0,float x1,float z1,float low,Vector3 n) {
+                if (low >= fy) return;
+                fl.quad({x0,fy,z0},{x1,fy,z1},{x1,low,z1},{x0,low,z0},n,
+                        {(x0+z0)/2,-fy/2},{(x1+z1)/2,-fy/2},
+                        {(x1+z1)/2,-low/2},{(x0+z0)/2,-low/2},wcol);
             };
-            if (dry(i, kk-1)) pstep(gx, gz, gx+CELL, gz, 0, 1);
-            if (dry(i, kk+1)) pstep(gx, gz+CELL, gx+CELL, gz+CELL, 0, -1);
-            if (dry(i-1, kk)) pstep(gx, gz, gx, gz+CELL, 1, 0);
-            if (dry(i+1, kk)) pstep(gx+CELL, gz, gx+CELL, gz+CELL, -1, 0);
-            wt.quad({gx,-0.12f,gz},{gx+CELL,-0.12f,gz},{gx+CELL,-0.12f,gz+CELL},{gx,-0.12f,gz+CELL},{0,1,0},
-                    {0,0},{1,0},{1,1},{0,1}, water);
+            skirt(gx,gz,gx+CELL,gz,floorY(ci,ck-1),{0,0,-1});
+            skirt(gx+CELL,gz+CELL,gx,gz+CELL,floorY(ci,ck+1),{0,0,1});
+            skirt(gx,gz+CELL,gx,gz,floorY(ci-1,ck),{-1,0,0});
+            skirt(gx+CELL,gz,gx+CELL,gz+CELL,floorY(ci+1,ck),{1,0,0});
+            if (d.pool[i][kk])
+                wt.quad({gx,WATER_Y,gz},{gx+CELL,WATER_Y,gz},{gx+CELL,WATER_Y,gz+CELL},{gx,WATER_Y,gz+CELL},{0,1,0},
+                        {0,0},{1,0},{1,1},{0,1},water);
+        }
+        // Elliptical vaults spanning the openings in the central partitions.
+        // The lowest point is 3.2 m above the deck: all collision lives in the
+        // full-height piers already represented by the wall grid.
+        for (int axis=0; axis<2; ++axis) for (int start : {3,11}) {
+            auto pos = [&](float t,float y,float depth) -> Vector3 {
+                return axis ? Vector3{wx+16+depth,y,wz+t} : Vector3{wx+t,y,wz+16+depth};
+            };
+            for (int n=0;n<24;++n) {
+                float t0=start*CELL+6.0f*n/24, t1=start*CELL+6.0f*(n+1)/24;
+                auto archY = [&](float t) { float u=(t-(start*CELL+3))/3;
+                    return 3.2f+1.35f*sqrtf(std::max(0.0f,1-u*u)); };
+                float y0=archY(t0),y1=archY(t1);
+                for (float side : {-WT,WT}) {
+                    Vector3 normal=axis ? Vector3{side/WT,0,0}:Vector3{0,0,side/WT};
+                    wa.quad(pos(t0,y0,side),pos(t1,y1,side),pos(t1,wallH,side),pos(t0,wallH,side),normal,
+                            {t0/2,-y0/2},{t1/2,-y1/2},{t1/2,-wallH/2},{t0/2,-wallH/2},wcol);
+                }
+                Vector3 normal=axis ? Vector3{0,-1,(y1-y0)/(t1-t0)}:Vector3{(y1-y0)/(t1-t0),-1,0};
+                wa.quad(pos(t0,y0,-WT),pos(t1,y1,-WT),pos(t1,y1,WT),pos(t0,y0,WT),normal,
+                        {t0/2,0},{t1/2,0},{t1/2,WT},{t0/2,WT},wcol);
+            }
         }
     } else {
         // per-cell floor: sunken lounges (L0) and loading docks (L1) change height, with real steps
@@ -1343,7 +1382,7 @@ void World::ensureMesh(int cx, int cz) {
             float yq = wallTop - 0.12f;
             // Recessed diffuser inside a real metal tray. The luminous plane
             // now matches uLY instead of floating 10 cm above its own light.
-            Color rim = {156, 153, 140, 254};
+            Color rim = level == 2 ? Color{230,232,223,254} : Color{156,153,140,254};
             const float outer = 0.69f, lip = 0.035f;
             addSolidBox(pr, lx-outer, yq-lip, lz-outer, lx-hp, wallTop, lz+outer, rim);
             addSolidBox(pr, lx+hp, yq-lip, lz-outer, lx+outer, wallTop, lz+outer, rim);
@@ -1363,7 +1402,7 @@ void World::ensureMesh(int cx, int cz) {
         // see straight through. Everything fixed to the wall — sill, door head,
         // architrave — is measured off that same base, so a doorway in a step
         // has its head where a real one would.
-        float fyc = floorY(gi0, gk0), cyc = fyc + wallH;
+        float fyc = floorY(gi0, gk0), cyc = ceilY(gi0, gk0);
         float nb = std::min(floorY(gi0, gk0 - 1), floorY(gi0, gk0));
         float nt = std::max(ceilY(gi0, gk0 - 1), ceilY(gi0, gk0));
         float wb = std::min(floorY(gi0 - 1, gk0), floorY(gi0, gk0));
@@ -1605,9 +1644,9 @@ void World::ensureMesh(int cx, int cz) {
             // the ones a building actually uses: outlets at the skirting, a
             // switch at the handle, a return grille up near the ceiling.
             auto pick = [&](uint32_t h, float &yc, int &id) {
-                if (h % EXITSIGN_RATE == 0) { yc = 2.44f; id = FIX_SIGN;   return true; }
-                if (h % GRILLE_RATE == 0)   { yc = 2.10f; id = FIX_GRILLE; return true; }
-                if (h % SWITCH_RATE == 0)   { yc = 1.22f; id = FIX_SWITCH; return true; }
+                if (level != 2 && h % EXITSIGN_RATE == 0) { yc = 2.44f; id = FIX_SIGN;   return true; }
+                if (level != 2 && h % GRILLE_RATE == 0)   { yc = 2.10f; id = FIX_GRILLE; return true; }
+                if (level != 2 && h % SWITCH_RATE == 0)   { yc = 1.22f; id = FIX_SWITCH; return true; }
                 // A pool hall does not have mains sockets at ankle height, and
                 // Level 2 is the one level meant to read as still maintained.
                 if (level != 2 && h % OUTLET_RATE == 0) {
@@ -1641,13 +1680,13 @@ void World::ensureMesh(int cx, int cz) {
             // underneath and off to one side.
             uint32_t hc = ih(gi, gk, seed ^ 0x71E3u);
             float ccx = gx + CELL * 0.5f, ccz = gz + CELL * 0.5f;
-            if (hc % DIFFUSER_RATE == 0) {
+            if (level != 2 && hc % DIFFUSER_RATE == 0) {
                 const FixtureRect &f = FIXTURES[FIX_DIFFUSER];
                 float yq = cyc - 0.008f;
                 fx.quad({ccx-f.halfW,yq,ccz-f.halfH},{ccx-f.halfW,yq,ccz+f.halfH},
                         {ccx+f.halfW,yq,ccz+f.halfH},{ccx+f.halfW,yq,ccz-f.halfH},{0,-1,0},
                         {f.u0,f.v0},{f.u0,f.v1},{f.u1,f.v1},{f.u1,f.v0}, FIXC);
-            } else if (hc % SPRINK_RATE == 0) {
+            } else if (level != 2 && hc % SPRINK_RATE == 0) {
                 const Color BRASS = { 158, 126, 66, 254 };
                 addSolidBox(fx, ccx-0.016f, cyc-0.085f, ccz-0.016f, ccx+0.016f, cyc, ccz+0.016f, BRASS);
                 addSolidBox(fx, ccx-0.033f, cyc-0.085f, ccz-0.033f, ccx+0.033f, cyc-0.070f, ccz+0.033f, BRASS);
@@ -1888,8 +1927,8 @@ int World::gatherCellAABBs(int ci, int ck, AABB *out, int cap, int cnt, bool inc
     // level with, so a body up here walks over it freely while a body down there
     // is stopped at the face and has to find another way round.
     //
-    // Pools are exempt on both sides: a pool's floor is 0.6 m down and getting
-    // into and out of one is handled by the poolAt branches in the mover, which
+    // Pools are exempt on both sides: submerged risers and assisted climbs
+    // are handled by the poolAt branches in the mover, which
     // a blocker here would override. Today the generator relaxes every terrace
     // to within MAX_STEP, so nothing it produces trips this — it is here so the
     // drops WORLD-03..WORLD-10 want to add are solid the day they land, and

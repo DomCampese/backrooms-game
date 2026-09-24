@@ -144,7 +144,8 @@ void Game::renderScene(double now) {
     SetShaderValue(worldShader, locOccN, &occN, SHADER_UNIFORM_FLOAT);
 
     BeginTextureMode(rt);
-    ClearBackground(BLACK);
+    // Long pool galleries fade into atmospheric colour beyond the streamed ring.
+    ClearBackground(level==2 ? Color{48,70,66,255} : BLACK);
     BeginMode3D(cam);
     Matrix ident = MatrixIdentity();
     struct VisibleChunk { ChunkData *data; float distance2; };
@@ -565,12 +566,17 @@ void Game::renderUI(double now) {
     ClearBackground(BLACK);
     SetShaderValue(postShader, locPTime, &timeF, SHADER_UNIFORM_FLOAT);
     SetShaderValue(postShader, locPFear, &fear, SHADER_UNIFORM_FLOAT);
+    float submerged = level==2 && world.poolAt(cellOf(px),cellOf(pz)) ? clampf((WATER_Y-eyeY)*8,0,1) : 0;
+    SetShaderValue(postShader,locPWater,&submerged,SHADER_UNIFORM_FLOAT);
     BeginShaderMode(postShader);
     DrawTextureRec(rt.texture, { 0, 0, (float)rt.texture.width, -(float)rt.texture.height }, { 0, 0 }, WHITE);
     EndShaderMode();
     if (cleanShot && !inMenu) { EndDrawing(); return; }
 
     int sw = GetScreenWidth(), sh = GetScreenHeight();
+    if (swimming && !inMenu)
+        hudTextC(inTouchActive() ? "JUMP  surface   ·   DUCK  dive" : "SPACE  surface   ·   CTRL  dive   ·   SHIFT  swim faster",
+                 sw/2,sh-hud(42),hud(16),Color{174,221,214,230});
 
     if (inMenu && deathT > 0) {   // the run just ended; the card holds the title screen
         DrawRectangle(0, 0, sw, sh, Fade(Color{ 10, 3, 3, 255 }, 0.88f));
