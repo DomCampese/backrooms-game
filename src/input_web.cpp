@@ -124,7 +124,7 @@ bool inKeyDown(int key) {
         case KEY_D:            return g.moveX >  DZ;
         case KEY_A:            return g.moveX < -DZ;
         case KEY_LEFT_SHIFT:   return (g.down & BTN_SPRINT) != 0;
-        case KEY_Z: return (g.down & BTN_SQUEEZE) != 0;
+        case KEY_C: return (g.down & BTN_SQUEEZE) != 0;
         case KEY_LEFT_CONTROL: return (g.down & BTN_CROUCH) != 0;
         default:               return false;
     }

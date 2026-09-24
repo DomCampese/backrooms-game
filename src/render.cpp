@@ -632,7 +632,7 @@ void Game::renderUI(double now) {
         const char *tc = inTouchActive()
             ? TextFormat("STICK move    AIM taps the sights up and down    LAMP torch    ITEM cycle    bank %d doubloons to leave",
                          ESCAPE_COST)
-            : TextFormat("WASD move    SHIFT run    Z squeeze    F flashlight    1/2/4 item    bank %d doubloons to leave",
+            : TextFormat("WASD move    SHIFT run    C squeeze    F flashlight    1/2/4 item    bank %d doubloons to leave",
                          ESCAPE_COST);
         hudTextC(tc, sw / 2, sh - hud(42), hud(15), { 128, 122, 96, 170 });
         EndDrawing();
@@ -662,7 +662,7 @@ void Game::renderUI(double now) {
         hudTextC(t2, sw / 2, sh / 3 + hud(66), hud(18), Fade({ 160, 150, 110, 255 }, ta * 0.9f));
         const char *t3 = inTouchActive()
             ? "STICK walk   push past its ring to run   DUCK crouch   SQUEEZE   JUMP   LAMP torch   ITEM cycle   DRINK   MARK chalk   USE vend/pick up"
-            : "WASD walk   SHIFT run   CTRL crouch   Z squeeze   SPACE jump   F flashlight   1/2/4 item   3 drink   M chalk   E vend/pick up";
+            : "WASD walk   SHIFT run   CTRL crouch   C squeeze   SPACE jump   F flashlight   1/2/4 item   3 drink   M chalk   E vend/pick up";
         hudTextC(t3, sw / 2, sh - hud(60), hud(16), Fade({ 140, 132, 100, 255 }, ta * 0.8f));
         if (bestEsc || bestKill || bestM || bestWins) {
             const char *tb = bestTapes > 0

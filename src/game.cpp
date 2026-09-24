@@ -992,7 +992,7 @@ void Game::updateMovement(float dt) {
     // webMoveScale returns 1 for keys and for a stick at full deflection, so
     // this multiplies nothing away on any other platform.
     if (moving) { float ms = webMoveScale(); ix *= ms; iz *= ms; }
-    updateSqueeze(inCursorHidden() && inKeyDown(KEY_Z),dt);
+    updateSqueeze(inCursorHidden() && inKeyDown(KEY_C),dt);
     bool inWater = world.poolAt(cellOf(px),cellOf(pz)) && py < WATER_Y-0.08f;
     bool crouched = inKeyDown(KEY_LEFT_CONTROL) && !inWater;
     crouchCur += ((crouched ? 1.0f : 0.0f) - crouchCur) * fminf(1, 10 * dt);

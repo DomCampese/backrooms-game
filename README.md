@@ -462,7 +462,7 @@ Details that reward paying attention:
 | mouse | look |
 | SHIFT | sprint |
 | CTRL | crouch / dive in deep water |
-| Z (hold) | squeeze through narrow gaps; release in open space to straighten up |
+| C (hold) | squeeze through narrow gaps; release in open space to straighten up |
 | SPACE | jump / surface while swimming |
 | F / L | flashlight |
 | hold right mouse | revolver iron sights (release to lower; no reload while aiming) |

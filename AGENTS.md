@@ -1528,7 +1528,7 @@ pass, and both obey the same three rules, learned the hard way:
   actors and walls; separate damage loops let one round hit multiple targets.
   Mesh bounds must accept a ray starting inside the box: rejecting it by the
   distance to the box exit skips nearby interior triangles.
-- Z / touch SQUEEZE reduces the player radius to 0.12 m at 1.1 m/s. On release,
+- C / touch SQUEEZE reduces the player radius to 0.12 m at 1.1 m/s. On release,
   retain the narrow stance until the normal radius fits; expanding in a gap can
   eject the player through a wall. Match the collider's height tolerance.
 - The source reload uses quarter-size live rounds as a visibility switch.
