@@ -1612,3 +1612,22 @@ pass, and both obey the same three rules, learned the hard way:
   change therefore captures byte-identical to the frame without it, which
   reads as "my overlay does nothing". Turn `cleanShot` off and move `runStart`
   back for that capture, as `wounded.png` does.
+
+## Poolrooms generation (September 2026)
+
+- Level 2 is no longer one stamped layout. `World::generate` makes about one
+  chunk in four a grand hall (one basin, a colonnade in the deep water); the
+  rest keep the arched cross, and each quarter is one of bath, flooded tunnels
+  (braided maze, wading or swim depth), submerged staircase (0.4 m treads to
+  -2.8 m), window gallery, stepping stones or private tubs.
+- Cells 0 and 15 are a dry walkway on every chunk, which is what lets chunks
+  generated blind of each other connect. Keep it if you add room types.
+- The mesher draws arches only where the partition is solid on both sides of
+  the opening; grand halls have no partition, and an unconditional arch would
+  hang in mid-air over water.
+- Level 2 turns every WALL_DOOR into WALL_NONE after connectivity and
+  thinning: tiled halls get plain openings, not office door frames.
+- Level 2 windows are emissive pale panes (alpha 70), one per face, rather
+  than glass: the lore's windows look into a light void, not the next room.
+- Regression finds and captures a window gallery, a staircase and a tunnel
+  and fails if any room type goes missing or water drops below half the cells.

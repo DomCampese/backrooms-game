@@ -691,6 +691,41 @@ int main() {
         capture(g,"pool-wall-corner.png"); corner=true;
     }
     CHECK(corner);
+    // The Poolrooms are no longer one layout per chunk. Over a patch of the
+    // level every lore room type must turn up, and each gets a capture:
+    // glowing windows, a staircase descending into deep water, flooded tunnels.
+    {
+        bool win=false, stairs=false, tunnel=false, hall=false;
+        int wet=0, cells=0;
+        for (int a=1;a<96;++a) for (int b=1;b<96;++b) {
+            ++cells; if (g.world.poolAt(a,b)) ++wet;
+            float e=g.world.floorY(a,b);
+            if (!win && g.world.wallNVal(a,b)==WALL_WINDOW && !g.world.poolAt(a,b+1) && !g.world.pillarAt(a,b+1)) {
+                g.px=a*CELL+1; g.pz=(b+2)*CELL+0.2f; g.py=g.world.floorY(a,b+1); g.eyeY=g.py+1.62f;
+                g.yaw=-PI/2; g.pitch=0.05f;
+                capture(g,"pool-windows.png"); win=true;
+            }
+            // three treads in a row, each one step (0.4 m) below the last
+            if (!stairs && g.world.poolAt(a,b) && fabsf(e+0.4f)<0.01f &&
+                fabsf(g.world.floorY(a+1,b)+0.8f)<0.01f && fabsf(g.world.floorY(a+2,b)+1.2f)<0.01f &&
+                !g.world.poolAt(a-1,b) && !g.world.pillarAt(a-1,b)) {
+                g.px=(a-1)*CELL+0.4f; g.pz=b*CELL+1; g.py=g.world.floorY(a-1,b); g.eyeY=g.py+1.62f;
+                g.yaw=0; g.pitch=-0.35f;
+                capture(g,"pool-stairs.png"); stairs=true;
+            }
+            // a one-cell flooded corridor: walls both sides, open ahead and behind
+            if (!tunnel && g.world.poolAt(a,b) && g.world.wallWVal(a,b)==WALL_SOLID && g.world.wallWVal(a+1,b)==WALL_SOLID &&
+                g.world.poolAt(a,b+1) && g.world.poolAt(a,b+2) && g.world.wallNVal(a,b+1)==WALL_NONE &&
+                g.world.wallNVal(a,b+2)==WALL_NONE && g.world.floorY(a,b)>-1.0f) {
+                g.px=a*CELL+1; g.pz=b*CELL+0.5f; g.py=g.world.floorY(a,b); g.eyeY=g.py+1.62f;
+                g.yaw=PI/2; g.pitch=0;
+                capture(g,"pool-tunnel.png"); tunnel=true;
+            }
+            if (!hall && g.world.pillarAt(a,b) && g.world.poolAt(a,b+1) && g.world.floorY(a,b+1)<-2.0f) hall=true;
+        }
+        CHECK(win && stairs && tunnel && hall);
+        CHECK(wet*2>cells);   // still a flooded level, not a dry one with puddles
+    }
     // Isolated pillar: exposes the old hard contact rectangle and the bright
     // square where shadow rays skipped their first/last occupancy cells.
     g.applyLevel(0); g.world.unloadAll();
