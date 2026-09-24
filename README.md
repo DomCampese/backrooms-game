@@ -296,7 +296,7 @@ make run
   switch it off, but a dead battery won't switch back on. Spares turn up
   in the world like almond water and doubloons do, and top up a solid chunk
   of charge. Choose when you actually need it.
-- **Your grip on the place** — a meter that only ever goes one way on its
+- **Sanity** — a meter that only ever goes one way on its
   own. It drains the whole time you're down here, faster the deeper you go
   (roughly nine minutes' worth on Level 0, four in LEVEL FUN), faster again
   in the dark or while something is hunting you, and slower when you're
@@ -319,7 +319,7 @@ make run
   actually drink it — the can comes up, tips right back for three
   swallows, and drops away, and both hands are busy the whole time, so you
   can't shoot your way out of a decision to drink. It steadies you,
-  restores your wind, and puts a solid third of your grip back. They turn
+  restores your wind, and puts a solid third of your sanity back. They turn
   up on the floor and standing on tables, desks, cabinets and nightstands
   — wherever somebody set one down and didn't come back.
 - **Cassette tapes** — rarer finds, scattered through the halls: someone
@@ -329,7 +329,7 @@ make run
   tapes you've found and press play, and a voice comes up out of the hiss:
   synthesized formants through tape wow and dropouts, garbled just past
   intelligible. The words aren't the point. Someone was here, and while you
-  can hear them your grip on the place climbs back instead of draining — the
+  can hear them your sanity climbs back instead of draining — the
   only thing besides a can that gives any of it back, and unlike a can it
   gives it back slowly, for as long as you let the tape run.
 
@@ -462,6 +462,7 @@ Details that reward paying attention:
 | mouse | look |
 | SHIFT | sprint |
 | CTRL | crouch / dive in deep water |
+| Z (hold) | squeeze through narrow gaps; release in open space to straighten up |
 | SPACE | jump / surface while swimming |
 | F / L | flashlight |
 | hold right mouse | revolver iron sights (release to lower; no reload while aiming) |
@@ -513,6 +514,8 @@ a doorway's jambs and a locked door actually stop a body, then
 captures nine held-item and navigation views in `shots/regression`. It needs a display.
 `tools/bench.sh /absolute/baseline /absolute/new 2 3` interleaves runs and retains logs;
 legacy binaries report total runtime only. Automated captures do not save player records.
+
+Revolver rounds travel through the world and stop at the first surface or target, with a brief trail and impact debris. On touch devices, hold **SQUEEZE** while moving the stick to pass through narrow gaps.
 
 ### Poolrooms and swimming
 

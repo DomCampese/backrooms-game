@@ -219,8 +219,9 @@ vec3 roomLight(vec3 P, vec3 N){
     // reflection ray, for picking the point on a panel this surface can actually
     // see a highlight from — see the representative-point note below
     vec3 R = reflect(-V, N);
-    // march from just off the surface, so a wall face isn't shadowed by its own wall
-    vec2 shP = P.xz + N.xz * 0.16;
+    // Bias along geometry, never tile relief: a perturbed floor normal can
+    // move the lookup across an adjoining wall and light a strip behind it.
+    vec2 shP = P.xz + normalize(fragN).xz * 0.16;
     for (int dx=-1; dx<=1; dx++)
     for (int dz=-1; dz<=1; dz++){
         vec2 g = base + vec2(float(dx), float(dz));
@@ -327,7 +328,7 @@ vec3 roomLight(vec3 P, vec3 N){
                 // nonzero over a small band of the screen — and the trace is a
                 // whole DDA. Testing the cheap thing first is where the poolrooms
                 // got their frame time back.
-                if (lobe > 0.002) light += uLightCol*(lobe*mix(0.18, 1.0, lightVis(sp.xz, shP)));
+                if (lobe > 0.002) light += uLightCol*(lobe*lightVis(sp.xz, shP));
             }
         }
     }

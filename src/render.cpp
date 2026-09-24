@@ -96,7 +96,7 @@ void Game::renderScene(double now) {
     cam.position = { px, eyeY, pz };
     cam.target = Vector3Add(cam.position, fwd);
     // roll the up-vector a touch when strafing, so the camera leans into it
-    float roll = leanCur * -0.035f;
+    float roll = leanCur * -0.035f + squeezeBlend * 0.07f;
     cam.up = { r2x * sinf(roll), cosf(roll), r2z * sinf(roll) };
     cam.fovy = fov;
     cam.projection = CAMERA_PERSPECTIVE;
@@ -461,6 +461,24 @@ void Game::renderScene(double now) {
         DrawBillboardRec(cam, spr, { (float)ef1 * 128, (float)headRow * 256, 128, 256 }, epos,
                          { 0.98f, 1.96f }, { lum8, lum8, lum8, cl8(al * et) });
     }
+    for (const Bullet &b : bullets) {
+        Vector3 tail = Vector3Subtract(b.pos, Vector3Scale(b.direction,
+            fminf(1.2f, Vector3Distance(b.pos,b.tail))));
+        DrawCylinderEx(tail,b.pos,0.006f,0.009f,5,{255,211,126,220});
+        DrawSphere(b.pos,0.012f,{255,237,187,255});
+    }
+    for (const BulletImpact &impact : bulletImpacts) {
+        float age=0.24f-impact.life;
+        Color color=impact.body ? Color{125,32,24,190} : Color{211,188,144,190};
+        color.a=cl8(190*impact.life/0.24f);
+        DrawBillboard(cam,texParticle,impact.pos,0.06f+age*0.7f,color);
+        for (int i=0;i<5;++i) {
+            Vector3 spread{cosf(i*2.4f)*0.7f, sinf(i*3.7f)*0.7f, sinf(i*2.4f)*0.7f};
+            Vector3 p=Vector3Add(impact.pos,Vector3Scale(Vector3Add(impact.normal,spread),age*1.4f));
+            p.y-=age*age*2;
+            DrawSphere(p,0.009f,color);
+        }
+    }
     if (!inMenu && (drinkT > 0 || (weapon == WEAPON_DECK && deck.carried) ||
                     weapon == WEAPON_REVOLVER || (weapon == WEAPON_FLARE && flares > 0))) {
         // Held against a wall, the can falls inside that wall's shadow and goes
@@ -643,8 +661,8 @@ void Game::renderUI(double now) {
         const char *t2 = "if you're reading this, you've already noclipped";
         hudTextC(t2, sw / 2, sh / 3 + hud(66), hud(18), Fade({ 160, 150, 110, 255 }, ta * 0.9f));
         const char *t3 = inTouchActive()
-            ? "STICK walk   push past its ring to run   DUCK crouch   JUMP   LAMP torch   ITEM cycle   DRINK   MARK chalk   USE vend/pick up"
-            : "WASD walk   SHIFT run   CTRL crouch   SPACE jump   F flashlight   1/2/4 item   3 drink   M chalk   E vend/pick up";
+            ? "STICK walk   push past its ring to run   DUCK crouch   SQUEEZE   JUMP   LAMP torch   ITEM cycle   DRINK   MARK chalk   USE vend/pick up"
+            : "WASD walk   SHIFT run   CTRL crouch   Z squeeze   SPACE jump   F flashlight   1/2/4 item   3 drink   M chalk   E vend/pick up";
         hudTextC(t3, sw / 2, sh - hud(60), hud(16), Fade({ 140, 132, 100, 255 }, ta * 0.8f));
         if (bestEsc || bestKill || bestM || bestWins) {
             const char *tb = bestTapes > 0
@@ -725,7 +743,7 @@ void Game::renderUI(double now) {
         hudTextR("F · flashlight", sw - hud(16), sh - hud(28), hud(16), { 190, 180, 140, 160 });
     else if (flashOn)
         hudTextR("[ flashlight ]", sw - hud(16), sh - hud(26), hud(14), { 235, 225, 180, 120 });
-    {   // your grip on the place: always up, because it is always going down
+    {   // sanity: always up, because it is always going down
         const int w = hud(90), x = sw - w - hud(16), y = sh - hud(60), th = hud(5);
         DrawRectangle(x - hud(1), y - hud(1), w + hud(2), th + hud(2), { 0, 0, 0, 120 });
         // steady cream, souring toward red as it empties; the last stretch pulses
@@ -734,21 +752,21 @@ void Game::renderUI(double now) {
                                    : Color{ 214, 96, 84, 200 };
         if (sanity < 0.25f) bar.a = (unsigned char)(150 + 80 * (0.5f + 0.5f * sinf((float)now * 4.2f)));
         DrawRectangle(x, y, (int)(w * sanity), th, bar);
-        hudTextR("grip", x - hud(6), y - hud(4), hud(12), { 150, 142, 122, 120 });
+        hudTextR("sanity", x - hud(6), y - hud(4), hud(12), { 150, 142, 122, 120 });
     }
     if (sanityWarnT > 0 && winT <= 0 && deathT <= 0) {   // it just slipped a notch
         float a = clampf(sanityWarnT / 1.2f, 0, 1) * clampf((4.0f - sanityWarnT) / 0.4f, 0, 1);
         hudTextC(sanityLine, sw / 2, sh / 2 + hud(96), hud(19), Fade({ 206, 176, 176, 255 }, a * 0.9f));
     }
     if (flashOn || battery < 0.99f) {   // charge bar, once it's been used or spent at all
-        const int w = hud(90), x = sw - w - hud(16), y = sh - hud(44), th = hud(5);   // one row below the grip meter
+        const int w = hud(90), x = sw - w - hud(16), y = sh - hud(44), th = hud(5);   // one row below the sanity meter
         DrawRectangle(x - hud(1), y - hud(1), w + hud(2), th + hud(2), { 0, 0, 0, 120 });
         Color bar = battery < 0.15f ? Color{ 220, 90, 70, 190 } : Color{ 200, 190, 150, 150 };
         DrawRectangle(x, y, (int)(w * battery), th, bar);
         if (flashOn && battery < 0.15f) {
             const char *t = "battery low";
             float pulse = 0.5f + 0.5f * sinf((float)now * 5.0f);
-            hudTextR(t, sw - hud(16), sh - hud(78), hud(13), Fade({ 220, 120, 100, 220 }, pulse));   // clear of the grip meter
+            hudTextR(t, sw - hud(16), sh - hud(78), hud(13), Fade({ 220, 120, 100, 220 }, pulse));   // clear of the sanity meter
         }
     }
     {   // inventory, bottom-left; the selected weapon is lit
@@ -811,6 +829,8 @@ void Game::renderUI(double now) {
     } else if (nearCover) {           // cover is right there, you are just too quick for it
         coverLine = "[ cover · stop to hide ]";
         coverCol = { 190, 180, 150, 140 };
+    } else if (squeezing) {
+        coverLine = "[ squeezing ]";
     } else if (crouchCur > 0.5f) {
         coverLine = "[ crouched ]";
         coverCol = { 180, 170, 140, 120 };

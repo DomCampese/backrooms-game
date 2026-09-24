@@ -188,6 +188,15 @@ struct Game {
     static constexpr int   SHIFT_RING = 8;
     static constexpr double SHIFT_GAP_MIN = 9.0;
     static constexpr double SHIFT_GAP_SPAN = 22.0;
+    struct Bullet { Vector3 pos, tail, direction; float remaining, fade; };
+    struct BulletImpact { Vector3 pos, normal; float life; bool body; };
+    std::vector<Bullet> bullets;
+    std::vector<BulletImpact> bulletImpacts;
+    void fireBullet();
+    void updateBullets(float dt);
+    bool squeezing = false;
+    float squeezeBlend = 0;
+    void updateSqueeze(bool held, float dt);
     float muzzleSmoke = 0;                    // powder haze lingering after a shot
 
     // flare weapon: thrown, burns orange, Pirate Clark won't go near one.
@@ -204,7 +213,7 @@ struct Game {
     float deckNoteT = 0;                      // brief line when you thread or set down a tape
     const char *deckNote = "";
 
-    // revolver: hitscan, six rounds, three hits put Clark down
+    // revolver: traveling rounds, six rounds, three hits put Clark down
     int weapon = WEAPON_REVOLVER;                // see enum Weapon — keys 1/2/4, or the wheel
     int ammo = MAXAMMO;
     bool aiming = false;
@@ -365,10 +374,7 @@ struct Game {
     // party-table balloon bunch in this cell: fills pos[]/cols[] (up to 4), the
     // knot point, and returns the count (0 = no bunch). Shared by render + aim.
     int tableBalloonBunch(int a, int b, Vector3 *pos, Color *cols, Vector3 &tie);
-    void popBalloonsAlongAim();               // revolver vs. balloons, when you fire in LEVEL FUN
-    // a round from the eye against an actor's body cylinder — pitch included
-    bool shotHitsBody(float ax, float az, float feetY, float bodyH,
-                      float radius, float maxRange) const;
+    bool popBalloonAt(Vector3 point);
 
     // update, in frame order (game.cpp)
     void updateLook();

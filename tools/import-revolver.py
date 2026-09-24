@@ -51,14 +51,24 @@ def pose(animation,time):
  # gun hides the tips. Reload retains the authored individual cartridge motion.
  if animation['name']=='Shoot':
   for joint in (7,8,9,14,15,16):result[joint]=result[4]
+ # The source uses quarter-size live rounds as its visibility switch while
+ # spent cases eject. Those tiny rounds became visible when the spent meshes
+ # were omitted. Export explicit hidden poses, never miniature cartridges.
+ for j,node in enumerate(skin['joints']):
+  name=p['nodes'][node]['name']
+  if not name.startswith('DEF_Bullet'):continue
+  fired=name.startswith('DEF_BulletFired')
+  scale=np.linalg.norm(result[j][:3,:3],axis=0).mean()
+  hidden=(fired and (animation['name']!='Reload' or time>=.70)) or scale<.99
+  if hidden:
+   result[j]=np.diag([1e-6,1e-6,1e-6,1.])
  return result
-# Keep all gun geometry plus live rounds. Spent-case alternatives and loose props
-# are excluded, preventing duplicate overlapping cartridges from the source scene.
+# Keep the gun, live rounds and spent cases. Animation visibility above makes
+# the two cartridge sets mutually exclusive; unrelated loose props are excluded.
 meshes=[]
 for material in [1,0]:
  verts=[];indices=[]
  for node in p['nodes'][17:36]:
-  if 'Fired' in node['name']:continue
   pr=p['meshes'][node['mesh']]['primitives'][0]
   if pr['material']!=material:continue
   a=pr['attributes'];positions=acc(a['POSITION']);normals=acc(a['NORMAL']);uv=acc(a['TEXCOORD_0']);joints=acc(a['JOINTS_0']);weights=acc(a['WEIGHTS_0'])

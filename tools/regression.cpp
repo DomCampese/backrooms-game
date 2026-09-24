@@ -1,6 +1,7 @@
 // Native integration checks and reproducible viewmodel captures.
 #include "game.h"
 #include "raymath.h"
+#include "sfx.h"
 #define CHECK(condition) do { if (!(condition)) { \
     std::fprintf(stderr,"FAIL %s:%d: %s\n",__FILE__,__LINE__,#condition); \
     std::exit(EXIT_FAILURE); } } while (0)
@@ -133,7 +134,7 @@ int main() {
     g.weapon=WEAPON_REVOLVER;g.ammo=3;
     g.updateAim(true,.2f);CHECK(g.aiming && g.aimBlend==1 && !g.canReload());
     capture(g,"iron-sights.png");
-    g.gunCd=.36f;g.recoil=.8f;capture(g,"iron-sights-fire.png");g.gunCd=0;g.recoil=0;
+    g.gunCd=Revolver::SHOT_INTERVAL*0.86f;g.recoil=.8f;capture(g,"iron-sights-fire.png");g.gunCd=0;g.recoil=0;
     g.updateSprint(true,true,false,.016f);CHECK(!g.sprinting);
     g.updateAim(false,.08f);CHECK(!g.aiming && !g.canReload());
     g.updateAim(false,.08f);CHECK(g.aimBlend==0 && g.canReload());
@@ -203,6 +204,20 @@ int main() {
         g.revolver.pose(0,0,ammo);auto resting=vertices();
         for(size_t i=0;i<fired.size();++i) CHECK(fabsf(fired[i]-resting[i])<.002f);
     }
+    for (float t : {0.2f,0.45f,0.85f}) {
+        g.revolver.pose(1.8f*(1-t),0,0);
+        int live=0,spent=0;
+        for (int i=0;i<g.revolver.asset.boneCount();++i) {
+            const char *name=g.revolver.asset.boneName(i);
+            if (strncmp(name,"DEF_Bullet",10)!=0) continue;
+            Vector3 scale=g.revolver.asset.sampledPose[i].scale;
+            CHECK(scale.x<0.01f || fabsf(scale.x-1)<0.001f);
+            if (scale.x>0.9f) {
+                if (strncmp(name,"DEF_BulletFired",15)==0) ++spent; else ++live;
+            }
+        }
+        CHECK((t<0.5f && spent==6 && live==0) || (t>0.8f && live==6 && spent==0));
+    }
     // Assert the rule, not a proxy for it: the viewmodel has to stay inside the
     // 0.34 m collision radius, and the hold offset and scale in drawHeldWeapon
     // are what turn a model-space radius into that distance. The bare
@@ -215,7 +230,17 @@ int main() {
     CHECK(0.155f + maxRadius * 0.48f < 0.34f);
     printf("Imported reload maximum model-space radius: %.4f m\n",maxRadius);
     g.ammo=6;g.weapon=WEAPON_REVOLVER;capture(g,"revolver.png");
-    g.ammo=5;g.gunCd=.34f;
+    {
+        float savedPitch=g.pitch;
+        g.pitch=-0.5f; capture(g,"bullet-before.png");
+        g.fireBullet(); g.updateBullets(0.05f);
+        CHECK(!g.bulletImpacts.empty());
+        capture(g,"bullet-impact.png");
+        g.bullets.clear(); g.bulletImpacts.clear(); g.pitch=savedPitch;
+        g.updateSqueeze(true,0.2f); capture(g,"squeeze.png");
+        g.squeezing=false; g.squeezeBlend=0;
+    }
+    g.ammo=5;g.gunCd=Revolver::SHOT_INTERVAL*0.81f;
     g.recoil=0.7f;g.muzzleT=0.06f;g.muzzleSmoke=0.8f;capture(g,"muzzle.png");
     g.recoil=0;g.gunCd=0;g.muzzleT=0;g.muzzleSmoke=0;g.reloadT=0.9f;capture(g,"reload.png");
     for(int i=1;i<=5;++i) {
@@ -390,26 +415,58 @@ int main() {
         g.world.rebuildChunk(cx,cz);
     }
 
-    // ---- shots respect pitch. Level aim through a body hits; the same shot
-    // aimed at the ceiling misses, which it did not before — the hit test was
-    // horizontal-only, so you could shoot the ceiling and still land the round.
+    // Projectiles cross the whole frame segment, stop at geometry, and choose
+    // the nearest actor rather than the first actor in the array.
     {
-        g.px=0; g.pz=0; g.py=0; g.eyeY=1.62f; g.yaw=0; g.pitch=0; g.updateLook();
-        CHECK(g.shotHitsBody(6.0f, 0.0f, 0.0f, 1.95f, 0.55f, 60.0f));
-        g.pitch=1.0f; g.updateLook();                       // aimed well above his head
-        CHECK(!g.shotHitsBody(6.0f, 0.0f, 0.0f, 1.95f, 0.55f, 60.0f));
-        g.pitch=-1.0f; g.updateLook();                      // and at the floor in front
-        CHECK(!g.shotHitsBody(6.0f, 0.0f, 0.0f, 1.95f, 0.55f, 60.0f));
-        g.pitch=0.15f; g.updateLook();                      // a low dog at that pitch is over-shot
-        CHECK(!g.shotHitsBody(9.0f, 0.0f, 0.0f, 0.92f, 0.6f, 30.0f));
-        // the eye rides at 1.62 m and a dog stands 0.92 m, so a dead-level shot
-        // goes over its back at any range — you have to put the crosshair on it
-        g.pitch=0; g.updateLook();
-        CHECK(!g.shotHitsBody(9.0f, 0.0f, 0.0f, 0.92f, 0.6f, 30.0f));
-        g.pitch=-0.15f; g.updateLook();
-        CHECK(g.shotHitsBody(9.0f, 0.0f, 0.0f, 0.92f, 0.6f, 30.0f));
-        g.pitch=0; g.updateLook();
-        CHECK(!g.shotHitsBody(-6.0f, 0.0f, 0.0f, 1.95f, 0.55f, 60.0f));   // behind you
+        Game p;
+        p.sndHit=g.sndHit;
+        for (int x=-1;x<=1;++x) for (int z=-1;z<=1;++z)
+            p.world.chunks[World::key(x,z)]={};
+        auto &chunk=p.world.chunks[World::key(0,0)];
+        Mesh &wall=chunk.meshes[MESH_WALLS];
+        wall.vertexCount=6; wall.triangleCount=2;
+        wall.vertices=(float *)MemAlloc(18*sizeof(float));
+        const float v[]={4,0,0, 4,3,2, 4,3,0, 4,0,0, 4,0,2, 4,3,2};
+        memcpy(wall.vertices,v,sizeof(v)); chunk.built=true;
+        p.px=1; p.pz=1; p.eyeY=0.6f; p.fwd={1,0,0};
+        p.dogs[0].st=DState::Prowl; p.dogs[0].x=6; p.dogs[0].z=1; p.dogs[0].hp=3;
+        p.fireBullet(); p.updateBullets(0.1f);
+        CHECK(p.bullets.size()==1 && p.bullets[0].remaining==0);
+        CHECK_NEAR(p.bullets[0].pos.x,4,0.001f);
+        CHECK(p.dogs[0].hp==3 && p.bulletImpacts.size()==1);
+        p.updateBullets(0.3f); CHECK(p.bullets.empty() && p.bulletImpacts.empty());
+        MemFree(wall.vertices); wall={};
+        p.dogs[1]=p.dogs[0]; p.dogs[1].x=3;
+        p.ent.st=EState::Stalk; p.ent.x=8; p.ent.z=1; p.ent.hp=3;
+        p.fireBullet(); p.updateBullets(0.1f);
+        CHECK(p.dogs[1].hp==2 && p.dogs[0].hp==3 && p.ent.hp==3);
+        p.bullets.clear(); p.bulletImpacts.clear();
+        p.fwd=Vector3Normalize({1,2,0}); p.fireBullet(); p.updateBullets(0.1f);
+        CHECK(p.dogs[1].hp==2 && p.dogs[0].hp==3 && p.ent.hp==3);
+        p.bullets.clear(); p.fwd={1,0,0}; p.fireBullet(); p.updateBullets(0.001f);
+        CHECK_NEAR(p.bullets[0].pos.x,1.22f,0.001f); // finite travel, not hitscan
+        p.bullets.clear(); p.dogs[0].st=p.dogs[1].st=DState::Gone; p.ent.st=EState::Hidden;
+        p.fireBullet(); p.updateBullets(1); p.updateBullets(1); CHECK(p.bullets.empty());
+        chunk.wallW[0][0]=WALL_SOLID;
+        p.px=0.30f; p.py=0;
+        p.updateSqueeze(true,0.1f); CHECK(p.squeezing);
+        float x=p.px,z=p.pz; p.world.collideCircle(x,z,0.12f,0);
+        CHECK_NEAR(x,p.px,0.001f);
+        p.updateSqueeze(false,0.1f); CHECK(p.squeezing); // no room to expand
+        CHECK_NEAR(p.px,0.30f,0.001f);
+        p.px=1; p.updateSqueeze(false,0.1f); CHECK(!p.squeezing);
+    }
+    {
+        Wave w=makeGulpWave();
+        const short *pcm=(const short *)w.data;
+        int peak=0, jump=0;
+        for (unsigned i=1;i<w.frameCount;++i) {
+            peak=std::max(peak,std::abs((int)pcm[i]));
+            jump=std::max(jump,std::abs((int)pcm[i]-pcm[i-1]));
+        }
+        CHECK(peak>500 && peak<8000 && jump<1500);
+        CHECK(pcm[0]==0 && pcm[w.frameCount-1]==0);
+        ExportWave(w,"drinking.wav"); UnloadWave(w);
     }
 
     // ---- the catch ends the run, and only out of a committed lunge. The bare
@@ -565,6 +622,17 @@ int main() {
         CHECK(g.slide==0.0f);
     }
 
+    // A low view at a tiled Poolrooms wall exposes shadow lookup leaking
+    // across the wall when texture relief is used as the ray-origin normal.
+    g.applyLevel(2);
+    bool corner=false;
+    for (int a=2;a<30 && !corner;++a) for (int b=2;b<30 && !corner;++b) {
+        if (g.world.wallNVal(a,b)!=WALL_SOLID || g.world.poolAt(a,b) || g.world.pillarAt(a,b)) continue;
+        g.px=a*CELL+1; g.pz=b*CELL+0.65f; g.py=g.world.floorY(a,b); g.eyeY=g.py+1.62f;
+        g.yaw=-PI/2; g.pitch=-0.9f; g.ammo=6; g.reloadT=0; g.weapon=WEAPON_REVOLVER;
+        capture(g,"pool-wall-corner.png"); corner=true;
+    }
+    CHECK(corner);
     // Isolated pillar: exposes the old hard contact rectangle and the bright
     // square where shadow rays skipped their first/last occupancy cells.
     g.applyLevel(0); g.world.unloadAll();
@@ -586,7 +654,7 @@ int main() {
     printf("PASS Poolrooms buoyancy at 30/60/144 Hz, diving, resurfacing, ledges and refuge,\n"
            "     sprint recovery, crouch/stationary gating, restart reset, battery retention,\n"
            "     animation continuity, held aim/reload gating, step-height blocking,\n"
-           "     pitch-aware hit tests, doorway jambs and locked doors you cannot walk\n"
+           "     projectile travel/occlusion, squeeze clearance, drinking audio, doorway jambs and locked doors you cannot walk\n"
            "     through, the catch ending the run only out of a committed\n"
            "     lunge, arrivals that are not all from the fog, a pack that hunts by sound,\n"
            "     a building that moves out of sight, the grip meter as an ending,\n"
