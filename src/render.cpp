@@ -632,7 +632,7 @@ void Game::renderUI(double now) {
         const char *tc = inTouchActive()
             ? TextFormat("STICK move    AIM taps the sights up and down    LAMP torch    ITEM cycle    bank %d doubloons to leave",
                          ESCAPE_COST)
-            : TextFormat("WASD move    SHIFT run    F flashlight    1/2/4 item    bank %d doubloons to leave",
+            : TextFormat("WASD move    SHIFT run    Z squeeze    F flashlight    1/2/4 item    bank %d doubloons to leave",
                          ESCAPE_COST);
         hudTextC(tc, sw / 2, sh - hud(42), hud(15), { 128, 122, 96, 170 });
         EndDrawing();
