@@ -135,7 +135,84 @@ Texture2D makeCeilingTex() {
     return finishTexture(img, true);
 }
 
-// PIRATE CLARK: tricorn hat, eyepatch strap, one glowing eye, hook hand, peg leg
+// A SMILER, as the lore has it: no body you can pin down, just a shape of
+// darker dark with a grin and two eyes floating in it. Two sheets on the same
+// ENT_FRAMES x ENT_ROWS grid as the other residents. `glow` = false is the fog
+// body, lit and fogged like anything else; `glow` = true is the eyes and
+// teeth alone, drawn unlit on top, because the grin in an unlit corridor is
+// the whole of the creature. Frames churn the fog rather than stride; the
+// shared gait still drives them, so the smoke boils faster as it closes.
+Texture2D makeSmilerTex(bool glow) {
+    const int FW = 128, FH = 256, W = FW * ENT_FRAMES, H = FH * ENT_ROWS;
+    Image img = GenImageColor(W, H, BLANK);
+    Color *p = (Color *)img.data;
+    for (int hr = 0; hr < ENT_ROWS; hr++)
+    for (int f = 0; f < ENT_FRAMES; f++) {
+        int fx = f * FW, fy = hr * FH;
+        float ph = (float)f / ENT_FRAMES * TAU;
+        // 0 = turned away (no face at all), 1 = full on. The face slides and
+        // narrows across the head as it comes round.
+        float look = (hr < ENT_ROW_LEAN_L) ? (float)hr / ENT_ROW_FACE : 1.0f;
+        float shear = (hr == ENT_ROW_LEAN_L) ? -14.0f : (hr == ENT_ROW_LEAN_R) ? 14.0f : 0.0f;
+        auto off = [&](float y) { return shear * clampf((252.0f - y) / 250.0f, 0, 1); };
+        for (int y = 0; y < FH; y++)
+        for (int x = 0; x < FW; x++) {
+            float cx = 64 + off((float)y), dx = x - cx;
+            Color c = BLANK;
+            if (!glow) {
+                // Silhouette: a head, broad hunched shoulders, then smoke
+                // thinning toward the floor. Ragged by drifting noise.
+                float half = y < 70  ? 26.0f * sqrtf(fmaxf(0, 1 - powf((y - 42) / 30.0f, 2)))
+                           : y < 120 ? 26.0f + (y - 70) * 0.55f
+                                     : 53.0f - (y - 120) * 0.30f;
+                float n = fbm2(x * 0.06f + sinf(ph) * 1.3f, y * 0.035f - ph * 0.45f, 91u, 4);
+                float edge = half * (0.75f + 0.55f * n) - fabsf(dx);
+                float fade = clampf((256.0f - y) / 110.0f, 0, 1);   // dissolves toward the floor
+                float a = clampf(edge / 14.0f, 0, 1) * fade * (0.55f + 0.45f * n);
+                if (a > 0.01f) {
+                    unsigned char v = (unsigned char)(6 + 10 * n);
+                    c = { v, (unsigned char)(v * 0.9f), v, (unsigned char)(235 * a) };
+                }
+            } else if (look > 0.2f) {
+                float sx = 1.0f / (0.45f + 0.55f * look);           // narrower while turning
+                float fcx = cx - (1.0f - look) * 12.0f;
+                float u = (x - fcx) * sx, g = 0;
+                // eyes: tilted slits, hot centres and a halo
+                for (int side = -1; side <= 1; side += 2) {
+                    float ex = u - side * 13.0f, ey = (y - 36) + side * ex * 0.18f;
+                    float d = ex * ex / 36.0f + ey * ey / 6.0f;
+                    g = fmaxf(g, clampf(1.6f - d, 0, 1));
+                    g = fmaxf(g, 0.35f * expf(-d * 0.15f));
+                }
+                // the grin: a crescent far wider than any mouth, lined with teeth
+                float mu = u / 34.0f;
+                if (fabsf(mu) < 1.0f) {
+                    float top = 52 + 6 * mu * mu, bot = 52 + 18 * (1 - mu * mu) * 0.9f + 4;
+                    float yy = (float)y;
+                    if (yy > top - 1 && yy < bot + 1) {
+                        float mid = (top + bot) * 0.5f;
+                        // alternating fangs from top and bottom; dark gaps between
+                        float tp = fmodf(fabsf(u) + 100.0f, 7.0f) / 7.0f;
+                        float fang = 1.0f - fabsf(tp - 0.5f) * 2.0f;          // 0..1 peak mid-tooth
+                        bool upper = yy < mid;
+                        float reach = upper ? (yy - top) / (mid - top + 0.01f) : (bot - yy) / (bot - mid + 0.01f);
+                        float tooth = reach < fang * 1.05f ? 1.0f : 0.0f;
+                        g = fmaxf(g, tooth * (0.85f + 0.15f * (1 - fabsf(mu))));
+                    }
+                    // faint glow bleeding off the lips
+                    float lip = fminf(fabsf(y - top), fabsf(y - bot));
+                    g = fmaxf(g, 0.25f * expf(-lip * 0.25f) * (1 - fabsf(mu)));
+                }
+                g *= clampf((look - 0.2f) / 0.4f, 0, 1);
+                if (g > 0.01f)
+                    c = { 250, 246, 226, (unsigned char)(255 * clampf(g, 0, 1)) };
+            }
+            p[(fy + y) * W + fx + x] = c;
+        }
+    }
+    return finishTexture(img, false);
+}
+
 // Where one leg is at a given point in the gait, as a fraction of full stride.
 //
 // Not a sine. A leg spends about 60% of a cycle planted — sliding backwards
@@ -152,166 +229,6 @@ static void legPose(float ph, float &x, float &lift) {
     ph -= floorf(ph);
     if (ph < 0.6f) { float t = ph / 0.6f; x = 1.0f - 2.0f * t; lift = 0.0f; }
     else           { float t = (ph - 0.6f) / 0.4f; x = -1.0f + 2.0f * t; lift = sinf(t * 3.14159265f); }
-}
-
-// PIRATE CLARK, six frames of a walk.
-//
-// The pose is the one this generator always drew; what moves between frames is
-// where the limbs are. Each limb swings about its own pivot and its offset is
-// scaled by how far down the limb the scanline is, so a leg pivots at the hip
-// and travels furthest at the boot rather than sliding sideways as a block.
-//
-// The two legs are not mirror images. He has a peg on the right, and a peg does
-// not stride — it is planted and swung stiffly from the hip. Giving the real leg
-// a longer throw than the peg is what turns a walk into his walk.
-Texture2D makeEntityTex() {
-    const int FW = 128, FH = 256, W = FW * ENT_FRAMES, H = FH * ENT_ROWS;
-    Image img = GenImageColor(W, H, BLANK);
-    Color *p = (Color *)img.data;
-    int fx = 0, fy = 0;   // origin of the cell being drawn; every write goes through it
-    auto put = [&](int x, int y, Color c) { x += fx; y += fy; if (x >= 0 && x < W && y >= 0 && y < H) p[y * W + x] = c; };
-    auto hspan = [&](int y, float cx, float halfw, Color c) {
-        for (int x = (int)(cx - halfw); x <= (int)(cx + halfw); x++) put(x, y, c);
-    };
-    Color body = { 13, 11, 10, 255 };
-    Color hat  = { 18, 15, 13, 255 };
-    Color wood = { 62, 48, 33, 255 };
-    for (int hr = 0; hr < ENT_ROWS; hr++)
-    for (int f = 0; f < ENT_FRAMES; f++) {
-    fx = f * FW; fy = hr * FH;
-    // 0 = looking away over his shoulder, 1 = facing you. The head, hat, beard
-    // and eye all ride it; the body does not turn, because the thing that makes
-    // this read is the head moving independently of the walk.
-    float look = (hr < ENT_ROW_LEAN_L) ? (float)hr / (ENT_ROW_FACE) : 1.0f;
-    float headShift = -(1.0f - look) * 9.0f;
-    // He tips into where he is going, from the feet up — they stay planted.
-    float shear = (hr == ENT_ROW_LEAN_L) ? -12.0f : (hr == ENT_ROW_LEAN_R) ? 12.0f : 0.0f;
-    // How far sideways the body is at a given height: the lean, pivoting at the
-    // boots, plus the head turn over the top 80 px. Everything stamped on him
-    // after the scanline loop — the eyepatch, the eye, the skull, the bandolier
-    // — has to go through this too. Those stamps only paint pixels that are
-    // already opaque, so a stamp at the unsheared position silently lands on
-    // empty background and vanishes: on the first lean row his eye went out.
-    auto bodyOff = [&](float y) {
-        float o = shear * clampf((252.0f - y) / 250.0f, 0, 1);
-        if (y < 80) o += headShift * clampf((80.0f - y) / 60.0f, 0, 1);
-        return o;
-    };
-    float ph = (float)f / ENT_FRAMES;
-    float lx0, ll0, rx0, rl0;
-    legPose(ph, lx0, ll0);           // the real leg
-    legPose(ph + 0.5f, rx0, rl0);    // and the peg, half a cycle behind it
-    // A peg is not a leg: it is planted and swung stiffly from the hip, with
-    // barely any throw and almost no lift. That asymmetry is the limp.
-    float legReal = lx0 * 7.0f,  liftReal = ll0 * 7.0f;
-    float legPeg  = rx0 * 4.0f,  liftPeg  = rl0 * 2.5f;
-    float armL = -rx0 * 5.5f, armR = -lx0 * 4.5f;   // arms answer the opposite leg
-    float hemSway = lx0 * 2.4f;
-    for (int y = 2; y < 252; y++) {
-        float wob = (vnoise2(0.05f * y, 3.7f, 77u) - 0.5f) * 7.0f;
-        float rag = (vnoise2(0.35f * y, 9.1f, 88u) - 0.5f) * 2.5f;
-        float cx = 64 + wob * 0.35f;
-        cx += bodyOff((float)y);
-        if (y >= 2 && y < 16) hspan(y, cx, 10 + (y - 2) * 0.35f + rag * 0.5f, hat);   // hat crown
-        if (y >= 10 && y < 16) {                                                     // upturned brim corners
-            for (int s = -1; s <= 1; s += 2)
-                for (int x = (int)(cx + s * 20); x != (int)(cx + s * 28); x += s) put(x, y, hat);
-        }
-        if (y >= 16 && y < 22) hspan(y, cx, 27 + rag * 0.5f, hat);                   // brim
-        if (y >= 22 && y <= 52) {                                                    // head
-            float dy = (y - 36) / 17.0f;
-            if (dy * dy < 1.0f) hspan(y, cx, 15.0f * sqrtf(1 - dy * dy) + rag, body);
-        }
-        if (y >= 44 && y <= 74) {                                                    // long ragged beard
-            float br = vnoise2(0.4f * y, 17.3f, 91u);
-            if (br > 0.30f) hspan(y, cx, 13.0f * (1.0f - (y - 44) / 34.0f) + rag, body);
-        }
-        if (y > 56 && y <= 66) hspan(y, cx, 7 + rag, body);                          // neck
-        if (y > 62 && y <= 165) {                                                    // long coat, flared hem
-            float t = (y - 62) / 103.0f;
-            float halfw = (t < 0.10f) ? 12 + t * 110 : (y < 150 ? 23 - 5 * t : 22 + (y - 150) * 0.35f);
-            float hem = (y > 158) ? (vnoise2(0.6f * y, 5.5f, 71u) - 0.5f) * 4 : 0;
-            // heavy wool does not keep up with the legs inside it
-            float sway = (y > 138) ? hemSway * (y - 138) / 27.0f : 0.0f;
-            hspan(y, cx + sway, halfw + rag + hem, body);
-        }
-        if (y > 68 && y <= 190) {                                                    // arms
-            float t = (y - 68) / 122.0f;
-            float off = 24 + 7 * t;
-            hspan(y, cx - off + armL * t, 3.6f + rag * 0.5f, body);
-            if (y <= 184) hspan(y, cx + off + armR * t, 3.6f + rag * 0.5f, body);
-        }
-        if (y > 165 && y < 252) {                                                    // legs: boot + peg
-            float t = (y - 165) / 87.0f;
-            float lx = cx - 10 + wob * 0.2f + legReal * t;
-            float rx = cx + 10 + wob * 0.2f + legPeg * t;
-            if (y < 252 - liftReal) {
-                hspan(y, lx, 5.8f - 1.2f * t + rag * 0.5f, body);                    // left: real leg
-                if (y > 244 - liftReal) hspan(y, lx, 8, body);                        // boot
-            }
-            if (y < 252 - liftPeg) {
-                if (y <= 185) hspan(y, rx, 5.8f + rag * 0.5f, body);                 // right: stump...
-                else hspan(y, rx, 2.4f, wood);                                       // ...then peg leg
-            }
-        }
-    }
-    // eyepatch strap across the face, turning with it
-    for (int x = 46; x <= 82; x++) {
-        int y = 30 + (x - 46) / 9 + fy;
-        int xx = fx + x + (int)bodyOff(30.0f + (x - 46) / 9.0f);
-        if (xx >= 0 && xx < W && p[y * W + xx].a) { p[y * W + xx] = { 58, 52, 46, 255 }; p[(y + 1) * W + xx] = { 48, 43, 38, 255 }; }
-    }
-    // Single glowing eye; the left is under the patch. It is only lit on the row
-    // where he is facing you — eyeshine you can see means something is looking
-    // back, so it must not be there while his head is turned away.
-    if (look > 0.55f) {
-        float ex = 64 + 7.5f + bodyOff(36.0f), ey = 36;
-        for (int dy = -7; dy <= 7; dy++) for (int dx = -7; dx <= 7; dx++) {
-            float d = sqrtf((float)(dx * dx + dy * dy));
-            int x = (int)(ex + dx) + fx, y = (int)(ey + dy) + fy;
-            if (x < 0 || x >= W || y < 0 || y >= H || p[y * W + x].a == 0) continue;
-            if (d < 3.0f) p[y * W + x] = { 244, 238, 214, 255 };
-            else if (d < 7.0f) {
-                float t = expf(-(d - 3.0f) * 1.0f) * 0.6f;
-                Color &c = p[y * W + x];
-                c.r = cl8(c.r + 205 * t); c.g = cl8(c.g + 195 * t); c.b = cl8(c.b + 160 * t);
-            }
-        }
-    }
-    // hook where the right hand should be
-    {
-        float hx = 64 + 31 + armR, hy = 194;   // it is on the end of the arm that just swung
-        for (int dy = -6; dy <= 8; dy++) for (int dx = -7; dx <= 7; dx++) {
-            float d = sqrtf((float)(dx * dx + dy * dy));
-            if (fabsf(d - 5.0f) < 1.4f && dy > -3) put((int)(hx + dx), (int)(hy + dy), { 150, 150, 158, 255 });
-        }
-        for (int y = 186; y < 191; y++) hspan(y, hx, 2, { 120, 120, 126, 255 });     // hook base
-        for (int q = -1; q <= 1; q++) put((int)(hx + 4), (int)(hy + q), { 224, 226, 234, 255 }); // glint
-    }
-    // the movie-poster details: skull on the hat, bandolier, brass buttons
-    auto putIf = [&](int x, int y, Color c) {
-        x += fx + (int)bodyOff((float)y); y += fy;
-        if (x >= 0 && x < W && y >= 0 && y < H && p[y * W + x].a) p[y * W + x] = c;
-    };
-    {   // bone-white skull emblem, crossbones behind
-        for (int s = -1; s <= 1; s += 2)
-            for (int t = 2; t <= 7; t++) { putIf(64 + s * t, 7 + t, { 188, 180, 156, 255 }); putIf(64 + s * t, 8 + t, { 172, 164, 140, 255 }); }
-        for (int dy = -3; dy <= 3; dy++) for (int dx = -3; dx <= 3; dx++)
-            if (dx * dx + dy * dy * 1.6f < 10.5f) putIf(64 + dx, 8 + dy, { 208, 199, 172, 255 });
-        putIf(62, 7, { 25, 20, 16, 255 }); putIf(63, 7, { 25, 20, 16, 255 });   // sockets
-        putIf(65, 7, { 25, 20, 16, 255 }); putIf(66, 7, { 25, 20, 16, 255 });
-        for (int x = 62; x <= 66; x++) putIf(x, 11, (x & 1) ? Color{ 30, 24, 18, 255 } : Color{ 196, 188, 162, 255 }); // teeth
-    }
-    {   // bandolier slung shoulder to hip, brass studs
-        for (int y = 68; y <= 128; y++) {
-            int xc = 54 + (y - 68) * 22 / 60;
-            for (int dx = -2; dx <= 2; dx++)
-                putIf(xc + dx, y, dx == 0 && (y % 9) < 2 ? Color{ 172, 136, 66, 255 } : Color{ 54, 43, 34, 255 });
-        }
-        for (int y = 82; y <= 152; y += 14) { putIf(59, y, { 158, 124, 58, 255 }); putIf(60, y, { 182, 148, 74, 255 }); } // buttons
-    }
-    }
-    return finishTexture(img, false);
 }
 
 // THE PARTYGOER =): pale yellow, painted-on smile, striped party hat. It was

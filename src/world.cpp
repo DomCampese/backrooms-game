@@ -1203,7 +1203,7 @@ void World::ensureMesh(int cx, int cz) {
                         {0,0},{1,0},{1,1},{0,1},water);
         }
         // Elliptical vaults spanning the openings in the central partitions.
-        // The lowest point is 3.2 m above the deck: all collision lives in the
+        // The lowest point is 4.6 m above the deck: all collision lives in the
         // full-height piers already represented by the wall grid.
         for (int axis=0; axis<2; ++axis) for (int start : {3,11}) {
             auto pos = [&](float t,float y,float depth) -> Vector3 {
@@ -1212,7 +1212,7 @@ void World::ensureMesh(int cx, int cz) {
             for (int n=0;n<24;++n) {
                 float t0=start*CELL+6.0f*n/24, t1=start*CELL+6.0f*(n+1)/24;
                 auto archY = [&](float t) { float u=(t-(start*CELL+3))/3;
-                    return 3.2f+1.35f*sqrtf(std::max(0.0f,1-u*u)); };
+                    return 4.6f+2.4f*sqrtf(std::max(0.0f,1-u*u)); };
                 float y0=archY(t0),y1=archY(t1);
                 for (float side : {-WT,WT}) {
                     Vector3 normal=axis ? Vector3{side/WT,0,0}:Vector3{0,0,side/WT};

@@ -78,13 +78,15 @@ int main() {
         for (float hz : {30.0f,60.0f,144.0f}) {
             g.px=deepX*CELL+1;g.pz=deepZ*CELL+1;
             g.py=-0.7f;g.vy=-3;g.grounded=false;
-            for (int i=0;i<(int)(hz*6);++i) CHECK(g.updateSwimming(1/hz,false,false));
+            // holding JUMP floats you at the surface
+            for (int i=0;i<(int)(hz*6);++i) CHECK(g.updateSwimming(1/hz,true));
             CHECK_NEAR(g.py,WATER_Y-1.35f,0.015f);
             CHECK(!g.grounded && g.swimming);
-            for (int i=0;i<(int)(hz*3);++i) g.updateSwimming(1/hz,true,false);
+            // letting go is the dive: you sink, and the floor stops you
+            for (int i=0;i<(int)(hz*3);++i) g.updateSwimming(1/hz,false);
             CHECK(g.py+1.62f<WATER_Y-0.5f);
             CHECK(g.py>=g.world.floorY(deepX,deepZ));
-            for (int i=0;i<(int)(hz*4);++i) g.updateSwimming(1/hz,false,true);
+            for (int i=0;i<(int)(hz*6);++i) g.updateSwimming(1/hz,true);
             CHECK_NEAR(g.py,WATER_Y-1.35f,0.02f);
             CHECK(fabsf(g.vy)<0.03f);
         }
@@ -93,7 +95,7 @@ int main() {
         g.py=-2.65f;g.eyeY=g.py+1.62f;
         capture(g,"pool-underwater.png");
         g.px=64;g.pz=65;g.py=0;
-        CHECK(!g.updateSwimming(1.0f/60,false,false));
+        CHECK(!g.updateSwimming(1.0f/60,false));
         g.ent.st=EState::Chase;g.fear=0.8f;
         g.updateEntity(1,100);CHECK(g.ent.st==EState::Hidden && g.fear<0.01f);
         g.sanity=0.4f;g.updateAmbience(1,100);CHECK(g.sanity>0.4f);
@@ -486,7 +488,27 @@ int main() {
         g.ent.lunge=0; g.ent.lungeCd=0;
         g.updateEntity(0.001f, 100.0);
         CHECK(g.ent.lunge>0 && !g.inMenu);
-        // and a commit that reaches you ends the run, with the card's numbers frozen
+        // a landed commit costs health, not the run: you are shoved clear, get a
+        // moment of immunity, and he reels from the swing
+        g.health=1; g.hurtT=0;
+        g.ent.x=g.px+1.0f; g.ent.z=g.pz; g.ent.lunge=Game::LUNGE_TIME;
+        g.updateEntity(0.001f, 100.0);
+        CHECK(!g.inMenu && g.deathT<=0 && fabsf(g.health-(1-Game::ENTITY_HIT))<1e-4f);
+        CHECK(g.hurtT>0 && g.ent.lunge<=0 && g.ent.stagger>0 && g.velx<0);
+        // inside the grace a second commit cannot land
+        g.ent.x=g.px+1.0f; g.ent.z=g.pz; g.ent.lunge=Game::LUNGE_TIME;
+        g.updateEntity(0.001f, 100.0);
+        CHECK(fabsf(g.health-(1-Game::ENTITY_HIT))<1e-4f);
+        // health regenerates only after REGEN_DELAY without being touched
+        float h0=g.health;
+        g.updateHealth(Game::REGEN_DELAY-0.5f);
+        CHECK(g.health==h0 && g.hurtT<=0);
+        g.updateHealth(1.0f);
+        CHECK(g.health>h0 && g.health<1);
+        for (int i=0;i<60;++i) g.updateHealth(1.0f);
+        CHECK(g.health==1);
+        // the commit that takes the last of it ends the run, with the card's numbers frozen
+        g.health=Game::ENTITY_HIT*0.5f; g.hurtT=0;
         g.ent.x=g.px+1.0f; g.ent.z=g.pz; g.ent.lunge=Game::LUNGE_TIME;
         g.distWalked=250; g.killCount=2;
         g.updateEntity(0.001f, 100.0);
@@ -494,7 +516,7 @@ int main() {
         // runs this session has cost you, and resetting it there made the card
         // report your first death every single time.
         CHECK(g.inMenu && g.deathT>0 && g.deathCount==1);
-        CHECK(strcmp(g.deathBy,"PIRATE CLARK")==0);
+        CHECK(strcmp(g.deathBy,"A SMILER")==0);
         CHECK(g.deathM==250 && g.deathKills==2 && g.deathTime>99.0f);
         // ...and the world behind the card is a fresh descent, not the one that killed you
         CHECK(g.level==0 && g.coins==0 && g.ent.st==EState::Hidden);
@@ -511,7 +533,16 @@ int main() {
     // walk cycle that does not read as a walk is worse than no walk cycle.
     {
         g.applyLevel(0);
-        g.px=40; g.pz=40; g.py=0; g.eyeY=1.62f; g.pitch=0; g.deathT=0; g.inMenu=false;
+        // A fixed spot drifts behind a wall whenever the generator changes, and
+        // these shots then silently show an empty corridor. Find one with a
+        // clear 7 m line down +x instead.
+        float sx=41, sz=41;
+        for (int k=0;k<400;++k) {
+            float cx=(k%20)*CELL+41, cz=(k/20)*CELL+41;
+            if (g.world.lineOfSight(cx,cz,cx+7.5f,cz) && g.world.floorY(cellOf(cx),cellOf(cz))==0
+                && g.world.floorY(cellOf(cx+7),cellOf(cz))==0) { sx=cx; sz=cz; break; }
+        }
+        g.px=sx; g.pz=sz; g.py=0; g.eyeY=1.62f; g.pitch=0; g.deathT=0; g.inMenu=false;
         g.ent.x=g.px+7.0f; g.ent.z=g.pz; g.ent.dispY=0; g.ent.hp=3; g.ent.stagger=0;
         g.yaw=0; g.updateLook();
         // stalking, head still down the corridor, mid-stride at four phases
@@ -530,7 +561,7 @@ int main() {
         // The pack, mid-bound. Captured on Level 0 rather than in the Red Halls
         // they actually live in: the Red Halls sit at mean luma 12 and a black
         // dog against it is unreviewable. This shot is for the run cycle only.
-        g.px=40; g.pz=40; g.yaw=0; g.updateLook();
+        g.px=sx; g.pz=sz; g.yaw=0; g.updateLook();
         g.dogs[0].st=DState::Charge; g.dogs[0].x=g.px+5.0f; g.dogs[0].z=g.pz;
         g.dogs[0].dispY=0; g.dogs[0].hp=2; g.dogs[0].gait=0.5f;
         for (int i=0;i<2;++i) {

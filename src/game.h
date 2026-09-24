@@ -91,6 +91,14 @@ struct Game {
     static constexpr float LUNGE_TIME = 0.6f;
     static constexpr float CATCH_REACH = 1.25f;
     static constexpr float DEATH_CARD = 7.0f;   // seconds the death card holds the title screen
+    // Health. A landed lunge or a bite takes a chunk instead of the run; after
+    // a hit you get HURT_GRACE of immunity and are shoved clear, and health
+    // creeps back once nothing has touched you for REGEN_DELAY.
+    static constexpr float ENTITY_HIT = 0.4f;     // three landed lunges end it
+    static constexpr float PACK_BITE = 0.25f;
+    static constexpr float HURT_GRACE = 1.5f;
+    static constexpr float REGEN_DELAY = 6.0f;
+    static constexpr float REGEN_RATE = 0.06f;   // meter-fraction per second
     // Where he arrives from. The near band is inside the fog and close enough
     // to matter; the far band is the old behaviour, kept in the mix because
     // replacing one fixed ritual with another buys nothing.
@@ -108,7 +116,7 @@ struct Game {
     bool noBlackout = false;                  // BACKROOMS_NOBLACKOUT: suppress the random schedule
 
     // resources
-    Texture2D texEntity{}, texPartygoer{}, texProps{}, texScrawl{}, texFixtures{}, texAO{}, texOcc{}, texDog{},
+    Texture2D texEntity{}, texEntityGlow{}, texPartygoer{}, texProps{}, texScrawl{}, texFixtures{}, texAO{}, texOcc{}, texDog{},
               texAlmondWrap{}, texDeck{}, texParticle{};
     Revolver revolver;
     Mesh flareMesh{};
@@ -132,7 +140,7 @@ struct Game {
         locEntPos = -1, locEntDark = -1, locOccOrigin = -1, locOccN = -1, locEntBlock = -1;
     int locPTime = -1, locPFear = -1, locPWater = -1;
     Material mats[MAT_COUNT]{};
-    Sound steps[4]{}, splashes[2]{}, sndBigSplash{}, sndClick{}, sndScare{}, sndWin{},
+    Sound steps[4]{}, splashes[2]{}, strokes[2]{}, sndBigSplash{}, sndClick{}, sndScare{}, sndWin{},
           sndFlare{}, sndShot{}, sndHit{}, sndKill{}, sndPop{}, sndHeartbeat{}, sndTape{},
           sndValve{}, sndHowl{}, sndGulp{}, sndVoice{}, sndGroan{};
     static constexpr int NBARKS = 3;
@@ -158,6 +166,9 @@ struct Game {
     bool grounded = true;
     bool swimming = false;
     float swimPhase = 0, swimClimb = 0;
+    static constexpr float W_TAP = 0.3f;      // double-tap window for W-to-run
+    float wTapT = 0; bool wSprint = false;
+    float health = 1.0f, hurtT = 0, sinceHurt = 0;   // hurtT: immunity left after a hit
     float stamina = 1.0f, fov = 70.0f;        // camera fovy, deg — the action pull;
                                               // screen shape rides on top in baseFov()
     float bobPhase = 0;                       // counts footfalls: an integer is a foot landing
@@ -326,6 +337,10 @@ struct Game {
     // card's headline — the place taking you is not the same ending as being
     // caught, and it should not use the same words.
     void dieRun(double now, const char *by, const char *title = "YOU DID NOT GET OUT");
+    // Take a hit from something at (fromX, fromZ). Returns true if it ended the
+    // run (dieRun has then already replaced the world), false if you survived it.
+    bool hurtPlayer(double now, float dmg, const char *by, float fromX, float fromZ);
+    void updateHealth(float dt);              // grace countdown and regeneration
     bool shiftAWall();                        // PAC-03: wall off one doorway you cannot see
     bool packDeaf() const;                    // ENT-04: are you quiet enough for the pack to lose you
     void updateMenu(double now);              // drift the title-screen camera; any key begins
@@ -385,7 +400,7 @@ struct Game {
     // The same mapping as a pure function of window size, for the harness.
     static float fovForWindow(int w, int h, float aim);
     void updateMovement(float dt);
-    bool updateSwimming(float dt, bool dive, bool rise);
+    bool updateSwimming(float dt, bool rise);
     void updateSprint(bool requested, bool moving, bool crouched, float dt);
     void updateDevKeys(double now);
     void updateWeapons(float dt, double now);

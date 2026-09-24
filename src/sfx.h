@@ -38,6 +38,7 @@ static inline float panFor(float bearing) {
 Sound makeFootstep(uint32_t seed, bool through = false);
 Sound makeJumpscare();
 Sound makeSplash(uint32_t seed, bool big);
+Sound makeSwimStroke(uint32_t seed);
 Sound makeClick();
 Sound makeBalloonPop();
 Sound makeFlareStrike();
