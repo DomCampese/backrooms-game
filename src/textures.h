@@ -9,7 +9,7 @@ Texture2D makeCeilingTex();        // office ceiling tiles (Level 0 + LEVEL FUN)
 // two adjacent frames and cross-fades between them, so the count is also the
 // resolution of the gait: six is enough that adjacent frames differ by a few
 // pixels and the fade reads as motion blur rather than as a dissolve.
-constexpr int ENT_FRAMES = 6;      // the Smiler and the partygoer, 128 px per frame
+constexpr int ENT_FRAMES = 6;      // Clark, the Smiler and the partygoer, 128 px per frame
 constexpr int DOG_FRAMES = 4;      // the pack, 192 px per frame
 
 // Rows of the entity sheet, 256 px each. A billboard always faces you, so
@@ -26,6 +26,7 @@ constexpr int DOG_FRAMES = 4;      // the pack, 192 px per frame
 // DrawBillboardRec does — see AGENTS.md.
 enum EntRow { ENT_ROW_AWAY = 0, ENT_ROW_HALF, ENT_ROW_FACE, ENT_ROW_LEAN_L, ENT_ROW_LEAN_R, ENT_ROWS };
 
+Texture2D makeClarkTex();          // PIRATE CLARK, Level 0's hunter, ENT_FRAMES wide
 Texture2D makeSmilerTex(bool glow);   // the Smiler: fog body, or its unlit eyes and grin; ENT_FRAMES wide
 Texture2D makePartygoerTex();      // the thing that lives at the party
 Texture2D makeScrawlTex();         // graffiti atlas: what earlier wanderers wrote

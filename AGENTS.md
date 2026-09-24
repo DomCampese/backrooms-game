@@ -130,7 +130,7 @@ time so the executable remains independent of its working directory.
 | `revolver.{h,cpp}` | embedded authored revolver, pose interpolation, two material batches |
 | `sfx.cpp` | one-shot sounds synthesized into `Wave` buffers, plus the loaders for embedded recordings |
 | `audio.cpp` | the streaming ambience synth (hum, drone); recorded loops live in `Game::updateLoopAudio` |
-| `entity.h` | `Entity` (the Smiler; the Partygoer on Level Fun) and `Dog` state |
+| `entity.h` | `Entity` (Clark on Level 0, the Smiler on 1 and 3, the Partygoer on 4) and `Dog` state |
 | `util.{h,cpp}` | hashes, RNG, value noise, shared helpers |
 
 `tick()` calls the update functions in a fixed order — look, movement, dev
@@ -526,7 +526,7 @@ In-game, press `F3` for the debug HUD; while it is up these are live:
 | key | effect |
 |---|---|
 | `B` | force a blackout now |
-| `E` | spawn the Smiler stalking ~12 m ahead |
+| `E` | spawn the level's hunter stalking ~12 m ahead |
 | `C` | force a chase (also squeeze, so holding it while F3 is up does both) |
 | `H` | banish him |
 | `G` | refill flares and ammo |
@@ -1567,7 +1567,11 @@ pass, and both obey the same three rules, learned the hard way:
   water.
 - Double-tap W latches sprint (`wSprint`) until W is released; the second
   press must land inside `W_TAP`. Touch keeps its push-past-the-ring sprint.
-- The hunter outside Level Fun is a lore Smiler: two sheets on the entity grid,
+- One entity, three looks: `Game::hunterName()` / `clarkLevel()` pick Pirate
+  Clark on Level 0 (`makeClarkTex`), the Partygoer on Level 4, and a Smiler on
+  Levels 1 and 3. Death cards, the "IS DOWN" banner and `deathBy` go through
+  `hunterName()`; the tally reads "hunters put down" because it spans levels.
+- The Smiler is two sheets on the entity grid,
   `makeSmilerTex(false)` a fog body lit like any billboard and
   `makeSmilerTex(true)` the eyes and grin, drawn unlit at full white on top.
   Tinting the glow sheet by `lightAtCPU` like the body would put the grin out
@@ -1587,7 +1591,9 @@ pass, and both obey the same three rules, learned the hard way:
   under `assets/sounds` into `src/sounds.generated.h`; load them by path with
   `loadEmbeddedSound` / `loadEmbeddedMusic` (sfx.cpp). The synthesized pool
   water and the "Happy Birthday" music box are gone from `audio.cpp`; osc slots
-  11, 12 and 15 are free.
+  11, 12 and 15 are free. The Poolrooms deliberately have no water bed at all:
+  a recorded running-water loop was tried and removed (it read as a tap left
+  running); only the underwater loop plays, and only with your head under.
 - Loops are `Music` streams, not retriggered `Sound`s, so they wrap without a
   gap. `Game::updateLoopAudio` must run every frame, including while paused,
   or a stream underruns and stutters its last buffer.

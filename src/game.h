@@ -119,7 +119,7 @@ struct Game {
     bool noBlackout = false;                  // BACKROOMS_NOBLACKOUT: suppress the random schedule
 
     // resources
-    Texture2D texEntity{}, texEntityGlow{}, texPartygoer{}, texProps{}, texScrawl{}, texFixtures{}, texAO{}, texOcc{}, texDog{},
+    Texture2D texClark{}, texEntity{}, texEntityGlow{}, texPartygoer{}, texProps{}, texScrawl{}, texFixtures{}, texAO{}, texOcc{}, texDog{},
               texAlmondWrap{}, texDeck{}, texParticle{};
     Revolver revolver;
     Mesh flareMesh{};
@@ -172,10 +172,10 @@ struct Game {
     // Surface float: the view rides slow overlapping swells and rolls with them,
     // fading out as you go under. Visual only; buoyancy physics are unchanged.
     float floatT = 0, floatRoll = 0;
-    // Recorded water (assets/sounds/water): the Poolrooms bed and the muffled
-    // loop while your head is under. Both stream and loop; volumes are eased.
-    Music musPool{}, musUnderwater{}, musParty{};
-    float poolVol = 0, underwaterVol = 0, partyVol = 0, loopT = 0;
+    // Looped recordings: the muffled water while your head is under, and LEVEL
+    // FUN's music. Both stream and loop; volumes are eased.
+    Music musUnderwater{}, musParty{};
+    float underwaterVol = 0, partyVol = 0, loopT = 0;
     static constexpr float W_TAP = 0.3f;      // double-tap window for W-to-run
     float wTapT = 0; bool wSprint = false;
     float health = 1.0f, hurtT = 0, sinceHurt = 0;   // hurtT: immunity left after a hit
@@ -350,6 +350,10 @@ struct Game {
     // Take a hit from something at (fromX, fromZ). Returns true if it ended the
     // run (dieRun has then already replaced the world), false if you survived it.
     bool hurtPlayer(double now, float dmg, const char *by, float fromX, float fromZ);
+    // Who hunts this level: Pirate Clark on Level 0, the Partygoer in LEVEL FUN,
+    // a Smiler everywhere else. One entity, one AI; only the look and name change.
+    bool clarkLevel() const { return level == 0; }
+    const char *hunterName() const { return level == 4 ? "THE PARTYGOER" : level == 0 ? "PIRATE CLARK" : "A SMILER"; }
     void updateHealth(float dt);              // grace countdown and regeneration
     void updateLoopAudio(float dt);          // feed and fade the looping recordings (water, LEVEL FUN music)
     bool shiftAWall();                        // PAC-03: wall off one doorway you cannot see

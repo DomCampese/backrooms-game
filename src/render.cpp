@@ -427,8 +427,8 @@ void Game::renderScene(double now) {
         float fogf = expf(-entDist * c.fogDen);
         unsigned char lum8 = cl8(40 + 215 * lum);
         unsigned char al = cl8(255 * clampf(fogf * 1.6f, 0, 1) * dieA);
-        // LEVEL FUN has its own resident; everywhere else it's a Smiler
-        Texture2D &spr = (level == 4) ? texPartygoer : texEntity;
+        // LEVEL FUN has its own resident, Level 0 is Pirate Clark's, the rest are a Smiler's
+        Texture2D &spr = (level == 4) ? texPartygoer : clarkLevel() ? texClark : texEntity;
         // The gait rides ent.gait, which is also what fires his footfalls, so
         // the foot plants on the sound rather than near it — by construction,
         // off one number, rather than by two accumulators agreeing.
@@ -463,7 +463,7 @@ void Game::renderScene(double now) {
                          { 0.98f, 1.96f }, { lum8, lum8, lum8, cl8(al * (1.0f - et)) });
         DrawBillboardRec(cam, spr, { (float)ef1 * 128, (float)headRow * 256, 128, 256 }, epos,
                          { 0.98f, 1.96f }, { lum8, lum8, lum8, cl8(al * et) });
-        if (level != 4) {   // the Smiler's eyes and grin carry their own light
+        if (level != 4 && !clarkLevel()) {   // the Smiler's eyes and grin carry their own light
             unsigned char ga = cl8(255 * clampf(fogf * 2.2f, 0, 1) * dieA);
             DrawBillboardRec(cam, texEntityGlow, { (float)ef0 * 128, (float)headRow * 256, 128, 256 }, epos,
                              { 0.98f, 1.96f }, { 255, 255, 255, cl8(ga * (1.0f - et)) });
@@ -594,7 +594,7 @@ void Game::renderUI(double now) {
         hudTextC(deathTitle, sw / 2, sh / 3, hud(54), Fade({ 178, 34, 24, 255 }, a));
         hudTextC(TextFormat("%s took you on %s", deathBy, LEVELS[deathLevel].name),
                  sw / 2, sh / 3 + hud(74), hud(20), Fade({ 176, 132, 122, 255 }, a * 0.95f));
-        hudTextC(TextFormat("%02d:%02d   ·   %d m wandered   ·   %d smiler%s put down",
+        hudTextC(TextFormat("%02d:%02d   ·   %d m wandered   ·   %d hunter%s put down",
                             (int)deathTime / 60, (int)deathTime % 60, deathM,
                             deathKills, deathKills == 1 ? "" : "s"),
                  sw / 2, sh / 3 + hud(106), hud(18), Fade({ 150, 118, 110, 255 }, a * 0.9f));
@@ -629,9 +629,9 @@ void Game::renderUI(double now) {
         hudTextC(pr, sw / 2, sh * 2 / 3, hud(24), Fade({ 210, 198, 150, 255 }, pl));
         if (bestEsc || bestKill || bestM || bestWins) {
             const char *tb = bestTapes > 0
-                ? TextFormat("best:  %d got out   ·   %d smiler%s put down   ·   %d m wandered   ·   %d tape%s found",
+                ? TextFormat("best:  %d got out   ·   %d hunter%s put down   ·   %d m wandered   ·   %d tape%s found",
                              bestWins, bestKill, bestKill == 1 ? "" : "s", bestM, bestTapes, bestTapes == 1 ? "" : "s")
-                : TextFormat("best:  %d got out   ·   %d smiler%s put down   ·   %d m wandered",
+                : TextFormat("best:  %d got out   ·   %d hunter%s put down   ·   %d m wandered",
                              bestWins, bestKill, bestKill == 1 ? "" : "s", bestM);
             hudTextC(tb, sw / 2, sh * 2 / 3 + hud(40), hud(16), { 140, 132, 100, 200 });
         }
@@ -676,13 +676,13 @@ void Game::renderUI(double now) {
         hudTextC(t3, sw / 2, sh - hud(60), hud(16), Fade({ 140, 132, 100, 255 }, ta * 0.8f));
         if (bestEsc || bestKill || bestM || bestWins) {
             const char *tb = bestTapes > 0
-                ? TextFormat("best: %d got out  ·  %d smiler%s put down  ·  %d m wandered  ·  %d tape%s found",
+                ? TextFormat("best: %d got out  ·  %d hunter%s put down  ·  %d m wandered  ·  %d tape%s found",
                              bestWins, bestKill, bestKill == 1 ? "" : "s", bestM, bestTapes, bestTapes == 1 ? "" : "s")
-                : TextFormat("best: %d got out  ·  %d smiler%s put down  ·  %d m wandered",
+                : TextFormat("best: %d got out  ·  %d hunter%s put down  ·  %d m wandered",
                              bestWins, bestKill, bestKill == 1 ? "" : "s", bestM);
             hudTextC(tb, sw / 2, sh / 3 + hud(98), hud(16), Fade({ 150, 140, 105, 255 }, ta * 0.8f));
         }
-        const char *tg = TextFormat("bank %d doubloons · fight the Smiler for them · then take a door out", ESCAPE_COST);
+        const char *tg = TextFormat("bank %d doubloons · fight what hunts you for them · then take a door out", ESCAPE_COST);
         hudTextC(tg, sw / 2, sh / 3 + hud(128), hud(16), Fade({ 120, 200, 140, 255 }, ta * 0.75f));
     }
     if (winT > 0) {   // you bought your way out and found a true door
@@ -690,7 +690,7 @@ void Game::renderUI(double now) {
         DrawRectangle(0, 0, sw, sh, Fade(Color{ 6, 12, 8, 255 }, a * 0.93f));
         const char *t = "YOU ESCAPED THE BACKROOMS";
         hudTextC(t, sw / 2, sh / 3, hud(54), Fade({ 120, 235, 145, 255 }, a));
-        const char *t2 = TextFormat("out the true door   ·   %02d:%02d   ·   %d m wandered   ·   %d smiler%s put down",
+        const char *t2 = TextFormat("out the true door   ·   %02d:%02d   ·   %d m wandered   ·   %d hunter%s put down",
                                     (int)winTime / 60, (int)winTime % 60, winM, winKills, winKills == 1 ? "" : "s");
         hudTextC(t2, sw / 2, sh / 3 + hud(74), hud(20), Fade({ 150, 200, 160, 255 }, a * 0.95f));
         const char *t3 = TextFormat("escape #%d   ·   best %d", winCount, bestWins);
@@ -718,7 +718,7 @@ void Game::renderUI(double now) {
     }
     if (killT > 0) {
         float a = clampf(killT / 3.0f, 0, 1);
-        const char *t = (level == 4) ? "THE PARTYGOER IS DOWN" : "THE SMILER IS DOWN";
+        const char *t = (level == 4) ? "THE PARTYGOER IS DOWN" : clarkLevel() ? "PIRATE CLARK IS DOWN" : "THE SMILER IS DOWN";
         hudTextC(t, sw / 2, sh / 2 - hud(96), hud(44), Fade({ 205, 60, 40, 255 }, a));
         const char *t2 = TextFormat("...but nothing stays down, down here   ·   %d put down", killCount);
         hudTextC(t2, sw / 2, sh / 2 - hud(44), hud(18), Fade({ 150, 122, 100, 255 }, a * 0.9f));

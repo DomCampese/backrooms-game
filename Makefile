@@ -27,7 +27,9 @@ src/object_materials.generated.h: tools/embed-materials.py $(wildcard assets/mat
 src/models.generated.h: tools/embed-materials.py $(shell find assets/models -name "*.glb")
 	python3 tools/embed-materials.py models
 
-src/sounds.generated.h: tools/embed-materials.py $(shell find assets/sounds -name "*.ogg")
+# The directories are listed too: deleting a clip changes its folder's mtime but
+# no remaining .ogg, and the header would otherwise keep embedding the dead file.
+src/sounds.generated.h: tools/embed-materials.py $(shell find assets/sounds -name "*.ogg" -o -type d)
 	python3 tools/embed-materials.py sounds
 
 GENERATED := src/object_materials.generated.h src/models.generated.h src/sounds.generated.h

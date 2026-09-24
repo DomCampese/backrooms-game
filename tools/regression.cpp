@@ -519,7 +519,7 @@ int main() {
         // runs this session has cost you, and resetting it there made the card
         // report your first death every single time.
         CHECK(g.inMenu && g.deathT>0 && g.deathCount==1);
-        CHECK(strcmp(g.deathBy,"A SMILER")==0);
+        CHECK(strcmp(g.deathBy,"PIRATE CLARK")==0);
         CHECK(g.deathM==250 && g.deathKills==2 && g.deathTime>99.0f);
         // ...and the world behind the card is a fresh descent, not the one that killed you
         CHECK(g.level==0 && g.coins==0 && g.ent.st==EState::Hidden);
@@ -566,6 +566,24 @@ int main() {
           g.health=1-Game::ENTITY_HIT; g.hurtT=0; capture(g,"wounded.png");
           g.health=1; capture(g,"unwounded.png");
           g.runStart=rs; g.cleanShot=true; }
+        // Level 0 is Pirate Clark's; the Smiler hunts Level 1 and the Red Halls.
+        CHECK(strcmp(g.hunterName(),"PIRATE CLARK")==0);
+        {
+            g.applyLevel(1);
+            CHECK(strcmp(g.hunterName(),"A SMILER")==0);
+            float qx=41, qz=41;
+            for (int k=0;k<400;++k) {
+                float cx=(k%20)*CELL+41, cz=(k/20)*CELL+41;
+                if (g.world.lineOfSight(cx,cz,cx+7.5f,cz) && g.world.floorY(cellOf(cx),cellOf(cz))==0
+                    && g.world.floorY(cellOf(cx+7),cellOf(cz))==0) { qx=cx; qz=cz; break; }
+            }
+            g.px=qx; g.pz=qz; g.py=0; g.eyeY=1.62f; g.yaw=0; g.pitch=0;
+            g.ent.x=g.px+7.0f; g.ent.z=g.pz; g.ent.dispY=0; g.ent.st=EState::Chase; g.ent.lunge=0;
+            capture(g,"smiler-chase.png");
+            g.applyLevel(4); CHECK(strcmp(g.hunterName(),"THE PARTYGOER")==0);
+            g.applyLevel(0);
+            g.px=sx; g.pz=sz; g.ent.x=g.px+7.0f; g.ent.z=g.pz; g.yaw=0; g.updateLook();
+        }
         g.ent.st=EState::Hidden; g.ent.lunge=0;
         // The pack, mid-bound. Captured on Level 0 rather than in the Red Halls
         // they actually live in: the Red Halls sit at mean luma 12 and a black
@@ -697,7 +715,7 @@ int main() {
             CHECK(w.frameCount>0 && w.sampleRate>0);
             UnloadWave(w); ++n;
         }
-        CHECK(n>=13);   // 12 water clips and the LEVEL FUN loop
+        CHECK(n>=12);   // 11 water clips and the LEVEL FUN loop
     }
 
     // ---- a ceiling balloon found where the renderer draws it can be shot:

@@ -51,8 +51,8 @@ void AudioSynth::update() {
             float droneS = (osc(8, 41.2f) * 0.6f + osc(9, 55.3f) * 0.45f)
                          * (0.55f + 0.45f * osc(10, 0.11f)) * 0.20f * wDrone
                          + lp1 * 0.14f * wDrone;
-            // The Poolrooms' water is a looped recording (Game::updateLoopAudio),
-            // not synthesized: filtered noise here read as static, not water.
+            // No Poolrooms water bed: synthesized noise read as static and a
+            // recorded stream read as a running tap. The level is meant to be still.
             float room = lp1 * 0.08f;
             // LEVEL FUN's music is a looped recording (Game::updateLoopAudio).
             // ...and in a blackout it does not simply go away. `hum` ducks the
