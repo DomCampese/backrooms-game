@@ -1,6 +1,7 @@
 #include "sfx.h"
 #include "util.h"
 #include <cmath>
+#include <cstring>
 
 // ---------------------------------------------------------------- sounds
 static Wave makeWaveBuf(int frames) {
@@ -97,70 +98,34 @@ Sound makeJumpscare() {
     Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
 }
 
-// Water is mostly bubbles. Each one rings as a damped sine whose pitch climbs
-// as it closes (the Minnaert resonance), so a splash is a soft noise wash for
-// the impact plus a scatter of rising "plinks". Filtered noise alone, which is
-// what this used to be, reads as static rather than water.
-static float bubble(float t, float f0, float decay) {
-    if (t < 0) return 0;
-    float f = f0 * (1 + 2.2f * t * decay * 0.05f);   // chirps upward as it rings out
-    return sinf(TAU * f * t) * expf(-t * decay) * (1 - expf(-t * 900));
+// Recorded sounds embedded at build time by tools/embed-materials.py (see
+// assets/sounds/*/README.md for provenance). Same record layout as the models.
+struct EmbeddedAsset { const char *path; const unsigned char *data; size_t size; };
+#include "sounds.generated.h"
+
+static const EmbeddedAsset *findSound(const char *key) {
+    for (const EmbeddedAsset &a : soundAssets)
+        if (strcmp(a.path, key) == 0) return &a;
+    TraceLog(LOG_ERROR, "SFX: embedded sound %s is missing", key);
+    return nullptr;
 }
 
-Sound makeSplash(uint32_t seed, bool big) {
-    int n = (int)((big ? 0.9f : 0.42f) * SAMPLE_RATE);
-    Wave w = makeWaveBuf(n);
-    short *d = (short *)w.data;
-    Rng r((uint64_t)seed * 6151u + 11u);
-    const int NB = big ? 26 : 9;
-    float bt[26], bf[26], bd[26], ba[26];
-    for (int k = 0; k < NB; k++) {
-        // bubbles cluster just after the impact and thin out
-        bt[k] = (big ? 0.02f : 0.01f) + powf(r.f01(), 1.8f) * (big ? 0.55f : 0.22f);
-        bf[k] = (big ? 280.0f : 480.0f) + r.f01() * (big ? 900.0f : 1300.0f);
-        bd[k] = 28.0f + r.f01() * 40.0f;
-        ba[k] = (0.35f + r.f01() * 0.65f) * (big ? 0.22f : 0.26f);
-    }
-    float lp = 0, bp = 0, hp = 0;
-    for (int i = 0; i < n; i++) {
-        float t = i / (float)SAMPLE_RATE;
-        float wn = r.f01() * 2 - 1;
-        lp += 0.12f * (wn - lp);                  // body of the slap
-        bp += 0.35f * ((wn - hp) - bp); hp += 0.02f * (wn - hp);   // brighter spray
-        float slap = (lp * 1.6f + bp * 0.5f) * (1 - expf(-t * 400)) * expf(-t * (big ? 9.0f : 22.0f));
-        float spray = bp * 0.25f * expf(-t * (big ? 5.0f : 12.0f)) * (big ? 1.0f : 0.5f);
-        float plunk = big ? sinf(TAU * (85 + 60 * t) * t) * expf(-t * 14) * 0.35f : 0.0f;
-        float bub = 0;
-        for (int k = 0; k < NB; k++) bub += ba[k] * bubble(t - bt[k], bf[k], bd[k]);
-        float s = (slap * (big ? 0.7f : 0.45f) + spray + plunk + bub) * 0.9f;
-        d[i] = (short)(clampf1(tanhf(s)) * 30000);
-    }
+Sound loadEmbeddedSound(const char *key) {
+    const EmbeddedAsset *a = findSound(key);
+    if (!a) return Sound{};
+    Wave w = LoadWaveFromMemory(".ogg", a->data, (int)a->size);
     Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
 }
 
-// One swimming stroke: a slow swell of displaced water, a trickle off the arm
-// and a few small bubbles. No sharp attack — it is a push, not a slap.
-Sound makeSwimStroke(uint32_t seed) {
-    int n = (int)(0.75f * SAMPLE_RATE);
-    Wave w = makeWaveBuf(n);
-    short *d = (short *)w.data;
-    Rng r((uint64_t)seed * 9973u + 5u);
-    float bt[7], bf[7];
-    for (int k = 0; k < 7; k++) { bt[k] = 0.15f + r.f01() * 0.45f; bf[k] = 600 + r.f01() * 1100; }
-    float lp = 0, lp2 = 0;
-    for (int i = 0; i < n; i++) {
-        float t = i / (float)SAMPLE_RATE;
-        float wn = r.f01() * 2 - 1;
-        lp += 0.04f * (wn - lp);
-        lp2 += 0.25f * (wn - lp2);
-        float swell = sinf(3.14159f * fminf(t / 0.5f, 1.0f));            // rises and falls over half a second
-        float trickle = lp2 * 0.18f * expf(-fabsf(t - 0.42f) * 9);
-        float bub = 0;
-        for (int k = 0; k < 7; k++) bub += 0.12f * bubble(t - bt[k], bf[k], 45);
-        float s = lp * 3.2f * swell + trickle + bub;
-        d[i] = (short)(clampf1(s * 0.8f) * 30000);
-    }
-    Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
+// Streamed and looping: raylib's music stream wraps without the one-frame gap
+// a retriggered one-shot leaves at its seam. The data is static, so the
+// stream may keep pointing into it.
+Music loadEmbeddedMusic(const char *key) {
+    const EmbeddedAsset *a = findSound(key);
+    if (!a) return Music{};
+    Music m = LoadMusicStreamFromMemory(".ogg", a->data, (int)a->size);
+    m.looping = true;
+    return m;
 }
 
 Sound makeClick() {

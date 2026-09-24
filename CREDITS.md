@@ -70,8 +70,19 @@ Retain these credits and the applicable license notices when redistributing.
 - **Poly Haven**: wood_table_001, metal_plate and denim_fabric, CC0 1.0.
   [Individual source links and conversion details](assets/materials/README.md).
 
-These assets retain their CC0 status. The project's GPL notice does not replace
-their original terms.
+- **Water sounds** — splashes, swim strokes and the underwater loop by the
+  **Red Eclipse Team**, CC BY-SA 4.0 or later; the Poolrooms water ambience by
+  **Paul Hertz ("ignotus")** via Red Eclipse, CC BY-SA 3.0.
+  [Source files, commit and per-file licenses](assets/sounds/water/README.md).
+- **LEVEL FUN music** — "Sketchbook 2024-02-21_02" by **Abstraction / Tallbeard
+  Studios (Ben Burnes)**, CC0 1.0, from the
+  [Music Loop Bundle](https://tallbeard.itch.io/music-loop-bundle).
+  [Provenance and the creator's notice](assets/sounds/music/README.md).
+
+These assets retain their original licenses (CC0, or CC BY-SA for the water
+sounds). The project's GPL notice does not replace their original terms. The
+CC BY-SA sounds are distributed unmodified; attribution and license links are
+above and in their README.
 
 ## Software dependencies
 

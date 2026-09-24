@@ -184,9 +184,15 @@ void Game::init() {
         entSteps[i] = makeFootstep(300 + i * 23);                  // heavier, its own gait
         entStepsThrough[i] = makeFootstep(300 + i * 23, true);     // ...and the same foot, through a wall
     }
-    splashes[0] = makeSplash(1, false); splashes[1] = makeSplash(2, false);
-    strokes[0] = makeSwimStroke(1); strokes[1] = makeSwimStroke(2);
-    sndBigSplash = makeSplash(3, true);
+    for (int i = 0; i < 3; i++) {
+        splashIn[i]  = loadEmbeddedSound(TextFormat("sounds/water/splash_in_%d.ogg", i + 1));
+        splashOut[i] = loadEmbeddedSound(TextFormat("sounds/water/splash_out_%d.ogg", i + 1));
+    }
+    for (int i = 0; i < 4; i++)
+        swimStrokes[i] = loadEmbeddedSound(TextFormat("sounds/water/swim_%d.ogg", i + 1));
+    musPool = loadEmbeddedMusic("sounds/water/pool_ambience.ogg");
+    musUnderwater = loadEmbeddedMusic("sounds/water/underwater.ogg");
+    musParty = loadEmbeddedMusic("sounds/music/level_fun.ogg");
     sndClick = makeClick();
     sndScare = makeJumpscare();
     sndWin = makeWinChime();
@@ -275,6 +281,7 @@ void Game::shutdown() {
     UnloadMesh(flareMesh);
     for (Texture2D map : surfaceDetails) UnloadTexture(map);
     UnloadTexture(neutralDetail);
+    UnloadMusicStream(musPool); UnloadMusicStream(musUnderwater); UnloadMusicStream(musParty);
     CloseAudioDevice();
     CloseWindow();
 }
@@ -354,6 +361,32 @@ bool Game::hurtPlayer(double now, float dmg, const char *by, float fromX, float 
     SetSoundPitch(sndGroan, 1.3f); PlaySound(sndGroan);
     fear = fmaxf(fear, 0.9f);
     return false;
+}
+
+void Game::updateLoopAudio(float dt) {
+    bool pools = level == 2 && !inMenu;
+    bool under = pools && eyeY < WATER_Y && world.poolAt(cellOf(px), cellOf(pz));
+    float k = 1 - expf(-3.0f * dt);
+    poolVol += ((pools ? (under ? 0.12f : 0.55f) : 0.0f) - poolVol) * k;
+    underwaterVol += ((under ? 0.5f : 0.0f) - underwaterVol) * (1 - expf(-8.0f * dt));
+    auto feed = [](Music &m, float vol) {
+        if (!m.stream.buffer) return;   // failed to load: stay silent rather than crash
+        if (vol > 0.005f) {
+            if (!IsMusicStreamPlaying(m)) PlayMusicStream(m);
+            SetMusicVolume(m, vol);
+            UpdateMusicStream(m);
+        } else if (IsMusicStreamPlaying(m)) StopMusicStream(m);
+    };
+    feed(musPool, poolVol);
+    feed(musUnderwater, underwaterVol);
+    // LEVEL FUN: a cheerful loop played slow and flat, the pitch wandering like
+    // a tape stretched on a failing motor. Ducks with the lights in a blackout.
+    partyVol += ((level == 4 && !inMenu ? 0.32f * synth.hum : 0.0f) - partyVol) * k;
+    if (musParty.stream.buffer) {
+        loopT += dt;
+        SetMusicPitch(musParty, 0.84f + 0.025f * sinf(loopT * 0.41f) + 0.008f * sinf(loopT * 1.9f));
+    }
+    feed(musParty, partyVol);
 }
 
 void Game::updateHealth(float dt) {
@@ -561,8 +594,6 @@ void Game::applyLevel(int lv) {
     SetShaderValue(worldShader, locGloss, &c.gloss, SHADER_UNIFORM_FLOAT);
     synth.tHum = lv == 0 ? 1.0f : lv == 4 ? 0.5f : lv == 2 ? 0.035f : 0.15f;
     synth.tDrone = lv == 1 ? 1.0f : 0.0f;
-    synth.tWater = lv == 2 ? 1.0f : 0.0f;
-    synth.tParty = lv == 4 ? 1.0f : 0.0f;
     nextBlackout = lv == 2 ? BLACKOUT_NEVER : blackoutIn(GetTime(), 30, 60);   // no blackouts in the poolrooms
     blackoutEnd = -1;
     occValid = false;                                   // different floorplan, different shadows
@@ -575,7 +606,7 @@ void Game::applyLevel(int lv) {
     // keyed by level, and it survives every doorway until the descent ends —
     // which is the whole point of leaving a mark. beginDescent clears it.
     chalkSeedPending = !chalkSeeded[lv];
-    swimming=false; swimPhase=swimClimb=0;
+    swimming=false; swimPhase=swimClimb=0; floatRoll=0;
     squeezing=false; squeezeBlend=0;
     bullets.clear(); bulletImpacts.clear();
     poppedBalloons.clear(); poppedTableBunches.clear(); confetti.clear();
@@ -819,6 +850,7 @@ bool Game::tick() {
         // frozen, but the ambience stream still has to be fed or it underruns
         synth.growlTarget = 0; synth.hissTarget = 0; synth.whisperTarget = 0;
         synth.update();
+        updateLoopAudio(0);   // keep the loops fed; a stalled stream repeats its last buffer
         renderScene(now);
         renderUI(now);
         if (shotPath && frame == shotFrame) { TakeScreenshot(shotPath); return false; }   // testing
@@ -856,6 +888,7 @@ bool Game::tick() {
     updateInteraction();
     updateDrink(dt, now);
     updateAmbience(dt, now);
+    updateLoopAudio(dt);
     updateEntity(dt, now);
     updateDogs(dt, now);
     updateExits(now);
@@ -1046,7 +1079,11 @@ void Game::updateMovement(float dt) {
                 // A submerged swimmer cannot pass sideways through a basin
                 // riser. Surface first; the same edge then assists the climb.
                 px=oldX; pz=oldZ; velx=velz=0;
-            } else { swimClimb += ledge-py; py=ledge; vy=0; grounded=true; swimming=false; }
+            } else {
+                swimClimb += ledge-py; py=ledge; vy=0; grounded=true; swimming=false;
+                Sound &out=splashOut[grng.ri(0,2)];
+                SetSoundPitch(out,0.92f+grng.f01()*0.16f); SetSoundVolume(out,0.6f); PlaySound(out);
+            }
         }
     }
     // Actual travel drives footsteps, bob and records. Running into a wall
@@ -1084,8 +1121,8 @@ void Game::updateMovement(float dt) {
         }
         if (softTimer > 0.9f && fellT <= 0 && escapeT <= 0 && deathT <= 0) {
             fellT = 4.0f;
-            SetSoundVolume(sndBigSplash, 0.5f); SetSoundPitch(sndBigSplash, 0.5f);
-            PlaySound(sndBigSplash);
+            SetSoundVolume(splashIn[0], 0.5f); SetSoundPitch(splashIn[0], 0.5f);
+            PlaySound(splashIn[0]);
             applyLevel(1);
             Vector2 spot = world.findOpenSpot(px, pz);
             px = spot.x; pz = spot.y; velx = velz = 0; py = 0.6f; vy = 0; grounded = false;
@@ -1102,7 +1139,10 @@ void Game::updateMovement(float dt) {
     groundY = world.groundAt(px, pz, py);
     bool wasSwimming=swimming;
     bool afloat=updateSwimming(dt,inKeyDown(KEY_SPACE));
-    if (afloat && !wasSwimming) { SetSoundVolume(sndBigSplash,0.45f); PlaySound(sndBigSplash); }
+    if (afloat && !wasSwimming) {
+        Sound &in=splashIn[grng.ri(0,2)];
+        SetSoundPitch(in,0.95f+grng.f01()*0.1f); SetSoundVolume(in,0.55f); PlaySound(in);
+    }
     if (!afloat && inKeyPressed(KEY_SPACE) && grounded) { vy = inWater ? 4.3f : 5.6f; grounded = false; }
     if (grounded) {
         if (py > groundY + 0.05f && world.poolAt(cellOf(px), cellOf(pz))) { grounded = false; vy = 0; }  // pool edge: drop in
@@ -1122,7 +1162,10 @@ void Game::updateMovement(float dt) {
         py += vy * dt;
         if (py <= groundY) {
             py = groundY; grounded = true;
-            if (groundY < -0.1f && world.poolAt(cellOf(px), cellOf(pz))) { SetSoundVolume(sndBigSplash, 0.7f); PlaySound(sndBigSplash); }
+            if (groundY < -0.1f && world.poolAt(cellOf(px), cellOf(pz))) {
+                Sound &in = splashIn[grng.ri(0, 2)];
+                SetSoundPitch(in, 0.9f + grng.f01() * 0.15f); SetSoundVolume(in, clampf(-vy * 0.12f, 0.4f, 0.8f)); PlaySound(in);
+            }
             else {
                 Sound &s = steps[grng.ri(0, 3)];    // landing thud
                 SetSoundPitch(s, 0.62f + grng.f01() * 0.1f);
@@ -1158,18 +1201,25 @@ void Game::updateMovement(float dt) {
     // cycle, which is what lateral sway actually tracks.
     eyeY = 1.62f - 0.55f * crouchCur - landDip - softSag + py - cosf(bobPhase * 6.28318f) * 0.032f * bobAmt;
     if (swimming) {
-        eyeY=py+1.62f+sinf(swimPhase)*0.018f;
+        // Floating: two slow swells that never line up, plus a dip with each
+        // stroke, all faded out as you sink below the surface float height.
+        floatT += dt;
+        float surf = clampf(1.0f - (WATER_Y - 1.35f - py) / 0.8f, 0, 1);
+        float swell = 0.075f * sinf(floatT * 1.55f) + 0.03f * sinf(floatT * 2.6f + 1.3f);
+        eyeY = py + 1.62f + swell * surf + sinf(swimPhase) * 0.022f;
+        floatRoll = (0.045f * sinf(floatT * 1.05f + 0.6f) + 0.015f * sinf(floatT * 2.3f)) * surf;
         // Slow strokes replace land footfalls; never bob the camera like a run.
         if ((int)(swimPhase/3.14159f)!=(int)((swimPhase-dt*(1.1f+0.45f*spd))/3.14159f) && spd>0.2f) {
-            Sound &stroke=strokes[grng.ri(0,1)];
-            SetSoundPitch(stroke,0.9f+grng.f01()*0.2f); SetSoundVolume(stroke,0.45f); PlaySound(stroke);
+            Sound &stroke=swimStrokes[grng.ri(0,3)];
+            SetSoundPitch(stroke,0.9f+grng.f01()*0.2f); SetSoundVolume(stroke,0.55f); PlaySound(stroke);
         }
-    }
+    } else floatRoll *= expf(-6 * dt);
     eyeY -= swimClimb;
     if (floorf(bobPhase) > floorf(lastPhase)) {
-        Sound &s = inWater ? splashes[grng.ri(0, 1)] : steps[grng.ri(0, 3)];
-        SetSoundPitch(s, 0.9f + grng.f01() * 0.22f);
-        SetSoundVolume(s, (0.35f + 0.3f * bobAmt) * (inWater ? 1.4f : 1.0f));
+        // Wading: a swim stroke, pitched up, is a leg pushing through water.
+        Sound &s = inWater ? swimStrokes[grng.ri(0, 3)] : steps[grng.ri(0, 3)];
+        SetSoundPitch(s, (inWater ? 1.15f : 0.9f) + grng.f01() * 0.22f);
+        SetSoundVolume(s, (0.35f + 0.3f * bobAmt) * (inWater ? 1.2f : 1.0f));
         PlaySound(s);
     }
     // Keep the phase from drifting into float mush over a long run. 4096 is an
@@ -1520,8 +1570,8 @@ void Game::updateFlare(float dt, double now) {
                 else { flare.flying = false; flare.vx = flare.vy = flare.vz = 0; }
             }
             if (world.poolAt(cellOf(flare.x), cellOf(flare.z)) && flare.y < -0.10f) {   // hit pool water: fizzles out
-                Sound &s = splashes[grng.ri(0, 1)];
-                SetSoundPitch(s, 1.1f); SetSoundVolume(s, 0.8f);
+                Sound &s = splashOut[grng.ri(0, 2)];
+                SetSoundPitch(s, 1.3f); SetSoundVolume(s, 0.7f);
                 PlaySound(s);
                 flare.active = false;
                 continue;
@@ -1598,8 +1648,8 @@ void Game::updateTapeDeck(float dt, double now) {
         // water kills it outright, the same way it kills a flare
         if (world.poolAt(cellOf(deck.x), cellOf(deck.z)) && deck.y < -0.10f && deck.playing) {
             deck.playing = false; deck.t = 0;
-            Sound &sp = splashes[grng.ri(0, 1)];
-            SetSoundPitch(sp, 1.0f); SetSoundVolume(sp, 0.8f); PlaySound(sp);
+            Sound &sp = splashIn[grng.ri(0, 2)];
+            SetSoundPitch(sp, 1.25f); SetSoundVolume(sp, 0.5f); PlaySound(sp);
             deckNoteT = 2.6f; deckNote = "the water takes it. the voice stops.";
         }
     }

@@ -2,6 +2,8 @@
 #include "game.h"
 #include "raymath.h"
 #include "sfx.h"
+struct EmbeddedAsset { const char *path; const unsigned char *data; size_t size; };
+#include "sounds.generated.h"
 #define CHECK(condition) do { if (!(condition)) { \
     std::fprintf(stderr,"FAIL %s:%d: %s\n",__FILE__,__LINE__,#condition); \
     std::exit(EXIT_FAILURE); } } while (0)
@@ -507,8 +509,9 @@ int main() {
         CHECK(g.health>h0 && g.health<1);
         for (int i=0;i<60;++i) g.updateHealth(1.0f);
         CHECK(g.health==1);
-        // the commit that takes the last of it ends the run, with the card's numbers frozen
-        g.health=Game::ENTITY_HIT*0.5f; g.hurtT=0;
+        // one hit is survivable, the second is not: from the one-hit-down state a
+        // landed commit ends the run, with the card's numbers frozen
+        g.health=1-Game::ENTITY_HIT; g.hurtT=0;
         g.ent.x=g.px+1.0f; g.ent.z=g.pz; g.ent.lunge=Game::LUNGE_TIME;
         g.distWalked=250; g.killCount=2;
         g.updateEntity(0.001f, 100.0);
@@ -557,6 +560,12 @@ int main() {
         // and the chase lean, and the harder lean of a committed lunge
         g.ent.st=EState::Chase; g.ent.lunge=0; capture(g,"clark-chase.png");
         g.ent.lunge=Game::LUNGE_TIME; capture(g,"clark-lunge.png");
+        // one hit down: no bar, just the edges still red until you heal
+        { // with the HUD layer on (the harness shoots clean) and past the intro card
+          double rs=g.runStart; g.runStart=-60; g.cleanShot=false;
+          g.health=1-Game::ENTITY_HIT; g.hurtT=0; capture(g,"wounded.png");
+          g.health=1; capture(g,"unwounded.png");
+          g.runStart=rs; g.cleanShot=true; }
         g.ent.st=EState::Hidden; g.ent.lunge=0;
         // The pack, mid-bound. Captured on Level 0 rather than in the Red Halls
         // they actually live in: the Red Halls sit at mean luma 12 and a black
@@ -678,6 +687,33 @@ int main() {
     g.inMenu=false;g.weapon=WEAPON_REVOLVER;g.fov=70;g.flashOn=false;g.flashCur=0;
     g.blackoutCur=1;g.ent.st=EState::Hidden;g.entDarkCur=0;g.aimBlend=0;g.reloadT=0;
     capture(g,"pillar-contact.png");
+
+    // ---- every embedded recording decodes: a bad or truncated .ogg would
+    // otherwise load as a silent zero-length sound and play as nothing at all.
+    {
+        int n=0;
+        for (const EmbeddedAsset &a : soundAssets) {
+            Wave w=LoadWaveFromMemory(".ogg",a.data,(int)a.size);
+            CHECK(w.frameCount>0 && w.sampleRate>0);
+            UnloadWave(w); ++n;
+        }
+        CHECK(n>=13);   // 12 water clips and the LEVEL FUN loop
+    }
+
+    // ---- a ceiling balloon found where the renderer draws it can be shot:
+    // render.cpp now places them through balloonAt, the function bullets test.
+    {
+        g.applyLevel(4);
+        int ba=0,bb=0; Vector3 bp{}; bool found=false;
+        for (int a=0;a<60 && !found;++a) for (int b=0;b<60 && !found;++b)
+            if (g.balloonAt(a,b,bp)) { ba=a; bb=b; found=true; }
+        CHECK(found);
+        CHECK(g.popBalloonAt(bp));
+        Vector3 again;
+        CHECK(!g.balloonAt(ba,bb,again));
+        g.poppedBalloons.clear(); g.confetti.clear();
+        g.applyLevel(0);
+    }
 
     // ---- headless captures must not be able to black out (BUG-08)
     CHECK(g.noBlackout && g.nextBlackout >= Game::BLACKOUT_NEVER);

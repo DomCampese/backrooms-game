@@ -14,24 +14,23 @@ struct AudioSynth {
     // Per-level ambience mix. applyLevel sets the t* targets; the w* weights
     // chase them a sample at a time in update(), so a level change is a
     // crossfade rather than a cut.
-    float tHum = 1, tDrone = 0, tWater = 0, tParty = 0;
-    float wHum = 1, wDrone = 0, wWater = 0, wParty = 0;
+    float tHum = 1, tDrone = 0;
+    float wHum = 1, wDrone = 0;
     // AUD-03: how hard you are standing under a live fluorescent, 0..1, and
     // AUD-04: how big the space around you sounds, 0 (corridor) to 1 (hall).
     // Game::updateAmbience sets the targets once a frame; they are chased a
     // sample at a time below so neither one steps.
     float panelTarget = 0, panel = 0;
     float spaceTarget = 0.25f, space = 0.25f;
-    double musT = 0; int musI = 0;                              // LEVEL FUN music box position
     // One running phase per oscillator, indexed by osc(). The index is an
     // OWNERSHIP claim, not a scratch slot: two signals sharing one advance it at
     // both their frequencies, so each gets the other's detune folded in and both
     // come out subtly wrong rather than obviously broken. Current owners:
     //   0-4   fluorescent hum      5-7   growl        8-10  L1 drone
-    //   11-12 poolroom water      13-14 whispers     15    LEVEL FUN music box
+    //   11-12 (free; was poolroom water, now a recording) 13-14 whispers     15    (free; LEVEL FUN music is a recording)
     //   16-17 hum beat frequency  18-19 blackout ring
     double ph[20] = {};
-    float lp1 = 0, lp2 = 0, lp3 = 0;   // one-pole low-passed noise, at three cutoffs
+    float lp1 = 0, lp2 = 0;   // one-pole low-passed noise, at two cutoffs
     uint32_t xr = 0x12345u;    // xorshift state for frand()
     float frand() { xr ^= xr << 13; xr ^= xr >> 17; xr ^= xr << 5; return (float)(xr & 0xFFFFFF) / 8388608.0f - 1.0f; }
     // Sine at freq, advanced by one sample. The phase is per oscillator and kept

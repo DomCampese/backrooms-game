@@ -25,8 +25,6 @@ void AudioSynth::update() {
             whisper += (whisperTarget - whisper) * 8e-5f;
             wHum += (tHum - wHum) * 1.5e-5f;
             wDrone += (tDrone - wDrone) * 1.5e-5f;
-            wWater += (tWater - wWater) * 1.5e-5f;
-            wParty += (tParty - wParty) * 1.5e-5f;
             panel += (panelTarget - panel) * 3e-5f;
             space += (spaceTarget - space) * 1.2e-5f;   // rooms change slowly; a stepping tail is audible
             float wn = frand();
@@ -53,31 +51,17 @@ void AudioSynth::update() {
             float droneS = (osc(8, 41.2f) * 0.6f + osc(9, 55.3f) * 0.45f)
                          * (0.55f + 0.45f * osc(10, 0.11f)) * 0.20f * wDrone
                          + lp1 * 0.14f * wDrone;
-            // Poolrooms: moving water
-            lp3 += 0.010f * (wn - lp3);
-            float waterS = (lp3 * 3.2f * (0.55f + 0.45f * osc(11, 0.16f))
-                          + lp1 * 0.55f * (0.5f + 0.5f * osc(12, 0.071f))) * 0.30f * wWater;
+            // The Poolrooms' water is a looped recording (Game::updateLoopAudio),
+            // not synthesized: filtered noise here read as static, not water.
             float room = lp1 * 0.08f;
-            // LEVEL FUN: a music box grinding through the birthday song, slightly flat, forever
-            float partyS = 0;
-            if (wParty > 0.001f) {
-                static const float MEL[25] = { 392, 392, 440, 392, 523, 494,
-                                               392, 392, 440, 392, 587, 523,
-                                               392, 392, 784, 659, 523, 494, 440,
-                                               698, 698, 659, 523, 587, 523 };
-                musT += 1.0 / SAMPLE_RATE;
-                if (musT > 0.42) { musT -= 0.42; musI = (musI + 1) % 25; }
-                float env = expf(-(float)musT * 4.0f);
-                float note = osc(15, MEL[musI] * 0.972f);   // half a semitone flat
-                partyS = (note * 0.75f + sinf(3.0f * (float)ph[15]) * 0.22f) * env * 0.085f * wParty;
-            }
+            // LEVEL FUN's music is a looped recording (Game::updateLoopAudio).
             // ...and in a blackout it does not simply go away. `hum` ducks the
             // whole bed, and what is left underneath is a thin high ring — the
             // sound of a room that was buzzing a second ago and now isn't,
             // which is a good deal worse than silence.
             float ringLvl = (1.0f - hum) * wHum * 0.020f;
             float ring = (osc(18, 3140.0f) * 0.7f + osc(19, 4710.0f) * 0.3f) * ringLvl;
-            float amb = (humS + droneS + waterS + partyS + room) * hum;   // hum var = blackout duck
+            float amb = (humS + droneS + room) * hum;   // hum var = blackout duck
             float g = osc(5, 46.0f) * 0.7f + osc(6, 33.5f) * 0.35f;
             float trem = 0.55f + 0.45f * osc(7, 2.1f);
             lp2 += 0.02f * (wn - lp2);

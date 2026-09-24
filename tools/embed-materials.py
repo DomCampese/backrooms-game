@@ -5,7 +5,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('group', nargs='?', choices=('objects', 'models'))
+parser.add_argument('group', nargs='?', choices=('objects', 'models', 'sounds'))
 args = parser.parse_args()
 groups = {
     'objects': ('object_materials.generated.h', [
@@ -13,6 +13,8 @@ groups = {
         for name in ('wood', 'metal', 'fabric')]),
     'models': ('models.generated.h', [
         ('model_'+str(i), path) for i, path in enumerate(sorted((root/'assets/models').rglob('*.glb')))]),
+    'sounds': ('sounds.generated.h', [
+        ('sound_'+str(i), path) for i, path in enumerate(sorted((root/'assets/sounds').rglob('*.ogg')))]),
 }
 for group in ([args.group] if args.group else groups):
     filename, assets = groups[group]
@@ -23,8 +25,8 @@ for group in ([args.group] if args.group else groups):
         parts.extend(','.join(str(b) for b in data[i:i+24])+',\n'
                      for i in range(0, len(data), 24))
         parts.append('};\n')
-    if group == 'models':
-        parts.append('static const EmbeddedAsset modelAssets[] = {\n')
+    if group in ('models', 'sounds'):
+        parts.append(f'static const EmbeddedAsset {group[:-1]}Assets[] = {{\n')
         for symbol, path in assets:
             key=path.relative_to(root/'assets').as_posix()
             parts.append(f'{{"{key}",{symbol},sizeof({symbol})}},\n')

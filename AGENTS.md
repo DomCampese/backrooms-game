@@ -128,8 +128,8 @@ time so the executable remains independent of its working directory.
 | `shaders.cpp` | the world and post-process GLSL, as string literals |
 | `textures.cpp` | procedural surfaces and composed CC0 material tiles |
 | `revolver.{h,cpp}` | embedded authored revolver, pose interpolation, two material batches |
-| `sfx.cpp` | one-shot sounds, synthesized into `Wave` buffers |
-| `audio.cpp` | the streaming ambience synth (hum, drone, water) |
+| `sfx.cpp` | one-shot sounds synthesized into `Wave` buffers, plus the loaders for embedded recordings |
+| `audio.cpp` | the streaming ambience synth (hum, drone); recorded loops live in `Game::updateLoopAudio` |
 | `entity.h` | `Entity` (the Smiler; the Partygoer on Level Fun) and `Dog` state |
 | `util.{h,cpp}` | hashes, RNG, value noise, shared helpers |
 
@@ -1550,13 +1550,17 @@ pass, and both obey the same three rules, learned the hard way:
 
 ## Health, swimming, double-tap run and the Smiler (September 2026)
 
-- Catches no longer end the run. `Game::hurtPlayer` takes `ENTITY_HIT` (0.4)
-  for a landed lunge and `PACK_BITE` (0.25) per bite, shoves the player 6 m/s
+- Catches no longer end the run. `Game::hurtPlayer` takes `ENTITY_HIT` (0.6)
+  for a landed lunge and `PACK_BITE` (0.6) per bite — one hit is survivable,
+  a second before regeneration refills the bar is not — shoves the player 6 m/s
   away, and grants `HURT_GRACE` of immunity; `dieRun` only fires when health
   reaches 0. Both catch sites gate on `hurtT <= 0`, or one lunge overlapping
   the player for several frames strips the whole bar at once. After a landed
   lunge the Smiler's lunge is spent and it staggers, so it cannot re-commit
   from inside the grace. `updateHealth` regenerates after `REGEN_DELAY`.
+  There is no health bar: with one spare hit the only thing worth showing is
+  whether you are wounded, so the screen edges stay red in proportion to the
+  missing health and clear exactly when a hit is survivable again.
 - Swimming has one input: `updateSwimming(dt, rise)`. Not holding SPACE/JUMP
   sinks the swimmer — that is the dive — and holding it rises to and holds the
   surface float. There is no dive key; CTRL is only crouch, and is disabled in
@@ -1568,10 +1572,37 @@ pass, and both obey the same three rules, learned the hard way:
   `makeSmilerTex(true)` the eyes and grin, drawn unlit at full white on top.
   Tinting the glow sheet by `lightAtCPU` like the body would put the grin out
   in exactly the dark corridors it exists to be seen in.
-- Water one-shots are bubble synthesis (rising-pitch damped sines over a noise
-  slap). Filtered noise alone read as static. Swim strokes have their own
-  `makeSwimStroke`, not a pitched-down splash.
+- Water sounds were first synthesized (noise, then bubble sines); both read as
+  fake. They are recordings now — see "Recorded sound and music" below.
 - The Poolrooms ceiling is 7.5 m with vaults peaking at 7.0 m; `lightMul` 1.25
   compensates for panels 2.7 m further from the floor. The regression entity
   captures search for a clear 7 m sightline rather than using a fixed spot,
   which had drifted behind a wall and was capturing an empty corridor.
+
+## Recorded sound and music (September 2026)
+
+- Water one-shots and loops are recordings in `assets/sounds/water` (Red
+  Eclipse, CC BY-SA) and LEVEL FUN's music is `assets/sounds/music/level_fun.ogg`
+  (Abstraction, CC0). `tools/embed-materials.py sounds` embeds every `.ogg`
+  under `assets/sounds` into `src/sounds.generated.h`; load them by path with
+  `loadEmbeddedSound` / `loadEmbeddedMusic` (sfx.cpp). The synthesized pool
+  water and the "Happy Birthday" music box are gone from `audio.cpp`; osc slots
+  11, 12 and 15 are free.
+- Loops are `Music` streams, not retriggered `Sound`s, so they wrap without a
+  gap. `Game::updateLoopAudio` must run every frame, including while paused,
+  or a stream underruns and stutters its last buffer.
+- A stream loaded from memory keeps pointing at that memory. The embedded
+  arrays are static, so this is safe; do not load music from a temporary buffer.
+- Surface swimming bobs the camera (`floatT`, `floatRoll` into the render roll)
+  and fades that out with depth. It is visual only: the buoyancy target the
+  regression test checks is unchanged.
+- The ceiling balloons are drawn from `balloonAt`, the same function bullets
+  test. The renderer used to carry its own copy of the placement hash, which
+  kept the old `world.seed` salt after levels began reseeding per visit, so the
+  balloons you could see could never be shot.
+- **Regression captures have no HUD.** The harness sets `cleanShot = true`
+  and a `captureTime` of 4 s, so `renderUI` returns after the post pass and,
+  even with the HUD on, the intro card still owns the screen. A HUD-only
+  change therefore captures byte-identical to the frame without it, which
+  reads as "my overlay does nothing". Turn `cleanShot` off and move `runStart`
+  back for that capture, as `wounded.png` does.
