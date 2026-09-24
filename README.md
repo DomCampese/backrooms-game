@@ -16,7 +16,7 @@ This unofficial hobby game is released under **GNU GPLv3**. See [LICENSE](LICENS
 and [Credits and third-party notices](CREDITS.md) for the full terms, Backrooms
 wiki author acknowledgments, and the separate licenses for adapted lore and assets.
 Thanks to the Backrooms community, especially 1000dumplings and the other authors
-credited there, for the shared lore behind Partygoers, Level Fun and Almond Water.
+credited there, for the shared lore behind Smilers, Partygoers, Level Fun, the Poolrooms and Almond Water.
 
 The software is provided without warranty. Source and build instructions are
 available in this repository; released builds must include access to their
