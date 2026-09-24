@@ -1503,6 +1503,12 @@ pass, and both obey the same three rules, learned the hard way:
   good part; what was missing was anything to spend it on. Subdivision is a real
   parameter here, not a detail: `MB::quad` carries one colour and one normal per
   quad, so 8 across the cell reads as a chequerboard and 12 still quilts.
+- **Keep CREDITS.md current in the same change.** Any new or changed lore
+  reference (an entity, level or object drawn from the Backrooms Wiki), external
+  asset, font, sound, or dependency gets its row in CREDITS.md — author(s),
+  link, license, and how the game differs — before the work is merged. A lore
+  adaptation or asset that ships without its credit is a licensing problem,
+  not a docs nit. Also update a row when the game's use of that item changes.
 - Comments explain *why*, not *what*. Several in here record a bug that a
   reasonable-looking change would reintroduce; keep those.
 - Prefer procedural world content; licensed external models and textures are user-authorized. Keep provenance beside each asset.

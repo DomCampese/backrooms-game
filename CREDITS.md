@@ -25,7 +25,7 @@ PARTICULAR PURPOSE. See the GNU General Public License for more details.
 The game's influences were not recorded during development. These credits
 acknowledge recognizable community lore and its documented authors; they do not
 claim that every linked article was consulted or that its current version is
-reproduced faithfully. Author information was checked on September 19, 2026.
+reproduced faithfully. Author information was checked on September 19, 2026; the Smilers entry was added on September 24, 2026.
 
 The following articles are from the [Backrooms Wiki](https://backrooms-wiki.wikidot.com/).
 Their article text is offered under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/).
@@ -34,12 +34,13 @@ are not permission to copy those assets.
 
 | Reference | Authors and version notes | Relationship to this game |
 | --- | --- | --- |
+| [Entity 3 — Smilers](https://backrooms-wiki.wikidot.com/entity-3) | Original by **Palico22**; rewritten by **Stretchsterz**, as cited for the page. | The hunter outside Level Fun: a procedurally drawn shadow body with glowing eyes and a toothed grin that shows in the dark. Its stalking, lunging, doubloon drops and weaknesses are the game's own. |
 | [Entity 67 — Partygoers =)](https://backrooms-wiki.wikidot.com/entity-67) | Original by **1000dumplings**; current rewrite by **Robert Goerman** and **MC_Crafter_24_7**, as credited on the page. | A procedurally drawn yellow, smiling party-themed enemy. The game changes its appearance and uses its own stalking/chase behavior. |
 | [Level Fun / Level 26 — The SS Fun =)](https://backrooms-wiki.wikidot.com/level-26) | Original Level Fun by **1000dumplings**; current rewrite by **Robert Goerman** and **MC_Crafter_24_7**. | The game uses the older party-room motif and name, with generated banquet rooms, balloons and confetti; it does not reproduce the current cruise-ship setting. |
 | [Object 1 — Almond Water](https://backrooms-wiki.wikidot.com/object-1) | Original by **1000dumplings**; rewritten by **Natedagreat563** and **Poliacci**. | Adapted into a canned consumable with game-specific recovery effects, placement, artwork and drinking animation. |
 | [(Archived) Level 0 — Tutorial Level](https://backrooms-wiki.wikidot.com/archived:level-0-2020) | **etoisle**, per the archived page's citation. | Acknowledgment of the community's yellow office-maze setting; this game generates its own layouts and adds its own combat and progression. |
 | [Level 1 — Habitable Zone](https://backrooms-wiki.wikidot.com/level-1) | Current article by **Praetor3005** and **DivineAtlas**. Its history credits **EnderMitten** for the concept, **u/ThePizzaEater1000** for the original Wikidot article, and **etoisle** for an earlier rewrite. | Acknowledgment of the warehouse-level tradition; the game's layout, loading docks and progression are its own implementation. |
-| [Level 37 — Sublimity](https://backrooms-wiki.wikidot.com/level-37) | **egglord**, per the page's citation. | Acknowledgment of Poolrooms lore; the game's tiled pools and stairs are generated and use different numbering and connections. |
+| [Level 37 — Sublimity](https://backrooms-wiki.wikidot.com/level-37) | **egglord**, per the page's citation. | Acknowledgment of Poolrooms lore, including its tall tiled halls and the absence of entities, which the game keeps as a refuge. The game's pools, vaults and swimming are generated and use different numbering and connections. |
 
 These are adaptations and acknowledgments, not claims of ownership over the
 Backrooms setting or of endorsement by its authors. Game-specific level ordering,
