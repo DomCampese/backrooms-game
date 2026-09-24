@@ -126,6 +126,10 @@ bool inKeyDown(int key) {
         case KEY_LEFT_SHIFT:   return (g.down & BTN_SPRINT) != 0;
         case KEY_C: return (g.down & BTN_SQUEEZE) != 0;
         case KEY_LEFT_CONTROL: return (g.down & BTN_CROUCH) != 0;
+        // Swimming rises while SPACE is held (Game::updateSwimming), so JUMP
+        // has to answer the held query too, not just the press edge below —
+        // without it a swimmer on a phone can only sink.
+        case KEY_SPACE:        return (g.down & BTN_JUMP) != 0;
         default:               return false;
     }
 }

@@ -1565,6 +1565,9 @@ pass, and both obey the same three rules, learned the hard way:
   sinks the swimmer — that is the dive — and holding it rises to and holds the
   surface float. There is no dive key; CTRL is only crouch, and is disabled in
   water.
+  On touch, `inKeyDown(KEY_SPACE)` must read JUMP's *held* bit: it once only
+  answered `inKeyPressed`, so holding JUMP on a phone did nothing and every
+  swimmer sank — which reads as broken buoyancy, not a missing input mapping.
 - Double-tap W latches sprint (`wSprint`) until W is released; the second
   press must land inside `W_TAP`. Touch keeps its push-past-the-ring sprint.
 - One entity, three looks: `Game::hunterName()` / `clarkLevel()` pick Pirate
