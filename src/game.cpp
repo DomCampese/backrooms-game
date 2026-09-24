@@ -72,7 +72,7 @@ void Game::init() {
     rlDisableBackfaceCulling();
 
     texParticle = makeParticleTex();
-    texEntity = makeEntityTex();
+    texEntity = makeSmilerTex(false); texEntityGlow = makeSmilerTex(true);
     texPartygoer = makePartygoerTex();
     texProps = makePropsTex();
     texScrawl = makeScrawlTex();
@@ -185,6 +185,7 @@ void Game::init() {
         entStepsThrough[i] = makeFootstep(300 + i * 23, true);     // ...and the same foot, through a wall
     }
     splashes[0] = makeSplash(1, false); splashes[1] = makeSplash(2, false);
+    strokes[0] = makeSwimStroke(1); strokes[1] = makeSwimStroke(2);
     sndBigSplash = makeSplash(3, true);
     sndClick = makeClick();
     sndScare = makeJumpscare();
@@ -960,16 +961,16 @@ void Game::updateSprint(bool requested, bool moving, bool crouched, float dt) {
     stamina = clampf(stamina + (sprinting ? -SPRINT_DRAIN * dt : dt / 6.0f), 0, 1);
 }
 
-// Buoyancy is separate from grounded walking: releasing the controls always
-// returns the swimmer to a stable surface float. Exponential drag behaves the
-// same at 30/60/144 Hz. JUMP rises; DUCK dives on both keyboard and touch.
-bool Game::updateSwimming(float dt, bool dive, bool rise) {
+// Buoyancy is separate from grounded walking. Holding JUMP swims up to the
+// surface and holds you there; letting go sinks you, so diving is simply not
+// holding it. Exponential drag behaves the same at 30/60/144 Hz.
+bool Game::updateSwimming(float dt, bool rise) {
     float bottom=world.groundAt(px,pz,py);
     swimming=world.poolAt(cellOf(px),cellOf(pz)) && bottom < WATER_Y-1.4f && py < WATER_Y-0.35f;
     if (!swimming) return false;
     grounded=false;
     float target=WATER_Y-1.35f;
-    float desired=dive && !rise ? -1.6f : clampf((target-py)*3.0f,-1.5f,rise ? 2.2f : 1.25f);
+    float desired=rise ? clampf((target-py)*3.0f,-1.5f,2.2f) : -1.2f;
     vy += (desired-vy)*(1-expf(-5.0f*dt));
     py += vy*dt;
     if (py<bottom) { py=bottom; vy=fmaxf(vy,0); }
@@ -1018,7 +1019,11 @@ void Game::updateMovement(float dt) {
     bool inWater = world.poolAt(cellOf(px),cellOf(pz)) && py < WATER_Y-0.08f;
     bool crouched = inKeyDown(KEY_LEFT_CONTROL) && !inWater;
     crouchCur += ((crouched ? 1.0f : 0.0f) - crouchCur) * fminf(1, 10 * dt);
-    updateSprint(inKeyDown(KEY_LEFT_SHIFT), moving, crouched || squeezing, dt);
+    // Double-tap W to run: the second press inside W_TAP holds the sprint until W is let go.
+    wTapT = fmaxf(0, wTapT - dt);
+    if (!inTouchActive() && inKeyPressed(KEY_W)) { if (wTapT > 0) wSprint = true; wTapT = W_TAP; }
+    if (!inKeyDown(KEY_W)) wSprint = false;
+    updateSprint(inKeyDown(KEY_LEFT_SHIFT) || wSprint, moving, crouched || squeezing, dt);
     boostT = fmaxf(0, boostT - dt);
     swimClimb *= expf(-10*dt);
     float groundY = world.groundAt(px, pz, py);
@@ -1096,7 +1101,7 @@ void Game::updateMovement(float dt) {
     // jump + floor height (groundY recomputed after collision; furniture tops count)
     groundY = world.groundAt(px, pz, py);
     bool wasSwimming=swimming;
-    bool afloat=updateSwimming(dt,inKeyDown(KEY_LEFT_CONTROL),inKeyDown(KEY_SPACE));
+    bool afloat=updateSwimming(dt,inKeyDown(KEY_SPACE));
     if (afloat && !wasSwimming) { SetSoundVolume(sndBigSplash,0.45f); PlaySound(sndBigSplash); }
     if (!afloat && inKeyPressed(KEY_SPACE) && grounded) { vy = inWater ? 4.3f : 5.6f; grounded = false; }
     if (grounded) {
@@ -1156,8 +1161,8 @@ void Game::updateMovement(float dt) {
         eyeY=py+1.62f+sinf(swimPhase)*0.018f;
         // Slow strokes replace land footfalls; never bob the camera like a run.
         if ((int)(swimPhase/3.14159f)!=(int)((swimPhase-dt*(1.1f+0.45f*spd))/3.14159f) && spd>0.2f) {
-            Sound &stroke=splashes[grng.ri(0,1)];
-            SetSoundPitch(stroke,0.72f); SetSoundVolume(stroke,0.28f); PlaySound(stroke);
+            Sound &stroke=strokes[grng.ri(0,1)];
+            SetSoundPitch(stroke,0.9f+grng.f01()*0.2f); SetSoundVolume(stroke,0.45f); PlaySound(stroke);
         }
     }
     eyeY -= swimClimb;
@@ -2096,7 +2101,7 @@ void Game::updateEntity(float dt, double now) {
             // within 1.25 m, silently and with no windup, which is survivable
             // when being caught is free and simply unfair once it is not.
             if (entDist < CATCH_REACH && ent.lunge > 0 && !hidden && hurtT <= 0) {
-                if (hurtPlayer(now, CLARK_HIT, level == 4 ? "THE PARTYGOER" : "PIRATE CLARK", ent.x, ent.z))
+                if (hurtPlayer(now, ENTITY_HIT, level == 4 ? "THE PARTYGOER" : "A SMILER", ent.x, ent.z))
                     return;   // beginDescent has already replaced the world under us
                 // He landed it: the lunge is spent and he reels from his own swing.
                 ent.lunge = 0; ent.lungeCd = HURT_GRACE + 1.0f; ent.stagger = 0.8f;

@@ -130,7 +130,7 @@ time so the executable remains independent of its working directory.
 | `revolver.{h,cpp}` | embedded authored revolver, pose interpolation, two material batches |
 | `sfx.cpp` | one-shot sounds, synthesized into `Wave` buffers |
 | `audio.cpp` | the streaming ambience synth (hum, drone, water) |
-| `entity.h` | `Entity` (Pirate Clark) and `Dog` state |
+| `entity.h` | `Entity` (the Smiler; the Partygoer on Level Fun) and `Dog` state |
 | `util.{h,cpp}` | hashes, RNG, value noise, shared helpers |
 
 `tick()` calls the update functions in a fixed order — look, movement, dev
@@ -526,8 +526,8 @@ In-game, press `F3` for the debug HUD; while it is up these are live:
 | key | effect |
 |---|---|
 | `B` | force a blackout now |
-| `E` | spawn Clark stalking ~12 m ahead |
-| `C` | force a chase |
+| `E` | spawn the Smiler stalking ~12 m ahead |
+| `C` | force a chase (also squeeze, so holding it while F3 is up does both) |
 | `H` | banish him |
 | `G` | refill flares and ammo |
 | `N` | jump to the next level |
@@ -1541,3 +1541,31 @@ pass, and both obey the same three rules, learned the hard way:
 - Shadow lookup bias uses the geometric surface normal, not the detail-map
   normal: tile relief pushed floor samples across walls and made bright strips
   at Poolrooms corners. Occluded panels contribute no sharp reflected image.
+
+## Health, swimming, double-tap run and the Smiler (September 2026)
+
+- Catches no longer end the run. `Game::hurtPlayer` takes `ENTITY_HIT` (0.4)
+  for a landed lunge and `PACK_BITE` (0.25) per bite, shoves the player 6 m/s
+  away, and grants `HURT_GRACE` of immunity; `dieRun` only fires when health
+  reaches 0. Both catch sites gate on `hurtT <= 0`, or one lunge overlapping
+  the player for several frames strips the whole bar at once. After a landed
+  lunge the Smiler's lunge is spent and it staggers, so it cannot re-commit
+  from inside the grace. `updateHealth` regenerates after `REGEN_DELAY`.
+- Swimming has one input: `updateSwimming(dt, rise)`. Not holding SPACE/JUMP
+  sinks the swimmer — that is the dive — and holding it rises to and holds the
+  surface float. There is no dive key; CTRL is only crouch, and is disabled in
+  water.
+- Double-tap W latches sprint (`wSprint`) until W is released; the second
+  press must land inside `W_TAP`. Touch keeps its push-past-the-ring sprint.
+- The hunter outside Level Fun is a lore Smiler: two sheets on the entity grid,
+  `makeSmilerTex(false)` a fog body lit like any billboard and
+  `makeSmilerTex(true)` the eyes and grin, drawn unlit at full white on top.
+  Tinting the glow sheet by `lightAtCPU` like the body would put the grin out
+  in exactly the dark corridors it exists to be seen in.
+- Water one-shots are bubble synthesis (rising-pitch damped sines over a noise
+  slap). Filtered noise alone read as static. Swim strokes have their own
+  `makeSwimStroke`, not a pitched-down splash.
+- The Poolrooms ceiling is 7.5 m with vaults peaking at 7.0 m; `lightMul` 1.25
+  compensates for panels 2.7 m further from the floor. The regression entity
+  captures search for a clear 7 m sightline rather than using a fixed spot,
+  which had drifted behind a wall and was capturing an empty corridor.

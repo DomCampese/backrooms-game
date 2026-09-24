@@ -16,7 +16,7 @@ These are native game captures, not concept images.
 
 Six-metre arches connect taller halls. Shallow shelves lead to 2.8-metre-deep basin floors; some chambers stay shallow and others contain submerged column groups. The arrival landing is dry. Poolrooms no longer spawn Clark or whispers, slowly restore sanity, and retain the existing no-blackout rule. The five-level progression is unchanged.
 
-Deep water uses damped buoyancy and water drag. Release dive to return to the surface; hold CTRL/DUCK to dive, SPACE/JUMP to surface, and SHIFT to swim faster. Surface swimmers climb onto shelves with eased camera motion; submerged swimmers are stopped by risers. There is no breath timer. Underwater tint and subtle distortion distinguish diving, and slow stroke sounds replace footsteps while afloat.
+Deep water uses damped buoyancy and water drag. Hold SPACE/JUMP to rise and float at the surface; release it to sink, which is the dive. SHIFT swims faster. Surface swimmers climb onto shelves with eased camera motion; submerged swimmers are stopped by risers. There is no breath timer. Underwater tint and subtle distortion distinguish diving, and slow stroke sounds replace footsteps while afloat.
 
 ## Verification
 
