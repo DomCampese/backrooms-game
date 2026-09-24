@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+constexpr float WATER_Y = -0.12f;       // shared surface for rendering and swimming
 constexpr float CELL = 2.0f;           // metres per grid cell
 constexpr int   CCELLS = 16;           // cells per chunk side
 // How rare a phrase on a wall is, and how many there are to find. The rate is

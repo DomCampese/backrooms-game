@@ -460,10 +460,10 @@ void main(){
             vec3 Nw = normalize(N + vec3(0.055*w2 + 0.03*w1, 0.0, 0.045*w1 - 0.025*w2));
             vec3 light = roomLight(fragPos, Nw);
             // water is the glossiest thing in the building whatever the level says
-            float fres = 0.03 + 0.97*pow(1.0 - max(dot(V, Nw), 0.0), 5.0);
+            float fres = 0.03 + 0.97*pow(1.0 - abs(dot(V, Nw)), 5.0);
             col = fragC.rgb * (light*0.75 + uAmb*1.4) * (0.85 + 0.15*w1);
             col += light * fres * 0.45;
-            aOut = 0.60 + 0.30*fres;                 // near-clear looking down, a mirror at a glance
+            aOut = 0.30 + 0.55*fres;                 // near-clear looking down, a mirror at a glance
         }
     } else {
         vec4 texel = texture(texture0, fragUV);
@@ -479,6 +479,16 @@ void main(){
 
         }
         col = texel.rgb * fragC.rgb * roomLight(fragPos, Nb);
+        // Underwater tile catches moving ribbons of refracted light. Pool
+        // floors are the only glossy world surfaces this far below the deck.
+        if (uGloss > 0.5 && fragPos.y < -0.13) {
+            float depth=-0.12-fragPos.y;
+            float c1=sin(fragPos.x*4.1+sin(fragPos.z*2.7+uTime)*1.4+uTime*0.8);
+            float c2=sin(fragPos.z*4.6+sin(fragPos.x*3.2-uTime*0.7)-uTime*0.6);
+            float caustic=pow(max(0.0,1.0-abs(c1+c2)*0.7),12.0);
+            col *= mix(vec3(1),vec3(0.32,0.77,0.68),1.0-exp(-depth*0.32));
+            col += vec3(0.12,0.24,0.19)*caustic*exp(-depth*0.22)*clamp(gLightLum,0.0,1.0);
+        }
         aOut = fragC.a * texel.a;                    // translucent contact shadows + scrawl decals
     }
     float f = clamp(exp(-dist*uFogDen), 0.0, 1.0);
@@ -503,11 +513,15 @@ void main(){
 const char *POST_FS = GLSL_VERSION_HEADER R"GLSL(
 in vec2 fragTexCoord; in vec4 fragColor;
 uniform sampler2D texture0; uniform vec4 colDiffuse;
-uniform float uTime; uniform float uFear;
+uniform float uTime; uniform float uFear; uniform float uWater;
 out vec4 finalColor;
 float hh(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)))*43758.5453); }
 void main(){
     vec2 uv = fragTexCoord;
+    if (uWater > 0.0) {
+        uv += uWater*0.0018*vec2(sin(uv.y*24.0+uTime*1.3),sin(uv.x*21.0-uTime));
+        uv = clamp(uv,vec2(0.002),vec2(0.998));
+    }
     vec2 dir = uv - 0.5;
     float ca = 0.00015 + uFear*0.0025;               // chromatic aberration
     vec3 c;
@@ -537,6 +551,7 @@ void main(){
     float d = length(dir);
     c *= 1.0 - smoothstep(0.34, 0.95, d)*(0.42 + 0.34*uFear); // vignette
     c *= 0.994 + 0.006*sin(uTime*377.0);             // mains-hum luma shimmer
+    c = mix(c,c*vec3(0.48,0.86,0.80)+vec3(0.015,0.07,0.065),uWater*0.75);
     finalColor = vec4(c, 1.0);
 }
 )GLSL";

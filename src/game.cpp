@@ -146,6 +146,7 @@ void Game::init() {
         TraceLog(LOG_ERROR, "post shader failed to compile - see the SHADER lines above");
     locPTime = GetShaderLocation(postShader, "uTime");
     locPFear = GetShaderLocation(postShader, "uFear");
+    locPWater = GetShaderLocation(postShader, "uWater");
 
     texAO = makeAOStripTex();
     {   // light-occlusion grid: one byte per cell, point-sampled, never filtered
@@ -535,7 +536,7 @@ void Game::applyLevel(int lv) {
     SetShaderValue(worldShader, locDead, &c.dead, SHADER_UNIFORM_FLOAT);
     SetShaderValue(worldShader, locLightMul, &c.lightMul, SHADER_UNIFORM_FLOAT);
     SetShaderValue(worldShader, locGloss, &c.gloss, SHADER_UNIFORM_FLOAT);
-    synth.tHum = lv == 0 ? 1.0f : lv == 4 ? 0.5f : 0.15f;
+    synth.tHum = lv == 0 ? 1.0f : lv == 4 ? 0.5f : lv == 2 ? 0.035f : 0.15f;
     synth.tDrone = lv == 1 ? 1.0f : 0.0f;
     synth.tWater = lv == 2 ? 1.0f : 0.0f;
     synth.tParty = lv == 4 ? 1.0f : 0.0f;
@@ -551,6 +552,7 @@ void Game::applyLevel(int lv) {
     // keyed by level, and it survives every doorway until the descent ends —
     // which is the whole point of leaving a mark. beginDescent clears it.
     chalkSeedPending = !chalkSeeded[lv];
+    swimming=false; swimPhase=swimClimb=0;
     poppedBalloons.clear(); poppedTableBunches.clear(); confetti.clear();
     SetWindowTitle(TextFormat("THE BACKROOMS — %s", c.name));
 }
@@ -959,6 +961,25 @@ void Game::updateSprint(bool requested, bool moving, bool crouched, float dt) {
     stamina = clampf(stamina + (sprinting ? -SPRINT_DRAIN * dt : dt / 6.0f), 0, 1);
 }
 
+// Buoyancy is separate from grounded walking: releasing the controls always
+// returns the swimmer to a stable surface float. Exponential drag behaves the
+// same at 30/60/144 Hz. JUMP rises; DUCK dives on both keyboard and touch.
+bool Game::updateSwimming(float dt, bool dive, bool rise) {
+    float bottom=world.groundAt(px,pz,py);
+    swimming=world.poolAt(cellOf(px),cellOf(pz)) && bottom < WATER_Y-1.4f && py < WATER_Y-0.35f;
+    if (!swimming) return false;
+    grounded=false;
+    float target=WATER_Y-1.35f;
+    float desired=dive && !rise ? -1.6f : clampf((target-py)*3.0f,-1.5f,rise ? 2.2f : 1.25f);
+    vy += (desired-vy)*(1-expf(-5.0f*dt));
+    py += vy*dt;
+    if (py<bottom) { py=bottom; vy=fmaxf(vy,0); }
+    // Do not break the surface into repeated jumps while holding rise.
+    if (py>target && rise) { py=target; vy=fminf(vy,0); }
+    swimPhase += dt*(1.1f+0.45f*hypotf(velx,velz));
+    return true;
+}
+
 void Game::updateMovement(float dt) {
     // ---- move
     float ix = 0, iz = 0;
@@ -973,21 +994,34 @@ void Game::updateMovement(float dt) {
     // webMoveScale returns 1 for keys and for a stick at full deflection, so
     // this multiplies nothing away on any other platform.
     if (moving) { float ms = webMoveScale(); ix *= ms; iz *= ms; }
-    bool crouched = inKeyDown(KEY_LEFT_CONTROL);
+    bool inWater = world.poolAt(cellOf(px),cellOf(pz)) && py < WATER_Y-0.08f;
+    bool crouched = inKeyDown(KEY_LEFT_CONTROL) && !inWater;
     crouchCur += ((crouched ? 1.0f : 0.0f) - crouchCur) * fminf(1, 10 * dt);
     updateSprint(inKeyDown(KEY_LEFT_SHIFT), moving, crouched, dt);
     boostT = fmaxf(0, boostT - dt);
+    swimClimb *= expf(-10*dt);
     float groundY = world.groundAt(px, pz, py);
-    bool inWater = grounded && py < -0.1f && world.poolAt(cellOf(px), cellOf(pz));
     float speed = (sprinting ? 6.8f : crouched ? 1.9f : 3.6f) * (inWater ? 0.55f : 1.0f)
                 * (boostT > 0 ? 1.12f : 1.0f);
+    if (swimming) speed = sprinting ? 3.5f : 2.4f;
     float tvx = ix * speed, tvz = iz * speed;
-    float accel = moving ? 12.0f : 9.0f;
-    velx += (tvx - velx) * fminf(1, accel * dt);
-    velz += (tvz - velz) * fminf(1, accel * dt);
+    float accel = inWater ? (moving ? 3.8f : 2.8f) : (moving ? 12.0f : 9.0f);
+    float drag=inWater ? 1-expf(-accel*dt) : fminf(1,accel*dt);
+    velx += (tvx - velx) * drag;
+    velz += (tvz - velz) * drag;
     float oldX = px, oldZ = pz;
     px += velx * dt; pz += velz * dt;
     world.collideCircle(px, pz, PR, py);
+    if (inWater) {
+        float ledge=world.groundAt(px,pz,py);
+        if (ledge>py+MAX_STEP) {
+            if (py+1.62f < WATER_Y+0.03f) {
+                // A submerged swimmer cannot pass sideways through a basin
+                // riser. Surface first; the same edge then assists the climb.
+                px=oldX; pz=oldZ; velx=velz=0;
+            } else { swimClimb += ledge-py; py=ledge; vy=0; grounded=true; swimming=false; }
+        }
+    }
     // Actual travel drives footsteps, bob and records. Running into a wall
     // should not sound like a sprint or bank metres toward the record.
     float spd = hypotf(px - oldX, pz - oldZ) / fmaxf(dt, 0.0001f);
@@ -1039,7 +1073,10 @@ void Game::updateMovement(float dt) {
 
     // jump + floor height (groundY recomputed after collision; furniture tops count)
     groundY = world.groundAt(px, pz, py);
-    if (inKeyPressed(KEY_SPACE) && grounded) { vy = inWater ? 4.3f : 5.6f; grounded = false; }
+    bool wasSwimming=swimming;
+    bool afloat=updateSwimming(dt,inKeyDown(KEY_LEFT_CONTROL),inKeyDown(KEY_SPACE));
+    if (afloat && !wasSwimming) { SetSoundVolume(sndBigSplash,0.45f); PlaySound(sndBigSplash); }
+    if (!afloat && inKeyPressed(KEY_SPACE) && grounded) { vy = inWater ? 4.3f : 5.6f; grounded = false; }
     if (grounded) {
         if (py > groundY + 0.05f && world.poolAt(cellOf(px), cellOf(pz))) { grounded = false; vy = 0; }  // pool edge: drop in
         // Walked off something taller than a step — a terrace lip, the top of a
@@ -1053,7 +1090,7 @@ void Game::updateMovement(float dt) {
             if (fabsf(py - groundY) < 0.004f) py = groundY;
         }
     }
-    if (!grounded) {
+    if (!grounded && !afloat) {
         vy -= 20.0f * dt;
         py += vy * dt;
         if (py <= groundY) {
@@ -1093,6 +1130,15 @@ void Game::updateMovement(float dt) {
     // which on this phase is one lateral cycle per two footfalls — a gait
     // cycle, which is what lateral sway actually tracks.
     eyeY = 1.62f - 0.55f * crouchCur - landDip - softSag + py - cosf(bobPhase * 6.28318f) * 0.032f * bobAmt;
+    if (swimming) {
+        eyeY=py+1.62f+sinf(swimPhase)*0.018f;
+        // Slow strokes replace land footfalls; never bob the camera like a run.
+        if ((int)(swimPhase/3.14159f)!=(int)((swimPhase-dt*(1.1f+0.45f*spd))/3.14159f) && spd>0.2f) {
+            Sound &stroke=splashes[grng.ri(0,1)];
+            SetSoundPitch(stroke,0.72f); SetSoundVolume(stroke,0.28f); PlaySound(stroke);
+        }
+    }
+    eyeY -= swimClimb;
     if (floorf(bobPhase) > floorf(lastPhase)) {
         Sound &s = inWater ? splashes[grng.ri(0, 1)] : steps[grng.ri(0, 3)];
         SetSoundPitch(s, 0.9f + grng.f01() * 0.22f);
@@ -1671,11 +1717,11 @@ void Game::updateInteraction() {
 
 void Game::updateAmbience(float dt, double now) {
     // ---- whispers in the walls
-    if (whisperT <= 0 && now > nextWhisper && ent.st == EState::Hidden) {
+    if (level != 2 && whisperT <= 0 && now > nextWhisper && ent.st == EState::Hidden) {
         whisperT = 4.5f;
         nextWhisper = now + (70 + grng.f01() * 90) * (0.35 + 0.65 * sanity);
     }
-    whisperT = fmaxf(0, whisperT - dt);
+    whisperT = level==2 ? 0 : fmaxf(0, whisperT - dt);
     synth.whisperTarget = whisperT > 0 ? 0.55f : 0.0f;
 
     // ---- blackout events
@@ -1731,7 +1777,7 @@ void Game::updateAmbience(float dt, double now) {
     else if (ent.st != EState::Hidden) drain *= 1.5f;         // or just knowing it's out
     if (hidden) drain *= 0.45f;                               // tucked in, breathing slow
     else if (crouchCur > 0.7f) drain *= 0.8f;
-    sanity = clampf(sanity - drain * dt, 0.0f, 1.0f);
+    sanity = clampf(sanity + (level==2 ? 0.018f : -drain) * dt, 0.0f, 1.0f);
 
     static const char *SANITY_LINES[] = {
         "your hands won't hold still.",
@@ -1776,7 +1822,7 @@ void Game::updateAmbience(float dt, double now) {
     }
 
     // ---- PAC-03: and while you are down there, it starts moving on you.
-    if (slide > 0.0f && now > nextShift && !inMenu) {
+    if (level != 2 && slide > 0.0f && now > nextShift && !inMenu) {
         nextShift = now + SHIFT_GAP_MIN + grng.f01() * SHIFT_GAP_SPAN * (1.0f - slide);
         // updateOccupancy only rebuilds when you have walked six cells, so a
         // wall that appears between rebuilds would light and shadow as though
@@ -1799,6 +1845,14 @@ void Game::updateAmbience(float dt, double now) {
 }
 
 void Game::updateEntity(float dt, double now) {
+    // Sublimity is a refuge. No scripted capture spawn or debug chase survives.
+    if (level==2) {
+        ent.st=EState::Hidden; ent.nextSpawn=now+60; entDist=1e9f;
+        entDarkCur += (0-entDarkCur)*fminf(1,4*dt);
+        fear += (0-fear)*fminf(1,2*dt);
+        synth.growlTarget=0;
+        return;
+    }
     // ---- entity
     if (shotPath && !benchmark && frame == 300 && ent.st == EState::Hidden) {   // autotest: force a visible spawn
         Vector2 spot = world.findOpenSpot(px + fwd.x * 8, pz + fwd.z * 8);

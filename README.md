@@ -461,8 +461,8 @@ Details that reward paying attention:
 | WASD | walk |
 | mouse | look |
 | SHIFT | sprint |
-| CTRL | crouch |
-| SPACE | jump |
+| CTRL | crouch / dive in deep water |
+| SPACE | jump / surface while swimming |
 | F / L | flashlight |
 | hold right mouse | revolver iron sights (release to lower; no reload while aiming) |
 | 1 / 2 / 4 / wheel | select item (revolver / flare / tape player) |
@@ -513,3 +513,11 @@ a doorway's jambs and a locked door actually stop a body, then
 captures nine held-item and navigation views in `shots/regression`. It needs a display.
 `tools/bench.sh /absolute/baseline /absolute/new 2 3` interleaves runs and retains logs;
 legacy binaries report total runtime only. Automated captures do not save player records.
+
+### Poolrooms and swimming
+
+The Poolrooms draw on [Level 37: Sublimity](https://backrooms-wiki.wikidot.com/level-37): pristine ceramic, blue-green water, broad tiled arches, submerged columns, and quiet isolation. The game retains its five-level progression; this is the Poolrooms destination within it. No entities spawn here, and your grip slowly recovers.
+
+Pools have shallow shelves and deep centres. Walk into deep water to float, hold **CTRL** to dive, **SPACE** to surface, and **SHIFT** to swim faster. Releasing dive returns you to the surface. On touch screens use **DUCK** and **JUMP**. Swim toward a shelf at the surface to climb out; submerged risers remain solid. There is no breath timer in this refuge.
+
+See [the Poolrooms implementation and visual checks](docs/poolrooms.md).

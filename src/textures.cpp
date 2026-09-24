@@ -1108,41 +1108,14 @@ Texture2D makeTileTex() {
         int tx = x / 64, ty = y / 64;
         float r, g, b;
         int ex = std::min(gx, 63 - gx), ey = std::min(gy, 63 - gy), ed = std::min(ex, ey);
-        if (ed < 3) {                                                  // grout
-            // Grout sits in a recess and collects everything that lands on it, so
-            // it is the dirtiest thing in the room, not — as it was — a clean band
-            // lighter than the tile. Making it darker and mottled is most of why
-            // the poolroom walls stopped reading as graph paper.
-            float gv = 1.0f + (lat(x, y, 90u) - 0.5f) * 0.14f;
-            float mould = fbm2(x * 0.05f, y * 0.05f, 95u, 3);
-            gv *= 1.0f - 0.30f * std::max(0.0f, mould - 0.45f);
-            r = 150 * gv; g = 152 * gv; b = 148 * gv;
+        if (ed < 2) { // fine, clean grout; no mildew or chipped ceramic
+            float gv = 1.0f + (lat(x,y,90u)-0.5f)*0.025f;
+            r=183*gv; g=189*gv; b=185*gv;
         } else {
-            float tv = 1.0f + (lat(tx, ty, 91u) - 0.5f) * 0.09f       // per-tile variation
-                     + (lat(x, y, 92u) - 0.5f) * 0.035f;
-            // Each tile is a slightly pillowed square with a rounded edge. The
-            // ceramic is glossy enough that the edge always carries a highlight
-            // on one side and a turn-away on the other; baking that in is what
-            // gives a flat wall of tiles any depth at all, and it costs nothing
-            // at runtime. Light is taken as coming from up-left, which matches
-            // where the ceiling fittings are in every room that has one.
-            float t = (ed - 3) / 6.0f;
-            if (t < 1.0f) {
-                float lift = (gx < 32 ? 1.0f : -1.0f) * (ex <= ey ? 1.0f : 0.0f)
-                           + (gy < 32 ? 1.0f : -1.0f) * (ey <  ex ? 1.0f : 0.0f);
-                tv *= 1.0f + lift * 0.085f * (1.0f - t) * (1.0f - t);
-            }
-            r = 221 * tv; g = 226 * tv; b = 229 * tv;
-            if (lat(tx, ty, 93u) > 0.94f) { r *= 0.90f; g *= 0.92f; b *= 0.86f; }  // aged tile
-            float gl = fbm2(x * 0.01f, y * 0.01f, 94u, 3);             // faint sheen variation
-            if (gl > 0.62f) { r *= 1.04f; g *= 1.04f; b *= 1.05f; }
-            uint32_t ck = ih(tx, ty, 98u);                             // the odd chipped corner
-            if ((ck & 31u) == 0u) {
-                int cxp = (ck & 32u) ? tx * 64 + 60 : tx * 64 + 3;
-                int cyp = (ck & 64u) ? ty * 64 + 60 : ty * 64 + 3;
-                float dd = sqrtf((float)((x - cxp) * (x - cxp) + (y - cyp) * (y - cyp)));
-                if (dd < 3.5f + ((ck >> 7) & 3u)) { r *= 0.72f; g *= 0.73f; b *= 0.72f; }
-            }
+            float tv=1.0f+(lat(tx,ty,91u)-0.5f)*0.018f;
+            float bevel=clampf((ed-2)/3.0f,0,1);
+            tv *= 0.97f+0.03f*bevel;
+            r=226*tv; g=229*tv; b=222*tv;
         }
         p[y * W + x] = { cl8(r), cl8(g), cl8(b), 255 };
     }

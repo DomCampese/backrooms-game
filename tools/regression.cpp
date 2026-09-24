@@ -61,6 +61,63 @@ int main() {
     g.updateSprint(true,false,false,1.0f/60); CHECK(!g.sprinting);
     g.beginDescent(0); CHECK(g.stamina==1 && !g.sprintExhausted);
 
+    // Poolrooms: deep water floats, dives, resurfaces and releases onto land.
+    // Test at three update rates, and exercise real generated floors.
+    {
+        g.applyLevel(2); g.inMenu=false;
+        int deepX=0,deepZ=0; bool found=false;
+        int wet=0,deep=0;
+        for (int x=16;x<48;++x) for (int z=16;z<48;++z) {
+            if (g.world.poolAt(x,z)) ++wet;
+            if (g.world.floorY(x,z)<-2.0f && !g.world.pillarAt(x,z)) {
+                ++deep; deepX=x;deepZ=z;found=true;
+            }
+        }
+        CHECK(found && wet>600 && deep>30);
+        for (float hz : {30.0f,60.0f,144.0f}) {
+            g.px=deepX*CELL+1;g.pz=deepZ*CELL+1;
+            g.py=-0.7f;g.vy=-3;g.grounded=false;
+            for (int i=0;i<(int)(hz*6);++i) CHECK(g.updateSwimming(1/hz,false,false));
+            CHECK_NEAR(g.py,WATER_Y-1.35f,0.015f);
+            CHECK(!g.grounded && g.swimming);
+            for (int i=0;i<(int)(hz*3);++i) g.updateSwimming(1/hz,true,false);
+            CHECK(g.py+1.62f<WATER_Y-0.5f);
+            CHECK(g.py>=g.world.floorY(deepX,deepZ));
+            for (int i=0;i<(int)(hz*4);++i) g.updateSwimming(1/hz,false,true);
+            CHECK_NEAR(g.py,WATER_Y-1.35f,0.02f);
+            CHECK(fabsf(g.vy)<0.03f);
+        }
+        g.eyeY=g.py+1.62f;g.yaw=0.5f;g.pitch=0;
+        capture(g,"pool-swimming.png");
+        g.py=-2.65f;g.eyeY=g.py+1.62f;
+        capture(g,"pool-underwater.png");
+        g.px=64;g.pz=65;g.py=0;
+        CHECK(!g.updateSwimming(1.0f/60,false,false));
+        g.ent.st=EState::Chase;g.fear=0.8f;
+        g.updateEntity(1,100);CHECK(g.ent.st==EState::Hidden && g.fear<0.01f);
+        g.sanity=0.4f;g.updateAmbience(1,100);CHECK(g.sanity>0.4f);
+        // A real movement frame must stop at a submerged riser, then climb
+        // it at the surface; a full-height wall must still block both states.
+        ChunkData &basin=g.world.data(4,4);
+        memset(basin.wallN,0,sizeof(basin.wallN)); memset(basin.wallW,0,sizeof(basin.wallW));
+        memset(basin.pillar,0,sizeof(basin.pillar)); memset(basin.prop,0,sizeof(basin.prop));
+        memset(basin.elev,0,sizeof(basin.elev)); memset(basin.pool,0,sizeof(basin.pool));
+        basin.pool[5][5]=basin.pool[6][5]=1;
+        basin.elev[5][5]=-28;basin.elev[6][5]=-6;
+        g.px=139.95f;g.pz=139;g.py=-2.7f;g.vy=0;g.velx=4;g.velz=0;
+        g.grounded=false;g.swimming=true;g.updateMovement(0.05f);
+        CHECK(g.px<140 && g.py<-2.5f);
+        g.py=WATER_Y-1.35f;g.vy=0;g.velx=4;g.updateMovement(0.05f);
+        CHECK(g.px>140 && g.grounded && !g.swimming);
+        CHECK_NEAR(g.py,-0.6f,0.001f);CHECK(g.swimClimb>0.5f);
+        g.px=141.95f;g.velx=4;g.updateMovement(0.05f);
+        CHECK(g.px>142 && g.grounded);CHECK_NEAR(g.py,0,0.001f);
+        basin.wallW[6][5]=WALL_SOLID;
+        g.px=139.5f;g.py=WATER_Y-1.35f;g.velx=4;g.grounded=false;
+        g.updateMovement(0.05f);CHECK(g.px<139.6f);
+        g.applyLevel(0);g.beginDescent(0);
+    }
+
     // A full battery does not consume a pickup; revisiting with charge missing does.
     bool testedBattery=false;
     for (int x=-35;x<35 && !testedBattery;++x) for (int z=-35;z<35 && !testedBattery;++z) {
@@ -526,7 +583,8 @@ int main() {
     // ---- headless captures must not be able to black out (BUG-08)
     CHECK(g.noBlackout && g.nextBlackout >= Game::BLACKOUT_NEVER);
 
-    printf("PASS sprint recovery, crouch/stationary gating, restart reset, battery retention,\n"
+    printf("PASS Poolrooms buoyancy at 30/60/144 Hz, diving, resurfacing, ledges and refuge,\n"
+           "     sprint recovery, crouch/stationary gating, restart reset, battery retention,\n"
            "     animation continuity, held aim/reload gating, step-height blocking,\n"
            "     pitch-aware hit tests, doorway jambs and locked doors you cannot walk\n"
            "     through, the catch ending the run only out of a committed\n"
