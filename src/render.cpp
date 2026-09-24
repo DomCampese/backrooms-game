@@ -809,6 +809,22 @@ void Game::renderUI(double now) {
         float pl = 0.55f + 0.45f * sinf((float)now * 2.5f);
         hudTextC(t, sw / 2, hud(70), hud(20), Fade({ 120, 235, 145, 255 }, pl));
     }
+    if (health < 0.98f && deathT <= 0) {   // health bar, just above the sprint bar
+        const int w = hud(220), x = sw / 2 - w / 2, y = sh - hud(54), th = hud(6);
+        bool regen = sinceHurt > REGEN_DELAY;
+        DrawRectangle(x - hud(1), y - hud(1), w + hud(2), th + hud(2), { 0, 0, 0, 120 });
+        DrawRectangle(x, y, (int)(w * health), th,
+                      regen ? Color{200,120,110,170} : Color{190,50,40,200});
+    }
+    if (hurtT > 0 || health < 0.4f) {   // red at the edges: just hit, or close to going down
+        float a = fmaxf(hurtT / HURT_GRACE * 0.55f, health < 0.4f ? (0.4f - health) * 0.6f : 0.0f);
+        Color r0 = Fade({120, 0, 0, 255}, a), r1 = Fade({120, 0, 0, 255}, 0);
+        int e = sh / 4;
+        DrawRectangleGradientV(0, 0, sw, e, r0, r1);
+        DrawRectangleGradientV(0, sh - e, sw, e, r1, r0);
+        DrawRectangleGradientH(0, 0, e, sh, r0, r1);
+        DrawRectangleGradientH(sw - e, 0, e, sh, r1, r0);
+    }
     if (stamina < 0.98f) {   // sprint bar, bottom centre
         const int w = hud(220), x = sw / 2 - w / 2, y = sh - hud(42), th = hud(6);
         DrawRectangle(x - hud(1), y - hud(1), w + hud(2), th + hud(2), { 0, 0, 0, 120 });

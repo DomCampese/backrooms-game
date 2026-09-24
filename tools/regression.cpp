@@ -486,7 +486,27 @@ int main() {
         g.ent.lunge=0; g.ent.lungeCd=0;
         g.updateEntity(0.001f, 100.0);
         CHECK(g.ent.lunge>0 && !g.inMenu);
-        // and a commit that reaches you ends the run, with the card's numbers frozen
+        // a landed commit costs health, not the run: you are shoved clear, get a
+        // moment of immunity, and he reels from the swing
+        g.health=1; g.hurtT=0;
+        g.ent.x=g.px+1.0f; g.ent.z=g.pz; g.ent.lunge=Game::LUNGE_TIME;
+        g.updateEntity(0.001f, 100.0);
+        CHECK(!g.inMenu && g.deathT<=0 && fabsf(g.health-(1-Game::CLARK_HIT))<1e-4f);
+        CHECK(g.hurtT>0 && g.ent.lunge<=0 && g.ent.stagger>0 && g.velx<0);
+        // inside the grace a second commit cannot land
+        g.ent.x=g.px+1.0f; g.ent.z=g.pz; g.ent.lunge=Game::LUNGE_TIME;
+        g.updateEntity(0.001f, 100.0);
+        CHECK(fabsf(g.health-(1-Game::CLARK_HIT))<1e-4f);
+        // health regenerates only after REGEN_DELAY without being touched
+        float h0=g.health;
+        g.updateHealth(Game::REGEN_DELAY-0.5f);
+        CHECK(g.health==h0 && g.hurtT<=0);
+        g.updateHealth(1.0f);
+        CHECK(g.health>h0 && g.health<1);
+        for (int i=0;i<60;++i) g.updateHealth(1.0f);
+        CHECK(g.health==1);
+        // the commit that takes the last of it ends the run, with the card's numbers frozen
+        g.health=Game::CLARK_HIT*0.5f; g.hurtT=0;
         g.ent.x=g.px+1.0f; g.ent.z=g.pz; g.ent.lunge=Game::LUNGE_TIME;
         g.distWalked=250; g.killCount=2;
         g.updateEntity(0.001f, 100.0);

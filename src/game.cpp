@@ -341,6 +341,26 @@ void Game::dieRun(double now, const char *by, const char *title) {
     if (!shotPath) EnableCursor();
 }
 
+bool Game::hurtPlayer(double now, float dmg, const char *by, float fromX, float fromZ) {
+    health -= dmg;
+    if (health <= 0.001f) { health = 0; dieRun(now, by); return true; }
+    hurtT = HURT_GRACE; sinceHurt = 0;
+    // Shove the player clear so the same attacker is not still on top of you
+    // when the grace runs out.
+    float dx = px - fromX, dz = pz - fromZ, d = hypotf(dx, dz);
+    if (d > 0.01f) { velx = dx / d * 6.0f; velz = dz / d * 6.0f; }
+    // sndGroan is otherwise the floor giving way: a low body-blow thud, pitched up a little.
+    SetSoundPitch(sndGroan, 1.3f); PlaySound(sndGroan);
+    fear = fmaxf(fear, 0.9f);
+    return false;
+}
+
+void Game::updateHealth(float dt) {
+    hurtT = fmaxf(0, hurtT - dt);
+    sinceHurt += dt;
+    if (sinceHurt > REGEN_DELAY) health = fminf(1, health + REGEN_RATE * dt);
+}
+
 // Title screen: the world drifts by behind the card until any key drops you in.
 void Game::updateMenu(double now) {
     float dt = fminf(GetFrameTime(), 0.05f);
@@ -467,6 +487,7 @@ void Game::beginDescent(double now) {
     // showed up as the card claiming your first death every time.
     fear = 0; boostT = 0;
     stamina = 1; sprintExhausted = false; aiming = false; aimBlend = 0;
+    health = 1; hurtT = 0; sinceHurt = 0;
     sanity = 1.0f; sanityStage = 0; sanityWarnT = 0; sanityLine = "";
     drinkT = 0; drinkLanded = false; nextHeartbeat = now + 20;
     ent.st = EState::Hidden; ent.nextSpawn = now + 30;
@@ -838,6 +859,7 @@ bool Game::tick() {
     updateDogs(dt, now);
     updateExits(now);
     deathT = fmaxf(0, deathT - dt);
+    updateHealth(dt);
     escapeT = fmaxf(0, escapeT - dt);
     killT = fmaxf(0, killT - dt);
     fellT = fmaxf(0, fellT - dt);
@@ -2073,9 +2095,11 @@ void Game::updateEntity(float dt, double now) {
             // bare proximity test this replaces fired the instant you came
             // within 1.25 m, silently and with no windup, which is survivable
             // when being caught is free and simply unfair once it is not.
-            if (entDist < CATCH_REACH && ent.lunge > 0 && !hidden) {
-                dieRun(now, level == 4 ? "THE PARTYGOER" : "PIRATE CLARK");
-                return;   // beginDescent has already replaced the world under us
+            if (entDist < CATCH_REACH && ent.lunge > 0 && !hidden && hurtT <= 0) {
+                if (hurtPlayer(now, CLARK_HIT, level == 4 ? "THE PARTYGOER" : "PIRATE CLARK", ent.x, ent.z))
+                    return;   // beginDescent has already replaced the world under us
+                // He landed it: the lunge is spent and he reels from his own swing.
+                ent.lunge = 0; ent.lungeCd = HURT_GRACE + 1.0f; ent.stagger = 0.8f;
             }
         }
         if (ent.st == EState::Flee) {   // bolts away from the burning flare
@@ -2287,9 +2311,9 @@ void Game::updateDogs(float dt, double now) {
             // works, and crouching behind a cabinet with a tape running in your
             // coat does not, which is what makes putting the deck down
             // somewhere else the actual play rather than a flourish.
-            if (dist < 1.15f && deathT <= 0 && !packDeaf()) {   // they have you
-                dieRun(now, "THE PACK");
-                return;   // beginDescent has already replaced the world under us
+            if (dist < 1.15f && deathT <= 0 && hurtT <= 0 && !packDeaf()) {   // they have you
+                if (hurtPlayer(now, PACK_BITE, "THE PACK", d.x, d.z))
+                    return;   // beginDescent has already replaced the world under us
             }
         }
         float gy = world.floorY(cellOf(d.x), cellOf(d.z));
