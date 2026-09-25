@@ -145,7 +145,7 @@ struct Game {
         locAmb = -1, locFogCol = -1, locFogDen = -1, locLightCol = -1, locLS = -1, locLY = -1,
         locDead = -1, locLightMul = -1, locFlarePos = -1, locFlareInt = -1, locGloss = -1,
         locEntPos = -1, locEntDark = -1, locOccOrigin = -1, locOccN = -1, locEntBlock = -1,
-        locVary = -1, locFaulty = -1, locWet = -1, locRoomMask = -1, locLamp = -1;
+        locVary = -1, locFaulty = -1, locWet = -1, locWetFrom = -1, locRoomMask = -1, locLamp = -1;
     int locPTime = -1, locPFear = -1, locPWater = -1, locPMigraine = -1;
     Material mats[MAT_COUNT]{};
     Sound steps[4]{}, squelches[4]{}, sndNoclip{}, splashIn[3]{}, splashOut[3]{}, swimStrokes[4]{}, sndClick{}, sndScare{}, sndWin{},
@@ -278,6 +278,18 @@ struct Game {
     // follows you through a noclip), and fastest in the Manila Room's quiet.
     float migraine = 0;
     bool migraineWarned = false;
+    // ---- Level 1's supply crates. "Crates of supplies appear and disappear
+    // randomly within the Level", and during a blackout "supplies are liable to
+    // vanish inexplicably". So where they stand is a hash of the cell and an
+    // epoch, and the epoch moves on every time a blackout ends: the dark comes
+    // down, and when the tubes come back the crates are somewhere else.
+    Mesh crateMesh{}, crateLidMesh{};
+    uint32_t crateEpoch = 0;
+    std::unordered_set<uint64_t> cratesOpened;   // this epoch's, by cell
+    bool crateWasDark = false;
+    bool crateAt(int a, int b);
+    void updateCrates(float dt, double now);
+    void openCrate(int a, int b);
     void updateManila(float dt, double now);
     void markWayOut();                        // chalk the way from the Manila Room to the nearest noclip wall
     // Stats frozen for the death card. Being caught used to cost nothing at all

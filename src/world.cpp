@@ -1097,9 +1097,16 @@ static void addSolidBox(MB &mb, float x0, float y0, float z0, float x1, float y1
 // their neighbours by WT so corners close, which buries the end caps inside the
 // next box — and an end cap meeting the neighbour's front face at exactly the same
 // depth z-fights into a vertical seam. Skipping buried caps removes the seam.
+// How many metres of wall one texture tile spans vertically. 3 everywhere the
+// wall texture is a repeating pattern; Level 1's concrete instead runs floor
+// to ceiling exactly once, because it carries things that live at a height —
+// the damp band and its tide line at the foot of the wall, and the pour joints
+// between concrete lifts — and a 3 m repeat on a 4.2 m wall would draw a
+// second tide line under the ceiling. Set per chunk bake by ensureMesh.
+static float gWallV = 3.0f;
 static void addBoxSides(MB &mb, float x0, float y0, float z0, float x1, float y1, float z1,
                         bool bottomFace = false, int skip = 0, Color w = WHITE) {
-    float va = 1 - y0 / 3, vb = 1 - y1 / 3;
+    float va = 1 - y0 / gWallV, vb = 1 - y1 / gWallV;
     if (!(skip & 1))
         mb.quad({x0,y0,z0},{x1,y0,z0},{x1,y1,z0},{x0,y1,z0},{0,0,-1},{x0/3,va},{x1/3,va},{x1/3,vb},{x0/3,vb},w);
     if (!(skip & 2))
@@ -1377,6 +1384,118 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
     }
 }
 
+// Spalled concrete with the rebar showing — "exposed rebar" is in the first
+// line of Level 1's description, and a warehouse of poured concrete gets it
+// wherever water has got at the steel and the cover has blown off. A ragged
+// cavity pressed just off the face (two fans, the deeper one darker), and the
+// bars themselves as real geometry standing proud of it: two verticals and a
+// tie or two across, rust-coloured. The face is axis-aligned, so `u` (the
+// horizontal tangent) is always x or z and the bars stay boxes.
+static void addSpall(MB &fx, MB &pr, Vector3 c, Vector3 n, Vector3 u, float rw, float rh, uint32_t h) {
+    Rng r(((uint64_t)h << 1) ^ 0x5BA11ULL);
+    const Vector2 uv = { 0.375f, 0.75f };                // the fixtures atlas's plain metal, darkened
+    auto ring = [&](float scale, float off, Color col) {
+        const int N = 11;
+        Vector3 pts[N];
+        for (int i = 0; i < N; i++) {
+            float a = TAU * i / N, k = scale * (0.62f + 0.38f * r.f01());
+            float du = cosf(a) * rw * k, dv = sinf(a) * rh * k;
+            pts[i] = { c.x + u.x * du + n.x * off, c.y + dv, c.z + u.z * du + n.z * off };
+        }
+        Vector3 m = { c.x + n.x * off, c.y, c.z + n.z * off };
+        for (int i = 0; i < N; i++) {
+            // wound to face along n whichever way the face points
+            float cr = (u.x * n.z - u.z * n.x);
+            if (cr > 0) fx.tri(m, pts[i], pts[(i + 1) % N], n, uv, uv, uv, col);
+            else        fx.tri(m, pts[(i + 1) % N], pts[i], n, uv, uv, uv, col);
+        }
+    };
+    ring(1.0f, 0.0025f, Color{ 104, 98, 90, 254 });
+    ring(0.62f, 0.0035f, Color{ 62, 58, 52, 254 });
+    Color rust = { 104, 58, 34, 254 };
+    const float R = 0.0085f, out = 0.014f;
+    for (int b = -1; b <= 1; b += 2) {                   // two verticals
+        float du = b * rw * (0.25f + 0.12f * r.f01());
+        float x0 = c.x + u.x * du + n.x * out, z0 = c.z + u.z * du + n.z * out;
+        addSolidBox(pr, x0 - R, c.y - rh * 0.75f, z0 - R, x0 + R, c.y + rh * 0.8f, z0 + R, rust);
+    }
+    int ties = 1 + (int)(r.f01() * 2);
+    for (int t = 0; t < ties; t++) {                      // and the ties across them
+        float y = c.y + (t - 0.5f * (ties - 1)) * rh * 0.55f;
+        float ax = c.x - u.x * rw * 0.55f + n.x * (out + 0.012f), az = c.z - u.z * rw * 0.55f + n.z * (out + 0.012f);
+        float bx = c.x + u.x * rw * 0.55f + n.x * (out + 0.012f), bz = c.z + u.z * rw * 0.55f + n.z * (out + 0.012f);
+        addSolidBox(pr, std::min(ax, bx) - R, y - R, std::min(az, bz) - R,
+                    std::max(ax, bx) + R, y + R, std::max(az, bz) + R, rust);
+    }
+}
+
+// ---- a Level 1 exit. The article lists Level 1's ways out as doors, and the
+// first of them is "doors with unique symbols at the end of corridors with
+// fluorescent lights". So an exit here is a steel door — frame, a heavy leaf
+// pinned open against the wall, the glow of wherever it goes in the opening —
+// with a symbol painted over it that no other door has (strokes between
+// points on a 3x3 lattice, chosen by the edge's hash, so every one differs),
+// and a caged bulkhead lamp above that. Cursed ones get their symbol in red.
+// `ax` is 0 for a wall running along x at z = w0, 1 for one along z at x = w0;
+// `a0` is the cell's low corner along the wall and `base` the floor under it.
+static void addSymbolDoor(MB &pr, MB &fx, int ax, float a0, float w0, float base, bool cursed, uint32_t h,
+                          bool leafRoom) {
+    auto P = [&](float a, float y, float n) {             // wall-local -> world
+        return ax == 0 ? Vector3{ a, y, w0 + n } : Vector3{ w0 + n, y, a };
+    };
+    auto box = [&](MB &mb, float aL, float y0, float nL, float aH, float y1, float nH, Color c) {
+        Vector3 lo = P(aL, y0, nL), hi = P(aH, y1, nH);
+        addSolidBox(mb, std::min(lo.x, hi.x), y0, std::min(lo.z, hi.z), std::max(lo.x, hi.x), y1, std::max(lo.z, hi.z), c);
+    };
+    Color steel = { 84, 88, 86, 254 }, dark = { 50, 52, 52, 254 };
+    const float o0 = a0 + 0.35f, o1 = a0 + 1.65f, T = 0.05f;
+    for (int sd = -1; sd <= 1; sd += 2) {                 // the frame, proud of both faces
+        float nf = sd * (WT + T * 0.5f);
+        box(pr, o0 - 0.09f, base, nf - T * 0.5f, o0, base + 2.39f, nf + T * 0.5f, steel);
+        box(pr, o1, base, nf - T * 0.5f, o1 + 0.09f, base + 2.39f, nf + T * 0.5f, steel);
+        box(pr, o0 - 0.09f, base + 2.30f, nf - T * 0.5f, o1 + 0.09f, base + 2.39f, nf + T * 0.5f, steel);
+    }
+    if (leafRoom) {   // the leaf, swung back flat against the -side face beside the frame
+        float nf = -(WT + 0.035f);
+        box(pr, o1 + 0.10f, base + 0.02f, nf - 0.022f, o1 + 1.38f, base + 2.27f, nf + 0.022f, Color{ 96, 104, 100, 254 });
+        box(pr, o1 + 0.22f, base + 1.00f, nf - 0.05f, o1 + 1.26f, base + 1.06f, nf - 0.02f, dark);   // push bar
+        box(pr, o1 + 0.40f, base + 1.55f, nf - 0.03f, o1 + 1.08f, base + 1.95f, nf - 0.022f, Color{ 60, 70, 76, 254 });   // wired glass
+    }
+    // the symbol: strokes of paint between lattice points, both faces
+    Rng r(((uint64_t)h << 1) ^ 0x51B01ULL);
+    int pts[6], np = 4 + r.ri(0, 2);
+    for (int i = 0; i < np; i++) pts[i] = r.ri(0, 8);
+    Color paint = cursed ? Color{ 210, 40, 30, 254 } : Color{ 250, 238, 190, 254 };
+    const Vector2 uv = { 0.375f, 0.75f };
+    float sc = 0.30f, cA = (o0 + o1) * 0.5f, cY = base + 2.78f;
+    for (int sd = -1; sd <= 1; sd += 2) {
+        float nf = sd * (WT + 0.0025f);
+        for (int i = 0; i + 1 < np; i++) {
+            float pa = cA + ((pts[i] % 3) - 1) * sc, py = cY + ((pts[i] / 3) - 1) * sc;
+            float qa = cA + ((pts[i + 1] % 3) - 1) * sc, qy = cY + ((pts[i + 1] / 3) - 1) * sc;
+            if (pts[i] == pts[i + 1]) { qa += sc * 0.6f; }
+            float da = qa - pa, dy = qy - py, L = sqrtf(da * da + dy * dy) + 1e-4f;
+            float ta = -dy / L * 0.065f, ty = da / L * 0.065f;          // half a brush width, across
+            Vector3 A = P(pa - ta, py - ty, nf), B = P(qa - ta, qy - ty, nf), C = P(qa + ta, qy + ty, nf), D = P(pa + ta, py + ty, nf);
+            Vector3 nn = ax == 0 ? Vector3{ 0, 0, (float)sd } : Vector3{ (float)sd, 0, 0 };
+            bool flip = (ax == 0) ? sd > 0 : sd < 0;
+            if (flip) fx.quad(B, A, D, C, nn, uv, uv, uv, uv, paint);
+            else      fx.quad(A, B, C, D, nn, uv, uv, uv, uv, paint);
+        }
+        // a dot where the stroke started: whoever painted it began there
+        float pa = cA + ((pts[0] % 3) - 1) * sc, py = cY + ((pts[0] / 3) - 1) * sc;
+        box(fx, pa - 0.04f, py - 0.04f, nf - 0.001f, pa + 0.04f, py + 0.04f, nf + 0.001f, paint);
+        // the caged bulkhead over it all: a warm glass lens (raw emissive) in a wire cage
+        float lf = sd * (WT + 0.07f);
+        box(pr, cA - 0.13f, base + 3.18f, sd * WT, cA + 0.13f, base + 3.36f, lf, dark);
+        box(pr, cA - 0.09f, base + 3.20f, lf - sd * 0.03f, cA + 0.09f, base + 3.34f, lf + sd * 0.012f,
+            Color{ 255, 206, 140, 60 });
+        for (int b = -1; b <= 1; b++)
+            box(pr, cA + b * 0.07f - 0.006f, base + 3.18f, lf + sd * 0.012f, cA + b * 0.07f + 0.006f, base + 3.36f,
+                lf + sd * 0.024f, dark);
+    }
+}
+
 // ---- the Manila Room, built. Everything here follows the wiki entry and the
 // renders made from it: wooden floorboards, walls papered the colour of a
 // manila folder, "one octagonal table and two chairs", cupboards under the
@@ -1573,6 +1692,7 @@ void World::ensureMesh(int cx, int cz) {
     if (d.built) return;
     MB fl, ce, wa, pr, wt, scr, gl, ao, fx;
     float wx = cx * CHUNK, wz = cz * CHUNK;
+    gWallV = level == 1 ? wallH : 3.0f;
     Color wcol = WHITE;
     // The ceiling gets no world-space relief (alpha 254, not 255). It hangs level
     // with the light fittings, so every panel lights it edge-on — and a bump under
@@ -1766,6 +1886,31 @@ void World::ensureMesh(int cx, int cz) {
             else if (hW > fy) stepEdge(gx, gz, gx, gz + CELL, hW, fy, 1, 0);
             if (hE < fy && hE == 0.0f) stepEdge(gx + CELL, gz, gx + CELL, gz + CELL, fy, hE, 1, 0);
             else if (hE > fy) stepEdge(gx + CELL, gz, gx + CELL, gz + CELL, hE, fy, -1, 0);
+            if (level == 1) {
+                // Safety edging along every drop off a loading dock: yellow and
+                // black, 100 mm wide, 250 mm to a stripe, painted just in from
+                // the lip. A warehouse marks its edges; and in the fog, with the
+                // floor the colour of the risers, it is the only thing that does.
+                auto edging = [&](float ex0, float ez0, float ex1, float ez1, float inx, float inz) {
+                    const Vector2 uv = { 0.375f, 0.75f };
+                    float len = sqrtf((ex1 - ex0) * (ex1 - ex0) + (ez1 - ez0) * (ez1 - ez0));
+                    int n = (int)(len / 0.25f);
+                    for (int q = 0; q < n; q++) {
+                        float t0 = q / (float)n, t1 = (q + 1) / (float)n;
+                        Vector3 a = { ex0 + (ex1 - ex0) * t0, fy + 0.004f, ez0 + (ez1 - ez0) * t0 };
+                        Vector3 b = { ex0 + (ex1 - ex0) * t1, fy + 0.004f, ez0 + (ez1 - ez0) * t1 };
+                        Vector3 c = { b.x + inx * 0.10f, b.y, b.z + inz * 0.10f }, dd2 = { a.x + inx * 0.10f, a.y, a.z + inz * 0.10f };
+                        Color col = (q & 1) ? Color{ 34, 32, 28, 254 } : Color{ 196, 160, 40, 254 };
+                        // wound up whichever way round the edge runs
+                        if ((ex1 - ex0) * inz - (ez1 - ez0) * inx < 0) fx.quad(a, b, c, dd2, {0,1,0}, uv, uv, uv, uv, col);
+                        else                                           fx.quad(dd2, c, b, a, {0,1,0}, uv, uv, uv, uv, col);
+                    }
+                };
+                if (hN < fy) edging(gx, gz, gx + CELL, gz, 0, 1);
+                if (hS < fy) edging(gx, gz + CELL, gx + CELL, gz + CELL, 0, -1);
+                if (hW < fy) edging(gx, gz, gx, gz + CELL, 1, 0);
+                if (hE < fy) edging(gx + CELL, gz, gx + CELL, gz + CELL, -1, 0);
+            }
         }
     }
     // Per-cell ceiling at this cell's own floor plus a wall height, in place of
@@ -1849,6 +1994,43 @@ void World::ensureMesh(int cx, int cz) {
             // now matches uLY instead of floating 10 cm above its own light.
             Color rim = level == 2 ? Color{230,232,223,254} : Color{156,153,140,254};
             const float outer = 0.69f, lip = 0.035f;
+            if (level == 1) {
+                // Level 1's fittings are warehouse battens, not office trays:
+                // two bare tubes under a steel reflector, hung off the slab on
+                // two rods. The tubes sit on the light plane (uLY), so the
+                // light still comes from where the glow is; the shader shades
+                // the fitting as its usual square, which at this pitch nobody
+                // can tell apart. Every other one is turned a quarter, so the
+                // grid does not read as rows of identical strips.
+                bool alongX = (ih((int)floorf(lx / ls), (int)floorf(lz / ls), seed ^ 0xBA77u) & 1) != 0;
+                auto box = [&](float a0, float y0, float b0, float a1, float y1, float b1, Color c) {
+                    if (alongX) addSolidBox(pr, lx + a0, y0, lz + b0, lx + a1, y1, lz + b1, c);
+                    else        addSolidBox(pr, lx + b0, y0, lz + a0, lx + b1, y1, lz + a1, c);
+                };
+                Color steel = { 132, 134, 128, 254 }, rod = { 70, 70, 68, 254 };
+                float yt = yq;                                   // the tubes' underside
+                box(-0.82f, yt + 0.035f, -0.16f, 0.82f, yt + 0.075f, 0.16f, steel);   // reflector
+                box(-0.82f, yt - 0.005f, -0.165f, 0.82f, yt + 0.075f, -0.145f, steel); // its lips
+                box(-0.82f, yt - 0.005f, 0.145f, 0.82f, yt + 0.075f, 0.165f, steel);
+                box(-0.84f, yt - 0.01f, -0.16f, -0.78f, yt + 0.075f, 0.16f, rod);      // end caps
+                box(0.78f, yt - 0.01f, -0.16f, 0.84f, yt + 0.075f, 0.16f, rod);
+                box(-0.55f, yt + 0.075f, -0.008f, -0.534f, wallTop, 0.008f, rod);     // hanger rods
+                box(0.534f, yt + 0.075f, -0.008f, 0.55f, wallTop, 0.008f, rod);
+                for (int t = -1; t <= 1; t += 2) {                                     // the two tubes
+                    float c0 = t * 0.07f - 0.028f, c1 = t * 0.07f + 0.028f;
+                    Vector3 a, b, c, d2;
+                    if (alongX) { a = {lx-0.78f,yt,lz+c0}; b = {lx-0.78f,yt,lz+c1}; c = {lx+0.78f,yt,lz+c1}; d2 = {lx+0.78f,yt,lz+c0}; }
+                    else        { a = {lx+c0,yt,lz-0.78f}; b = {lx+c0,yt,lz+0.78f}; c = {lx+c1,yt,lz+0.78f}; d2 = {lx+c1,yt,lz-0.78f}; }
+                    ce.quad(a, b, c, d2, {0,-1,0}, {0,0},{0,1},{1,1},{1,0}, panel);
+                    // and their sides, so a tube seen edge-on down a long hall
+                    // is still a line of light and not nothing
+                    if (alongX) ce.quad({lx-0.78f,yt,lz+c0},{lx+0.78f,yt,lz+c0},{lx+0.78f,yt+0.03f,lz+c0},{lx-0.78f,yt+0.03f,lz+c0},
+                                        {0,0,-1},{0,0},{1,0},{1,1},{0,1}, panel);
+                    else        ce.quad({lx+c0,yt,lz+0.78f},{lx+c0,yt,lz-0.78f},{lx+c0,yt+0.03f,lz-0.78f},{lx+c0,yt+0.03f,lz+0.78f},
+                                        {-1,0,0},{0,0},{1,0},{1,1},{0,1}, panel);
+                }
+                continue;
+            }
             if (level == 0) {
                 // Level 0's fittings are lay-in troffers, dropped into the tile
                 // grid the way they are in the photograph: the diffuser sits
@@ -1938,6 +2120,9 @@ void World::ensureMesh(int cx, int cz) {
             Color glow = crs ? Color{ 255, 60, 40, 70 } : Color{ 255, 248, 225, 70 };
             wa.quad({gx+0.35f,nb,gz},{gx+1.65f,nb,gz},{gx+1.65f,nb+2.3f,gz},{gx+0.35f,nb+2.3f,gz},{0,0,-1},
                     {0,1},{1,1},{1,0},{0,0},glow);
+            if (level == 1)
+                addSymbolDoor(pr, fx, 0, gx, gz, nb, crs, ih(gi0, gk0, seed ^ 0x51B0u),
+                              wallNVal(gi0 + 1, gk0) == WALL_SOLID);
         }
         else if (nv == WALL_DOOR) {   // doorway on x-running wall
             // Two doorways in neighbouring cells leave 0.35 m of jamb each side
@@ -2028,6 +2213,9 @@ void World::ensureMesh(int cx, int cz) {
             Color glow = crs ? Color{ 255, 60, 40, 70 } : Color{ 255, 248, 225, 70 };
             wa.quad({gx,wb,gz+0.35f},{gx,wb,gz+1.65f},{gx,wb+2.3f,gz+1.65f},{gx,wb+2.3f,gz+0.35f},{1,0,0},
                     {0,1},{1,1},{1,0},{0,0},glow);
+            if (level == 1)
+                addSymbolDoor(pr, fx, 1, gz, gx, wb, crs, ih(gi0, gk0, seed ^ 0x51B1u),
+                              wallWVal(gi0, gk0 + 1) == WALL_SOLID);
         }
         else if (wv == WALL_DOOR) {   // doorway on z-running wall
             // Merged the same way its x-running twin above is — see there.
@@ -2114,6 +2302,39 @@ void World::ensureMesh(int cx, int cz) {
             aoStrip({ gx + WT + 0.006f, fyE, z0 }, { gx + WT + 0.006f, fyE, z1 }, { 0, AOH, 0 }, { 1, 0, 0 }, 0);
             aoStrip({ gx - WT - 0.006f, cyW + 0.005f, z0 }, { gx - WT - 0.006f, cyW + 0.005f, z1 }, { 0, -AOH, 0 }, { -1, 0, 0 }, AOC);
             aoStrip({ gx + WT + 0.006f, cyE + 0.005f, z1 }, { gx + WT + 0.006f, cyE + 0.005f, z0 }, { 0, -AOH, 0 }, { 1, 0, 0 }, AOC);
+        }
+        if (level == 1 && nv == WALL_SOLID && ih(gi0, gk0, seed ^ 0xE1E7u) % 71 == 0 &&
+            wallNVal(gi0 - 1, gk0) == WALL_SOLID && wallNVal(gi0 + 1, gk0) == WALL_SOLID) {
+            // A lift. The article gives Level 1 "staircases, elevators, isolated
+            // rooms, and hallways"; the doors are shut and nobody has found the
+            // car, but the call button is lit, which is worse than if it were not.
+            float sgn = (ih(gi0, gk0, seed ^ 0xE1E8u) & 1) ? 1.0f : -1.0f;
+            float zf = gz + sgn * WT;
+            auto zb = [&](float x0, float y0, float x1, float y1, float d0, float d1, Color c) {
+                addSolidBox(pr, x0, y0, std::min(zf + sgn * d0, zf + sgn * d1), x1, y1, std::max(zf + sgn * d0, zf + sgn * d1), c);
+            };
+            Color frame = { 92, 94, 92, 254 }, leaf = { 142, 146, 144, 254 }, seam = { 40, 42, 42, 254 };
+            zb(gx + 0.30f, nb, gx + 1.70f, nb + 2.46f, 0.0f, 0.03f, frame);                       // surround
+            zb(gx + 0.38f, nb, gx + 0.995f, nb + 2.38f, 0.03f, 0.045f, leaf);                     // two leaves
+            zb(gx + 1.005f, nb, gx + 1.62f, nb + 2.38f, 0.03f, 0.045f, leaf);
+            zb(gx + 0.995f, nb, gx + 1.005f, nb + 2.38f, 0.03f, 0.042f, seam);
+            zb(gx + 0.62f, nb + 2.52f, gx + 1.38f, nb + 2.70f, 0.0f, 0.03f, seam);                 // floor indicator
+            zb(gx + 0.93f, nb + 2.55f, gx + 1.07f, nb + 2.67f, 0.03f, 0.036f, Color{ 255, 120, 40, 60 });
+            zb(gx + 1.86f, nb + 1.00f, gx + 1.96f, nb + 1.30f, 0.0f, 0.02f, frame);               // call plate
+            zb(gx + 1.89f, nb + 1.12f, gx + 1.93f, nb + 1.18f, 0.02f, 0.03f, Color{ 255, 236, 180, 60 });
+        }
+        if (level == 1) {   // spalls on the walls too, rarer than on the columns
+            uint32_t sn = ih(gi0, gk0, seed ^ 0x5BA2u), sw2 = ih(gi0, gk0, seed ^ 0x5BA3u);
+            if (nv == WALL_SOLID && sn % 13 == 0) {
+                float sgn = (sn >> 4) & 1 ? 1.0f : -1.0f;
+                addSpall(fx, pr, { gx + 0.5f + ((sn >> 5) & 7) * 0.14f, nb + 0.5f + ((sn >> 8) & 15) * 0.16f, gz + sgn * WT },
+                         { 0, 0, sgn }, { 1, 0, 0 }, 0.30f, 0.34f, sn);
+            }
+            if (wv == WALL_SOLID && sw2 % 13 == 0) {
+                float sgn = (sw2 >> 4) & 1 ? 1.0f : -1.0f;
+                addSpall(fx, pr, { gx + sgn * WT, wb + 0.5f + ((sw2 >> 8) & 15) * 0.16f, gz + 0.5f + ((sw2 >> 5) & 7) * 0.14f },
+                         { sgn, 0, 0 }, { 0, 0, 1 }, 0.30f, 0.34f, sw2);
+            }
         }
         // ---- the building's fittings. Decals pressed off the wall and ceiling
         // faces, plus real (if tiny) geometry for the conduit and sprinklers.
@@ -2299,6 +2520,16 @@ void World::ensureMesh(int cx, int cz) {
         }
         if (dd.pillar[i][kk]) {
             addBoxSides(wa, gx + 0.42f, fyc, gz + 0.42f, gx + 1.58f, cyc, gz + 1.58f);
+            uint32_t sh = ih(gi0, gk0, seed ^ 0x5BA1u);
+            if (level == 1 && sh % 3 == 0) {   // a column with its cover blown off
+                int f = (int)((sh >> 3) & 3);
+                const Vector3 NS[4] = { {0,0,-1}, {0,0,1}, {-1,0,0}, {1,0,0} };
+                Vector3 n = NS[f], u = (f < 2) ? Vector3{ 1, 0, 0 } : Vector3{ 0, 0, 1 };
+                float off = ((sh >> 6) & 1) ? 0.28f : -0.28f;   // toward a corner, where it goes first
+                Vector3 c = { gx + 1.0f + n.x * 0.58f + u.x * off, fyc + 0.7f + ((sh >> 8) & 15) / 15.0f * 2.0f,
+                              gz + 1.0f + n.z * 0.58f + u.z * off };
+                addSpall(fx, pr, c, n, u, 0.24f, 0.30f + ((sh >> 12) & 7) * 0.03f, sh);
+            }
             addContactShadow(ao, gx + 1.0f, gz + 1.0f, fyc, 0.0f, 0.58f, 0.58f);
             // AO up the pillar's feet and a ceiling crease around its head
             float pfy = fyc + 0.005f;
@@ -2324,8 +2555,10 @@ void World::ensureMesh(int cx, int cz) {
         float mx = wx + (MANILA_HI + 1 - 2) * CELL, mz = wz + (MANILA_HI + 1 - 2) * CELL;
         addManilaRoom(pr, fx, ao, mx, mz, ceilY(cellOf(mx), cellOf(mz)), ih(cx, cz, seed ^ 0x3A11u));
     }
-    if (level == 3) {
-        // Service pipework. Runs are decided per *row* rather than per cell, so a
+    if (level == 3 || level == 1) {
+        // Service pipework — the Red Halls' plumbing, and Level 1's: a warehouse
+        // with "a consistent supply of water and electricity" has to carry both
+        // somewhere, and the ceiling is where it does. Runs are decided per *row* rather than per cell, so a
         // pipe follows a whole corridor the way a real service run does instead of
         // appearing in patches. Consecutive cells emit abutting segments, so the
         // run reads as one continuous pipe.
@@ -2869,4 +3102,50 @@ Mesh buildFlareMesh() {
     // Printed safety bands, attached to the tube instead of screen-space boxes.
     weaponTube(b,0,-0.059f,-0.044f,0.0164f,0,{209,191,148,254},16);
     return b.bake();
+}
+
+// ---- a Level 1 supply crate. "Crates of supplies appear and disappear
+// randomly within the Level" — so they are not part of any chunk's mesh: Game
+// decides where they are this minute (Game::crateAt) and draws this one mesh
+// at each, base on y = 0, lid separate so an opened crate can have it off.
+// Planks from the props atlas's veneer, dark battens on the edges, and a pale
+// shipping label, all alpha 255 so the wood takes its grain relief.
+static void crateBody(MB &mb) {
+    const float WU0 = 0.51f, WV0 = 0.02f, WU1 = 0.99f, WV1 = 0.48f;
+    const float CU0 = 0.02f, CV0 = 0.30f, CU1 = 0.22f, CV1 = 0.50f;          // cardboard, for the label
+    const float H = 0.56f, R = 0.35f;
+    Color plank = { 255, 226, 180, 255 }, batten = { 176, 138, 96, 255 };
+    // the box as horizontal planks, each a little different in tone
+    for (int i = 0; i < 4; i++) {
+        float y0 = i * H / 4 + 0.004f, y1 = (i + 1) * H / 4 - 0.004f;
+        float k = 0.88f + 0.06f * ((i * 7) % 3);
+        Color t = { (unsigned char)(plank.r * k), (unsigned char)(plank.g * k), (unsigned char)(plank.b * k), 255 };
+        addPropBox(mb, 0, 0, 0, R, R, y0, y1, WU0, WV0 + 0.1f * i, WU1, WV0 + 0.1f * i + 0.08f,
+                   WU0, WV0, WU1, WV1, t, 0.0f);
+    }
+    addPropBox(mb, 0, 0, 0, R - 0.01f, R - 0.01f, 0, H, WU0, WV0, WU1, WV1, WU0, WV0, WU1, WV1,
+               Color{ 60, 44, 30, 255 }, 0.0f);                              // what shows in the gaps
+    for (int cx = -1; cx <= 1; cx += 2) for (int cz = -1; cz <= 1; cz += 2)   // corner battens
+        addPropBox(mb, cx * (R - 0.02f), cz * (R - 0.02f), 0, 0.035f, 0.035f, 0, H + 0.004f,
+                   WU0, WV0, WU0 + 0.1f, WV1, WU0, WV0, WU1, WV1, batten, 0.0f);
+    for (int f = 0; f < 4; f++) {                                            // a diagonal brace per side
+        float a = f * 1.5707963f;
+        addPropBox(mb, cosf(a) * (R + 0.012f), sinf(a) * (R + 0.012f), a + 1.5707963f, R - 0.05f, 0.012f,
+                   H * 0.44f, H * 0.56f, WU0, WV0, WU1, WV0 + 0.05f, WU0, WV0, WU1, WV1, batten, 0.0f);
+    }
+    // a shipping label on one face, pressed a hair off it
+    Color lab = { 226, 214, 184, 254 };
+    mb.quad({ -0.14f, 0.16f, R + 0.016f }, { 0.14f, 0.16f, R + 0.016f }, { 0.14f, 0.34f, R + 0.016f },
+            { -0.14f, 0.34f, R + 0.016f }, { 0, 0, 1 }, { CU0, CV1 }, { CU1, CV1 }, { CU1, CV0 }, { CU0, CV0 }, lab);
+}
+Mesh buildCrateMesh() { MB mb; crateBody(mb); return mb.bake(); }
+Mesh buildCrateLidMesh() {
+    MB mb;
+    const float WU0 = 0.51f, WV0 = 0.02f, WU1 = 0.99f, WV1 = 0.48f;
+    addPropBox(mb, 0, 0, 0, 0.365f, 0.365f, 0, 0.04f, WU0, WV0, WU1, WV1, WU0, WV0, WU1, WV1,
+               Color{ 246, 214, 170, 255 }, 0.0f);
+    for (int i = -1; i <= 1; i += 2)
+        addPropBox(mb, 0, i * 0.25f, 0, 0.365f, 0.035f, 0.04f, 0.06f, WU0, WV0, WU1, WV1, WU0, WV0, WU1, WV1,
+                   Color{ 176, 138, 96, 255 }, 0.0f);
+    return mb.bake();
 }

@@ -81,6 +81,8 @@ void Game::init() {
     texDog = makeDogTex();
     texAlmondWrap = makeAlmondWrapTex();
     canMesh = buildCanMesh();
+    crateMesh = buildCrateMesh();
+    crateLidMesh = buildCrateLidMesh();
     revolver.load();
     flareMesh = buildFlareMesh();
     texDeck = makeDeckTex();
@@ -135,6 +137,7 @@ void Game::init() {
     locVary = GetShaderLocation(worldShader, "uVary");
     locFaulty = GetShaderLocation(worldShader, "uFaulty");
     locWet = GetShaderLocation(worldShader, "uWet");
+    locWetFrom = GetShaderLocation(worldShader, "uWetFrom");
     locRoomMask = GetShaderLocation(worldShader, "uRoomMask");
     locLamp = GetShaderLocation(worldShader, "uLamp");
     locLY = GetShaderLocation(worldShader, "uLY");
@@ -604,6 +607,7 @@ void Game::applyLevel(int lv) {
     SetShaderValue(worldShader, locVary, &c.vary, SHADER_UNIFORM_FLOAT);
     SetShaderValue(worldShader, locFaulty, &c.faulty, SHADER_UNIFORM_FLOAT);
     SetShaderValue(worldShader, locWet, &c.wet, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(worldShader, locWetFrom, &c.wetFrom, SHADER_UNIFORM_FLOAT);
     synth.tHum = lv == 0 ? 1.0f : lv == 4 ? 0.5f : lv == 2 ? 0.035f : 0.15f;
     synth.tDrone = lv == 1 ? 1.0f : 0.0f;
     nextBlackout = lv == 2 ? BLACKOUT_NEVER : blackoutIn(GetTime(), 30, 60);   // no blackouts in the poolrooms
@@ -621,6 +625,7 @@ void Game::applyLevel(int lv) {
     // A different floor has no Manila Room in reach until updateManila says
     // so; left set, a room on the last floor went on soothing you on this one.
     manilaNear = inManila = false; noteT = 0; manilaCardT = 0;
+    cratesOpened.clear(); crateWasDark = false;
     swimming=false; swimPhase=swimClimb=0; floatRoll=0;
     squeezing=false; squeezeBlend=0;
     bullets.clear(); bulletImpacts.clear();
@@ -907,6 +912,7 @@ bool Game::tick() {
     updateDrink(dt, now);
     updateAmbience(dt, now);
     updateManila(dt, now);
+    updateCrates(dt, now);
     updateLoopAudio(dt);
     updateEntity(dt, now);
     updateDogs(dt, now);
@@ -1239,7 +1245,7 @@ void Game::updateMovement(float dt) {
         int si = grng.ri(0, 3);
         // Level 0's carpet squelches where it is sodden — the same patches the
         // shader darkens and glosses, via carpetWetCPU.
-        bool squelch = !inWater && LEVELS[level].wet > 0 && carpetWetCPU(px, pz) > 0.25f;
+        bool squelch = !inWater && LEVELS[level].wet > 0 && carpetWetCPU(px, pz, LEVELS[level].wetFrom) > 0.25f;
         Sound &s = inWater ? swimStrokes[si] : squelch ? squelches[si] : steps[si];
         SetSoundPitch(s, (inWater ? 1.15f : 0.9f) + grng.f01() * 0.22f);
         SetSoundVolume(s, (0.35f + 0.3f * bobAmt) * (inWater ? 1.2f : squelch ? 1.1f : 1.0f));
@@ -1781,6 +1787,15 @@ void Game::updateInteraction() {
     // cell never holds a prop, so a standpipe and a vending machine are never
     // the same cell, and the deck is wherever you personally put it down.
     if (inKeyPressed(KEY_E)) {
+        // Level 1: prise the lid off a supply crate.
+        if (level == 1) {
+            for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+                int a = pci + dx, b = pck + dz;
+                if (!crateAt(a, b) || cratesOpened.count(cellKey2(a, b))) continue;
+                float ddx = px - (a * CELL + 1.0f), ddz = pz - (b * CELL + 1.0f);
+                if (ddx * ddx + ddz * ddz < 1.35f * 1.35f) { openCrate(a, b); dx = dz = 2; }
+            }
+        }
         // Level 0: read the notes on the Manila Room's table.
         if (level == 0 && manilaNear) {
             float ddx = px - manilaX, ddz = pz - manilaZ;
@@ -2561,4 +2576,70 @@ void Game::updateManila(float dt, double now) {
 Vector2 Game::pickupSpot(int a, int b) {
     if (world.propAt(a, b) == PROP_MANILA_TABLE) return { a * CELL + 1.78f, b * CELL + 1.84f };
     return { a * CELL + 1.0f, b * CELL + 1.0f };
+}
+
+bool Game::crateAt(int a, int b) {
+    if (level != 1) return false;
+    if (ih(a, b, pickupSalt() ^ 0xC2A7Eu ^ (crateEpoch * 0x9E3779B9u)) % 37 != 0) return false;
+    // standing clear in a cell of its own: no furniture, no column, level floor
+    // and not in the doorway lines, so it never blocks a way through
+    if (world.pillarAt(a, b) || world.propAt(a, b) || world.poolAt(a, b)) return false;
+    if (pickupAt(a, b) != Pickup::None) return false;
+    // ...and never in front of a way through: a crate in a doorway or before
+    // an exit reads as the level barring the door, which it is not doing
+    const uint8_t e[4] = { world.wallNVal(a, b), world.wallNVal(a, b + 1), world.wallWVal(a, b), world.wallWVal(a + 1, b) };
+    for (uint8_t w : e) if (w == WALL_DOOR || w == WALL_EXIT || w == WALL_LOCKED) return false;
+    return !(abs(a) <= 3 && abs(b) <= 3);                 // not on top of an arrival
+}
+
+// Half the time what's inside keeps you going; the rest of the time it is the
+// lore's own list of things nobody could want. Decided by the cell and the
+// epoch, so a crate's contents are fixed for as long as the crate is there.
+void Game::openCrate(int a, int b) {
+    cratesOpened.insert(cellKey2(a, b));
+    uint32_t h = ih(a, b, pickupSalt() ^ 0x10075u ^ (crateEpoch * 0x85EBCA6Bu));
+    static const char *JUNK[] = {
+        "assorted car parts.", "a box of crayons.", "used syringes. you put the lid back.",
+        "partially burned paper. none of it legible.", "a live mouse. it is gone before you can blink.",
+        "mice, not moving, with needle marks.", "shoelaces. a lot of shoelaces.", "loose change.",
+        "a bundle of human hair.",
+    };
+    deckNoteT = 2.6f;
+    SetSoundPitch(sndClick, 0.6f); PlaySound(sndClick);
+    switch (h % 10) {
+    case 0: case 1: almond++;                                   deckNote = "a supply crate: a carton of almond water."; break;
+    case 2:         battery = clampf(battery + 0.6f, 0, 1);     deckNote = "a supply crate: batteries. the torch will keep."; break;
+    case 3:         if (flares < MAXFLARES) flares++; else almond++;
+                    deckNote = flares < MAXFLARES ? "a supply crate: a road flare." : "a supply crate: a road flare, and water."; break;
+    case 4:         tapes++;                                    deckNote = "a supply crate: a cassette, labelled in someone's hand."; break;
+    default:        deckNote = JUNK[(h >> 8) % (sizeof(JUNK) / sizeof(JUNK[0]))]; break;
+    }
+}
+
+void Game::updateCrates(float dt, double now) {
+    (void)dt;
+    if (level != 1) return;
+    // the epoch turns when the lights come back, not when they go: nobody sees
+    // the crates move, and the supplies that were there are simply not
+    bool dark = now < blackoutEnd;
+    if (crateWasDark && !dark) { crateEpoch++; cratesOpened.clear(); }
+    crateWasDark = dark;
+    // A crate is solid. It is not in the chunk's collision (it is not in the
+    // chunk at all), so push the player off it here, after world collision.
+    int ci = cellOf(px), ck = cellOf(pz);
+    for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+        int a = ci + dx, b = ck + dz;
+        if (!crateAt(a, b)) continue;
+        float cx = a * CELL + 1.0f, cz = b * CELL + 1.0f, r = 0.36f + PR;
+        float ox = px - cx, oz = pz - cz;
+        float qx = clampf(ox, -0.36f, 0.36f), qz = clampf(oz, -0.36f, 0.36f);   // nearest point on the box
+        float ex = ox - qx, ez = oz - qz, e2 = ex * ex + ez * ez;
+        if (py > 0.5f) continue;                                               // standing on it
+        if (e2 < PR * PR && e2 > 1e-8f) {
+            float e = sqrtf(e2), push = PR - e;
+            px += ex / e * push; pz += ez / e * push;
+        } else if (e2 <= 1e-8f) {                                              // inside: out the short way
+            if (fabsf(ox) > fabsf(oz)) px = cx + (ox > 0 ? r : -r); else pz = cz + (oz > 0 ? r : -r);
+        }
+    }
 }

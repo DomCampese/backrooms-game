@@ -347,6 +347,39 @@ int main() {
           g.cleanShot=true; g.runStart=rs; }
         g.world.manilaTest=false;
     }
+    // ---- Level 1 lore. Puddles "in inconsistent areas" (a few percent of the
+    // slab, not a sheen on all of it), and supply crates that are there, keep
+    // out of doorways, "appear and disappear" when a blackout ends, and open.
+    {
+        g.applyLevel(1);
+        int wet=0, n=0;
+        for(float x=-80;x<80;x+=1.37f) for(float z=-80;z<80;z+=1.41f) { n++; wet += carpetWetCPU(x,z,LEVELS[1].wetFrom)>0.5f; }
+        float pct=100.0f*wet/n;
+        CHECK(LEVELS[1].gloss<=0.10f);          // below the shader's specular cut: no blanket sheen
+        std::vector<uint64_t> a0;
+        for(int a=-40;a<40;++a) for(int b=-40;b<40;++b) if(g.crateAt(a,b)) {
+            a0.push_back(Game::cellKey2(a,b));
+            const uint8_t e[4]={g.world.wallNVal(a,b),g.world.wallNVal(a,b+1),g.world.wallWVal(a,b),g.world.wallWVal(a+1,b)};
+            for(uint8_t w:e) CHECK(w!=WALL_DOOR && w!=WALL_EXIT && w!=WALL_LOCKED);
+        }
+        g.crateEpoch++;
+        int same=0, after=0;
+        for(int a=-40;a<40;++a) for(int b=-40;b<40;++b) if(g.crateAt(a,b)) {
+            after++;
+            for(uint64_t k:a0) same += k==Game::cellKey2(a,b);
+        }
+        printf("Level 1: puddles on %.1f%% of the floor; %zu crates, %d after a blackout, %d in the same place\n",
+               pct, a0.size(), after, same);
+        CHECK(pct>0.5f && pct<7.0f);
+        CHECK(!a0.empty() && after>0 && same*4<(int)a0.size());
+        g.crateEpoch--;                         // back to the epoch a0 was taken in
+        int ca=(int)(uint32_t)(a0[0]>>32), cb=(int)(uint32_t)(a0[0]&0xFFFFFFFFu);
+        g.deckNoteT=0;
+        g.openCrate(ca,cb);
+        CHECK(g.cratesOpened.count(Game::cellKey2(ca,cb))==1 && g.deckNoteT>0);
+        g.px=ca*CELL+1.0f; g.pz=cb*CELL+3.2f; g.py=0; g.eyeY=1.62f; g.yaw=-PI/2; g.pitch=-0.35f;
+        capture(g,"level1-crate.png");
+    }
     // ---- step height. The generator relaxes every terrace to within MAX_STEP,
     // so nothing it produces exercises the riser blocker; a rule that never
     // fires is not a rule that works, so force a drop and check it directly.

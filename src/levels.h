@@ -26,6 +26,10 @@ struct LevelCfg {
     // space rather than baked into the 2 m carpet tile, because a puddle that
     // repeats every two metres is a pattern, not a leak.
     float wet = 0.0f;
+    // Where on the damp-patch field the patches start (the field is 0..1, see
+    // carpetWetCPU). 0.60 wets about a quarter of Level 0's carpet; Level 1's
+    // concrete only pools "in inconsistent areas", about 3% at 0.78.
+    float wetFrom = 0.60f;
 };
 constexpr int NLEVELS = 5;
 extern const LevelCfg LEVELS[NLEVELS];
@@ -40,7 +44,7 @@ float lightAtCPU(float x, float y, float z, float blackout,
 
 // How wet Level 0's carpet is at this point on the floor, 0..1 — the CPU twin
 // of the shader's uWet patches, for the footsteps.
-float carpetWetCPU(float x, float z);
+float carpetWetCPU(float x, float z, float from = 0.60f);
 
 // The Manila Room's panel mask (x0,z0,x1,z1) and chandelier (x,y,z,output),
 // for lightAtCPU — the same values Game hands the shader as uRoomMask/uLamp.

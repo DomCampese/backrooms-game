@@ -2,6 +2,7 @@
 #include "input.h"
 #include "textures.h"   // ENT_FRAMES / ENT_ROWS / DOG_FRAMES: the sprite-sheet layout
 #include "raymath.h"
+#include "rlgl.h"
 #include <cmath>
 #include "textures.h"   // ENT_FRAMES / DOG_FRAMES: how many frames each walk sheet holds
 #include <algorithm>
@@ -226,6 +227,21 @@ void Game::renderScene(double now) {
     auto lit = [](Color c, float f) {
         return Color{ cl8(c.r * f), cl8(c.g * f), cl8(c.b * f), c.a };
     };
+    if (level == 1) {   // this epoch's supply crates (Game::crateAt)
+        for (int dx = -9; dx <= 9; dx++) for (int dz = -9; dz <= 9; dz++) {
+            int a = pci + dx, b = pck + dz;
+            if (!crateAt(a, b)) continue;
+            float cxw = a * CELL + 1.0f, czw = b * CELL + 1.0f, gy = world.floorY(a, b);
+            float spin = (float)(ih(a, b, 0xC2A7u) & 3) * 1.5707963f + (((ih(a, b, 0xC2A8u) & 255) / 255.0f) - 0.5f) * 0.4f;
+            Matrix xf = MatrixMultiply(MatrixRotateY(spin), MatrixTranslate(cxw, gy, czw));
+            DrawMesh(crateMesh, mats[MAT_PROPS], xf);
+            if (!cratesOpened.count(cellKey2(a, b)))
+                DrawMesh(crateLidMesh, mats[MAT_PROPS], MatrixMultiply(MatrixTranslate(0, 0.564f, 0), xf));
+            else   // prised off and leaned against the side
+                DrawMesh(crateLidMesh, mats[MAT_PROPS],
+                         MatrixMultiply(MatrixMultiply(MatrixRotateX(1.35f), MatrixTranslate(0, 0.02f, 0.42f)), xf));
+        }
+    }
     for (int dx = -7; dx <= 7; dx++) for (int dz = -7; dz <= 7; dz++) {   // world pickups nearby
         int a = pci + dx, b = pck + dz;
         if (taken.count(cellKey2(a, b))) continue;
@@ -492,6 +508,39 @@ void Game::renderScene(double now) {
             fminf(1.2f, Vector3Distance(b.pos,b.tail))));
         DrawCylinderEx(tail,b.pos,0.006f,0.009f,5,{255,211,126,220});
         DrawSphere(b.pos,0.012f,{255,237,187,255});
+    }
+    if (level == 1) {
+        // Level 1's "low-hanging fog with no discernable source". The level's
+        // exponential fog handles distance; this is the part that hangs: soft,
+        // wide, faint banks lying on the slab, drifting on a draught nobody can
+        // find. One per floor cell on a hashed jitter, so the same bank sits in
+        // the same place as you walk past it, lit by the room at its own spot
+        // (propLum) so it goes dark in a blackout with everything else. No
+        // depth writes, or each bank would cut a hole in the one behind it;
+        // faded out right under you so you never have a sprite in your face.
+        rlDrawRenderBatchActive();
+        rlDisableDepthMask();
+        int mci = cellOf(px), mck = cellOf(pz);
+        float tnow = (float)now;
+        for (int dx = -11; dx <= 11; dx++) for (int dz = -11; dz <= 11; dz++) {
+            int a = mci + dx, b = mck + dz;
+            uint32_t h = ih(a, b, 0xF06u);
+            if ((h & 3) == 0 || world.pillarAt(a, b)) continue;         // three cells in four
+            float mxp = a * CELL + 1.0f + (((h >> 4) & 255) / 255.0f - 0.5f) * 1.2f + sinf(tnow * 0.07f + (h & 63)) * 0.35f;
+            float mzp = b * CELL + 1.0f + (((h >> 12) & 255) / 255.0f - 0.5f) * 1.2f + cosf(tnow * 0.05f + (h & 31)) * 0.35f;
+            float ddx = mxp - px, ddz = mzp - pz, d = sqrtf(ddx * ddx + ddz * ddz);
+            if (d > 22.0f || d < 1.2f) continue;
+            float fade = clampf((d - 1.2f) / 2.5f, 0.0f, 1.0f) * clampf((22.0f - d) / 6.0f, 0.0f, 1.0f);
+            float gy = world.floorY(a, b);
+            float my = gy + 0.26f + ((h >> 20) & 7) * 0.03f;
+            float lum = propLum(mxp, my, mzp);
+            float breathe = 0.75f + 0.25f * sinf(tnow * 0.3f + (h >> 24));
+            Color mc = { cl8(170 * lum), cl8(178 * lum), cl8(168 * lum), cl8(78 * fade * breathe) };
+            float w = 3.0f + ((h >> 26) & 3) * 0.5f;
+            DrawBillboardRec(cam, texParticle, { 0, 0, 32, 32 }, { mxp, my, mzp }, { w, w * 0.30f }, mc);
+        }
+        rlDrawRenderBatchActive();
+        rlEnableDepthMask();
     }
     for (const BulletImpact &impact : bulletImpacts) {
         float age=0.24f-impact.life;
