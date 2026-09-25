@@ -138,6 +138,21 @@ void Game::renderScene(double now) {
     // ...and it's solid: a beam that catches it throws its shadow down the hall
     float entBlock = (ent.st == EState::Hidden || ent.st == EState::Die) ? 0.0f : 1.0f;
     SetShaderValue(worldShader, locEntBlock, &entBlock, SHADER_UNIFORM_FLOAT);
+    {   // the Manila Room, when one is near: its tubes out, its chandelier on.
+        // An inverted rectangle masks nothing. The chandelier ignores the
+        // blackouts — it is the one light down here that does — and wavers
+        // like an old filament rather than stuttering like a tube.
+        float mask[4] = { 1e6f, 1e6f, -1e6f, -1e6f }, lamp[4] = { 0, 0, 0, 0 };
+        if (manilaNear) {
+            mask[0] = manilaX - 4.0f; mask[1] = manilaZ - 4.0f; mask[2] = manilaX + 4.0f; mask[3] = manilaZ + 4.0f;
+            float waver = 0.96f + 0.04f * sinf((float)now * 7.3f) * sinf((float)now * 2.9f + 1.1f);
+            lamp[0] = manilaX; lamp[1] = world.ceilY(cellOf(manilaX), cellOf(manilaZ)) - 0.80f;
+            lamp[2] = manilaZ; lamp[3] = 1.0f * waver;
+        }
+        SetShaderValue(worldShader, locRoomMask, mask, SHADER_UNIFORM_VEC4);
+        SetShaderValue(worldShader, locLamp, lamp, SHADER_UNIFORM_VEC4);
+        setLightExtrasCPU(mask, lamp);
+    }
     Vector2 occOrigin = { (float)occOriginI, (float)occOriginK };
     float occN = occValid ? (float)OCC_N : 0.0f;
     SetShaderValue(worldShader, locOccOrigin, &occOrigin, SHADER_UNIFORM_VEC2);
@@ -201,7 +216,7 @@ void Game::renderScene(double now) {
     float edSend = (ent.st == EState::Hidden) ? 0.0f : entDarkCur;
     auto propLum = [&](float x, float y, float z) {
         float lum = lightAtCPU(x, y, z, blackoutCur, lc.ls, lc.wallH - 0.12f, lc.dead, lc.lightMul, ambLumP,
-                               ent.x, ent.z, edSend);
+                               ent.x, ent.z, edSend, lc.vary);
         if (flareInt > 0.01f) {
             float fx = x - flarePos.x, fy = y - flarePos.y, fz = z - flarePos.z;
             lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fx * fx + fy * fy + fz * fz)), 0.0f, 1.0f);
@@ -216,7 +231,8 @@ void Game::renderScene(double now) {
         if (taken.count(cellKey2(a, b))) continue;
         Pickup kind = pickupAt(a, b);            // the same call the pickup test makes
         if (kind == Pickup::None) continue;
-        float bxx = a * CELL + 1.0f, bzz = b * CELL + 1.0f;
+        Vector2 spot = pickupSpot(a, b);
+        float bxx = spot.x, bzz = spot.y;
         float gy = world.floorY(a, b);
         float pl = propLum(bxx, gy + 0.15f, bzz);
         switch (kind) {
@@ -369,7 +385,7 @@ void Game::renderScene(double now) {
         const LevelCfg &c = LEVELS[level];
         float ambLum = (c.amb.x + c.amb.y + c.amb.z) / 3.0f;
         float lum = lightAtCPU(d.x, d.dispY + 0.5f, d.z, blackoutCur,
-                               c.ls, c.wallH - 0.12f, c.dead, c.lightMul, ambLum);
+                               c.ls, c.wallH - 0.12f, c.dead, c.lightMul, ambLum, 0, 0, 0, c.vary);
         if (flashCur > 0.05f) {
             float d2 = dd * dd + 1e-4f;
             float cone = powf(fmaxf((ddx * fwd.x + ddz * fwd.z) / (dd + 1e-4f), 0.0f), 26.0f);
@@ -408,7 +424,7 @@ void Game::renderScene(double now) {
         float eg = ent.dispY;
         float lum = lightAtCPU(ent.x, eg + 0.95f, ent.z, blackoutCur,
                                c.ls, c.wallH - 0.12f, c.dead, c.lightMul, ambLum,
-                               ent.x, ent.z, entDarkCur);   // it stands in its own pool of dead light
+                               ent.x, ent.z, entDarkCur, c.vary);   // it stands in its own pool of dead light
         if (flashCur > 0.05f) {   // flashlight picks him out of the dark
             float vx2 = ent.x - px, vz2 = ent.z - pz;
             float d2 = vx2 * vx2 + vz2 * vz2 + 1e-4f, dl = sqrtf(d2);
@@ -578,6 +594,7 @@ void Game::renderUI(double now) {
     SetShaderValue(postShader, locPFear, &fear, SHADER_UNIFORM_FLOAT);
     float submerged = level==2 && world.poolAt(cellOf(px),cellOf(pz)) ? clampf((WATER_Y-eyeY)*8,0,1) : 0;
     SetShaderValue(postShader,locPWater,&submerged,SHADER_UNIFORM_FLOAT);
+    SetShaderValue(postShader, locPMigraine, &migraine, SHADER_UNIFORM_FLOAT);
     BeginShaderMode(postShader);
     DrawTextureRec(rt.texture, { 0, 0, (float)rt.texture.width, -(float)rt.texture.height }, { 0, 0 }, WHITE);
     EndShaderMode();
@@ -663,6 +680,10 @@ void Game::renderUI(double now) {
         int ti = 0;
         for (const char *p = LEVELS[level].name; *p && ti < 60; p++) {
             t1[ti++] = *p;
+            // a UTF-8 character is several bytes (Level 0's "·" is two), and
+            // a space pushed between them draws as two '?' — space characters,
+            // not bytes
+            if (((unsigned char)p[1] & 0xC0) == 0x80) continue;
             t1[ti++] = ' ';
             if (*p == ' ') t1[ti++] = ' ';
         }
@@ -709,9 +730,21 @@ void Game::renderUI(double now) {
     if (escapeT > 0) {
         float a = clampf(escapeT > 5.4f ? (6.0f - escapeT) / 0.6f : escapeT / 5.4f, 0, 1);
         DrawRectangle(0, 0, sw, sh, Fade(WHITE, a * (escapeT > 5.4f ? 0.9f : 0.12f)));
-        const char *t = "YOU FOUND AN EXIT";
+        if (noclipped && escapeT > 4.6f) {
+            // the frame tearing as you go through: offset slabs of the flash,
+            // re-rolled a dozen times a second for the first moment
+            Rng tr(hash64((uint64_t)(now * 12.0) ^ 0x7EA2ULL));
+            for (int b = 0; b < 9; b++) {
+                int y = (int)(tr.f01() * sh), hgt = 2 + (int)(tr.f01() * sh * 0.05f);
+                int off = (int)((tr.f01() - 0.5f) * sw * 0.16f);
+                DrawRectangle(off, y, sw, hgt, Fade(tr.f01() < 0.3f ? BLACK : Color{ 240, 228, 170, 255 },
+                                                    0.55f * clampf((escapeT - 4.6f) / 1.4f, 0, 1)));
+            }
+        }
+        const char *t = noclipped ? "YOU NOCLIPPED" : "YOU FOUND AN EXIT";
         hudTextC(t, sw / 2, sh / 2 - hud(60), hud(48), Fade({ 235, 228, 200, 255 }, a));
-        const char *t2 = TextFormat("...it leads to %s.  %d m wandered  ·  %d escape%s  ·  %s",
+        const char *t2 = TextFormat("...%s %s.  %d m wandered  ·  %d escape%s  ·  %s",
+                                    noclipped ? "through the wall, and out of Level 0, into" : "it leads to",
                                     LEVELS[level].name, (int)distWalked, escapeCount, escapeCount == 1 ? "" : "s",
                                     TextFormat("%02d:%02d", (int)elapsed / 60, (int)elapsed % 60));
         hudTextC(t2, sw / 2, sh / 2 + hud(4), hud(18), Fade({ 180, 170, 140, 255 }, a));
@@ -764,6 +797,27 @@ void Game::renderUI(double now) {
         DrawRectangle(x, y, (int)(w * sanity), th, bar);
         hudTextR("sanity", x - hud(6), y - hud(4), hud(12), { 150, 142, 122, 120 });
     }
+    if (manilaCardT > 0 && winT <= 0 && deathT <= 0) {   // you found it
+        float a = clampf(manilaCardT > 4.2f ? (5.0f - manilaCardT) / 0.8f : manilaCardT / 1.6f, 0, 1);
+        hudTextC("THE MANILA ROOM", sw / 2, sh / 2 - hud(150), hud(34), Fade({ 226, 206, 158, 255 }, a));
+        hudTextC("...the hum is quieter here.  someone left notes on the table  [E]",
+                 sw / 2, sh / 2 - hud(112), hud(16), Fade({ 190, 172, 132, 255 }, a * 0.9f));
+    }
+    if (noteT > 0 && winT <= 0 && deathT <= 0) {   // a note from the table, held up to read
+        float a = clampf(noteT > 8.6f ? (9.0f - noteT) / 0.4f : noteT / 0.8f, 0, 1);
+        int pw = std::min(sw - hud(40), hud(720)), ph = hud(170);
+        int x0 = sw / 2 - pw / 2, y0 = sh / 2 - ph / 2 + hud(40);
+        DrawRectangle(x0, y0, pw, ph, Fade({ 232, 222, 190, 255 }, 0.92f * a));
+        DrawRectangleLines(x0, y0, pw, ph, Fade({ 150, 130, 96, 255 }, a));
+        for (int ln = 0; ln < 4; ln++) {
+            const char *t = MANILA_NOTES[notePage][ln];
+            if (!*t) continue;
+            int fs = hud(18), tw = MeasureText(t, fs);
+            if (tw > pw - hud(30)) { fs = fs * (pw - hud(30)) / tw; tw = MeasureText(t, fs); }
+            DrawText(t, sw / 2 - tw / 2, y0 + hud(22) + ln * hud(34), fs,
+                     Fade(ln == 3 ? Color{ 110, 96, 80, 255 } : Color{ 58, 50, 44, 255 }, a));
+        }
+    }
     if (sanityWarnT > 0 && winT <= 0 && deathT <= 0) {   // it just slipped a notch
         float a = clampf(sanityWarnT / 1.2f, 0, 1) * clampf((4.0f - sanityWarnT) / 0.4f, 0, 1);
         hudTextC(sanityLine, sw / 2, sh / 2 + hud(96), hud(19), Fade({ 206, 176, 176, 255 }, a * 0.9f));
@@ -815,7 +869,8 @@ void Game::renderUI(double now) {
                 weapon == WEAPON_DECK ? (deck.playing ? Color{ 205, 150, 235, 220 } : selc) : dimc);
     }
     if (wayOpen() && winT <= 0 && deathT <= 0 && escapeT <= 0) {   // you can leave now — go find a door
-        const char *t = "the doors know you now  ·  find one that isn't cursed";
+        const char *t = level == 0 ? "the walls know you now  ·  find one that isn't cursed"
+                                   : "the doors know you now  ·  find one that isn't cursed";
         float pl = 0.55f + 0.45f * sinf((float)now * 2.5f);
         hudTextC(t, sw / 2, hud(70), hud(20), Fade({ 120, 235, 145, 255 }, pl));
     }

@@ -272,9 +272,14 @@ int main() {
     g.deck.carried=false;g.deck.playing=true;g.deck.x=96;g.deck.z=81;g.deck.y=g.world.floorY(cellOf(96),cellOf(81));
     capture(g,"deck-world.png");
     // Inspect several real prop sites rather than relying on the empty spawn room.
-    g.deck.carried=true;g.weapon=WEAPON_REVOLVER;g.applyLevel(0);
-    const int kinds[]={PROP_COUCH,PROP_DESK,PROP_ARMOIRE,PROP_CABINET};
-    for(int kind:kinds) {
+    // Level 0 is barren now (lore: "randomly segmented empty rooms"), so each
+    // kind is looked for on a level that still furnishes it.
+    g.deck.carried=true;g.weapon=WEAPON_REVOLVER;
+    const int kinds[]={PROP_COUCH,PROP_BOXES,PROP_ARMOIRE,PROP_CABINET};
+    const int kindLevel[]={4,0,3,1};
+    for(int ki=0;ki<4;++ki) {
+        int kind=kinds[ki];
+        g.applyLevel(kindLevel[ki]);
         bool found=false;
         for(int x=0;x<70 && !found;++x) for(int z=0;z<70 && !found;++z) {
             if(g.world.propAt(x,z)!=kind) continue;
@@ -286,6 +291,62 @@ int main() {
     }
     for(const auto &entry:g.world.chunks) for(const auto &mesh:entry.second.meshes)
         CHECK(mesh.vertexCount<=65535);
+    // ---- Level 0 lore. Assert the rules, not the pictures: nothing on the
+    // level but cartons and fallen ceiling, no windows anywhere, and the
+    // Manila Room exactly as the article has it — 8x8 m, a door on each
+    // wall, a table in the middle, a wooden floor and no tubes over it.
+    {
+        g.applyLevel(0);
+        int bad=0, windows=0, manilas=0;
+        for(int x=-80;x<80;++x) for(int z=-80;z<80;++z) {
+            uint8_t pk=g.world.propAt(x,z);
+            if(pk && pk!=PROP_BOXES && pk!=PROP_FALLEN_TILE && pk!=PROP_MANILA_TABLE) bad++;
+            if(g.world.wallNVal(x,z)==WALL_WINDOW || g.world.wallWVal(x,z)==WALL_WINDOW) windows++;
+        }
+        for(auto &entry:g.world.chunks) manilas+=entry.second.manila;
+        printf("Level 0: %d furnished cells, %d windows, %d Manila Rooms in %zu chunks\n",
+               bad, windows, manilas, g.world.chunks.size());
+        CHECK(bad==0); CHECK(windows==0); CHECK(manilas>0);
+        g.world.manilaTest=true; g.applyLevel(0);          // one pinned east of spawn
+        ChunkData &md=g.world.data(1,0);
+        CHECK(md.manila);
+        int doors=0;
+        for(int t=MANILA_LO;t<=MANILA_HI;++t) {
+            doors+=(md.wallN[t][MANILA_LO]==WALL_DOOR)+(md.wallN[t][MANILA_HI+1]==WALL_DOOR)
+                  +(md.wallW[MANILA_LO][t]==WALL_DOOR)+(md.wallW[MANILA_HI+1][t]==WALL_DOOR);
+            CHECK(md.elev[t][MANILA_LO]==0);
+        }
+        CHECK(doors==4);
+        CHECK(md.prop[7][7]==PROP_MANILA_TABLE);
+        CHECK(g.world.manilaAt(16+MANILA_LO,MANILA_LO) && !g.world.manilaAt(16+MANILA_LO-1,MANILA_LO));
+        float rx=0,rz=0;
+        CHECK(g.world.manilaNear(48,16,rx,rz)); CHECK(rx==48.0f && rz==16.0f);
+        // no tube inside its walls: the chandelier lights it (shader mask +
+        // lightAtCPU mirror agree once Game sets the extras)
+        float mask[4]={rx-4,rz-4,rx+4,rz+4}, lamp[4]={0,0,0,0};
+        setLightExtrasCPU(mask,lamp);
+        const LevelCfg &c0=LEVELS[0];
+        float inRoom=lightAtCPU(rx+2,1.0f,rz+2,1.0f,c0.ls,c0.wallH-0.12f,0.0f,c0.lightMul,0.04f);
+        float mask0[4]={1e6f,1e6f,-1e6f,-1e6f};
+        setLightExtrasCPU(mask0,lamp);
+        float unmasked=lightAtCPU(rx+2,1.0f,rz+2,1.0f,c0.ls,c0.wallH-0.12f,0.0f,c0.lightMul,0.04f);
+        printf("Manila Room light at a corner seat: %.3f masked vs %.3f with tubes\n", inRoom, unmasked);
+        // The rule is "the room's own tubes are out". lightAtCPU has no walls,
+        // so the tubes outside it still reach this seat and the tone curve
+        // compresses the rest: measured 0.768 against 0.906. Assert a clear
+        // drop with margin rather than a ratio the CPU model cannot produce.
+        CHECK(inRoom < unmasked - 0.08f);
+        g.px=44.8f;g.pz=18.6f;g.py=0;g.eyeY=1.62f;g.yaw=-0.45f;g.pitch=0;
+        g.updateManila(0.0f,GetTime());
+        CHECK(g.manilaNear && g.inManila);
+        capture(g,"manila-room.png");
+        { // the HUD layer: a note held up to read, then the hum's migraine at full throb
+          double rs=g.runStart; g.runStart=-60; g.cleanShot=false;
+          g.noteT=5; g.notePage=1; capture(g,"manila-note.png"); g.noteT=0;
+          g.migraine=1; capture(g,"migraine.png"); g.migraine=0;
+          g.cleanShot=true; g.runStart=rs; }
+        g.world.manilaTest=false;
+    }
     // ---- step height. The generator relaxes every terrace to within MAX_STEP,
     // so nothing it produces exercises the riser blocker; a rule that never
     // fires is not a rule that works, so force a drop and check it directly.

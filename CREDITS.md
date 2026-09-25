@@ -26,6 +26,9 @@ The game's influences were not recorded during development. These credits
 acknowledge recognizable community lore and its documented authors; they do not
 claim that every linked article was consulted or that its current version is
 reproduced faithfully. Author information was checked on September 19, 2026; the Smilers entry was added on September 24, 2026.
+The Level 0 — "Threshold", Manila Room and Red Rooms entries were added on September 25, 2026. The wiki
+itself could not be reached from the development environment, so their author lists come from
+search-engine copies of each page's citation and should be confirmed against the live pages.
 
 The following articles are from the [Backrooms Wiki](https://backrooms-wiki.wikidot.com/).
 Their article text is offered under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/).
@@ -38,7 +41,11 @@ are not permission to copy those assets.
 | [Entity 67 — Partygoers =)](https://backrooms-wiki.wikidot.com/entity-67) | Original by **1000dumplings**; current rewrite by **Robert Goerman** and **MC_Crafter_24_7**, as credited on the page. | A procedurally drawn yellow, smiling party-themed enemy. The game changes its appearance and uses its own stalking/chase behavior. |
 | [Level Fun / Level 26 — The SS Fun =)](https://backrooms-wiki.wikidot.com/level-26) | Original Level Fun by **1000dumplings**; current rewrite by **Robert Goerman** and **MC_Crafter_24_7**. | The game uses the older party-room motif and name, with generated banquet rooms, balloons and confetti; it does not reproduce the current cruise-ship setting. |
 | [Object 1 — Almond Water](https://backrooms-wiki.wikidot.com/object-1) | Original by **1000dumplings**; rewritten by **Natedagreat563** and **Poliacci**. | Adapted into a canned consumable with game-specific recovery effects, placement, artwork and drinking animation. |
-| [(Archived) Level 0 — Tutorial Level](https://backrooms-wiki.wikidot.com/archived:level-0-2020) | **etoisle**, per the archived page's citation. | Acknowledgment of the community's yellow office-maze setting; this game generates its own layouts and adds its own combat and progression. |
+| [Level 0 — "Threshold"](https://backrooms-wiki.wikidot.com/level-0) | Adapted by Reddit user **u/Deveyerr**; rewritten by **DivineAtlas**, **Robert Goerman** and **DrAkimoto**, as cited for the page. | The basis of Level 0: worn mono-yellow wallpaper over "old moist carpet", scattered outlets and "inconsistently placed fluorescent lighting" (the uneven 4 m tube grid, dead and dim tubes), the hum that brings on migraines that last after you leave, empty rooms with no windows, the carpet fluid that "is not water", falling ceiling tiles, isolation from other wanderers, and leaving only by noclipping into Level 1 (the glitching noclip walls). The title card uses the "Threshold" name. Layouts, the Pirate Clark hunter, doubloons and combat are the game's own. |
+| [(Archived) Level 0 — Tutorial Level](https://backrooms-wiki.wikidot.com/archived:level-0-2020) | Adapted by **u/Deveyerr**; rewritten by **etoisle**, per the archived page's citation. | The older article's version of the same level. Its "exiting Level 0 is only possible by noclipping, which will always result in entry to Level 1", and the fact that nobody has ever met another wanderer there, shaped the noclip exits and the Manila Room's notes. |
+| [The Manila Room](https://backrooms-wiki.wikidot.com/manila-room) | Original concept by **Tocharian17** (Backrooms Fandom wiki, March 2020), imported to Wikidot in April 2020. Secondary sources credit the current rewrite to **Hickory** (April 2022); one names **Hikarinu**. Confirm against the live page. | A rare 8 × 8 m room in Level 0 with manila wallpaper, wooden floorboards, one octagonal table, two chairs, a door on each wall, notes about noclipping on the table and supplies in a cupboard under it. It is quieter and soothing inside. The chandelier comes from the Level 0 article. The notes' wording, the chalked way out, and the geometry and lighting are the game's own. |
+| [Red Rooms](https://backrooms-wiki.wikidot.com/red-rooms) | **scutoid studios**, as cited for the page. | The warning signs near Level 0's cursed noclip walls: the colour shifts through rust to crimson as you approach, and the paper tears to red. Those walls drop you into the game's own Red Halls (Level 3), not into a reproduction of the article's rooms. |
+| Original Backrooms post (4chan /x/, 12 May 2019) | **Anonymous**, replying to a photograph (see below). | The "mono-yellow", "old moist carpet", "fluorescent lights at maximum hum-buzz" and "randomly segmented empty rooms" that every later article builds on. Quoted only in code comments. |
 | [Level 1 — Habitable Zone](https://backrooms-wiki.wikidot.com/level-1) | Current article by **Praetor3005** and **DivineAtlas**. Its history credits **EnderMitten** for the concept, **u/ThePizzaEater1000** for the original Wikidot article, and **etoisle** for an earlier rewrite. | Acknowledgment of the warehouse-level tradition; the game's layout, loading docks and progression are its own implementation. |
 | [Level 37 — Sublimity](https://backrooms-wiki.wikidot.com/level-37) | **egglord**, per the page's citation. | Acknowledgment of Poolrooms lore, including its tall tiled halls, flooded corridors, underwater staircases, windows into a light void and the absence of entities, which the game keeps as a refuge. The game's layouts, vaults and swimming are its own procedural generation and use different numbering and connections. |
 
@@ -62,7 +69,20 @@ CC's [compatibility list](https://creativecommons.org/compatible-licenses/), and
 [software guidance](https://creativecommons.org/faq/#can-i-apply-a-creative-commons-license-to-software).
 Retain these credits and the applicable license notices when redistributing.
 
+### The photograph
+
+The Backrooms began as a 2002 renovation photo of the second floor of 807 Oregon Street, Oshkosh,
+Wisconsin: a former furniture store being fitted out by HobbyTown USA of Oshkosh, posted to the
+store's renovation blog in 2003 and identified in 2024. The game does not include the photograph.
+Level 0's chevron wallpaper, lay-in troffers in a drop ceiling, and the absence of windows follow it,
+through the CC0 texture set listed below.
+
 ## External assets
+
+- **Backrooms Textures** by **Amini Allight**, CC0 1.0.
+  [Original source](https://github.com/amini-allight/backrooms-textures). Level 0's chevron
+  wallpaper motif is embedded as a luminance-only tile and recoloured in-engine.
+  [Local provenance and modifications](assets/materials/README.md).
 
 - **Revolver Game Asset** by **loafbrr_1 / TheLoafbrr**, CC0 1.0.
   [Original source](https://opengameart.org/content/revolver-game-asset).

@@ -1,3 +1,51 @@
+# Level 0 lore pass (September 2026)
+
+Level 0 now follows the wiki's "Threshold" article, the Manila Room and Red Rooms
+entries, and the 2002 photograph (CREDITS.md). What changed, and what will bite:
+
+- **Empty rooms.** L0 furniture is cartons and fallen tiles only; windows are
+  drawn from the rng and discarded so the stream stays aligned. The regression
+  asserts zero furnished cells and zero windows. Cartons are Clark's level's
+  only cover, so do not thin them further without looking at `hide spot` in mapdump.
+- **Light grid.** L0 `ls` is 4 m (was 8). The panel mesher reads `LEVELS[].ls`
+  now; it used to hardcode `level == 1 ? 12 : 8` and would have drawn fittings
+  where no light came from. `vary`/`faulty` (LevelCfg) make tubes uneven and
+  stutter; lightState() and lightAtCPU both apply `vary`, change both. L0 trays
+  are flush lay-in troffers; the light plane stays at `wallH - 0.12`.
+- **Wet carpet** is world-space in the shader (`uWet`), not in the carpet tile:
+  a puddle baked into a 2 m texture repeats every 2 m. `carpetWetCPU` mirrors it
+  for the squelching footsteps.
+- **Wallpaper** is 1024 px for the 3 m wall UV span, with the CC0 chevron motif
+  repeating exactly 4 times (256 px). Any other period puts half a chevron
+  down every seam.
+- **Noclip exits.** On L0 a `WALL_EXIT` is drawn as a full wall with vertex
+  alpha 250 (247 when cursed) and still has no collision. The shader tears
+  those fragments with `textureGrad`: plain `texture()` on the jittered UV
+  picks the smallest mip at every tear edge and draws lines. The cursed flag
+  is alpha, not colour, because the Red Rooms tint is multiplied into every
+  vertex near it.
+- **Red Rooms bleed.** `MB::tint` multiplies a colour field into every vertex a
+  builder emits (per vertex, so it grades rather than stepping per cell). Only
+  the floor and wall builders get it; the greedy-meshed ceiling would
+  interpolate a tint across a whole chunk.
+- **Manila Room.** One chunk in `MANILA_RATE`, never within one chunk of spawn.
+  generate() stamps it before the connectivity flood *and again at the end*,
+  so door thinning, the locked door and the exit pass cannot move its four
+  doors. The table is anchored on room cell (7,7) but built on that cell's far
+  corner, so `Game::pickupSpot` offsets the can; the render and the pickup test
+  both go through it. The room's tubes are masked in the shader
+  (`uRoomMask`) and the CPU mirror (`setLightExtrasCPU`), and its chandelier is
+  `uLamp`. `applyLevel` must clear `inManila`/`manilaNear`: the first version
+  did not, and the regression's grip-meter death stopped firing because a room
+  from an earlier test was still "soothing" the player on a fresh descent.
+- **Migraine** (`Game::migraine`, post `uMigraine`) builds on L0 under live
+  tubes and deliberately survives a noclip, because the lore says it persists
+  after you leave. beginDescent resets it.
+- **UTF-8 in level names.** The intro card letter-spaces the name byte by byte;
+  "LEVEL 0 · THRESHOLD" came out with the "·" split into two `?`. It now skips
+  continuation bytes. `tools/mapdump --list-exits` prints exit/noclip positions
+  as BACKROOMS_POS coordinates.
+
 # Texture filtering and Pages caching (September 2026)
 
 - raylib 5.5's SetTextureFilter(ANISOTROPIC_*) only sets the anisotropy level.
@@ -515,6 +563,7 @@ Environment variables, all read at startup:
 | `BACKROOMS_EXITS=1` | exit doors everywhere, for visual testing |
 | `BACKROOMS_MENU=1` | hold on the title screen instead of starting the run |
 | `BACKROOMS_FLASH=1` | start with the flashlight on |
+| `BACKROOMS_MANILA=1` | put a Manila Room in the chunk east of spawn (centre x 48, z 16) |
 
 **`BACKROOMS_NOENT` does not exist.** It appears in scratch scripts written
 during development and is silently ignored — it never suppressed the entity.
@@ -1266,6 +1315,7 @@ Getting this wrong produces surfaces that are subtly or wildly mislit:
 | `< 0.45` | window glass |
 | `< 0.62` | water surface |
 | `>= 0.62` | textured; `aOut = fragC.a * texel.a` |
+| `0.965..0.99` | Level 0 noclip wall: textured, torn by the shader; 247 cursed, 250 not |
 | `> 0.998` | additionally gets **world-space relief bump** |
 
 That last row is a trap. Relief is right for grimy walls and carpet, wrong for

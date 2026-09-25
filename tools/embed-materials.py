@@ -10,7 +10,7 @@ args = parser.parse_args()
 groups = {
     'objects': ('object_materials.generated.h', [
         (f'object_{name}', root/'assets/materials'/f'{name}.jpg')
-        for name in ('wood', 'metal', 'fabric')]),
+        for name in ('wood', 'metal', 'fabric', 'wallpaper')]),
     'models': ('models.generated.h', [
         ('model_'+str(i), path) for i, path in enumerate(sorted((root/'assets/models').rglob('*.glb')))]),
     'sounds': ('sounds.generated.h', [

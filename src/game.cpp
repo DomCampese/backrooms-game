@@ -132,6 +132,11 @@ void Game::init() {
     locFogDen = GetShaderLocation(worldShader, "uFogDen");
     locLightCol = GetShaderLocation(worldShader, "uLightCol");
     locLS = GetShaderLocation(worldShader, "uLS");
+    locVary = GetShaderLocation(worldShader, "uVary");
+    locFaulty = GetShaderLocation(worldShader, "uFaulty");
+    locWet = GetShaderLocation(worldShader, "uWet");
+    locRoomMask = GetShaderLocation(worldShader, "uRoomMask");
+    locLamp = GetShaderLocation(worldShader, "uLamp");
     locLY = GetShaderLocation(worldShader, "uLY");
     locDead = GetShaderLocation(worldShader, "uDead");
     locLightMul = GetShaderLocation(worldShader, "uLightMul");
@@ -149,6 +154,7 @@ void Game::init() {
     locPTime = GetShaderLocation(postShader, "uTime");
     locPFear = GetShaderLocation(postShader, "uFear");
     locPWater = GetShaderLocation(postShader, "uWater");
+    locPMigraine = GetShaderLocation(postShader, "uMigraine");
 
     texAO = makeAOStripTex();
     {   // light-occlusion grid: one byte per cell, point-sampled, never filtered
@@ -181,6 +187,8 @@ void Game::init() {
     mats[MAT_DECK].maps[MATERIAL_MAP_DIFFUSE].texture = texDeck;
 
     for (int i = 0; i < 4; i++) steps[i] = makeFootstep(100 + i * 17);
+    for (int i = 0; i < 4; i++) squelches[i] = makeSquelch(500 + i * 29);
+    sndNoclip = makeNoclip();      SetSoundVolume(sndNoclip, 0.8f);
     for (int i = 0; i < 4; i++) {
         entSteps[i] = makeFootstep(300 + i * 23);                  // heavier, its own gait
         entStepsThrough[i] = makeFootstep(300 + i * 23, true);     // ...and the same foot, through a wall
@@ -218,6 +226,7 @@ void Game::init() {
     world.seed = shotPath ? 1337u : (unsigned)time(nullptr);
     if (const char *seedEnv = getenv("BACKROOMS_SEED")) world.seed = (unsigned)strtoul(seedEnv, nullptr, 10);
     world.exitTest = getenv("BACKROOMS_EXITS") != nullptr;
+    world.manilaTest = getenv("BACKROOMS_MANILA") != nullptr;
 
     grng = Rng(hash64(world.seed ^ 0xABCDEF));
 
@@ -522,6 +531,7 @@ void Game::beginDescent(double now) {
     stamina = 1; sprintExhausted = false; aiming = false; aimBlend = 0;
     health = 1; hurtT = 0; sinceHurt = 0;
     sanity = 1.0f; sanityStage = 0; sanityWarnT = 0; sanityLine = "";
+    migraine = 0; migraineWarned = false; notesRead = false; manilaSeen = false; noteT = 0;
     drinkT = 0; drinkLanded = false; nextHeartbeat = now + 20;
     ent.st = EState::Hidden; ent.nextSpawn = now + 30;
     for (auto &c : chalk) c.clear();            // a new descent is a clean building
@@ -591,6 +601,9 @@ void Game::applyLevel(int lv) {
     SetShaderValue(worldShader, locDead, &c.dead, SHADER_UNIFORM_FLOAT);
     SetShaderValue(worldShader, locLightMul, &c.lightMul, SHADER_UNIFORM_FLOAT);
     SetShaderValue(worldShader, locGloss, &c.gloss, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(worldShader, locVary, &c.vary, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(worldShader, locFaulty, &c.faulty, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(worldShader, locWet, &c.wet, SHADER_UNIFORM_FLOAT);
     synth.tHum = lv == 0 ? 1.0f : lv == 4 ? 0.5f : lv == 2 ? 0.035f : 0.15f;
     synth.tDrone = lv == 1 ? 1.0f : 0.0f;
     nextBlackout = lv == 2 ? BLACKOUT_NEVER : blackoutIn(GetTime(), 30, 60);   // no blackouts in the poolrooms
@@ -605,6 +618,9 @@ void Game::applyLevel(int lv) {
     // keyed by level, and it survives every doorway until the descent ends —
     // which is the whole point of leaving a mark. beginDescent clears it.
     chalkSeedPending = !chalkSeeded[lv];
+    // A different floor has no Manila Room in reach until updateManila says
+    // so; left set, a room on the last floor went on soothing you on this one.
+    manilaNear = inManila = false; noteT = 0; manilaCardT = 0;
     swimming=false; swimPhase=swimClimb=0; floatRoll=0;
     squeezing=false; squeezeBlend=0;
     bullets.clear(); bulletImpacts.clear();
@@ -622,6 +638,7 @@ float Game::bottleShelfY(int a, int b) {
     case PROP_NIGHTSTAND:  return 0.60f;
     case PROP_PARTY_TABLE: return 0.74f;
     case PROP_DESK:        return 0.74f;
+    case PROP_MANILA_TABLE: return 0.787f;  // the octagonal table's top (addManilaRoom)
     default:               return -1.0f;   // nothing you'd stand a carton on
     }
 }
@@ -632,6 +649,8 @@ bool Game::bottleAt(int a, int b) {
         // left standing on the furniture. Far likelier than on bare floor,
         // because a table is where a person puts a drink down.
         if (bottleShelfY(a, b) < 0) return false;
+        // "cupboards under the table that contain food, water": always one
+        if (world.propAt(a, b) == PROP_MANILA_TABLE) return true;
         return ih(a, b, pickupSalt() ^ 0xA1A2u) % 4 == 0;
     }
     return ih(a, b, pickupSalt() ^ 0xA1A1u) % 137 == 0;
@@ -887,6 +906,7 @@ bool Game::tick() {
     updateInteraction();
     updateDrink(dt, now);
     updateAmbience(dt, now);
+    updateManila(dt, now);
     updateLoopAudio(dt);
     updateEntity(dt, now);
     updateDogs(dt, now);
@@ -1216,9 +1236,13 @@ void Game::updateMovement(float dt) {
     eyeY -= swimClimb;
     if (floorf(bobPhase) > floorf(lastPhase)) {
         // Wading: a swim stroke, pitched up, is a leg pushing through water.
-        Sound &s = inWater ? swimStrokes[grng.ri(0, 3)] : steps[grng.ri(0, 3)];
+        int si = grng.ri(0, 3);
+        // Level 0's carpet squelches where it is sodden — the same patches the
+        // shader darkens and glosses, via carpetWetCPU.
+        bool squelch = !inWater && LEVELS[level].wet > 0 && carpetWetCPU(px, pz) > 0.25f;
+        Sound &s = inWater ? swimStrokes[si] : squelch ? squelches[si] : steps[si];
         SetSoundPitch(s, (inWater ? 1.15f : 0.9f) + grng.f01() * 0.22f);
-        SetSoundVolume(s, (0.35f + 0.3f * bobAmt) * (inWater ? 1.2f : 1.0f));
+        SetSoundVolume(s, (0.35f + 0.3f * bobAmt) * (inWater ? 1.2f : squelch ? 1.1f : 1.0f));
         PlaySound(s);
     }
     // Keep the phase from drifting into float mush over a long run. 4096 is an
@@ -1696,7 +1720,8 @@ void Game::updateInteraction() {
         if (taken.count(ky)) continue;
         Pickup kind = pickupAt(a, b);
         if (kind == Pickup::None) continue;
-        float bxx = a * CELL + 1.0f, bzz = b * CELL + 1.0f;
+        Vector2 spot = pickupSpot(a, b);
+        float bxx = spot.x, bzz = spot.y;
         float ddx = px - bxx, ddz = pz - bzz;
         // collision keeps you off the furniture, so a carton standing on it needs
         // a grab radius that reaches across the piece you can't walk through
@@ -1756,6 +1781,16 @@ void Game::updateInteraction() {
     // cell never holds a prop, so a standpipe and a vending machine are never
     // the same cell, and the deck is wherever you personally put it down.
     if (inKeyPressed(KEY_E)) {
+        // Level 0: read the notes on the Manila Room's table.
+        if (level == 0 && manilaNear) {
+            float ddx = px - manilaX, ddz = pz - manilaZ;
+            if (ddx * ddx + ddz * ddz < 1.9f * 1.9f) {
+                notePage = notesRead ? (notePage + 1) % MANILA_NOTE_COUNT : 0;
+                noteT = 9.0f;
+                SetSoundPitch(sndClick, 1.9f); PlaySound(sndClick);
+                if (!notesRead) { notesRead = true; markWayOut(); }
+            }
+        }
         // Red Halls: close a standpipe.
         if (level == 3) {
             bool turned = false;
@@ -1875,7 +1910,9 @@ void Game::updateAmbience(float dt, double now) {
         blackout = true;
     }
     blackoutCur += ((blackout ? 0.02f : 1.0f) - blackoutCur) * fminf(1, 18 * dt);
-    synth.humTarget = blackout ? 0.12f : 1.0f;
+    // the Manila Room is the one quiet place: "the isolation effect of Level
+    // 0 will begin to weaken", and so does the buzz
+    synth.humTarget = blackout ? 0.12f : inManila ? 0.22f : 1.0f;
 
     // ---- what the room sounds like from where you are standing (AUD-03/04).
     //
@@ -1888,7 +1925,7 @@ void Game::updateAmbience(float dt, double now) {
         float nx = (floorf(px / ls) + 0.5f) * ls, nz = (floorf(pz / ls) + 0.5f) * ls;
         float pd = sqrtf((px - nx) * (px - nx) + (pz - nz) * (pz - nz));
         // right underneath it is 1, and it is gone by about 4 m out
-        synth.panelTarget = blackout ? 0.0f : clampf(1.0f - pd / 4.0f, 0.0f, 1.0f);
+        synth.panelTarget = (blackout || inManila) ? 0.0f : clampf(1.0f - pd / 4.0f, 0.0f, 1.0f);
 
         // And how big the space is, for the reverb's decay. Walk the four
         // cardinal directions from your cell until a wall stops you: the mean
@@ -1918,7 +1955,10 @@ void Game::updateAmbience(float dt, double now) {
     else if (ent.st != EState::Hidden) drain *= 1.5f;         // or just knowing it's out
     if (hidden) drain *= 0.45f;                               // tucked in, breathing slow
     else if (crouchCur > 0.7f) drain *= 0.8f;
-    sanity = clampf(sanity + (level==2 ? 0.018f : -drain) * dt, 0.0f, 1.0f);
+    drain *= 1.0f + 0.6f * migraine;                          // a splitting head wears you down too
+    // The Manila Room soothes — "many have reported experiencing a soothing
+    // feeling" — so it gives some of your grip back, slowly, like the pools do.
+    sanity = clampf(sanity + ((level==2 || inManila) ? 0.018f : -drain) * dt, 0.0f, 1.0f);
 
     static const char *SANITY_LINES[] = {
         "your hands won't hold still.",
@@ -2389,8 +2429,12 @@ void Game::updateExits(double now) {
             if (ddx * ddx + ddz * ddz < 0.72f * 0.72f) {
                 bool cursed = world.cursedExit(i, k);
                 if (wayOpen() && !cursed) { winRun(now); return; }   // the true way out
-                // otherwise a normal door: cursed ones drop you into the Red Halls
-                PlaySound(sndWin);
+                // otherwise a normal door: cursed ones drop you into the Red Halls.
+                // On Level 0 there are no doors, only walls that fail to hold
+                // you — the lore's one way out is noclipping — so it sounds
+                // and reads like passing through something solid.
+                noclipped = level == 0;
+                PlaySound(noclipped ? sndNoclip : sndWin);
                 escapeT = 6.0f; escapeCount++;
                 saveBest();
                 applyLevel(cursed ? 3 : EXIT_NEXT[level]);
@@ -2426,4 +2470,95 @@ void Game::updateOccupancy() {
     world.buildOccupancy(occOriginI, occOriginK, OCC_N, occBuf.data());
     UpdateTexture(texOcc, occBuf.data());
     occValid = true;
+}
+
+// What the wanderers who got here before you left on the table. The Manila
+// Room entry has "notes ... containing information about the Backrooms and
+// guides to no-clipping, providing information that enables one to escape
+// Level 0". Everything here is the lore's, in a wanderer's voice.
+const char *const MANILA_NOTES[MANILA_NOTE_COUNT][4] = {
+    { "if you are reading this you noclipped in, same as all of us.",
+      "this room is safe. the hum is quieter here. sit down a minute.",
+      "you will not meet anyone out there. you only meet people in here.",
+      "(E for the next page)" },
+    { "the only way out of level 0 is the way you came in: noclip.",
+      "find a wall that is not quite there. the paper TEARS on it,",
+      "just for a second, like a bad tape. walk straight into it.",
+      "i chalked an arrow outside the door that faces the nearest one." },
+    { "do not drink what is in the carpet. it is not water.",
+      "there is almond water in the cupboard under this table. take it.",
+      "the lights give you a migraine that follows you out. rest in here.",
+      "" },
+    { "if the wallpaper starts turning RED, turn around.",
+      "red means the red rooms are on the other side of that wall.",
+      "the carpet goes coarse and sticky near them. nobody comes back.",
+      "- left by the ones before you" },
+};
+
+// The second note says the way out is chalked. Make that true: find the
+// nearest noclip wall that is not cursed, pick whichever of the room's four
+// doors faces it best, and lay a stranger's arrow on the floor outside it,
+// pointing the way. It looks as far as three chunks out, which generates (but
+// does not mesh) what it has to; one read per descent, on a keypress.
+void Game::markWayOut() {
+    int ci = cellOf(manilaX), ck = cellOf(manilaZ);
+    float best = 1e30f, tx = 0, tz = 0;
+    for (int dk = -48; dk <= 48; dk++) for (int di = -48; di <= 48; di++) {
+        int i = ci + di, k = ck + dk;
+        bool n = world.wallNVal(i, k) == WALL_EXIT, w = world.wallWVal(i, k) == WALL_EXIT;
+        if ((!n && !w) || world.cursedExit(i, k)) continue;
+        float ex = i * CELL + (n ? 1.0f : 0.0f), ez = k * CELL + (n ? 0.0f : 1.0f);
+        float d2 = (ex - manilaX) * (ex - manilaX) + (ez - manilaZ) * (ez - manilaZ);
+        if (d2 < best) { best = d2; tx = ex; tz = ez; }
+    }
+    if (best >= 1e30f) return;   // none in reach: the note is just a note
+    // the doors, as (outward direction, centre of the opening)
+    const float DOORS[4][4] = {
+        {  0, -1, manilaX - 1.0f, manilaZ - 4.0f },   // north, in room cell 7
+        {  0,  1, manilaX + 1.0f, manilaZ + 4.0f },   // south, cell 8
+        { -1,  0, manilaX - 4.0f, manilaZ + 1.0f },   // west, cell 8
+        {  1,  0, manilaX + 4.0f, manilaZ - 1.0f },   // east, cell 7
+    };
+    float dx = tx - manilaX, dz = tz - manilaZ, dl = sqrtf(dx * dx + dz * dz);
+    int pick = 0; float pd = -2;
+    for (int q = 0; q < 4; q++) {
+        float dot = (DOORS[q][0] * dx + DOORS[q][1] * dz) / dl;
+        if (dot > pd) { pd = dot; pick = q; }
+    }
+    float mx = DOORS[pick][2] + DOORS[pick][0] * 1.3f, mz = DOORS[pick][3] + DOORS[pick][1] * 1.3f;
+    float yawTo = atan2f(tz - mz, tx - mx);
+    chalk[level].insert(chalk[level].begin(), ChalkMark{ { mx, world.groundAt(mx, mz, 0.0f) + 0.016f, mz }, yawTo, false });
+}
+
+void Game::updateManila(float dt, double now) {
+    (void)now;
+    manilaNear = level == 0 && world.manilaNear(px, pz, manilaX, manilaZ);
+    bool wasIn = inManila;
+    inManila = manilaNear && fabsf(px - manilaX) < 3.9f && fabsf(pz - manilaZ) < 3.9f;
+    if (inManila && !wasIn && !manilaSeen) { manilaSeen = true; manilaCardT = 5.0f; }
+    manilaCardT = fmaxf(0, manilaCardT - dt);
+    noteT = fmaxf(0, noteT - dt);
+    if (noteT > 0 && !inManila) noteT = fminf(noteT, 1.0f);   // walked off with it: let it fade
+
+    bool blackout = now < blackoutEnd;
+    if (level == 0 && !inManila && !blackout) {
+        // builds under the tubes: about four minutes of Level 0 to the worst of it
+        migraine = fminf(1.0f, migraine + dt / 240.0f * (0.45f + 0.55f * synth.panelTarget));
+    } else {
+        migraine = fmaxf(0.0f, migraine - dt / (inManila ? 25.0f : 150.0f));
+    }
+    if (migraine > 0.35f && !migraineWarned) {
+        migraineWarned = true;
+        sanityWarnT = 4.0f;
+        sanityLine = "the hum has worked its way in behind your eyes.";
+    }
+}
+
+// Where a cell's loose item stands. The middle of the cell, except on the
+// Manila Room's table, which is anchored on one cell but stands centred on its
+// far corner (the middle of the room) — a can at the cell centre would hang in
+// the air beside it.
+Vector2 Game::pickupSpot(int a, int b) {
+    if (world.propAt(a, b) == PROP_MANILA_TABLE) return { a * CELL + 1.78f, b * CELL + 1.84f };
+    return { a * CELL + 1.0f, b * CELL + 1.0f };
 }

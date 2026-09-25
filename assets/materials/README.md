@@ -18,3 +18,19 @@ from the composed albedo; gloss is assigned by material family.
 The three JPEGs total 45,083 bytes. tools/embed-materials.py embeds the compressed
 bytes at build time. No network access or external asset directory is required
 at runtime. The generated header is ignored by git and recreated by both build paths.
+
+## Level 0 wallpaper motif
+
+`wallpaper.jpg` is derived from `img/backrooms-wall-diffuse.png` in Amini Allight's
+[Backrooms Textures](https://github.com/amini-allight/backrooms-textures), commit
+of September 2026 (shallow clone), released under CC0 1.0 ("Textures created and/or
+modified by Amini Allight. The contents of this repository are licensed under
+Creative Commons Zero (CC0 1.0), placing them in the public domain.").
+
+Conversion: the 1024x1024 RGBA diffuse was converted to grayscale, resized to
+256x256 with Lanczos filtering, auto-contrasted (0.5% cutoff) and saved as JPEG
+quality 92 (30,217 bytes). Only its luminance is used: `makeWallpaperTex` prints
+it as darker ochre ink over the game's procedural mono-yellow ground, repeats it
+four times across the 3 m wall tile, and keeps the game's own grime, damp, roll
+seams and skirting. The repository's carpet textures (derived from a third-party
+source under separate permission) are not used.
