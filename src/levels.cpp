@@ -127,7 +127,7 @@ float lightAtCPU(float x, float y, float z, float blackout,
 
 // The shader's damp-patch field (uWet in WORLD_FS), on the CPU: the same
 // vnoise over the same hash at the same two scales and the same threshold, so
-// a squelch underfoot lands where the carpet looks wet. GPU and CPU sin() differ
+// anything asking the CPU "is it wet here" gets the patch the eye sees. GPU and CPU sin() differ
 // in the last bits at large arguments; for a footstep that is nothing.
 static float vnoiseCPU(float x, float z) {
     float ix = floorf(x), iz = floorf(z), fx = x - ix, fz = z - iz;

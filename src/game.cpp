@@ -190,7 +190,6 @@ void Game::init() {
     mats[MAT_DECK].maps[MATERIAL_MAP_DIFFUSE].texture = texDeck;
 
     for (int i = 0; i < 4; i++) steps[i] = makeFootstep(100 + i * 17);
-    for (int i = 0; i < 4; i++) squelches[i] = makeSquelch(500 + i * 29);
     sndNoclip = makeNoclip();      SetSoundVolume(sndNoclip, 0.8f);
     for (int i = 0; i < 4; i++) {
         entSteps[i] = makeFootstep(300 + i * 23);                  // heavier, its own gait
@@ -1242,13 +1241,11 @@ void Game::updateMovement(float dt) {
     eyeY -= swimClimb;
     if (floorf(bobPhase) > floorf(lastPhase)) {
         // Wading: a swim stroke, pitched up, is a leg pushing through water.
-        int si = grng.ri(0, 3);
-        // Level 0's carpet squelches where it is sodden — the same patches the
-        // shader darkens and glosses, via carpetWetCPU.
-        bool squelch = !inWater && LEVELS[level].wet > 0 && carpetWetCPU(px, pz, LEVELS[level].wetFrom) > 0.25f;
-        Sound &s = inWater ? swimStrokes[si] : squelch ? squelches[si] : steps[si];
+        // Wet floors look wet but sound like any other floor: a squelch on the
+        // damp patches was tried and removed at the owner's request.
+        Sound &s = inWater ? swimStrokes[grng.ri(0, 3)] : steps[grng.ri(0, 3)];
         SetSoundPitch(s, (inWater ? 1.15f : 0.9f) + grng.f01() * 0.22f);
-        SetSoundVolume(s, (0.35f + 0.3f * bobAmt) * (inWater ? 1.2f : squelch ? 1.1f : 1.0f));
+        SetSoundVolume(s, (0.35f + 0.3f * bobAmt) * (inWater ? 1.2f : 1.0f));
         PlaySound(s);
     }
     // Keep the phase from drifting into float mush over a long run. 4096 is an

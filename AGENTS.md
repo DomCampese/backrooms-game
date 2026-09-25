@@ -49,7 +49,7 @@ entries, and the 2002 photograph (CREDITS.md). What changed, and what will bite:
   are flush lay-in troffers; the light plane stays at `wallH - 0.12`.
 - **Wet carpet** is world-space in the shader (`uWet`), not in the carpet tile:
   a puddle baked into a 2 m texture repeats every 2 m. `carpetWetCPU` mirrors it
-  for the squelching footsteps.
+  on the CPU (the squelching footsteps it fed were removed by request).
 - **Wallpaper** is 1024 px for the 3 m wall UV span, with the CC0 chevron motif
   repeating exactly 4 times (256 px). Any other period puts half a chevron
   down every seam.

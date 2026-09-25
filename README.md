@@ -370,7 +370,7 @@ make run
 - **Level 0, by the book** — mono-yellow chevron wallpaper (the paper in the
   2002 photograph), lay-in troffers crowded into a drop ceiling with a fifth
   of them dead and the rest uneven, carpet with damp patches that catch the
-  tubes and squelch underfoot, and a hum that gives you a migraine which
+  tubes, and a hum that gives you a migraine which
   follows you out. There are no exit doors: the only way out of Level 0 is
   noclipping, through a stretch of wall whose paper tears for a moment like a
   bad tape. If the paper around it turns red, that wall leads to the red places.

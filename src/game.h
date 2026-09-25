@@ -148,7 +148,7 @@ struct Game {
         locVary = -1, locFaulty = -1, locWet = -1, locWetFrom = -1, locRoomMask = -1, locLamp = -1;
     int locPTime = -1, locPFear = -1, locPWater = -1, locPMigraine = -1;
     Material mats[MAT_COUNT]{};
-    Sound steps[4]{}, squelches[4]{}, sndNoclip{}, splashIn[3]{}, splashOut[3]{}, swimStrokes[4]{}, sndClick{}, sndScare{}, sndWin{},
+    Sound steps[4]{}, sndNoclip{}, splashIn[3]{}, splashOut[3]{}, swimStrokes[4]{}, sndClick{}, sndScare{}, sndWin{},
           sndFlare{}, sndShot{}, sndHit{}, sndKill{}, sndPop{}, sndHeartbeat{}, sndTape{},
           sndValve{}, sndHowl{}, sndGulp{}, sndVoice{}, sndGroan{};
     static constexpr int NBARKS = 3;
