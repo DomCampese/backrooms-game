@@ -50,6 +50,7 @@ uniform float uGloss;
 uniform float uVary;             // how uneven the working tubes are (Level 0)
 uniform float uFaulty;           // share of tubes that stutter
 uniform float uWet;              // Level 0's sodden carpet: 1 = damp patches on the floor
+uniform float uWetFrom;          // where on the patch field they start: 0.60 L0 carpet, 0.78 L1 puddles
 uniform vec4 uRoomMask;          // x0,z0,x1,z1: ceiling panels centred in here are dark (the Manila Room)
 uniform vec4 uLamp;              // xyz: the Manila Room's chandelier, w: its output (0 = none near)
 uniform sampler2D texture1; // packed material slopes / gloss mask
@@ -540,7 +541,7 @@ void main(){
         // deck level), and in world space so the patches never tile.
         if (uWet > 0.0 && fragN.y > 0.7 && fragPos.y < 0.3){
             float wn = vnoise(fragPos.xz*0.42)*0.62 + vnoise(fragPos.xz*1.35 + 17.0)*0.38;
-            float wet = smoothstep(0.60, 0.72, wn) * uWet;
+            float wet = smoothstep(uWetFrom, uWetFrom + 0.12, wn) * uWet;
             texel.rgb *= mix(vec3(1.0), vec3(0.60, 0.56, 0.48), wet);
             gGloss = max(gGloss, 0.62*wet);
             Nb = normalize(mix(Nb, normalize(fragN), wet));

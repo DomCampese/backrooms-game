@@ -1,3 +1,38 @@
+# Level 1 lore pass (September 2026)
+
+Level 1 follows the wiki's "Habitable Zone" article (CREDITS.md). What changed:
+
+- **Puddles.** The floor used to be gloss 0.22 everywhere, which put a
+  specular sheen on every square metre of slab and read as a flooded car park.
+  Gloss is 0.07 now (below the shader's 0.10 specular cut) and real puddles come
+  from the same world-space field as Level 0's carpet, gated by `wetFrom`
+  (`uWetFrom`): 0.60 wets a quarter of L0, 0.78 about 1–3% of L1. The regression
+  asserts the share, and that L1 gloss stays under the cut.
+- **Light.** Twin-tube battens (not trays) on the old 12 m grid, three in ten
+  dead, a fifth stuttering, faint green-white; the tubes sit on uLY. An 8 m grid
+  was tried and cost 58% more frame: nearly all nine summed fittings then fall
+  inside shadow-trace range. Brighter or more live tubes cost frame the same way.
+- **Walls run floor to ceiling once.** `gWallV` (world.cpp) is the vertical
+  metres per wall-texture tile: 3 everywhere, `wallH` on L1, because the
+  concrete now carries a damp band, tide line and pour joints at real heights
+  and a 3 m repeat drew a second tide line under the 4.2 m slab. Anything baked
+  at a height in `makeConcreteWallTex` assumes 4.2 m.
+- **Ground mist** is billboards in `renderScene`, not shader fog: no depth
+  writes (or each bank punches a hole in the next), lit by `propLum`, faded out
+  within 1.2 m of the eye.
+- **Supply crates** are not in any chunk mesh. `Game::crateAt` hashes the cell
+  with `crateEpoch`, which advances when a blackout *ends*, so crates move while
+  nobody can see. They are drawn with `MAT_PROPS`, pushed out of the player in
+  `updateCrates` (world collision knows nothing about them), and never stand in
+  a cell with a door, exit or lock on any edge. Clark walks through them.
+- **Exits** are steel doors with a glyph painted over them (`addSymbolDoor`),
+  strokes between 3x3 lattice points chosen by the edge hash; cursed ones red.
+- Rebar spalls (`addSpall`), dock safety edging and lift doors are all fixtures
+  or props geometry; pipework is the Red Halls' code, now also on Level 1.
+- A Level 1 capture at `BACKROOMS_LEVEL=1` is Level 1's **visit 0** (init
+  applies L0, then L1 for the first time). Level 0 captures are visit 1. A
+  locator that assumes the other visit points the camera at an empty corridor.
+
 # Level 0 lore pass (September 2026)
 
 Level 0 now follows the wiki's "Threshold" article, the Manila Room and Red Rooms
@@ -14,7 +49,7 @@ entries, and the 2002 photograph (CREDITS.md). What changed, and what will bite:
   are flush lay-in troffers; the light plane stays at `wallH - 0.12`.
 - **Wet carpet** is world-space in the shader (`uWet`), not in the carpet tile:
   a puddle baked into a 2 m texture repeats every 2 m. `carpetWetCPU` mirrors it
-  for the squelching footsteps.
+  on the CPU (the squelching footsteps it fed were removed by request).
 - **Wallpaper** is 1024 px for the 3 m wall UV span, with the CC0 chevron motif
   repeating exactly 4 times (256 px). Any other period puts half a chevron
   down every seam.

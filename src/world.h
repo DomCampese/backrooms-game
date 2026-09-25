@@ -287,3 +287,6 @@ struct World {
 
 
 Mesh buildFlareMesh();
+// A Level 1 supply crate and its lid, base on y = 0 (see Game::crateAt).
+Mesh buildCrateMesh();
+Mesh buildCrateLidMesh();

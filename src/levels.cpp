@@ -16,8 +16,24 @@ const LevelCfg LEVELS[NLEVELS] = {
     // under the grid is now summing four near panels instead of one. The
     // carpet's wet patches are the last column (see uWet in shaders.cpp).
     { 3.0f,  4.0f, 0.20f, 0.36f, 0.050f, 0.06f, {1.00f,0.95f,0.76f}, {0.045f,0.042f,0.030f}, {0.140f,0.125f,0.070f}, "LEVEL 0 · THRESHOLD",
-      0.42f, 0.16f, 1.0f },
-    { 4.2f, 12.0f, 0.30f, 0.85f, 0.075f, 0.22f, {0.72f,0.80f,0.95f}, {0.016f,0.017f,0.022f}, {0.018f,0.020f,0.026f}, "LEVEL 1" },
+      0.42f, 0.16f, 1.0f, 0.60f },
+    // Level 1 — "Habitable Zone": "a large, sprawling warehouse" of concrete
+    // floors and walls under "dim fluorescent lights" that "are prone to
+    // flicker and fail at inconsistent intervals", in "a low-hanging fog with
+    // no discernable source" that "coalesces into condensation, forming
+    // puddles on the floor in inconsistent areas". It used to be lit in cold
+    // blue at a 12 m pitch, which read as a night-time car park rather than a
+    // fluorescent warehouse, and its floor gloss (0.22) put a sheen on every
+    // square metre of slab — puddles everywhere, which is the opposite of
+    // "inconsistent areas". Now: dim, faintly green-white tube battens, three
+    // in ten of them out and a fifth stuttering, grey-green fog for the mist
+    // to be made of, matte concrete, and real puddles on a few percent of the
+    // floor through the same world-space field as Level 0's carpet. The grid
+    // stays 12 m: at 8 m nearly all nine summed fittings fall inside shadow
+    // range and the frame cost 58% more on the software rasteriser.
+    // lightMul is up to carry the sparser fittings.
+    { 4.2f, 12.0f, 0.30f, 1.05f, 0.070f, 0.07f, {0.93f,0.97f,0.86f}, {0.054f,0.057f,0.052f}, {0.070f,0.075f,0.068f}, "LEVEL 1 · HABITABLE ZONE",
+      0.35f, 0.20f, 1.0f, 0.78f },
     // Tall vaulted bathing halls: warm diffuse light over pristine ceramic, with
     // restrained exposure so white grout and underwater steps stay readable.
     // The panels sit 7.4 m up, so lightMul carries the extra throw.
@@ -111,7 +127,7 @@ float lightAtCPU(float x, float y, float z, float blackout,
 
 // The shader's damp-patch field (uWet in WORLD_FS), on the CPU: the same
 // vnoise over the same hash at the same two scales and the same threshold, so
-// a squelch underfoot lands where the carpet looks wet. GPU and CPU sin() differ
+// anything asking the CPU "is it wet here" gets the patch the eye sees. GPU and CPU sin() differ
 // in the last bits at large arguments; for a footstep that is nothing.
 static float vnoiseCPU(float x, float z) {
     float ix = floorf(x), iz = floorf(z), fx = x - ix, fz = z - iz;
@@ -119,8 +135,8 @@ static float vnoiseCPU(float x, float z) {
     float a = lhashCPU(ix, iz), b = lhashCPU(ix + 1, iz), c = lhashCPU(ix, iz + 1), d = lhashCPU(ix + 1, iz + 1);
     return (a + (b - a) * fx) + ((c + (d - c) * fx) - (a + (b - a) * fx)) * fz;
 }
-float carpetWetCPU(float x, float z) {
+float carpetWetCPU(float x, float z, float from) {
     float wn = vnoiseCPU(x * 0.42f, z * 0.42f) * 0.62f + vnoiseCPU(x * 1.35f + 17.0f, z * 1.35f + 17.0f) * 0.38f;
-    float t = clampf((wn - 0.60f) / 0.12f, 0.0f, 1.0f);
+    float t = clampf((wn - from) / 0.12f, 0.0f, 1.0f);
     return t * t * (3 - 2 * t);
 }

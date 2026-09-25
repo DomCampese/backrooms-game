@@ -1156,7 +1156,35 @@ Texture2D makeConcreteWallTex() {
             r = r * (1 - t) + 120 * t; g = g * (1 - t) + 82 * t; b = b * (1 - t) + 52 * t;
         }
         float fall = 1.0f - 0.14f * vy;                                // darker toward the floor
-        p[y * W + x] = { cl8(r * fall), cl8(g * fall), cl8(b * fall), 255 };
+        r *= fall; g *= fall; b *= fall;
+        // Level 1's walls are one tile floor to ceiling (gWallV in world.cpp),
+        // so v is height: the texture's bottom edge is the floor and its top
+        // the 4.2 m slab. Two things live at a height. The pour joints, where
+        // one lift of concrete was cast on the last: a hairline with a slight
+        // lip, at 1.4 and 2.8 m. And the damp: "bland, discolored walls", the
+        // lore has it, and discolour is what standing water in a fog does to
+        // the foot of a wall — a darker, greener band to about a metre, with
+        // an uneven tide line and the odd run of wet climbing above it.
+        float hgt = (1.0f - vy) * 4.2f;                                // metres above the floor
+        for (float jy : { 1.4f, 2.8f }) {
+            float d = fabsf(hgt - jy - (fbm2(x * 0.02f, jy, 90u, 2) - 0.5f) * 0.03f);
+            if (d < 0.008f) { r *= 0.72f; g *= 0.72f; b *= 0.72f; }
+            else if (d < 0.02f && hgt > jy) { r *= 1.05f; g *= 1.05f; b *= 1.05f; }
+        }
+        float tide = 0.95f + (fbm2(x * 0.012f, 3.0f, 91u, 3) - 0.5f) * 0.45f
+                   + fbm2(x * 0.09f, 7.0f, 92u, 2) * 0.10f;
+        float climb = fbm2(x * 0.05f, hgt * 0.8f, 93u, 3);               // wet wicking up in runs
+        if (climb > 0.62f) tide += (climb - 0.62f) * 1.6f;
+        if (hgt < tide) {
+            float depth = clampf((tide - hgt) / 0.35f, 0.0f, 1.0f);
+            float k = 0.86f - 0.20f * depth;
+            r *= k * 0.94f; g *= k; b *= k * 0.92f;
+            float mould = fbm2(x * 0.03f, hgt * 3.0f, 94u, 3);           // blooms in the wettest part
+            if (mould > 0.60f && hgt < tide - 0.1f) { float t = (mould - 0.60f) * 1.5f; r *= 1 - t * 0.5f; g *= 1 - t * 0.4f; b *= 1 - t * 0.5f; }
+        } else if (hgt < tide + 0.03f) {                                 // the tide line itself, salts left behind
+            r *= 1.10f; g *= 1.10f; b *= 1.08f;
+        }
+        p[y * W + x] = { cl8(r), cl8(g), cl8(b), 255 };
     }
     return finishTexture(img, true);
 }

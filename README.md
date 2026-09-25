@@ -145,7 +145,7 @@ soundscape, and things that live there. Exits lead deeper — usually.
 
 | | |
 |---|---|
-| ![Level 0](docs/levels/level_0.png) **LEVEL 0 · THRESHOLD** — empty rooms, mono-yellow chevron wallpaper, sodden carpet, a humming, uneven grid of tubes, and no way out but through a wall. Home of Pirate Clark. | ![Level 1](docs/levels/level_1.png) **LEVEL 1** — cavernous concrete warehouse, sparse lights, loading docks. Where a Smiler waits in the dark. |
+| ![Level 0](docs/levels/level_0.png) **LEVEL 0 · THRESHOLD** — empty rooms, mono-yellow chevron wallpaper, sodden carpet, a humming, uneven grid of tubes, and no way out but through a wall. Home of Pirate Clark. | ![Level 1](docs/levels/level_1.png) **LEVEL 1 · HABITABLE ZONE** — a concrete warehouse under dim, failing tube lights, fog lying on the slab, exposed rebar, supply crates that move in the blackouts, and doors marked with symbols. Where a Smiler waits in the dark. |
 | ![The Poolrooms](docs/levels/level_2.png) **THE POOLROOMS** — endless white tile and still water: colonnaded halls, flooded tunnels, staircases sinking into deep water, windows onto white light. No blackouts, no exit in a hurry. | ![The Red Halls](docs/levels/level_3.png) **THE RED HALLS** — oppressive dark-red brick, someone's abandoned bedroom furniture. |
 | ![Level Fun](docs/levels/level_4.png) **LEVEL FUN =)** — the party that never ended: deep red carpet, a ceiling gone black so the lights hang like a party hall's, bunting, balloons, party tables, and a resident who is very glad you came. | |
 
@@ -370,10 +370,17 @@ make run
 - **Level 0, by the book** — mono-yellow chevron wallpaper (the paper in the
   2002 photograph), lay-in troffers crowded into a drop ceiling with a fifth
   of them dead and the rest uneven, carpet with damp patches that catch the
-  tubes and squelch underfoot, and a hum that gives you a migraine which
+  tubes, and a hum that gives you a migraine which
   follows you out. There are no exit doors: the only way out of Level 0 is
   noclipping, through a stretch of wall whose paper tears for a moment like a
   bad tape. If the paper around it turns red, that wall leads to the red places.
+- **Level 1, by the book** — the Habitable Zone's warehouse: bare concrete with
+  a damp tide line at the foot of every wall and rebar showing where the cover
+  has blown off, a low fog lying on the floor, puddles only here and there, and
+  twin-tube battens, three in ten of them dead. Supply crates stand about with
+  something useful inside — or crayons, shoelaces, loose change — and after
+  every blackout they are somewhere else. The ways on are steel doors with a
+  symbol painted over each, and nobody has ever seen the lifts come.
 - **The Manila Room** — walk far enough and you may find it: an 8 m square room
   with manila wallpaper, wooden floorboards, a door on each wall, an octagonal
   table with two chairs under a chandelier, almond water in the cupboard and
