@@ -92,23 +92,18 @@ float lightState(vec2 g){
     // Not every tube that works works well: some run at part output, a
     // spread uVary wide. levels.cpp's lightAtCPU applies the same factor.
     float s = 1.0 - uVary * fract(h*53.7);
-    if (h > 1.0 - uFaulty){                         // faulty tube: occasional gentle stutter
-        float fh = fract(h*97.31);
-        float gate = fract(sin(floor(uTime*0.45+fh*37.0)*12.9898)*43758.5453);
-        if (gate > 0.74){
-            float n = fract(sin(uTime*(7.0+fh*10.0) + fh*211.0)*43758.5453);
-            s *= 0.62 + 0.38*step(0.5, n);
-        }
-    }
-    // A single exit matters on desktop WebGL/ANGLE: returning early for a
-    // dead tube inside the divergent reflection branch produced black shards
-    // across the revolver and decals. Apply the dead mask at the common exit.
-    // The Manila Room is lit by its chandelier, not by tubes: any panel
-    // centred inside uRoomMask is out. Folded into the same single exit.
+    // Keep this arithmetic-only: desktop ANGLE can corrupt fragments when
+    // the reflected panel's light state adds nested divergent control flow.
+    float fh = fract(h*97.31);
+    float gate = fract(sin(floor(uTime*0.45+fh*37.0)*12.9898)*43758.5453);
+    float n = fract(sin(uTime*(7.0+fh*10.0) + fh*211.0)*43758.5453);
+    float faulty = 1.0 - step(h, 1.0 - uFaulty);
+    float flicker = faulty * (1.0 - step(gate, 0.74));
+    s *= mix(1.0, 0.62 + 0.38*step(0.5, n), flicker);
     vec2 pc = g*uLS + uLS*0.5;
     float masked = step(uRoomMask.x, pc.x) * step(pc.x, uRoomMask.z)
                  * step(uRoomMask.y, pc.y) * step(pc.y, uRoomMask.w);
-    return (h < uDead || masked > 0.5) ? 0.0 : s * uBlackout;
+    return s * uBlackout * step(uDead, h) * (1.0 - masked);
 }
 int occAt(ivec2 c){
     ivec2 t = c - ivec2(uOccOrigin);

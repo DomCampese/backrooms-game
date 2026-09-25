@@ -82,15 +82,32 @@ try {
   await page.click('#start');await page.waitForTimeout(4000);
   const output=resolve(process.env.CAPTURE_DIR || 'shots/web-render');mkdirSync(output,{recursive:true});
   const png=await page.screenshot({path:resolve(output,'revolver.png')});
-  const darkest=await page.evaluate(async base64=>{
+  const patches=await page.evaluate(async base64=>{
     const img=new Image();img.src='data:image/png;base64,'+base64;await img.decode();
     const c=document.createElement('canvas');c.width=img.width;c.height=img.height;
     const ctx=c.getContext('2d');ctx.drawImage(img,0,0);
-    // Interior barrel patch: no silhouette edges, gold trim or background.
-    const d=ctx.getImageData(855,499,45,13).data;let low=255;
-    for(let i=0;i<d.length;i+=4)low=Math.min(low,Math.max(d[i],d[i+1],d[i+2]));
-    return low;
+    // Stable interiors at this fixed camera: wallpaper and the barrel side.
+    // Brightness alone is not a corruption test: Level 0's uneven tubes made
+    // legitimate barrel shading darker than the old >40 threshold. Shards
+    // and wall streaks are isolated discontinuities against smooth neighbours.
+    return [['wall',990,421,160,44],['barrel',875,520,41,25]].map(([name,x,y,w,h])=>{
+      const d=ctx.getImageData(x,y,w,h).data;let outliers=0,worst=0;
+      for(let py=2;py<h-2;py++)for(let px=2;px<w-2;px++) {
+        let deviation=0;
+        for(let channel=0;channel<3;channel++) {
+          const values=[];
+          for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++)
+            values.push(d[((py+dy)*w+px+dx)*4+channel]);
+          values.sort((a,b)=>a-b);
+          deviation=Math.max(deviation,Math.abs(d[(py*w+px)*4+channel]-values[12]));
+        }
+        worst=Math.max(worst,deviation);if(deviation>25)outliers++;
+      }
+      return {name,outliers,worst};
+    });
   },png.toString('base64'));
-  assert.deepEqual(errors,[]);assert.ok(darkest>40,`black reflection shards: darkest barrel pixel ${darkest}`);
-  console.log(`PASS desktop revolver capture (darkest barrel pixel ${darkest}); ${output}`);
+  assert.deepEqual(errors,[]);
+  for(const patch of patches)assert.ok(patch.outliers<=2,
+    `${patch.name} shader corruption: ${patch.outliers} isolated discontinuities (worst ${patch.worst})`);
+  console.log(`PASS desktop material continuity ${JSON.stringify(patches)}; ${output}`);
 } finally { await browser.close(); }

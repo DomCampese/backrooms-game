@@ -1684,3 +1684,13 @@ pass, and both obey the same three rules, learned the hard way:
   than glass: the lore's windows look into a light void, not the next room.
 - Regression finds and captures a window gallery, a staircase and a tunnel
   and fails if any room type goes missing or water drops below half the cells.
+
+## Desktop browser shader control flow
+
+- Keep `lightState` arithmetic-only, including the dead-tube and Manila Room
+  masks. Adding a short-circuit condition to its return brought back desktop
+  Chrome/ANGLE corruption: horizontal black streaks on wallpaper and holes in
+  the revolver, while native rendering stayed correct. A single textual return
+  was not sufficient. `tools/web-render-check.mjs` with `BROWSER_CHANNEL=chrome`
+  detects both surfaces using isolated pixel discontinuities; absolute gun
+  brightness is not stable when the level's light tuning changes.

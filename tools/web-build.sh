@@ -63,7 +63,15 @@ mkdir -p "$OUT/LICENSES" && cp -f LICENSES/*.txt "$OUT/LICENSES/" 2>/dev/null ||
 # an old page cached by Pages notice that a newer build is live.
 BUILD_ID=$(cat "$OUT/index.js" "$OUT/index.wasm" | sha256sum | cut -c1-12)
 # emscripten minifies the shell, so the tag may be src=index.js or src="index.js"
-sed -i -E "s/__BUILD_ID__/$BUILD_ID/g; s/src=(\"?)index\.js\1([ >])/src=\"index.js?v=$BUILD_ID\"\2/" "$OUT/index.html"
+python3 - "$OUT/index.html" "$BUILD_ID" <<'PYTHON'
+import re, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+html = path.read_text().replace('__BUILD_ID__', sys.argv[2])
+html = re.sub(r'src=("?)index\.js\1(?=[ >])',
+              lambda _: 'src="index.js?v=' + sys.argv[2] + '"', html)
+path.write_text(html)
+PYTHON
 grep -q "index.js?v=$BUILD_ID" "$OUT/index.html" || {
     echo "web-build: could not version the index.js script tag" >&2; exit 1; }
 echo "$BUILD_ID" > "$OUT/version.txt"
