@@ -145,7 +145,7 @@ soundscape, and things that live there. Exits lead deeper — usually.
 
 | | |
 |---|---|
-| ![Level 0](docs/levels/level_0.png) **LEVEL 0** — yellowed office maze, humming fluorescents, mustard carpet. Home of Pirate Clark. | ![Level 1](docs/levels/level_1.png) **LEVEL 1** — cavernous concrete warehouse, sparse lights, loading docks. Where a Smiler waits in the dark. |
+| ![Level 0](docs/levels/level_0.png) **LEVEL 0 · THRESHOLD** — empty rooms, mono-yellow chevron wallpaper, sodden carpet, a humming, uneven grid of tubes, and no way out but through a wall. Home of Pirate Clark. | ![Level 1](docs/levels/level_1.png) **LEVEL 1** — cavernous concrete warehouse, sparse lights, loading docks. Where a Smiler waits in the dark. |
 | ![The Poolrooms](docs/levels/level_2.png) **THE POOLROOMS** — endless white tile and still water: colonnaded halls, flooded tunnels, staircases sinking into deep water, windows onto white light. No blackouts, no exit in a hurry. | ![The Red Halls](docs/levels/level_3.png) **THE RED HALLS** — oppressive dark-red brick, someone's abandoned bedroom furniture. |
 | ![Level Fun](docs/levels/level_4.png) **LEVEL FUN =)** — the party that never ended: deep red carpet, a ceiling gone black so the lights hang like a party hall's, bunting, balloons, party tables, and a resident who is very glad you came. | |
 
@@ -357,17 +357,28 @@ make run
   concrete loading docks, and the pools get proper steps down into the water.
   Real stair geometry, smooth step physics — and you can jump onto most of
   the furniture and walk across it.
-- **Windows** — rarely, a wall has one, and now you can see through it: a
+- **Windows** — rarely, a Red Halls wall has one, and now you can see through it: a
   translucent glass pane, clear in the middle and catching the light at
   grazing angles, with the next room laid out on the far side.
 
   <p align="center"><img src="docs/window.png" width="440" alt="A see-through window"></p>
-- **Furniture** — beyond the office clutter: couches, armoires, floor lamps,
-  nightstands, and the occasional bare mattress, arranged by no one, for
-  no one. Level 0 also keeps the furniture of the job that used to happen
-  here — desks with a dead monitor, papers, and a chair shoved back; open
-  steel shelving half-emptied in a hurry; water coolers; potted plants
-  nobody waters. All of it solid, and most of it climbable.
+- **Furniture** — couches, armoires, floor lamps, nightstands, party tables
+  and the occasional bare mattress, arranged by no one, for no one. All of it
+  solid, and most of it climbable. Level 0 has none: the lore's "randomly
+  segmented empty rooms" hold only the odd stack of cartons and the ceiling
+  tiles that have come down.
+- **Level 0, by the book** — mono-yellow chevron wallpaper (the paper in the
+  2002 photograph), lay-in troffers crowded into a drop ceiling with a fifth
+  of them dead and the rest uneven, carpet with damp patches that catch the
+  tubes and squelch underfoot, and a hum that gives you a migraine which
+  follows you out. There are no exit doors: the only way out of Level 0 is
+  noclipping, through a stretch of wall whose paper tears for a moment like a
+  bad tape. If the paper around it turns red, that wall leads to the red places.
+- **The Manila Room** — walk far enough and you may find it: an 8 m square room
+  with manila wallpaper, wooden floorboards, a door on each wall, an octagonal
+  table with two chairs under a chandelier, almond water in the cupboard and
+  notes left by the wanderers before you (E to read). The hum goes quiet
+  inside, your grip comes back, and the notes chalk you a way out.
 - **Another floor down** — Level 0 rarely opens into a grand atrium: the
   carpet falls away in broad terraces, half a metre a ring, down to a hall
   two and a half metres below the office, with real stairs at every edge and
@@ -499,6 +510,7 @@ With the F3 debug HUD open, dev hotkeys are live: `B` force blackout,
   Lower it to sweep the game quickly; the software renderer is slow.
 - `BACKROOMS_MENU=1` — hold on the title screen (skips the auto-start; visual testing).
 - `BACKROOMS_EXITS=1` — exit doors everywhere (visual testing).
+- `BACKROOMS_MANILA=1` — a Manila Room in the chunk east of spawn, centred at x 48, z 16 (visual testing).
 - `BACKROOMS_POS="x,z,yaw"` — start at a specific spot (visual testing).
 - `BACKROOMS_LEVEL=n` — start on level n (visual testing).
 - `BACKROOMS_SEED=n` — fix the world seed (repeatable maze).

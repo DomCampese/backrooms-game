@@ -47,6 +47,11 @@ uniform vec3 uEntPos; uniform float uEntDark;      // the hunter kills the light
 uniform vec3 uAmb; uniform vec3 uFogCol; uniform float uFogDen;
 uniform vec3 uLightCol; uniform float uLS; uniform float uLY; uniform float uDead; uniform float uLightMul;
 uniform float uGloss;
+uniform float uVary;             // how uneven the working tubes are (Level 0)
+uniform float uFaulty;           // share of tubes that stutter
+uniform float uWet;              // Level 0's sodden carpet: 1 = damp patches on the floor
+uniform vec4 uRoomMask;          // x0,z0,x1,z1: ceiling panels centred in here are dark (the Manila Room)
+uniform vec4 uLamp;              // xyz: the Manila Room's chandelier, w: its output (0 = none near)
 uniform sampler2D texture1; // packed material slopes / gloss mask
 float gGloss;
 uniform sampler2D texture2;      // occupancy grid (material normal-map slot)
@@ -84,19 +89,26 @@ vec3 detailNormal(vec3 N, vec2 slope, vec3 dpdx, vec3 dpdy, vec2 duvdx, vec2 duv
 }
 float lightState(vec2 g){
     float h = lhash(g);
-    float s = 1.0;
-    if (h > 0.93){                                  // faulty tube: occasional gentle stutter
+    // Not every tube that works works well: some run at part output, a
+    // spread uVary wide. levels.cpp's lightAtCPU applies the same factor.
+    float s = 1.0 - uVary * fract(h*53.7);
+    if (h > 1.0 - uFaulty){                         // faulty tube: occasional gentle stutter
         float fh = fract(h*97.31);
         float gate = fract(sin(floor(uTime*0.45+fh*37.0)*12.9898)*43758.5453);
         if (gate > 0.74){
             float n = fract(sin(uTime*(7.0+fh*10.0) + fh*211.0)*43758.5453);
-            s = 0.62 + 0.38*step(0.5, n);
+            s *= 0.62 + 0.38*step(0.5, n);
         }
     }
     // A single exit matters on desktop WebGL/ANGLE: returning early for a
     // dead tube inside the divergent reflection branch produced black shards
     // across the revolver and decals. Apply the dead mask at the common exit.
-    return h < uDead ? 0.0 : s * uBlackout;
+    // The Manila Room is lit by its chandelier, not by tubes: any panel
+    // centred inside uRoomMask is out. Folded into the same single exit.
+    vec2 pc = g*uLS + uLS*0.5;
+    float masked = step(uRoomMask.x, pc.x) * step(pc.x, uRoomMask.z)
+                 * step(uRoomMask.y, pc.y) * step(pc.y, uRoomMask.w);
+    return (h < uDead || masked > 0.5) ? 0.0 : s * uBlackout;
 }
 int occAt(ivec2 c){
     ivec2 t = c - ivec2(uOccOrigin);
@@ -274,7 +286,13 @@ vec3 roomLight(vec3 P, vec3 N){
             vis = 1.0;                                   // too far to shadow; it's faint anyway
         } else {
             // two taps for a little penumbra up close, closing onto one by 6 m
-            float spread = d2 < 36.0 ? 0.45 * (1.0 - smoothstep(16.0, 36.0, d2)) : 0.0;
+            // The range scales with the grid, capped at the original 6 m, so
+            // the 8 and 12 m levels trace exactly as before. On Level 0's
+            // 4 m grid all nine summed panels sit inside 6 m, and two taps
+            // each for all nine cost a quarter of the frame; the next tube
+            // along is 4 m away, so the penumbra closes by 3 m there.
+            float sr2 = min(36.0, 0.5625*uLS*uLS), sr1 = min(16.0, 0.25*uLS*uLS);   // 36 and 16 at ls >= 8
+            float spread = d2 < sr2 ? 0.45 * (1.0 - smoothstep(sr1, sr2, d2)) : 0.0;
             vis = panelVis(lc.xz, shP, spread);
         }
         vis = mix(1.0, vis, sw);                         // ease the shadow off with range
@@ -379,6 +397,21 @@ vec3 roomLight(vec3 P, vec3 N){
         light += fcol * ndl;
         if (gGloss > 0.10) light += fcol * (sheen(N, V, Lf, shin) * gGloss * 0.55);
     }
+    // The Manila Room's chandelier: six warm bulbs, near enough one point.
+    // Walled in by lightVis like the torch and the flare, so its warmth stays
+    // in the room and spills only out of the four doorways.
+    if (uLamp.w > 0.01){
+        vec3 lv3 = uLamp.xyz - P;
+        float d2 = dot(lv3, lv3);
+        if (d2 < 90.0){
+            float li = uLamp.w * 3.2/(1.0 + 0.26*d2) * (1.0 - smoothstep(55.0, 90.0, d2));
+            li *= lightVis(uLamp.xz, shP);
+            vec3 Ll = lv3 * inversesqrt(max(d2, 1e-6));
+            vec3 lcol = vec3(1.0, 0.70, 0.42) * li;
+            light += lcol * clamp(dot(N, Ll)*0.75 + 0.25, 0.0, 1.0);
+            if (gGloss > 0.10) light += lcol * (sheen(N, V, Ll, shin) * gGloss * 0.6);
+        }
+    }
     gLightLum = dot(light, vec3(0.30,0.59,0.11));
     return light;
 }
@@ -467,7 +500,28 @@ void main(){
             aOut = 0.30 + 0.55*fres;                 // near-clear looking down, a mirror at a glance
         }
     } else {
-        vec4 texel = texture(texture0, fragUV);
+        // Level 0's noclip walls (vertex alpha 250, see noclipCol in
+        // world.cpp): the paper tears sideways in thin horizontal bands that
+        // jump a dozen times a second, most of the time not at all. Grad
+        // sampling with the untorn derivatives, or every band edge picks the
+        // smallest mip and draws a line.
+        bool noclip = fragC.a > 0.965 && fragC.a < 0.990;
+        vec2 uvT = fragUV;
+        float tear = 0.0;
+        if (noclip){
+            float tick = floor(uTime*11.0);
+            float band = floor(fragPos.y*9.0 + fract(tick*0.37)*4.0);
+            float r = fract(sin(band*91.7 + tick*7.31)*43758.5453);
+            float burst = step(0.62, fract(sin(floor(uTime*1.3)*3.7)*151.3));   // it comes and goes
+            // ragged, not a clean slab: each band tears in 30 cm pieces, some of
+            // which hold, so its ends are broken rather than the wall's edges
+            float seg = floor((fragPos.x + fragPos.z) * 3.3);
+            float keep = step(0.30, fract(sin(seg*47.1 + band*13.7 + tick*3.9)*43758.5453));
+            tear = step(0.58, r) * burst * keep;
+            uvT.x += (r - 0.5) * 0.09 * tear;
+        }
+        // everything else keeps the plain sample it always had
+        vec4 texel = noclip ? textureGrad(texture0, uvT, duvdx, duvdy) : texture(texture0, fragUV);
         vec4 detail = texture(texture1, fragUV);
         gGloss = detail.a < 0.75 ? detail.b : uGloss * detail.b;
         vec3 Nb = normalize(fragN);
@@ -478,6 +532,18 @@ void main(){
             vec2 slope = (detail.rg * 255.0 - 128.0) / 127.0;
             Nb = detailNormal(Nb, slope, dpdx, dpdy, duvdx, duvdy);
 
+        }
+        // Level 0's carpet is "old" and "moist" in every telling, and whatever
+        // soaks it "is not water". Damp patches: darker, browner pile that
+        // has the gloss to mirror the tubes overhead, and flattened relief,
+        // because liquid fills the loops. Floors only (up-facing, at or below
+        // deck level), and in world space so the patches never tile.
+        if (uWet > 0.0 && fragN.y > 0.7 && fragPos.y < 0.3){
+            float wn = vnoise(fragPos.xz*0.42)*0.62 + vnoise(fragPos.xz*1.35 + 17.0)*0.38;
+            float wet = smoothstep(0.60, 0.72, wn) * uWet;
+            texel.rgb *= mix(vec3(1.0), vec3(0.60, 0.56, 0.48), wet);
+            gGloss = max(gGloss, 0.62*wet);
+            Nb = normalize(mix(Nb, normalize(fragN), wet));
         }
         col = texel.rgb * fragC.rgb * roomLight(fragPos, Nb);
         // Underwater tile catches moving ribbons of refracted light. Pool
@@ -491,6 +557,17 @@ void main(){
             col += vec3(0.12,0.24,0.19)*caustic*exp(-depth*0.22)*clamp(gLightLum,0.0,1.0);
         }
         aOut = fragC.a * texel.a;                    // translucent contact shadows + scrawl decals
+        if (noclip){
+            // Reality is thin here, and the torn bands show what is behind
+            // it: a flat, over-bright nothing on an ordinary exit, and on a
+            // cursed one (vertex alpha 247) the crimson of
+            // the Red Rooms. A faint shimmer runs all the time, torn or not,
+            // so a wanderer who stops and looks can find it.
+            float shimmer = 0.035 * sin(uTime*23.0 + fragPos.y*41.0 + fragPos.x*7.0 + fragPos.z*7.0);
+            vec3 behind = fragC.a < 0.975 ? vec3(0.55, 0.03, 0.02) : vec3(1.25, 1.18, 0.95);   // 247 cursed, 250 not
+            col = mix(col * (1.0 + shimmer), behind * (0.6 + 0.4*gLightLum), tear * 0.55);
+            aOut = 1.0;
+        }
     }
     float f = clamp(exp(-dist*uFogDen), 0.0, 1.0);
     // Fog used to be one flat colour everywhere, which meant the far end of a
@@ -515,6 +592,7 @@ const char *POST_FS = GLSL_VERSION_HEADER R"GLSL(
 in vec2 fragTexCoord; in vec4 fragColor;
 uniform sampler2D texture0; uniform vec4 colDiffuse;
 uniform float uTime; uniform float uFear; uniform float uWater;
+uniform float uMigraine;   // Level 0's hum headache, 0..1 (Game::migraine)
 out vec4 finalColor;
 float hh(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)))*43758.5453); }
 void main(){
@@ -523,8 +601,16 @@ void main(){
         uv += uWater*0.0018*vec2(sin(uv.y*24.0+uTime*1.3),sin(uv.x*21.0-uTime));
         uv = clamp(uv,vec2(0.002),vec2(0.998));
     }
+    // The migraine throbs: a slow double pulse, like a heartbeat behind the
+    // eyes, that pinches the image in a little and splits its colour.
+    float throb = 0.0;
+    if (uMigraine > 0.0) {
+        float ph = fract(uTime * 1.05);
+        throb = uMigraine * (exp(-ph*ph*90.0) + 0.6*exp(-(ph-0.22)*(ph-0.22)*120.0));
+        uv = 0.5 + (uv - 0.5) * (1.0 - 0.006*throb);
+    }
     vec2 dir = uv - 0.5;
-    float ca = 0.00015 + uFear*0.0025;               // chromatic aberration
+    float ca = 0.00015 + uFear*0.0025 + throb*0.0035;   // chromatic aberration
     vec3 c;
     c.r = texture(texture0, uv + dir*ca).r;
     c.g = texture(texture0, uv).g;
@@ -550,7 +636,8 @@ void main(){
     float g = hh(uv*vec2(1287.0,721.0) + vec2(fract(uTime*13.71)*61.0, fract(uTime*7.31)*83.0)) - 0.5;
     c += g * (0.012 + 0.055*uFear);                   // film grain
     float d = length(dir);
-    c *= 1.0 - smoothstep(0.34, 0.95, d)*(0.42 + 0.34*uFear); // vignette
+    c *= 1.0 - smoothstep(0.34, 0.95, d)*(0.42 + 0.34*uFear + 0.30*throb); // vignette
+    c *= 1.0 - 0.05*throb;                               // and the whole frame dims on the beat
     c *= 0.994 + 0.006*sin(uTime*377.0);             // mains-hum luma shimmer
     c = mix(c,c*vec3(0.48,0.86,0.80)+vec3(0.015,0.07,0.065),uWater*0.75);
     finalColor = vec4(c, 1.0);

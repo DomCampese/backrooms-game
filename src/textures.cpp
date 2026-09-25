@@ -22,44 +22,67 @@ static Texture2D finishTexture(Image img, bool tiled) {
     return t;
 }
 
+// Level 0's wallpaper is the one in the photograph: vertical pinstripe bands,
+// a narrow ornamental scroll strip between them, and pairs of chevrons pointing
+// up the wall — the "90s chevron-styled" paper of the Oshkosh store the 2002
+// picture was taken in. The motif comes from Amini Allight's CC0 Backrooms
+// texture set (assets/materials/README.md), embedded as luminance only and
+// printed here in darker ochre ink over the game's own mono-yellow ground, so
+// the grime, damp, seams and skirting below are unchanged in kind.
+//
+// 1024 px for the 3 m the wall UVs span (addBoxSides maps x/3), and the 256 px
+// motif repeats exactly four times across it — a pattern whose period does
+// not divide the texture puts half a chevron down every seam in the building
+// (see AGENTS.md). The roll seams sit on the motif's own repeat, 0.75 m apart,
+// because that is where a paperhanger would butt two drops together.
 Texture2D makeWallpaperTex() {
-    const int W = 512, H = 512;
+    const int W = 1024, H = 1024, M = 256;
+    Image motif = LoadImageFromMemory(".jpg", object_wallpaper, (int)sizeof(object_wallpaper));
+    ImageFormat(&motif, PIXELFORMAT_UNCOMPRESSED_GRAYSCALE);
+    ImageResize(&motif, M, M);
+    const unsigned char *mp = (const unsigned char *)motif.data;
     Image img = GenImageColor(W, H, BLANK);
     Color *p = (Color *)img.data;
     for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
         float vy = (float)y / H;
-        float stripe = 0.97f + 0.03f * sinf(x * TAU / 42.0f);
-        float lines = 0.985f + 0.015f * sinf(x * 0.9f);
-        float grime = fbm2(x * 0.013f, y * 0.013f, 7u, 4);
-        float stain = fbm2(x * 0.006f + 31.0f, y * 0.006f, 12u, 4);
-        float base = stripe * lines * (1.0f - 0.16f * grime) * (1.0f - 0.10f * vy);
+        // the print: light ground, darker ink wherever the motif is dark
+        float ink = 1.0f - mp[(y % M) * M + (x % M)] / 255.0f;
+        float hx = x * 0.5f, hy = y * 0.5f;      // the old 512 px noise scales
+        float grime = fbm2(hx * 0.013f, hy * 0.013f, 7u, 4);
+        float stain = fbm2(hx * 0.006f + 31.0f, hy * 0.006f, 12u, 4);
+        float base = (1.0f - 0.16f * grime) * (1.0f - 0.10f * vy);
         if (stain > 0.62f) base *= 1.0f - (stain - 0.62f) * 0.8f;
         // Wallpaper arrives on a roll and gets hung in strips, so there is a seam
         // every so often — a hairline of shadow with a lifting edge beside it,
         // and the two strips never quite match in tone. Without them a wall is
         // one printed sheet a hundred metres long, which is the thing that most
         // gives away that a corridor is generated rather than decorated.
-        int strip = x / 128, sx = x % 128;
+        int strip = x / M, sx = x % M;
         base *= 1.0f + (lat(strip, 0, 15u) - 0.5f) * 0.030f;   // roll-to-roll tone drift
         // A hairline, not a stripe. Anything stronger than this and the post
         // pass's chromatic aberration picks the seam up and draws a coloured
         // line down the wall at every one of them.
-        if (sx < 2) base *= 0.93f;                             // the seam itself
-        else if (sx < 9) base *= 0.985f + 0.015f * ((sx - 2) / 7.0f);
+        if (sx < 3) base *= 0.93f;                             // the seam itself
+        else if (sx < 17) base *= 0.985f + 0.015f * ((sx - 3) / 14.0f);
+        // mono-yellow ground, ochre-olive ink; the ink fades where the paper
+        // has yellowed hardest, which is what keeps it from reading as new
+        float r = 204 * base, g = 184 * base, b = 108 * base;
+        float k = ink * (0.50f - 0.18f * grime);
+        r = r * (1 - k) + 128 * base * k; g = g * (1 - k) + 112 * base * k; b = b * (1 - k) + 52 * base * k;
         // damp creeping up from the skirting, worst in the corners of the roll
-        float damp = fbm2(x * 0.017f, y * 0.006f, 16u, 3) * (0.25f + 0.95f * vy * vy);
-        float r = 199 * base, g = 178 * base, b = 104 * base;
+        float damp = fbm2(hx * 0.017f, hy * 0.006f, 16u, 3) * (0.25f + 0.95f * vy * vy);
         if (damp > 0.42f) {
             float t = std::min(0.55f, (damp - 0.42f) * 1.7f);
             r = r * (1 - t) + 96 * t; g = g * (1 - t) + 92 * t; b = b * (1 - t) + 58 * t;
         }
-        if (y > H - 46) {                            // baseboard
-            float t = fbm2(x * 0.02f, y * 0.1f, 99u, 3);
+        if (y > H - 92) {                            // baseboard
+            float t = fbm2(hx * 0.02f, hy * 0.1f, 99u, 3);
             r = 92 - 22 * t; g = 74 - 18 * t; b = 42 - 11 * t;
-            if (y < H - 40) { r *= 0.45f; g *= 0.45f; b *= 0.45f; }
+            if (y < H - 80) { r *= 0.45f; g *= 0.45f; b *= 0.45f; }
         }
         p[y * W + x] = { cl8(r), cl8(g), cl8(b), 255 };
     }
+    UnloadImage(motif);
     return finishTexture(img, true);
 }
 
@@ -734,15 +757,18 @@ Texture2D makeScrawlTex() {
     // Thirty-two of them, so that seeing the same line twice in one run means
     // something rather than meaning the pool is small. They are all somebody
     // trying to leave a fact behind: a count, a warning, a rule they worked out.
+    // Several are Level 0's own lore passed hand to hand — the carpet fluid
+    // that "is not water", the tearing paper of a noclip wall, the red that
+    // means the Red Rooms, the one room where the hum goes quiet.
     static const char *LINES[32] = {
-        "NO CLIP",              "dont stare",           "day 407",              "the exit lies",
+        "NO CLIP",              "dont stare",           "its not water",        "the exit lies",
         "he hears the flares",  "keep walking",         "it hums at night",     "wrong door =)",
         "i counted 12 doors",   "none of them out",     "turn left. always",    "dont sleep here",
         "the lights know",      "day 1 again",          "it wears a coat",      "smells like almond",
-        "i was here. was i",    "same room twice",      "no stairs go up",      "hold still :(",
-        "water is a floor",     "dont say your name",   "fire moves it",        "it is taller today",
+        "i was here. was i",    "same room twice",      "find the manila room", "hold still :(",
+        "water is a floor",     "dont say your name",   "fire moves it",        "watch the paper tear",
         "421 and counting",     "my watch stopped",     "listen for dogs",      "the party never ends",
-        "i can hear the hum",   "there is no 13th",     "follow the pipes",     "help",
+        "i can hear the hum",   "red = turn back",      "follow the pipes",     "help",
     };
     Rng r(0x5C12ULL);
     for (int i = 0; i < 32; i++) {
@@ -785,6 +811,8 @@ static const int FIXPX[FIX_COUNT][4] = {   // x, y, w, h in the 512px atlas
     {   8, 168, 224, 160 },   // FIX_GRILLE        560 x 400 mm
     { 296, 176, 192, 192 },   // FIX_DIFFUSER      600 x 600 mm
     { 280, 400, 224,  80 },   // FIX_SIGN          560 x 200 mm
+    {   8, 336, 128, 128 },   // FIX_MANILA        one 500 mm tile of the Manila Room's paper
+    { 336,   8, 104, 148 },   // FIX_NOTE          A5, 148 x 210 mm
 };
 const FixtureRect FIXTURES[FIX_COUNT] = {
     { 8/512.f,     8/512.f, 104/512.f, 160/512.f, 0.0375f, 0.059f  },
@@ -793,6 +821,10 @@ const FixtureRect FIXTURES[FIX_COUNT] = {
     { 8/512.f,   168/512.f, 232/512.f, 328/512.f, 0.280f,  0.200f  },
     { 296/512.f, 176/512.f, 488/512.f, 368/512.f, 0.300f,  0.300f  },
     { 280/512.f, 400/512.f, 504/512.f, 480/512.f, 0.280f,  0.100f  },
+    // inset half a texel: these are tiled edge to edge, and bilinear filtering
+    // would otherwise pull the neighbouring cell into every seam
+    { 8.5f/512.f, 336.5f/512.f, 135.5f/512.f, 463.5f/512.f, 0.250f, 0.250f },
+    { 336/512.f,   8/512.f, 440/512.f, 156/512.f, 0.074f,  0.105f  },
 };
 
 Texture2D makeFixturesTex() {
@@ -947,6 +979,45 @@ Texture2D makeFixturesTex() {
         grime(x0, y0, x1, y1, 0xE9u, 0.40f);
     }
 
+    // --- the Manila Room's paper: the beige of a manila folder, "reminiscent
+    // of manila paper" as the lore puts it, with a small printed diamond
+    // lattice and a fibre grain. Every term repeats inside 128 px (the lattice
+    // is 32 px, the grain is a per-pixel hash) so tiles butt without a seam.
+    {
+        const int *r = FIXPX[FIX_MANILA];
+        for (int y = 0; y < r[3]; y++) for (int x = 0; x < r[2]; x++) {
+            int u = x % 32, v = y % 32;
+            float dmd = fabsf(u - 15.5f) + fabsf(v - 15.5f);
+            float lattice = (dmd > 13.5f && dmd < 15.5f) ? 0.93f : 1.0f;
+            float dot = (dmd < 2.5f) ? 0.94f : 1.0f;
+            float fibre = 0.97f + 0.06f * lat(x, y >> 2, 0x3A7u) + 0.02f * lat(x >> 1, y, 0x3A8u);
+            float k = lattice * dot * fibre;
+            p[(r[1] + y) * W + r[0] + x] = { cl8(226 * k), cl8(206 * k), cl8(158 * k), OP };
+        }
+    }
+    // --- a note from the table: lined paper gone soft and yellow, ruled in
+    // faint blue, with a few lines of cramped pencil. Unreadable at the size it
+    // is seen; the words are in the game's overlay when you pick them up.
+    {
+        const int *r = FIXPX[FIX_NOTE];
+        int x0 = r[0], y0 = r[1], x1 = r[0] + r[2] - 1, y1 = r[1] + r[3] - 1;
+        for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++) {
+            float k = 0.94f + 0.06f * fbm2(x * 0.09f, y * 0.09f, 0x4D2u, 2);
+            p[y * W + x] = { cl8(236 * k), cl8(228 * k), cl8(200 * k), OP };
+        }
+        for (int ly = y0 + 18; ly < y1 - 6; ly += 9) box(x0 + 4, ly, x1 - 4, ly, { 168, 184, 206, OP });
+        box(x0 + 14, y0 + 4, x0 + 14, y1 - 4, { 214, 150, 150, OP });   // the margin
+        Rng nr(0x4D07EULL);
+        for (int ly = y0 + 16; ly < y1 - 12; ly += 9) {
+            int x = x0 + 18, end = x1 - 6 - nr.ri(0, 30);
+            while (x < end) {                                           // pencil "words"
+                int wl = 4 + nr.ri(0, 12);
+                for (int q = 0; q < wl && x + q < end; q++)
+                    box(x + q, ly - 1 - nr.ri(0, 2), x + q, ly, { 70, 66, 64, OP });
+                x += wl + 3;
+            }
+        }
+    }
     // --- plain galvanised metal, covering the pixel at UV (0.375, 0.75).
     //
     // That is not an arbitrary corner: `addSolidBox` hardcodes exactly that UV

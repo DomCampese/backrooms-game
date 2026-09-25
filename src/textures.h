@@ -42,7 +42,11 @@ Texture2D makeFixturesTex();       // fittings atlas: outlets, switch, grille, d
 // immediately — the first version of this drew each fitting inside part of a
 // square cell and hung the whole cell, and every outlet in the building came
 // out a narrow vertical sliver.
-enum FixtureId { FIX_OUTLET = 0, FIX_OUTLET_BROKEN, FIX_SWITCH, FIX_GRILLE, FIX_DIFFUSER, FIX_SIGN, FIX_COUNT };
+// FIX_MANILA is not a fitting but a tile of the Manila Room's wallpaper, and
+// FIX_NOTE one of the notes left on its table; both live here because the
+// fixtures mesh is where the room's decals go.
+enum FixtureId { FIX_OUTLET = 0, FIX_OUTLET_BROKEN, FIX_SWITCH, FIX_GRILLE, FIX_DIFFUSER, FIX_SIGN,
+                 FIX_MANILA, FIX_NOTE, FIX_COUNT };
 struct FixtureRect {
     float u0, v0, u1, v1;   // its cell in the atlas, normalised
     float halfW, halfH;     // and half its size on the wall, in metres

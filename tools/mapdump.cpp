@@ -48,7 +48,7 @@ struct Args {
     int level = 0, cells = 129, samples = 4000;
     unsigned visit = 0;
     unsigned seed = 1337;
-    bool plan = true;
+    bool plan = true, listExits = false;
     int px = 0, pz = 0, pw = 48, ph = 32;
 };
 
@@ -74,7 +74,7 @@ char cellGlyph(World &w, int a, int b) {
 
 const char *usage =
     "usage: mapdump [--level N] [--seed S] [--cells N] [--samples N]\n"
-    "               [--plan X Z W H] [--no-plan]\n";
+    "               [--plan X Z W H] [--no-plan] [--list-exits]\n";
 
 }  // namespace
 
@@ -89,6 +89,7 @@ int main(int argc, char **argv) {
         else if (k == "--cells")   a.cells = num(129);
         else if (k == "--samples") a.samples = num(4000);
         else if (k == "--no-plan") a.plan = false;
+        else if (k == "--list-exits") a.listExits = true;
         else if (k == "--plan")    { a.px = num(0); a.pz = num(0); a.pw = num(48); a.ph = num(32); }
         else { fputs(usage, stderr); return 2; }
     }
@@ -346,5 +347,16 @@ int main(int argc, char **argv) {
     printf("  raised floor          %8.0f  (%ld)\n", per(raised), raised);
     printf("  sunken floor          %8.0f  (%ld)\n", per(sunk), sunk);
     printf("  cells using elevation %6.2f%%\n", 100.0 * (raised + sunk) / cells);
+    // Where the exits are, in world metres — the numbers BACKROOMS_POS takes —
+    // so a capture can be pointed at one. On Level 0 these are the noclip walls.
+    if (a.listExits) {
+        printf("\nexits (x z, world metres; * = cursed)\n");
+        for (int k = -half; k <= half; k++) for (int i = -half; i <= half; i++) {
+            bool n = w.wallNVal(i, k) == WALL_EXIT, ww = w.wallWVal(i, k) == WALL_EXIT;
+            if (!n && !ww) continue;
+            printf("  %7.1f %7.1f  %s%s\n", i * CELL + (n ? 1.0f : 0.0f), k * CELL + (n ? 0.0f : 1.0f),
+                   n ? "north edge" : "west edge", w.cursedExit(i, k) ? "  *" : "");
+        }
+    }
     return 0;
 }

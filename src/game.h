@@ -63,6 +63,10 @@ enum MatSlot {
     MAT_COUNT,
 };
 
+// The Manila Room's notes: pages of up to four lines (game.cpp).
+constexpr int MANILA_NOTE_COUNT = 4;
+extern const char *const MANILA_NOTES[MANILA_NOTE_COUNT][4];
+
 // `mine` separates the marks you drew from the ones that were already there.
 // They are the same arrow; only the chalk has aged.
 struct ChalkMark { Vector3 pos; float yaw; bool mine; };
@@ -140,10 +144,11 @@ struct Game {
     int locTime = -1, locBlackout = -1, locViewPos = -1, locFlash = -1, locFlashDir = -1,
         locAmb = -1, locFogCol = -1, locFogDen = -1, locLightCol = -1, locLS = -1, locLY = -1,
         locDead = -1, locLightMul = -1, locFlarePos = -1, locFlareInt = -1, locGloss = -1,
-        locEntPos = -1, locEntDark = -1, locOccOrigin = -1, locOccN = -1, locEntBlock = -1;
-    int locPTime = -1, locPFear = -1, locPWater = -1;
+        locEntPos = -1, locEntDark = -1, locOccOrigin = -1, locOccN = -1, locEntBlock = -1,
+        locVary = -1, locFaulty = -1, locWet = -1, locRoomMask = -1, locLamp = -1;
+    int locPTime = -1, locPFear = -1, locPWater = -1, locPMigraine = -1;
     Material mats[MAT_COUNT]{};
-    Sound steps[4]{}, splashIn[3]{}, splashOut[3]{}, swimStrokes[4]{}, sndClick{}, sndScare{}, sndWin{},
+    Sound steps[4]{}, squelches[4]{}, sndNoclip{}, splashIn[3]{}, splashOut[3]{}, swimStrokes[4]{}, sndClick{}, sndScare{}, sndWin{},
           sndFlare{}, sndShot{}, sndHit{}, sndKill{}, sndPop{}, sndHeartbeat{}, sndTape{},
           sndValve{}, sndHowl{}, sndGulp{}, sndVoice{}, sndGroan{};
     static constexpr int NBARKS = 3;
@@ -258,6 +263,23 @@ struct Game {
     double nextBlackout = 0, blackoutEnd = -1;
     float blackoutCur = 1.0f, fear = 0.0f;
     float deathT = 0, escapeT = 0, killT = 0, fellT = 0, winT = 0;
+    bool noclipped = false;                   // the last exit was a Level 0 wall, not a door
+    // ---- the Manila Room (Level 0). manilaNear is true while one is in the
+    // chunks round you, which is what points the shader's uRoomMask/uLamp at
+    // it; inManila while you are inside its four walls.
+    bool manilaNear = false, inManila = false, manilaSeen = false, notesRead = false;
+    float manilaX = 0, manilaZ = 0;
+    float noteT = 0; int notePage = 0;        // the note being read, and how long it stays up
+    float manilaCardT = 0;                    // the name card the first time you walk in
+    // ---- the hum's migraine. The lore is specific: the buzz "tends to induce
+    // throbbing migraines in most individuals, which persist for an extended
+    // period of time even after one has exited the level." So it builds while
+    // you are on Level 0 under the tubes, eases off slowly anywhere else (it
+    // follows you through a noclip), and fastest in the Manila Room's quiet.
+    float migraine = 0;
+    bool migraineWarned = false;
+    void updateManila(float dt, double now);
+    void markWayOut();                        // chalk the way from the Manila Room to the nearest noclip wall
     // Stats frozen for the death card. Being caught used to cost nothing at all
     // — it teleported you 800 m and you kept every item — so there was nothing
     // in the game that could be lost, which is most of why none of it was
@@ -389,6 +411,7 @@ struct Game {
     // height to stand it on, or -1 if this cell's prop is nothing you'd set a
     // drink down on. Shared by the mesher-side render and the pickup test.
     float bottleShelfY(int a, int b);
+    Vector2 pickupSpot(int a, int b);         // where in the cell the item stands (render + pickup test)
     void updateDrink(float dt, double now); // run the drinking animation
     void drawHeldWeapon(const Camera3D &cam);
     void drawCan(Matrix xf);                // one can, lit by the room like anything else

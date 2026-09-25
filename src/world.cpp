@@ -1,10 +1,12 @@
 #include "world.h"
 #include "util.h"
+#include "levels.h"     // the light grid spacing per level
 #include "textures.h"   // FIXTURES: where each fitting sits in the atlas, and how big it is
 #include <cstring>
 #include <cmath>
 #include <vector>
 #include <algorithm>
+#include <functional>
 
 // Door trim: an architrave 24 mm proud of the wall face, and the threshold
 // strip under the opening. Both sample the props atlas's plain metal at
@@ -23,6 +25,12 @@ struct MB {
     std::vector<float> v, uv, n;
     std::vector<unsigned char> c;
     std::vector<unsigned short> idx;
+    // Optional colour field over the floor plan, multiplied into every vertex
+    // this builder emits (alpha untouched, so the shader's alpha coding is
+    // unaffected). Per vertex rather than per quad, so a tint that changes
+    // across a room grades smoothly instead of stepping cell by cell — which
+    // is what the Red Rooms' bleed on Level 0 needs.
+    std::function<Color(float, float)> tint;
     void quad(Vector3 a, Vector3 b, Vector3 cc, Vector3 d, Vector3 nn,
               Vector2 ta, Vector2 tb, Vector2 tc, Vector2 td, Color col) {
         unsigned short base = (unsigned short)(v.size() / 3);
@@ -32,7 +40,13 @@ struct MB {
             v.push_back(P[i].x); v.push_back(P[i].y); v.push_back(P[i].z);
             uv.push_back(T[i].x); uv.push_back(T[i].y);
             n.push_back(nn.x); n.push_back(nn.y); n.push_back(nn.z);
-            c.push_back(col.r); c.push_back(col.g); c.push_back(col.b); c.push_back(col.a);
+            Color k = col;
+            if (tint) {
+                Color t = tint(P[i].x, P[i].z);
+                k = { (unsigned char)(col.r * t.r / 255), (unsigned char)(col.g * t.g / 255),
+                      (unsigned char)(col.b * t.b / 255), col.a };
+            }
+            c.push_back(k.r); c.push_back(k.g); c.push_back(k.b); c.push_back(k.a);
         }
         const unsigned short q[6] = { 0, 1, 2, 0, 2, 3 };
         for (int i = 0; i < 6; i++) idx.push_back(base + q[i]);
@@ -112,8 +126,12 @@ void World::generate(ChunkData &d, int cx, int cz) {
                 if (horiz) d.wallN[i][b] = WALL_DOOR; else d.wallW[b][i] = WALL_DOOR;
                 continue;
             }
-            // rarely a window instead of blank wall; behind it, nothing
-            uint8_t v = ((level == 0 || level == 3) && rng.f01() < 0.035f) ? WALL_WINDOW : WALL_SOLID;
+            // rarely a window instead of blank wall; behind it, nothing. Only the
+            // Red Halls: Level 0 is canonically windowless (the original photo's
+            // caption says as much), so it still draws the number — keeping the
+            // rng stream where it was — and throws the answer away.
+            bool win = (level == 0 || level == 3) && rng.f01() < 0.035f;
+            uint8_t v = (win && level == 3) ? WALL_WINDOW : WALL_SOLID;
             if (horiz) d.wallN[i][b] = v; else d.wallW[b][i] = v;
         }
     }
@@ -263,12 +281,20 @@ void World::generate(ChunkData &d, int cx, int cz) {
         else if (level == 4)                                               // level fun: the party never ended
             d.prop[a][b] = f < 0.52f ? PROP_PARTY_TABLE : f < 0.70f ? PROP_BOXES : f < 0.82f ? PROP_COUCH
                          : f < 0.93f ? PROP_TABLE : PROP_VENDING;
-        else   // L0: office clutter — desks someone worked at — plus furniture that has no business here
-            d.prop[a][b] = f < 0.20f ? PROP_BOXES : f < 0.31f ? PROP_CABINET : f < 0.39f ? PROP_TABLE
-                         : f < 0.49f ? PROP_FALLEN_TILE : f < 0.58f ? PROP_COUCH : f < 0.65f ? PROP_ARMOIRE
-                         : f < 0.70f ? PROP_LAMP : f < 0.74f ? PROP_NIGHTSTAND : f < 0.77f ? PROP_BED
-                         : f < 0.80f ? PROP_VENDING : f < 0.90f ? PROP_DESK : f < 0.94f ? PROP_SHELVING
-                         : f < 0.97f ? PROP_COOLER : PROP_PLANT;
+        else   // L0: "randomly segmented EMPTY rooms" — see below
+            // Level 0 used to be furnished like a flat someone had moved out of:
+            // desks, beds, couches, armoires, vending machines, plants. Every
+            // version of the lore says the opposite — the 4chan post's "randomly
+            // segmented empty rooms", the wiki's "barren, sprawling maze", the
+            // 2002 photo itself, which is a stripped retail back room with
+            // nothing in it. The emptiness is the horror; a couch in the corner
+            // is somewhere to sit. What survives is what a back room that was
+            // cleared out would still have: the odd stack of cartons nobody
+            // took, and ceiling tiles that have come down (the Threshold
+            // article lists falling tiles among the level's hazards). The
+            // cartons are also the only cover Clark's level offers, so they
+            // stay common enough to find.
+            d.prop[a][b] = f < 0.30f ? PROP_BOXES : f < 0.46f ? PROP_FALLEN_TILE : PROP_NONE;
         d.propRot[a][b] = (uint8_t)rng.ri(0, 3);
         // boxes like company: sometimes a neighbouring stack
         if (d.prop[a][b] == PROP_BOXES && a + 1 < CCELLS && rng.f01() < 0.4f &&
@@ -443,6 +469,38 @@ void World::generate(ChunkData &d, int cx, int cz) {
                 d.elev[i][kk] = (int8_t)(-5 * std::min(ring, 5));
             }
         }
+    }
+    // ---- the Manila Room. Stamped before the connectivity flood so the flood
+    // sees it, and stamped again at the end (below) so nothing after the flood
+    // — door thinning, the locked door, the exit — can move its four doors.
+    d.manila = false;
+    if (level == 0) {
+        bool nearSpawn = abs(cx) <= 1 && abs(cz) <= 1;
+        bool rolled = (hash64(k ^ 0x3A1111AULL ^ (uint64_t)seed
+                              ^ ((uint64_t)visit * 0xA24BAED4963EE407ULL)) % MANILA_RATE) == 0;
+        d.manila = manilaTest ? (cx == 1 && cz == 0) : (rolled && !nearSpawn);
+    }
+    auto stampManila = [&]() {
+        // Walls of the room: solid all round, one doorway in each side.
+        for (int t = MANILA_LO; t <= MANILA_HI; t++) {
+            d.wallN[t][MANILA_LO] = d.wallN[t][MANILA_HI + 1] = WALL_SOLID;
+            d.wallW[MANILA_LO][t] = d.wallW[MANILA_HI + 1][t] = WALL_SOLID;
+        }
+        d.wallN[7][MANILA_LO] = d.wallN[8][MANILA_HI + 1] = WALL_DOOR;
+        d.wallW[MANILA_LO][8] = d.wallW[MANILA_HI + 1][7] = WALL_DOOR;
+    };
+    if (d.manila) {
+        // A cleared margin round it, so every door opens onto floor and the
+        // room stands on its own in the maze rather than sharing walls with
+        // whatever the partition cut there.
+        for (int i = MANILA_LO - 2; i <= MANILA_HI + 2; i++)
+            for (int kk = MANILA_LO - 2; kk <= MANILA_HI + 2; kk++) {
+                d.pillar[i][kk] = 0; d.prop[i][kk] = PROP_NONE; d.elev[i][kk] = 0;
+                if (kk > MANILA_LO - 2) d.wallN[i][kk] = WALL_NONE;
+                if (i > MANILA_LO - 2) d.wallW[i][kk] = WALL_NONE;
+            }
+        stampManila();
+        d.prop[7][7] = PROP_MANILA_TABLE; d.propRot[7][7] = 0;
     }
     // ---- connectivity.
     //
@@ -650,6 +708,9 @@ void World::generate(ChunkData &d, int cx, int cz) {
         for (int attempt = 0; attempt < 12 && nb > 0 && d.lockI < 0; attempt++) {
             int c = rng.ri(0, nb - 1);
             int x = bi[c], z = bk[c], west = bw[c];
+            // the Manila Room's doors are open by definition: it is where
+            // wanderers can meet, and a locked one would make it a closet
+            if (d.manila && x >= MANILA_LO && x <= MANILA_HI + 1 && z >= MANILA_LO && z <= MANILA_HI + 1) continue;
             int ax = x, az = z, bx2 = west ? x - 1 : x, bz2 = west ? z : z - 1;
             uint8_t &e = west ? d.wallW[x][z] : d.wallN[x][z];
             e = WALL_LOCKED;
@@ -699,6 +760,7 @@ void World::generate(ChunkData &d, int cx, int cz) {
                     d.wallW[i][kk] = WALL_EXIT; placed = true;
                 }
     }
+    if (d.manila) stampManila();   // see above: its doors are its own
     if (level == 2) {
         // Tiled halls have no door frames. Whatever the connectivity pass and
         // the thinning punched through, open it as a plain gap in the tile.
@@ -861,8 +923,30 @@ float World::ceilY(int ci, int ck) {
     return std::max(floorY(ci, ck), 0.0f) + wallH;
 }
 
+bool World::manilaAt(int ci, int ck) {
+    if (level != 0) return false;
+    int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
+    int li = ci - cx * CCELLS, lk = ck - cz * CCELLS;
+    if (li < MANILA_LO || li > MANILA_HI || lk < MANILA_LO || lk > MANILA_HI) return false;
+    return data(cx, cz).manila;
+}
+
+bool World::manilaNear(float x, float z, float &rx, float &rz) {
+    if (level != 0) return false;
+    int pcx = fdiv(cellOf(x), CCELLS), pcz = fdiv(cellOf(z), CCELLS);
+    for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+        auto it = chunks.find(key(pcx + dx, pcz + dz));   // loaded chunks only: never generate from here
+        if (it == chunks.end() || !it->second.manila) continue;
+        rx = ((pcx + dx) * CCELLS + MANILA_HI + 1 - 2) * CELL;   // the corner between cells 7 and 8
+        rz = ((pcz + dz) * CCELLS + MANILA_HI + 1 - 2) * CELL;
+        return true;
+    }
+    return false;
+}
+
 bool World::softAt(int ci, int ck) {
     if (level != 0) return false;
+    if (manilaAt(ci, ck)) return false;                  // the room has a wooden floor
     if (abs(ci) <= 10 && abs(ck) <= 10) return false;   // never near where you wake up
     if (ih(ci, ck, (uint32_t)seed ^ 0x50F7u) % 523 != 0) return false;
     return !pillarAt(ci, ck) && propAt(ci, ck) == PROP_NONE && floorY(ci, ck) == 0.0f;
@@ -896,6 +980,21 @@ bool World::valveAt(int ci, int ck) {
 // Baked contact-shadow tint. The AO strip texture carries the falloff in its
 // alpha channel, so wall creases and furniture shadows all share this one colour.
 static const Color AO_TINT = { 10, 9, 9, 255 };
+
+// Level 0 has no exit doors. "Exiting Level 0 is only possible by noclipping"
+// — so an exit there is a stretch of ordinary wall that is not quite there:
+// full geometry, no collision (WALL_EXIT never had any), and a vertex alpha of
+// 250 that the world shader reads as "this wallpaper is tearing". It sits in
+// the gap between the 0.62 textured cutoff and the 254 relief opt-out, so it
+// is textured, unbumped, and matches no other code in the alpha table. A
+// cursed one is 247: the Red Rooms are behind that wall, and its tears show
+// crimson rather than light.
+static Color noclipCol(bool cursed) {
+    // Alpha, not colour, says which kind: the Red Rooms' tint (MB::tint) is
+    // multiplied into everything near a cursed wall, so a cursed wall wears
+    // the same red as its neighbours and colour could not tell the two apart.
+    return { 255, 255, 255, (unsigned char)(cursed ? 247 : 250) };
+}
 
 // A rounded contact shadow shared by props and pillars. Only the footprint
 // is solid; the skirt samples the AO gradient down to zero at its outer edge.
@@ -999,8 +1098,7 @@ static void addSolidBox(MB &mb, float x0, float y0, float z0, float x1, float y1
 // next box — and an end cap meeting the neighbour's front face at exactly the same
 // depth z-fights into a vertical seam. Skipping buried caps removes the seam.
 static void addBoxSides(MB &mb, float x0, float y0, float z0, float x1, float y1, float z1,
-                        bool bottomFace = false, int skip = 0) {
-    Color w = WHITE;
+                        bool bottomFace = false, int skip = 0, Color w = WHITE) {
     float va = 1 - y0 / 3, vb = 1 - y1 / 3;
     if (!(skip & 1))
         mb.quad({x0,y0,z0},{x1,y0,z0},{x1,y1,z0},{x0,y1,z0},{0,0,-1},{x0/3,va},{x1/3,va},{x1/3,vb},{x0/3,vb},w);
@@ -1279,6 +1377,197 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
     }
 }
 
+// ---- the Manila Room, built. Everything here follows the wiki entry and the
+// renders made from it: wooden floorboards, walls papered the colour of a
+// manila folder, "one octagonal table and two chairs", cupboards under the
+// table, "a wooden entrance door on each wall", and — from the Level 0 article
+// — "a table illuminated by a lone chandelier". rx/rz is the room's centre
+// (a cell corner), cy its ceiling. Floor is 0: generate() keeps it flat.
+static void addManilaRoom(MB &pr, MB &fx, MB &ao, float rx, float rz, float cy, uint32_t h) {
+    const float R = 4.0f, IN = R - WT;       // half-size of the room, and of its inside
+    const float WU0 = 0.51f, WV0 = 0.02f, WU1 = 0.99f, WV1 = 0.48f;   // props atlas: wood
+    auto wood = [&](MB &mb, float cxp, float czp, float yaw, float hx, float hz, float y0, float y1, Color t) {
+        addPropBox(mb, cxp, czp, yaw, hx, hz, y0, y1, WU0, WV0, WU1, WV1, WU0, WV0, WU1, WV1, t, 0.004f);
+    };
+    Rng r(((uint64_t)h << 1) ^ 0x3A11AULL);
+
+    // Floorboards: 145 mm strips running east-west, broken at random lengths
+    // and staggered row to row, over a dark underlay that shows as the gaps.
+    // Alpha 255, so the props detail map gives the grain its relief, and the
+    // wood's own gloss mask gives the varnish a sheen off the chandelier.
+    {
+        const Vector3 up = { 0, 1, 0 };
+        const Vector2 u = { 0.375f, 0.75f };
+        pr.quad({rx-R,0.002f,rz-R},{rx-R,0.002f,rz+R},{rx+R,0.002f,rz+R},{rx+R,0.002f,rz-R}, up,
+                u, u, u, u, Color{ 34, 24, 18, 254 });
+        const float PW = 0.145f;
+        for (float z = rz - R; z < rz + R - 0.01f; z += PW) {
+            float z1 = std::min(z + PW, rz + R);
+            float x = rx - R - r.f01() * 1.2f;
+            while (x < rx + R) {
+                float len = 0.9f + r.f01() * 1.6f;
+                float xa = std::max(x, rx - R), xb = std::min(x + len, rx + R);
+                if (xb - xa > 0.05f) {
+                    float ou = WU0 + r.f01() * (WU1 - WU0 - 0.26f), ov = WV0 + r.f01() * (WV1 - WV0 - 0.05f);
+                    float k = 0.80f + 0.34f * r.f01();
+                    Color t = { cl8(150 * k), cl8(104 * k), cl8(70 * k), 255 };
+                    float ua = ou, ub = ou + (xb - xa) * 0.11f, va = ov, vb = ov + 0.03f;
+                    pr.quad({xa+0.003f,0.005f,z+0.003f},{xa+0.003f,0.005f,z1-0.003f},
+                            {xb-0.003f,0.005f,z1-0.003f},{xb-0.003f,0.005f,z+0.003f}, up,
+                            {ua,va},{ua,vb},{ub,vb},{ub,va}, t);
+                }
+                x += len;
+            }
+        }
+    }
+
+    // Manila paper on the four inside faces, as 500 mm tiles pressed 1.5 mm
+    // off the plaster, from the top of the skirting to the ceiling and round
+    // each doorway. Tiles are anchored to the world grid so the lattice runs
+    // unbroken across the cuts.
+    const FixtureRect &M = FIXTURES[FIX_MANILA];
+    auto tileRect = [&](int axis, float fixed, float nsgn, float a0, float a1, float y0, float y1) {
+        const float T = 0.5f;
+        for (float a = floorf(a0 / T) * T; a < a1 - 1e-4f; a += T)
+            for (float y = floorf(y0 / T) * T; y < y1 - 1e-4f; y += T) {
+                float qa0 = std::max(a, a0), qa1 = std::min(a + T, a1);
+                float qy0 = std::max(y, y0), qy1 = std::min(y + T, y1);
+                if (qa1 - qa0 < 1e-3f || qy1 - qy0 < 1e-3f) continue;
+                float ua = M.u0 + (M.u1 - M.u0) * (qa0 - a) / T, ub = M.u0 + (M.u1 - M.u0) * (qa1 - a) / T;
+                float va = M.v1 - (M.v1 - M.v0) * (qy0 - y) / T, vb = M.v1 - (M.v1 - M.v0) * (qy1 - y) / T;
+                Color c = { 255, 255, 255, 254 };
+                if (axis == 0) {   // face at z = fixed, running along x
+                    Vector3 n = { 0, 0, nsgn };
+                    if (nsgn > 0) fx.quad({qa1,qy0,fixed},{qa0,qy0,fixed},{qa0,qy1,fixed},{qa1,qy1,fixed}, n,
+                                          {ub,va},{ua,va},{ua,vb},{ub,vb}, c);
+                    else          fx.quad({qa0,qy0,fixed},{qa1,qy0,fixed},{qa1,qy1,fixed},{qa0,qy1,fixed}, n,
+                                          {ua,va},{ub,va},{ub,vb},{ua,vb}, c);
+                } else {           // face at x = fixed, running along z
+                    Vector3 n = { nsgn, 0, 0 };
+                    if (nsgn > 0) fx.quad({fixed,qy0,qa0},{fixed,qy0,qa1},{fixed,qy1,qa1},{fixed,qy1,qa0}, n,
+                                          {ua,va},{ub,va},{ub,vb},{ua,vb}, c);
+                    else          fx.quad({fixed,qy0,qa1},{fixed,qy0,qa0},{fixed,qy1,qa0},{fixed,qy1,qa1}, n,
+                                          {ub,va},{ua,va},{ua,vb},{ub,vb}, c);
+                }
+            }
+    };
+    // Door openings, in room-local cells: north wall's doorway is in cell 7,
+    // south's in 8, west's in 8, east's in 7 (see stampManila in generate).
+    // Cell c's opening runs from its west/north edge + 0.35 to + 1.65.
+    auto face = [&](int axis, float fixed, float nsgn, int doorCell) {
+        float a0 = (axis == 0 ? rx : rz) - IN, a1 = (axis == 0 ? rx : rz) + IN;
+        float o0 = (axis == 0 ? rx : rz) - R + (doorCell - MANILA_LO) * CELL + 0.35f, o1 = o0 + 1.30f;
+        const float y0 = 0.135f, yo = 2.30f;
+        tileRect(axis, fixed, nsgn, a0, o0 - 0.06f, y0, cy);    // left of the frame
+        tileRect(axis, fixed, nsgn, o1 + 0.06f, a1, y0, cy);    // right of it
+        tileRect(axis, fixed, nsgn, o0 - 0.06f, o1 + 0.06f, yo + 0.06f, cy);   // over the head
+        // The door itself, opened flat back against the wall beside its frame:
+        // a wooden leaf, two panels, and a brass knob. It is what the lore
+        // means by "a wooden entrance door on each wall", and it is open
+        // because this is the one place down here you are meant to walk into.
+        float lc = o1 + 0.08f + 0.64f;                       // leaf centre along the wall
+        float off = fixed + nsgn * 0.03f;                    // standing just off the face
+        Color leaf = { 118, 78, 50, 255 }, panel = { 98, 64, 40, 255 };
+        if (axis == 0) {
+            wood(pr, lc, off, 0, 0.64f, 0.022f, 0.01f, 2.27f, leaf);
+            wood(pr, lc, off + nsgn * 0.02f, 0, 0.48f, 0.006f, 0.25f, 1.05f, panel);
+            wood(pr, lc, off + nsgn * 0.02f, 0, 0.48f, 0.006f, 1.25f, 2.05f, panel);
+            addSolidBox(pr, lc + 0.50f, 0.98f, off + nsgn * 0.02f - 0.025f, lc + 0.56f, 1.04f,
+                        off + nsgn * 0.02f + 0.025f, Color{ 200, 160, 70, 254 });
+        } else {
+            wood(pr, off, lc, 0, 0.022f, 0.64f, 0.01f, 2.27f, leaf);
+            wood(pr, off + nsgn * 0.02f, lc, 0, 0.006f, 0.48f, 0.25f, 1.05f, panel);
+            wood(pr, off + nsgn * 0.02f, lc, 0, 0.006f, 0.48f, 1.25f, 2.05f, panel);
+            addSolidBox(pr, off + nsgn * 0.02f - 0.025f, 0.98f, lc + 0.50f, off + nsgn * 0.02f + 0.025f,
+                        1.04f, lc + 0.56f, Color{ 200, 160, 70, 254 });
+        }
+    };
+    const float D = 0.0015f;
+    face(0, rz - IN + D, +1, 7);    // north wall, facing into the room (+z)
+    face(0, rz + IN - D, -1, 8);    // south
+    face(1, rx - IN + D, +1, 8);    // west
+    face(1, rx + IN - D, -1, 7);    // east
+
+    // The octagonal table, with its cupboard under the top (the lore keeps
+    // "food, water, and more documents" in there), on a plinth.
+    auto octo = [&](float r0, float y0, float y1, Color t, bool top) {
+        const float rr = r0 / cosf(TAU / 16);            // r0 is flat-to-centre
+        for (int i = 0; i < 8; i++) {
+            float a = TAU * i / 8 + TAU / 16, b = TAU * (i + 1) / 8 + TAU / 16, m = (a + b) * 0.5f;
+            Vector3 p0 = { rx + rr * cosf(a), y0, rz + rr * sinf(a) }, p1 = { rx + rr * cosf(b), y0, rz + rr * sinf(b) };
+            Vector3 p2 = { p1.x, y1, p1.z }, p3 = { p0.x, y1, p0.z };
+            float ua = WU0 + 0.05f * i, ub = ua + 0.05f;
+            pr.quad(p0, p1, p2, p3, { cosf(m), 0, sinf(m) }, {ua,WV1}, {ub,WV1}, {ub,WV1-0.05f}, {ua,WV1-0.05f}, t);
+            if (top) {
+                Vector2 c = { (WU0 + WU1) * 0.5f, (WV0 + WV1) * 0.5f };
+                auto tuv = [&](Vector3 p) { return Vector2{ c.x + (p.x - rx) * 0.35f, c.y + (p.z - rz) * 0.35f }; };
+                pr.tri({ rx, y1, rz }, p3, p2, { 0, 1, 0 }, c, tuv(p3), tuv(p2), t);
+            }
+        }
+    };
+    Color top = { 132, 86, 54, 255 }, body = { 104, 68, 44, 255 };
+    octo(0.48f, 0.00f, 0.07f, Color{ 70, 46, 30, 255 }, true);    // plinth
+    octo(0.42f, 0.07f, 0.73f, body, true);                          // the cupboard
+    octo(0.64f, 0.73f, 0.785f, top, true);                          // the top
+    for (int i = 0; i < 8; i += 2) {                                // cupboard doors: a knob on alternate faces
+        float m = TAU * i / 8 + TAU / 8;
+        float kx = rx + 0.425f * cosf(m), kz = rz + 0.425f * sinf(m);
+        addSolidBox(pr, kx - 0.015f, 0.44f, kz - 0.015f, kx + 0.015f, 0.47f, kz + 0.015f, Color{ 200, 160, 70, 254 });
+    }
+    addContactShadow(ao, rx, rz, 0.0f, 0.0f, 0.52f, 0.52f);
+
+    // Two chairs, one either side, pulled up to it as if two people had sat
+    // down to talk — the only place in Level 0 anyone ever can.
+    for (int sgn = -1; sgn <= 1; sgn += 2) {
+        float chx = rx + sgn * 1.02f, chz = rz;
+        Color cw = { 112, 74, 46, 255 };
+        wood(pr, chx, chz, 0, 0.21f, 0.21f, 0.43f, 0.47f, cw);                        // seat
+        for (int lx = -1; lx <= 1; lx += 2) for (int lz = -1; lz <= 1; lz += 2)
+            wood(pr, chx + lx * 0.18f, chz + lz * 0.18f, 0, 0.018f, 0.018f, 0.0f, 0.43f, cw);
+        float bx = chx + sgn * 0.19f;                                                 // the back, away from the table
+        for (int lz = -1; lz <= 1; lz += 2) wood(pr, bx, chz + lz * 0.18f, 0, 0.018f, 0.018f, 0.47f, 0.93f, cw);
+        wood(pr, bx, chz, 0, 0.014f, 0.19f, 0.74f, 0.90f, cw);
+        wood(pr, bx, chz, 0, 0.012f, 0.19f, 0.56f, 0.61f, cw);
+        addContactShadow(ao, chx, chz, 0.0f, 0.0f, 0.22f, 0.22f);
+    }
+
+    // The notes. "Notes have been left on the table containing information
+    // about the Backrooms and guides to no-clipping." E reads them (Game).
+    const FixtureRect &N = FIXTURES[FIX_NOTE];
+    for (int i = 0; i < 4; i++) {
+        float a = r.f01() * TAU, d = 0.12f + r.f01() * 0.30f, rot = r.f01() * TAU;
+        float nx = rx + cosf(a) * d, nz = rz + sinf(a) * d, y = 0.787f + 0.0012f * i;
+        float c = cosf(rot), s2 = sinf(rot), hw = N.halfW, hh = N.halfH;
+        auto P = [&](float u, float v) { return Vector3{ nx + u * c - v * s2, y, nz + u * s2 + v * c }; };
+        fx.quad(P(-hw,-hh), P(-hw,hh), P(hw,hh), P(hw,-hh), { 0, 1, 0 },
+                { N.u0, N.v0 }, { N.u0, N.v1 }, { N.u1, N.v1 }, { N.u1, N.v0 }, Color{ 255, 255, 255, 254 });
+    }
+
+    // The chandelier: a chain from the ceiling, a brass hub, six arms and six
+    // warm bulbs. The bulbs are raw emissive (alpha 60); the light they throw
+    // is the shader's uLamp, which Game points at this room while you are near.
+    {
+        Color brass = { 186, 146, 72, 254 };
+        float hy = cy - 0.78f;
+        addSolidBox(pr, rx - 0.008f, hy + 0.10f, rz - 0.008f, rx + 0.008f, cy, rz + 0.008f, Color{ 90, 80, 60, 254 });
+        addSolidBox(pr, rx - 0.06f, hy - 0.05f, rz - 0.06f, rx + 0.06f, hy + 0.10f, rz + 0.06f, brass);
+        addSolidBox(pr, rx - 0.10f, cy - 0.03f, rz - 0.10f, rx + 0.10f, cy, rz + 0.10f, brass);   // ceiling rose
+        for (int i = 0; i < 6; i++) {
+            float a = TAU * i / 6;
+            float ex = rx + cosf(a) * 0.34f, ez = rz + sinf(a) * 0.34f;
+            for (int sgm = 0; sgm < 4; sgm++) {                 // the arm, as a few short boxes out and up
+                float t0 = sgm / 4.0f, t1 = (sgm + 1) / 4.0f;
+                float ax = rx + cosf(a) * 0.34f * t1, az = rz + sinf(a) * 0.34f * t1;
+                float ay = hy + 0.02f * sinf(t0 * 3.1416f) - 0.03f * t1;
+                addSolidBox(pr, ax - 0.012f, ay - 0.012f, az - 0.012f, ax + 0.012f, ay + 0.012f, az + 0.012f, brass);
+            }
+            addSolidBox(pr, ex - 0.03f, hy - 0.05f, ez - 0.03f, ex + 0.03f, hy - 0.01f, ez + 0.03f, brass);   // cup
+            addSolidBox(pr, ex - 0.018f, hy - 0.01f, ez - 0.018f, ex + 0.018f, hy + 0.07f, ez + 0.018f,
+                        Color{ 255, 196, 120, 60 });                                                        // bulb
+        }
+    }
+}
+
 void World::ensureMesh(int cx, int cz) {
     ChunkData &d = data(cx, cz);
     if (d.built) return;
@@ -1303,6 +1592,45 @@ void World::ensureMesh(int cx, int cz) {
     const float AOW = 0.55f;   // reach across the floor / ceiling
     const float AOH = 0.48f;   // creep up / down the wall face
     const float AOC = 0.30f;   // ceiling creases start partway down the gradient (softer)
+    // ---- the Red Rooms, bleeding through. On Level 0 a cursed noclip wall
+    // leads to the red places, and the lore's warning signs are that the
+    // colour shifts toward red and the paper starts peeling to crimson as you
+    // get near one. So collect the cursed exits in this chunk and its eight
+    // neighbours (an exit's pull reaches ~10 m, less than a chunk) and tint
+    // every wall and floor cell by how close it stands to the nearest.
+    struct RedSrc { float x, z; };
+    RedSrc reds[16]; int nred = 0;
+    if (level == 0) {
+        for (int ncx = cx - 1; ncx <= cx + 1; ncx++) for (int ncz = cz - 1; ncz <= cz + 1; ncz++) {
+            ChunkData &nd = data(ncx, ncz);
+            for (int a = 0; a < CCELLS; a++) for (int b = 0; b < CCELLS; b++) {
+                int gi = ncx * CCELLS + a, gk = ncz * CCELLS + b;
+                bool n = nd.wallN[a][b] == WALL_EXIT, w = nd.wallW[a][b] == WALL_EXIT;
+                if ((!n && !w) || !cursedExit(gi, gk) || nred >= 16) continue;
+                reds[nred++] = { gi * CELL + (n ? 1.0f : 0.0f), gk * CELL + (n ? 0.0f : 1.0f) };
+            }
+        }
+    }
+    auto redAt = [&](float x, float z) {
+        float best = 0;
+        for (int r = 0; r < nred; r++) {
+            float dx = x - reds[r].x, dz = z - reds[r].z;
+            float t = 1.0f - sqrtf(dx * dx + dz * dz) / 11.0f;
+            if (t > best) best = t;
+        }
+        return best * best * (3 - 2 * best);
+    };
+    // Multiplied into the texture, so it can only take colour away: the
+    // yellow ground loses green and blue and goes to rust, then to the dull
+    // crimson the Red Rooms are papered in. Alpha stays 255 so the relief does.
+    auto redTint = [&](float x, float z) {
+        float t = redAt(x, z);
+        // rust at the edge of the pull, crimson and dim at its heart
+        float t2 = t * t;
+        return Color{ (unsigned char)(255 - 30 * t - 60 * t2), (unsigned char)(255 - 150 * t - 72 * t2),
+                      (unsigned char)(255 - 110 * t - 90 * t2), 255 };
+    };
+    if (nred) { wa.tint = redTint; fl.tint = redTint; }
     if (level == 2) {
         Color water = { 72, 172, 162, 128 };
         for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
@@ -1371,6 +1699,8 @@ void World::ensureMesh(int cx, int cz) {
         for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
             float gx = wx + i * CELL, gz = wz + kk * CELL;
             float fy = d.elev[i][kk] * ELEV_UNIT;
+            // the Manila Room lays its own floorboards (addManilaRoom)
+            if (d.manila && i >= MANILA_LO && i <= MANILA_HI && kk >= MANILA_LO && kk <= MANILA_HI) continue;
             if (level == 0 && softAt(cx * CCELLS + i, cz * CCELLS + kk)) {
                 // A rotten patch, and the one thing on Level 0 that will drop you
                 // a floor. It used to be two flat decal quads: a black rectangle
@@ -1495,13 +1825,19 @@ void World::ensureMesh(int cx, int cz) {
     }
     // light panels on the global grid (emissive: alpha=0); spacing varies per level
     Color panel = {255,255,255,0};
-    float ls = level == 1 ? 12.0f : 8.0f;
+    float ls = LEVELS[level].ls;   // the same grid the shader lights from (uLS)
     int g0x = (int)floorf(wx / ls), g1x = (int)floorf((wx + CHUNK) / ls);
     int g0z = (int)floorf(wz / ls), g1z = (int)floorf((wz + CHUNK) / ls);
     for (int gx = g0x; gx <= g1x; gx++)
         for (int gz = g0z; gz <= g1z; gz++) {
             float lx = gx * ls + ls * 0.5f, lz = gz * ls + ls * 0.5f, hp = 0.62f;
             if (lx < wx || lx >= wx + CHUNK || lz < wz || lz >= wz + CHUNK) continue;
+            // No tubes in the Manila Room: it is lit by its chandelier, and the
+            // shader masks these same panels dark through uRoomMask.
+            if (d.manila) {
+                float mx = wx + (MANILA_HI + 1 - 2) * CELL, mz = wz + (MANILA_HI + 1 - 2) * CELL;
+                if (fabsf(lx - mx) < 4.0f && fabsf(lz - mz) < 4.0f) continue;
+            }
             // The fitting hangs in the ceiling, so it goes wherever the ceiling
             // of the cell it is centred in went. The tray is 1.38 m across and a
             // cell is 2 m, so it can overhang a neighbour at another height;
@@ -1513,6 +1849,23 @@ void World::ensureMesh(int cx, int cz) {
             // now matches uLY instead of floating 10 cm above its own light.
             Color rim = level == 2 ? Color{230,232,223,254} : Color{156,153,140,254};
             const float outer = 0.69f, lip = 0.035f;
+            if (level == 0) {
+                // Level 0's fittings are lay-in troffers, dropped into the tile
+                // grid the way they are in the photograph: the diffuser sits
+                // flush with the ceiling behind a hairline frame, not in a
+                // box hanging under it. The light plane (uLY) stays 12 cm
+                // down, which nobody can see and every light calculation in
+                // both shader and CPU mirror already agrees on.
+                float yf = wallTop - 0.010f;
+                Color frame = { 186, 182, 166, 254 };
+                addSolidBox(pr, lx-outer, yf-0.008f, lz-outer, lx-hp, wallTop, lz+outer, frame);
+                addSolidBox(pr, lx+hp, yf-0.008f, lz-outer, lx+outer, wallTop, lz+outer, frame);
+                addSolidBox(pr, lx-hp, yf-0.008f, lz-outer, lx+hp, wallTop, lz-hp, frame);
+                addSolidBox(pr, lx-hp, yf-0.008f, lz+hp, lx+hp, wallTop, lz+outer, frame);
+                ce.quad({lx-hp,yf,lz-hp},{lx-hp,yf,lz+hp},{lx+hp,yf,lz+hp},{lx+hp,yf,lz-hp},{0,-1,0},
+                        {0,0},{0,1},{1,1},{1,0},panel);
+                continue;
+            }
             addSolidBox(pr, lx-outer, yq-lip, lz-outer, lx-hp, wallTop, lz+outer, rim);
             addSolidBox(pr, lx+hp, yq-lip, lz-outer, lx+outer, wallTop, lz+outer, rim);
             addSolidBox(pr, lx-hp, yq-lip, lz-outer, lx+hp, wallTop, lz-hp, rim);
@@ -1571,6 +1924,10 @@ void World::ensureMesh(int cx, int cz) {
             gl.quad({gx+0.45f,nb+1.0f,gz},{gx+1.55f,nb+1.0f,gz},{gx+1.55f,nb+2.1f,gz},{gx+0.45f,nb+2.1f,gz},
                     {0,0,-1},{0,1},{1,1},{1,0},{0,0}, glass);
             }
+        }
+        else if (nv == WALL_EXIT && level == 0) {   // Level 0: a wall you can noclip through
+            addBoxSides(wa, gx - WT, nb, gz - WT, gx + CELL + WT, nt, gz + WT, false, 0,
+                        noclipCol(cursedExit(gi0, gk0)));
         }
         else if (nv == WALL_EXIT) {   // exit doorway on x-running wall
             addBoxSides(wa, gx - WT, nb, gz - WT, gx + 0.35f, nt, gz + WT);
@@ -1659,6 +2016,10 @@ void World::ensureMesh(int cx, int cz) {
                     {1,0,0},{0,1},{1,1},{1,0},{0,0}, glass);
             }
         }
+        else if (wv == WALL_EXIT && level == 0) {   // see the x-running case
+            addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wt2, gz + CELL + WT, false, 0,
+                        noclipCol(cursedExit(gi0, gk0)));
+        }
         else if (wv == WALL_EXIT) {   // exit doorway on z-running wall
             addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wt2, gz + 0.35f);
             addBoxSides(wa, gx - WT, wb, gz + 1.65f, gx + WT, wt2, gz + CELL + WT);
@@ -1707,12 +2068,12 @@ void World::ensureMesh(int cx, int cz) {
             // Thin timber trim catches grazing light. Keep the extrusion within
             // the collision clearance; no separate obstacle or draw call.
             Color trim = level == 0 ? Color{91, 71, 39, 254} : Color{67, 41, 34, 254};
-            if (nv == WALL_SOLID) {
+            if (nv == WALL_SOLID || (level == 0 && nv == WALL_EXIT)) {
                 float tS = floorY(gi0, gk0 - 1), tN = floorY(gi0, gk0);
                 addSolidBox(pr, gx, tS, gz-WT-0.025f, gx+CELL, tS + 0.13f, gz-WT, trim);
                 addSolidBox(pr, gx, tN, gz+WT, gx+CELL, tN + 0.13f, gz+WT+0.025f, trim);
             }
-            if (wv == WALL_SOLID) {
+            if (wv == WALL_SOLID || (level == 0 && wv == WALL_EXIT)) {
                 float tW = floorY(gi0 - 1, gk0), tE = floorY(gi0, gk0);
                 addSolidBox(pr, gx-WT-0.025f, tW, gz, gx-WT, tW + 0.13f, gz+CELL, trim);
                 addSolidBox(pr, gx+WT, tE, gz, gx+WT+0.025f, tE + 0.13f, gz+CELL, trim);
@@ -1720,7 +2081,11 @@ void World::ensureMesh(int cx, int cz) {
         }
         // baked AO around this cell's walls: floor strip, ceiling strip, and a
         // wall-face strip on both sides (solid walls and windows; doorways stay clean)
-        if (blocksEdge(nv)) {
+        // A noclip wall has to be indistinguishable from its neighbours by
+        // everything except the glitch, so it gets their creases too.
+        bool nvWall = blocksEdge(nv) || (level == 0 && nv == WALL_EXIT);
+        bool wvWall = blocksEdge(wv) || (level == 0 && wv == WALL_EXIT);
+        if (nvWall) {
             float fyS = floorY(gi0, gk0 - 1) + 0.005f, fyN = floorY(gi0, gk0) + 0.005f;
             // Ceiling creases follow each side's own ceiling. Pinned to a fixed
             // wallH they detach the moment the floor moves, and a crease hanging
@@ -1737,7 +2102,7 @@ void World::ensureMesh(int cx, int cz) {
             aoStrip({ x0, cyS + 0.005f, gz - WT - 0.006f }, { x1, cyS + 0.005f, gz - WT - 0.006f }, { 0, -AOH, 0 }, { 0, 0, -1 }, AOC);   // and down from the ceiling
             aoStrip({ x0, cyN + 0.005f, gz + WT + 0.006f }, { x1, cyN + 0.005f, gz + WT + 0.006f }, { 0, -AOH, 0 }, { 0, 0, 1 }, AOC);
         }
-        if (blocksEdge(wv)) {
+        if (wvWall) {
             float fyW = floorY(gi0 - 1, gk0) + 0.005f, fyE = floorY(gi0, gk0) + 0.005f;
             float cyW = ceilY(gi0 - 1, gk0) - 0.005f, cyE = ceilY(gi0, gk0) - 0.005f;
             float z0 = gz, z1 = gz + CELL;
@@ -1954,6 +2319,10 @@ void World::ensureMesh(int cx, int cz) {
                               cx * CCELLS + i, cz * CCELLS + kk };
             addProp(dd.prop[i][kk], site, seed, level, pr, ce, ao);
         }
+    }
+    if (d.manila) {
+        float mx = wx + (MANILA_HI + 1 - 2) * CELL, mz = wz + (MANILA_HI + 1 - 2) * CELL;
+        addManilaRoom(pr, fx, ao, mx, mz, ceilY(cellOf(mx), cellOf(mz)), ih(cx, cz, seed ^ 0x3A11u));
     }
     if (level == 3) {
         // Service pipework. Runs are decided per *row* rather than per cell, so a

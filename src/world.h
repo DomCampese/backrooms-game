@@ -88,7 +88,21 @@ enum PropKind : uint8_t {
     PROP_SHELVING,       // 13 steel shelving
     PROP_COOLER,         // 14 water cooler
     PROP_PLANT,          // 15 potted plant
+    // 16 the Manila Room's octagonal table, two chairs and the cupboard under
+    // it. Anchored on room cell (7,7) but built centred on that cell's far
+    // corner, which is the middle of the room — the lore has the table
+    // "perfectly centered". See World::generate and addManilaRoom.
+    PROP_MANILA_TABLE,
 };
+
+// The Manila Room (Level 0): "an isolated eight-by-eight-meter room" — 4x4
+// cells — "with thick walls", manila wallpaper, wooden floorboards, one
+// octagonal table, two chairs and "a wooden entrance door on each wall". It is
+// found by "walking an almighty distance in any direction", so it is rare and
+// never in the chunks around where you wake. One chunk in MANILA_RATE carries
+// one, in room cells MANILA_LO..MANILA_HI on both axes.
+constexpr uint32_t MANILA_RATE = 20;
+constexpr int MANILA_LO = 6, MANILA_HI = 9;
 
 // Slots in ChunkData::meshes. Each is baked separately because each needs a
 // different material or a different draw order (see Game::renderScene).
@@ -135,6 +149,7 @@ struct ChunkData {
     int8_t lockI = -1, lockK = -1;   // cell owning the locked edge, chunk-local
     uint8_t lockWest = 0;            // 0: its north edge, 1: its west edge
     int8_t keyI = -1, keyK = -1;     // where the key for it lies, chunk-local
+    bool manila = false;             // this chunk holds the Manila Room (Level 0)
     bool built = false;
     Mesh meshes[MESH_COUNT] = {};
 };
@@ -184,6 +199,7 @@ struct World {
     unsigned visit = 0;
     float wallH = 3.0f;
     bool exitTest = false;   // BACKROOMS_EXITS env: exits everywhere, for visual testing
+    bool manilaTest = false; // BACKROOMS_MANILA env: a Manila Room in the chunk east of spawn
     std::unordered_map<uint64_t, ChunkData> chunks;
 
     static uint64_t key(int cx, int cz) { return ((uint64_t)(uint32_t)cx << 32) | (uint32_t)cz; }
@@ -218,6 +234,12 @@ struct World {
     // BFS the cell grid from (si,sk) toward (ti,tk); fills the next cell to move
     // to in (outI,outK). false if no route within budget (fall back to a beeline).
     bool pathStep(int si, int sk, int ti, int tk, int &outI, int &outK);
+    // Level 0 only: is this cell inside the Manila Room?
+    bool manilaAt(int ci, int ck);
+    // The centre (world metres) of the Manila Room in this point's chunk or
+    // one of its eight neighbours, if there is one. Rooms are at least a chunk
+    // apart, so there is never more than one in reach of the player.
+    bool manilaNear(float x, float z, float &rx, float &rz);
     // Level 0 only: a rare patch of carpet that has stopped being a floor
     bool softAt(int ci, int ck);
     // How far the rotten patch in this cell has sunk at a continuous point in

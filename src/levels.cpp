@@ -5,7 +5,18 @@
 // One row per level. The columns are in LevelCfg's declaration order:
 //     wallH   ls   dead  lightMul fogDen gloss   lightCol            amb                     fogCol                  name
 const LevelCfg LEVELS[NLEVELS] = {
-    { 3.0f,  8.0f, 0.06f, 1.00f, 0.055f, 0.06f, {1.00f,0.94f,0.74f}, {0.045f,0.042f,0.030f}, {0.140f,0.125f,0.070f}, "LEVEL 0" },
+    // Level 0 — "Threshold". The 2002 photograph and every render made from it
+    // have a drop ceiling crowded with fittings, a few of them out: fluorescent
+    // trays every other ceiling tile, not one lonely panel per 8 m square, which
+    // is what this row used to be and why the level's ceiling read as dark
+    // board with the occasional light in it. A 4 m grid is four times the
+    // fittings; a fifth of them are dead and the rest vary in output, so the
+    // pools of light are uneven the way the lore's "inconsistently placed
+    // fluorescent lighting" asks for. lightMul comes down because a point
+    // under the grid is now summing four near panels instead of one. The
+    // carpet's wet patches are the last column (see uWet in shaders.cpp).
+    { 3.0f,  4.0f, 0.20f, 0.36f, 0.050f, 0.06f, {1.00f,0.95f,0.76f}, {0.045f,0.042f,0.030f}, {0.140f,0.125f,0.070f}, "LEVEL 0 · THRESHOLD",
+      0.42f, 0.16f, 1.0f },
     { 4.2f, 12.0f, 0.30f, 0.85f, 0.075f, 0.22f, {0.72f,0.80f,0.95f}, {0.016f,0.017f,0.022f}, {0.018f,0.020f,0.026f}, "LEVEL 1" },
     // Tall vaulted bathing halls: warm diffuse light over pristine ceramic, with
     // restrained exposure so white grout and underwater steps stay readable.
@@ -29,20 +40,29 @@ const int EXIT_NEXT[NLEVELS] = { 1, 2, 4, 0, 0 };
 // lighting model with two implementations, and when they drift what you see is
 // sprites lit for a different room than the one they are standing in.
 static const float PANEL_HALF_CPU = 0.62f;   // same panel rectangle as the shader
+// uRoomMask and uLamp, mirrored: Game sets both every frame alongside the
+// shader uniforms, so a sprite in the Manila Room is lit by its chandelier
+// and not by the tubes that aren't there.
+static float gMaskCPU[4] = { 0, 0, 0, 0 }, gLampCPU[4] = { 0, 0, 0, 0 };
+void setLightExtrasCPU(const float mask[4], const float lamp[4]) {
+    for (int i = 0; i < 4; i++) { gMaskCPU[i] = mask[i]; gLampCPU[i] = lamp[i]; }
+}
 static float lhashCPU(float gx, float gz) {
     float v = sinf(gx * 127.1f + gz * 311.7f) * 43758.5453f;
     return v - floorf(v);
 }
 float lightAtCPU(float x, float y, float z, float blackout,
                         float ls, float ly, float dead, float mul, float ambLum,
-                        float entX, float entZ, float entDark) {
+                        float entX, float entZ, float entDark, float vary) {
     float bx = floorf((x - ls * 0.5f) / ls + 0.5f), bz = floorf((z - ls * 0.5f) / ls + 0.5f);
     float sum = 0;
     for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
         float gx = bx + dx, gz = bz + dz;
         float h = lhashCPU(gx, gz);
         if (h < dead) continue;
+        float out = 1.0f - vary * (h * 53.7f - floorf(h * 53.7f));   // same spread as lightState()
         float lx = gx * ls + ls * 0.5f, lz = gz * ls + ls * 0.5f;
+        if (lx >= gMaskCPU[0] && lx <= gMaskCPU[2] && lz >= gMaskCPU[1] && lz <= gMaskCPU[3]) continue;
         // the panel is a rectangle, and the shader shades from the point on it
         // closest to the surface — mirror that, or a sprite standing under a
         // fitting comes out dimmer than the floor it is standing on
@@ -65,10 +85,15 @@ float lightAtCPU(float x, float y, float z, float blackout,
         // edge-on would get — rather than a lambert against a made-up normal.
         float w = clampf(PANEL_HALF_CPU / sqrtf(d2 + PANEL_HALF_CPU * PANEL_HALF_CPU), 0.10f, 0.80f);
         float ndl = (0.55f + w) / (1.0f + w);
-        sum += st / (1.0f + 0.22f * d2) * 5.4f * mul * ndl * wx * wz;
+        sum += out * st / (1.0f + 0.22f * d2) * 5.4f * mul * ndl * wx * wz;
     }
     float ambT = ambLum * 1.4f;
     ambT *= 1.0f + 5.5f / (1.0f + 40.0f * ambT);   // same toe compensation as the shader
+    if (gLampCPU[3] > 0.01f) {   // the chandelier (no occlusion here: sprites near it are in the room)
+        float dx = gLampCPU[0] - x, dy = gLampCPU[1] - y, dz = gLampCPU[2] - z;
+        float d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 < 90.0f) sum += gLampCPU[3] * 3.2f / (1.0f + 0.26f * d2) * 0.6f;
+    }
     float lit = sum * blackout + ambT;
     if (entDark > 0.01f) {   // and the surface pool of shadow around it
         float fd = sqrtf((x - entX) * (x - entX) + (z - entZ) * (z - entZ));
@@ -82,4 +107,20 @@ float lightAtCPU(float x, float y, float z, float blackout,
     lit *= 0.70f;
     lit = (lit * (2.51f * lit + 0.03f)) / (lit * (2.43f * lit + 0.59f) + 0.14f);
     return clampf(lit, 0.0f, 1.0f);
+}
+
+// The shader's damp-patch field (uWet in WORLD_FS), on the CPU: the same
+// vnoise over the same hash at the same two scales and the same threshold, so
+// a squelch underfoot lands where the carpet looks wet. GPU and CPU sin() differ
+// in the last bits at large arguments; for a footstep that is nothing.
+static float vnoiseCPU(float x, float z) {
+    float ix = floorf(x), iz = floorf(z), fx = x - ix, fz = z - iz;
+    fx = fx * fx * (3 - 2 * fx); fz = fz * fz * (3 - 2 * fz);
+    float a = lhashCPU(ix, iz), b = lhashCPU(ix + 1, iz), c = lhashCPU(ix, iz + 1), d = lhashCPU(ix + 1, iz + 1);
+    return (a + (b - a) * fx) + ((c + (d - c) * fx) - (a + (b - a) * fx)) * fz;
+}
+float carpetWetCPU(float x, float z) {
+    float wn = vnoiseCPU(x * 0.42f, z * 0.42f) * 0.62f + vnoiseCPU(x * 1.35f + 17.0f, z * 1.35f + 17.0f) * 0.38f;
+    float t = clampf((wn - 0.60f) / 0.12f, 0.0f, 1.0f);
+    return t * t * (3 - 2 * t);
 }
