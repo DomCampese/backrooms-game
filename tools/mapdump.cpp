@@ -14,6 +14,7 @@
 //
 #include "../src/world.h"
 #include "../src/util.h"
+#include "../src/levels.h"
 
 #include <algorithm>
 #include <cmath>
@@ -45,10 +46,10 @@ bool coinAt(World &w, int a, int b) {
 }
 
 struct Args {
-    int level = 0, cells = 129, samples = 4000;
+    int level = 0, cells = 129, samples = 4000, storey = 0;
     unsigned visit = 0;
     unsigned seed = 1337;
-    bool plan = true, listExits = false;
+    bool plan = true, listExits = false, listStairs = false;
     int px = 0, pz = 0, pw = 48, ph = 32;
 };
 
@@ -73,8 +74,8 @@ char cellGlyph(World &w, int a, int b) {
 }
 
 const char *usage =
-    "usage: mapdump [--level N] [--seed S] [--cells N] [--samples N]\n"
-    "               [--plan X Z W H] [--no-plan] [--list-exits]\n";
+    "usage: mapdump [--level N] [--seed S] [--storey N] [--cells N] [--samples N]\n"
+    "               [--plan X Z W H] [--no-plan] [--list-exits] [--list-stairs]\n";
 
 }  // namespace
 
@@ -86,10 +87,12 @@ int main(int argc, char **argv) {
         if      (k == "--level")   a.level = num(0);
         else if (k == "--seed")    a.seed = (unsigned)num(1337);
         else if (k == "--visit")   a.visit = (unsigned)num(0);
+        else if (k == "--storey")  a.storey = num(0);
         else if (k == "--cells")   a.cells = num(129);
         else if (k == "--samples") a.samples = num(4000);
         else if (k == "--no-plan") a.plan = false;
         else if (k == "--list-exits") a.listExits = true;
+        else if (k == "--list-stairs") a.listStairs = true;
         else if (k == "--plan")    { a.px = num(0); a.pz = num(0); a.pw = num(48); a.ph = num(32); }
         else { fputs(usage, stderr); return 2; }
     }
@@ -101,10 +104,15 @@ int main(int argc, char **argv) {
     // wallH would normally come from the level table via applyLevel; only
     // gatherCellAABBs uses it and nothing here reads the height.
     w.wallH = 3.0f;
+    // The storey pitch does come from the table: it is what turns the stairs
+    // and openings on, and a harness that left it at zero would describe a
+    // one-floor Level 0 that the game no longer ships.
+    w.storeyH = (a.level >= 0 && a.level < NLEVELS) ? LEVELS[a.level].storeyH : 0.0f;
+    w.setStorey(a.storey);
 
     const int N = a.cells, half = N / 2;
-    printf("mapdump  level %d  seed %u  %dx%d cells (%.0f x %.0f m)\n",
-           a.level, a.seed, N, N, N * CELL, N * CELL);
+    printf("mapdump  level %d  seed %u  storey %d  %dx%d cells (%.0f x %.0f m)\n",
+           a.level, a.seed, a.storey, N, N, N * CELL, N * CELL);
     if (a.visit) printf("  (visit %u)\n", a.visit);
 
     // ---- floorplan. Each cell is two characters wide so the west edge has
@@ -121,11 +129,11 @@ int main(int argc, char **argv) {
                 uint8_t nv = w.wallNVal(x, b);
                 top += '+';
                 top += (nv == WALL_SOLID) ? "--" : (nv == WALL_DOOR) ? " ," :
-                       (nv == WALL_LOCKED) ? "LL" :
+                       (nv == WALL_LOCKED) ? "LL" : (nv == WALL_RAIL) ? ".." :
                        (nv == WALL_WINDOW) ? "==" : (nv == WALL_EXIT) ? "EE" : "  ";
                 uint8_t wv = w.wallWVal(x, b);
                 mid += (wv == WALL_SOLID) ? '|' : (wv == WALL_DOOR) ? ',' :
-                       (wv == WALL_LOCKED) ? 'L' :
+                       (wv == WALL_LOCKED) ? 'L' : (wv == WALL_RAIL) ? ':' :
                        (wv == WALL_WINDOW) ? '=' : (wv == WALL_EXIT) ? 'E' : ' ';
                 char g = cellGlyph(w, x, b);
                 if (g == ' ' && w.keyAt(x, b))   g = 'k';
@@ -133,6 +141,11 @@ int main(int argc, char **argv) {
                 if (g == ' ' && w.poolAt(x, b))  g = 'w';
                 float fy = w.floorY(x, b);
                 char h = (fabsf(fy) < 0.05f) ? ' ' : (fy > 0 ? '^' : '_');
+                // storeys: S a flight, O open to the storey above, v a hole
+                // down one you can walk (a flight comes up it), X a drop
+                uint8_t vf = w.vflagAt(x, b);
+                if (g == ' ') g = (vf & VF_STAIR) ? 'S' : (vf & VF_HOLE) ? ((vf & VF_WALKHOLE) ? 'v' : 'X') : ' ';
+                if (h == ' ' && (vf & VF_OPENUP)) h = 'O';
                 mid += g;
                 mid += h;
             }
@@ -265,14 +278,22 @@ int main(int argc, char **argv) {
     std::vector<unsigned char> seen((size_t)N * N, 0);
     auto idx = [&](int x, int z) { return (size_t)(z + half) * N + (x + half); };
     std::vector<std::pair<int,int>> stack;
+    // Not floor: a pillar, or a hole with no flight coming up it (the void of
+    // an atrium, railed off). Counting a void as floor made every one of its
+    // cells a sealed one-cell "pocket".
+    auto notFloor = [&](int x, int z) {
+        if (w.pillarAt(x, z)) return true;
+        uint8_t vf = w.storeyH > 0.0f ? w.vflagAt(x, z) : 0;
+        return (vf & VF_HOLE) && !(vf & VF_WALKHOLE);
+    };
     long openCells = 0;
     for (int b = -half; b <= half; b++) for (int x = -half; x <= half; x++)
-        if (!w.pillarAt(x, b)) openCells++;
+        if (!notFloor(x, b)) openCells++;
     // start from the first open cell at the centre, the way a run does
     for (int r = 0; r < half && stack.empty(); r++)
         for (int b = -r; b <= r && stack.empty(); b++)
             for (int x = -r; x <= r && stack.empty(); x++)
-                if (!w.pillarAt(x, b)) { stack.push_back({ x, b }); seen[idx(x, b)] = 1; }
+                if (!notFloor(x, b)) { stack.push_back({ x, b }); seen[idx(x, b)] = 1; }
     long reached = 0;
     while (!stack.empty()) {
         auto [x, z] = stack.back();
@@ -282,7 +303,7 @@ int main(int argc, char **argv) {
         for (int k = 0; k < 4; k++) {
             int nx = x + dx[k], nz = z + dz[k];
             if (nx < -half || nx > half || nz < -half || nz > half) continue;
-            if (seen[idx(nx, nz)] || w.pillarAt(nx, nz)) continue;
+            if (seen[idx(nx, nz)] || notFloor(nx, nz)) continue;
             if (!w.canStep(x, z, nx, nz)) continue;
             seen[idx(nx, nz)] = 1;
             stack.push_back({ nx, nz });
@@ -295,7 +316,7 @@ int main(int argc, char **argv) {
     long pockets = 0, biggest = 0, inPockets = 0;
     int bigX = 0, bigZ = 0;
     for (int b = -half; b <= half; b++) for (int x = -half; x <= half; x++) {
-        if (seen[idx(x, b)] || w.pillarAt(x, b)) continue;
+        if (seen[idx(x, b)] || notFloor(x, b)) continue;
         long size = 0;
         bool touchesEdge = false;   // see below
         std::vector<std::pair<int,int>> q{ { x, b } };
@@ -309,7 +330,7 @@ int main(int argc, char **argv) {
             for (int k = 0; k < 4; k++) {
                 int nx = cx2 + dx[k], nz = cz2 + dz[k];
                 if (nx < -half || nx > half || nz < -half || nz > half) continue;
-                if (seen[idx(nx, nz)] || w.pillarAt(nx, nz)) continue;
+                if (seen[idx(nx, nz)] || notFloor(nx, nz)) continue;
                 if (!w.canStep(cx2, cz2, nx, nz)) continue;
                 seen[idx(nx, nz)] = 1;
                 q.push_back({ nx, nz });
@@ -331,6 +352,23 @@ int main(int argc, char **argv) {
     printf("  largest pocket        %ld cells  (median %ld) at x %d z %d\n",
            biggest, pockets ? inPockets / pockets : 0, bigX, bigZ);
 
+    // ---- the ways up and down from this storey, over the chunks the window
+    // covers. "How far to the nearest stair" is the number a player feels.
+    if (w.storeyH > 0.0f) {
+        int cr = half / CCELLS, chunksN = 0, withWay = 0;
+        int up[4] = {}, down[4] = {};
+        for (int cz = -cr; cz <= cr; cz++) for (int cx = -cr; cx <= cr; cx++) {
+            VertFeat fs[2];
+            int n = w.featuresFor(cx, cz, w.storey, fs, 2);
+            chunksN++;
+            if (n) withWay++;
+            for (int q = 0; q < n; q++) (fs[q].lo == w.storey ? up : down)[fs[q].kind]++;
+        }
+        printf("\nstoreys (%d chunks, %.0f%% with a way up or down)\n", chunksN, 100.0 * withWay / (chunksN ? chunksN : 1));
+        printf("  up                    %d stairwells, %d flights, %d atria\n", up[VK_STAIRWELL], up[VK_STAIR], up[VK_ATRIUM]);
+        printf("  down                  %d stairwells, %d flights, %d atria\n", down[VK_STAIRWELL], down[VK_STAIR], down[VK_ATRIUM]);
+    }
+
     // ---- what is lying about. Densities in m2 per instance read better than
     // percentages here: "one doubloon per 1,753 m2" is the number that showed
     // the floor route was impossible.
@@ -349,6 +387,36 @@ int main(int argc, char **argv) {
     printf("  cells using elevation %6.2f%%\n", 100.0 * (raised + sunk) / cells);
     // Where the exits are, in world metres — the numbers BACKROOMS_POS takes —
     // so a capture can be pointed at one. On Level 0 these are the noclip walls.
+    if (a.listStairs) {
+        // Every vertical feature rising from or arriving at this storey, with a
+        // BACKROOMS_POS that stands you at its foot looking up the flight (or,
+        // for an atrium, at its near edge looking across it).
+        static const char *KIND[] = { "none", "stairwell", "stair", "atrium" };
+        printf("\nvertical features on storey %d (BACKROOMS_POS=x,z,yaw)\n", a.storey);
+        int cr = half / CCELLS + 1;
+        for (int cz = -cr; cz <= cr; cz++) for (int cx = -cr; cx <= cr; cx++) {
+            VertFeat fs[2];
+            int n = w.featuresFor(cx, cz, a.storey, fs, 2);
+            for (int q = 0; q < n; q++) {
+                const VertFeat &f = fs[q];
+                bool rising = f.lo == a.storey;
+                // stand in the approach (or at the arrival, for one arriving here)
+                float u = f.kind == VK_STAIRWELL ? (rising ? 1.0f : 3.0f) : f.wu * CELL * 0.5f;
+                // A stairwell: at its foot (rising) or its head (arriving), in
+                // the shaft, facing up or down the first flight.
+                float v = rising ? (f.kind == VK_STAIRWELL ? 0.8f : 0.2f)
+                                 : (f.kind == VK_STAIRWELL ? 0.8f : f.lv * CELL - 0.6f);
+                Vector3 at = w.featureWorld(f, cx, cz, u, 0, v);
+                Vector3 ahead = w.featureWorld(f, cx, cz, u, 0, v + (rising || f.kind == VK_STAIRWELL ? 1.0f : -1.0f));
+                float yaw = atan2f(ahead.z - at.z, ahead.x - at.x);
+                printf("  %-9s %s  wu %d lv %d dir %d  %s%s  at %.1f,%.1f,%.2f\n", KIND[f.kind],
+                       rising ? "up  " : "down", f.wu, f.lv, f.dir,
+                       f.kind == VK_ATRIUM && f.stairU >= 0 ? "with flight " : "",
+                       f.kind == VK_STAIR ? (f.wallSide ? "against a wall" : "free-standing") : "",
+                       at.x, at.z, yaw);
+            }
+        }
+    }
     if (a.listExits) {
         printf("\nexits (x z, world metres; * = cursed)\n");
         for (int k = -half; k <= half; k++) for (int i = -half; i <= half; i++) {

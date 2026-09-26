@@ -1,3 +1,110 @@
+# Storeys (September 2026)
+
+Level 0 is no longer one floorplan. The Threshold article's wanderers stumble
+"through mile after mile of randomly segmented rooms, hallways, and stairs",
+and the photograph it began with is of a building's second floor, so Level 0
+is now a stack of floors joined by enclosed stairwells, straight flights under
+openings in the ceiling, and double-height atria railed round on the floor
+above (CREDITS.md). `LevelCfg::storeyH` is the floor-to-floor pitch: 4.32 m on
+Level 0 (24 risers of 180 mm), 0 on every other level, which is how they stay
+byte-identical. How it fits together, and what will bite:
+
+- **Every floor is a whole maze, and the one you are on is at y = 0.** The
+  engine's 2D machinery (collision, BFS, line of sight, the shader's shadow
+  march) is untouched and works on one storey in local coordinates. The others
+  live in `World::layers` and are drawn translated by a pitch. Crossing the
+  middle of a flight (`py > H/2 + 0.1`, or below `-H/2 - 0.1` on the way down)
+  calls `Game::changeStorey`, which swaps the chunk maps and rebases *everything
+  with a position* by one pitch: player, eye, fall height, flares, the tape
+  deck, bullets, impacts, coins, confetti, dogs, the hunter. **Add a new
+  positional thing and it goes in that list**, or it jumps a storey the moment
+  you cross one.
+- **`World::qs` is the storey the accessors read**, not `storey`. `data()`,
+  `generate()` and the mesher all go through it, and `StoreyScope` moves it for
+  a scope (meshing the floor below, looking down a hole, building the grid of
+  the floor above). `sseed()` is the per-storey seed; storey 0 keeps the bare
+  seed, so a fresh run opens on exactly the maze it always did and every capture
+  away from a feature is pixel-identical to before. Use `sseed()`, not `seed`,
+  anywhere the generator or mesher hashes.
+- **Features are pure functions of (chunk, pair of storeys)** — `pairFeature`
+  hashes the seed, level, visit and coordinates and never reads a floorplan, so
+  both storeys stamp their half of the same stairwell without seeing each other,
+  the way neighbouring chunks meet at a seam. The pair's parity picks the chunk
+  half (x 2..6 or 9..13), so the feature rising from a storey and the one
+  arriving at it never overlap. **The one-cell gap between the halves is load
+  bearing**: with 2..7 and 8..13 two footprints could touch, the storey carrying
+  both stamped a stairwell wall over the neighbour's rail, the storeys either
+  side kept the rail, and the regression's boundary probe saw a body pushed 3 cm
+  differently either side of the switch.
+- **Protected edges** (`ChunkData::prot`, bit 0 N, bit 1 W) are the feature's
+  walls, rails and doors. Connectivity punching, `tidyLine`'s door thinning, the
+  locked door and the noclip exits all skip them — each of those had a way of
+  turning a stairwell wall into a doorway on one floor only. A new pass that
+  edits edges after the stamp must skip them too.
+- **Cell flags** (`VertFlag`): `VF_STAIR` (the floor is a flight, `stairY`),
+  `VF_OPENUP` (no ceiling), `VF_HOLE` (no floor), `VF_WALKHOLE` (a flight comes
+  up through the hole), `VF_KEEP` (feature or margin: place nothing),
+  `VF_NOWALK` (out of the 2D floor graph). The regression asserts the pair
+  agrees: OPENUP below ⇔ HOLE above, a flight below ⇒ WALKHOLE above. The
+  stairwell's foot is deliberately *plain floor* (OPENUP only), because
+  `findOpenSpot` refuses stair cells and an actor had nowhere to stand at the
+  bottom of the shaft.
+- **Rails are `WALL_RAIL`**: `blocksEdge` yes, `blocksLight` no, an AABB with
+  `seeThrough` that `lineOfSight` ignores. Walls, jambs, pillars and rails report
+  `FULL_H` as their top — an actor on a flight is well above a 3 m wall top, so
+  `wallH` no longer means "too tall to step over". Rail boxes stop at the edge
+  ends; an overhang (like the partitions have) poked into the next cell and made
+  the storeys disagree at the corner of an opening.
+- **`groundAt` looks down holes**: on a `VF_HOLE` cell it recurses into storey
+  `qs - 1` (up to `STOREY_REACH`), so a fall into an atrium lands where the floor
+  below is. Landing calls `Game::landFrom`: about 0.4 of the health meter for
+  one storey, most of it for two.
+- **Occupancy is RGBA**: byte 0 your storey, 1 the one below, 2 the one above.
+  Bit 3 = no fitting at this cell's min corner (it would hang in an opening),
+  bit 4 = no ceiling here, bit 5 = a hole touches the corner, bit 6 = one of
+  those is within reach of the nine fittings the shader sums here. The shader
+  picks the byte by `gRel` (`floor((y + 0.3) / H)`), lights OPENUP cells with a
+  second pass over the storey above's fittings, and hashes each storey's tubes
+  with its own offset (`storeyOffset` ⇔ `storeyHashOffset` in levels.cpp — change
+  both). `lightAtCPU` mirrors all of it through `StoreyLightCPU`.
+- **Bit 6 is a performance gate and must be conservative.** Looking up all nine
+  fittings for every fragment cost 13% of the frame on llvmpipe; now only cells
+  near an opening pay. If a fragment's nine fittings could include a missing
+  one and bit 6 is clear, that fragment is lit by a fitting that is not there.
+  The radius is `ceil(0.75 * ls) + 2` cells: 1.5 pitches, one for rounding, one
+  for the shadow lookup's 16 cm bias.
+- **Other storeys are drawn only through an opening you can see.** Outside a
+  footprint the slab is closed (ceiling below, floor above, fascia round the
+  edge), so `renderScene` projects each candidate chunk's box from the eye onto
+  the plane of the upper floor and draws it only if that overlaps a footprint.
+  The frustum alone let 22 chunks of other storeys in behind 9 of this one.
+  Stacked flights chain to ±2 storeys through both openings. A new kind of
+  opening that is *not* inside a feature footprint breaks this.
+- **Wallpaper on tall walls.** The L0 tile has its baseboard baked into the
+  bottom, so a wall that climbs past 3 m (a shaft, the fascia round an opening,
+  the void side of a rail) repeats it at 3 m. `gTallPaper` (storeyed levels
+  only) carries on from the tile's clean middle instead, and faces over a void
+  (`voidFace`) never show the baseboard at all. Every other level keeps its
+  deliberate repeat, byte for byte.
+- **Streaming.** Adjacent storeys are generated and meshed only round chunks
+  that link to them (and ±2 through stacked links); `unloadFar` drops layers
+  more than two storeys away. The regression's `capture()` runs `streamChunks`
+  24 times, not 7: with 7 the storey above had not been meshed yet and every
+  opening in a capture was black.
+- **The landing lamp.** Enclosed stairwells have no ceiling grid over them, so
+  the nearest one within 22 m gets the shader's spare point light (`uLamp`,
+  colour `uLampCol`); the Manila Room's chandelier wins when it is nearer.
+
+Tools: `BACKROOMS_STOREY=n` starts on storey n; with F3 up, PageUp/PageDown
+move a storey where you stand. `./mapdump --visit 1 --list-stairs` prints every
+feature near the origin as a `BACKROOMS_POS` (use `--visit 1`: captures are
+visit 1 and features move with the visit), and `--storey n` dumps another
+floor's plan (`S` stair, `v` walkable hole, `X` void, `O` open above, `:`/`..`
+rails). The regression's storey block checks flag agreement, 11k boundary
+points of `groundAt` and collision agreeing either side of the switch, a climb
+and descent by the real mover with Clark following, the atrium rail, a fall,
+per-storey pickups, and captures `storey-stairwell/stair/atrium.png`.
+
 # Level 1 lore pass (September 2026)
 
 Level 1 follows the wiki's "Habitable Zone" article (CREDITS.md). What changed:
@@ -1396,8 +1503,9 @@ way.
 engine rests on there being exactly one: `floorY` returns a scalar,
 `buildOccupancy` is a byte per cell with no height in it, `lightVis` is a 2D DDA
 and `pathStep` a 2D BFS. Extending height *upward* keeps all of that and still
-buys stairwells, mezzanines and drops; walkable floor directly over walkable
-floor is the one thing it cannot express, and nothing in the fiction needs it.
+buys mezzanines and drops. Walkable floor directly over walkable floor is the
+one thing a cell cannot express, so storeys (top of this file) do not try: each
+floor is its own floorplan, and the one you are on is always at y = 0.
 
 The ceiling is `World::ceilY`, not `wallH`. It follows the floor **up only**:
 `max(floorY, 0) + wallH`. A raised deck has to carry its ceiling with it or its
@@ -1423,8 +1531,9 @@ Two rules fall out of this, and both have already been broken once:
   the low side and a slot over it on the high side, both of which you see
   straight through.
 
-What has *not* moved is the shader's light plane. `uLY` is still one constant
-per level (`wallH - 0.12`), and `lightAtCPU` mirrors that constant, so a fitting
+What has *not* moved is the shader's light plane within a storey. `uLY` is
+one constant per level (`wallH - 0.12`), offset by a whole pitch per storey on
+Level 0, and `lightAtCPU` mirrors that constant, so a fitting
 hanging in a raised bay is drawn where it is but lights the room from where the
 base ceiling is. That is invisible at Level 1's 0.6-1.2 m decks and would not be
 at a whole storey; it needs the panel grid to carry a height, which is a

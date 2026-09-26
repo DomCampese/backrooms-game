@@ -19,6 +19,9 @@ static const Color SILL_COL = { 138, 136, 130, 254 };   // dulled metal threshol
 // world-space bump on it comes out looking like pebbledash (see AGENTS.md).
 static const Color LEAF_COL = { 150, 128, 96, 254 };
 static const Color LOCK_COL = { 206, 194, 140, 254 };
+// Half the thickness of a rail's knee wall. Thinner than a partition (WT) so it
+// reads as a guard and not as a wall someone forgot to finish.
+static const float RAIL_T = 0.075f;
 
 // mesh builder: accumulate textured quads, bake to a raylib Mesh
 struct MB {
@@ -86,11 +89,285 @@ struct MB {
 
 ChunkData &World::data(int cx, int cz) {
     uint64_t k = key(cx, cz);
-    auto it = chunks.find(k);
-    if (it != chunks.end()) return it->second;
-    ChunkData &d = chunks[k];
+    auto &m = layer(qs);
+    auto it = m.find(k);
+    if (it != m.end()) return it->second;
+    ChunkData &d = m[k];
     generate(d, cx, cz);
     return d;
+}
+
+void World::setStorey(int s) {
+    if (s == storey) return;
+    layers[storey] = std::move(chunks);
+    auto it = layers.find(s);
+    if (it != layers.end()) { chunks = std::move(it->second); layers.erase(it); }
+    else chunks.clear();
+    storey = qs = s;
+}
+
+// ---- where the stairs go.
+//
+// One pure function decides, for each chunk and each pair of storeys (p, p+1),
+// whether a flight or an opening joins them there and exactly where. Both
+// storeys' generators call it and stamp their half, so the two halves agree by
+// construction — neither storey ever reads the other's floorplan.
+//
+// Rising and arriving features must not overlap on the storey they share, so
+// the pair's parity picks the half of the chunk it may use: pair p sits in the
+// west half when p is even and the east half when it is odd, and storey s —
+// which carries pair s rising and pair s-1 arriving — therefore always has the
+// two in different halves. Footprints start on even cells: Level 0's 4 m tube
+// grid puts a fitting on every odd cell corner, and an opening whose edge ran
+// along one would take the fitting out and leave a dark stripe beside it.
+bool World::manilaChunk(int cx, int cz, int s) {
+    if (level != 0) return false;
+    if (manilaTest) return s == 0 && cx == 1 && cz == 0;
+    if (abs(cx) <= 1 && abs(cz) <= 1) return false;          // never near where you wake
+    StoreyScope sc(*this, s);
+    return (hash64(key(cx, cz) ^ 0x3A1111AULL ^ (uint64_t)sseed()
+                   ^ ((uint64_t)visit * 0xA24BAED4963EE407ULL)) % MANILA_RATE) == 0;
+}
+
+bool World::pairFeature(int cx, int cz, int p, VertFeat &f) {
+    if (storeyH <= 0.0f) return false;
+    // The arrival: nothing may be stamped over the room you wake in.
+    if (cx == 0 && cz == 0 && (p == 0 || p == -1)) return false;
+    // A Manila Room fills the middle of its chunk on its own storey.
+    if (manilaChunk(cx, cz, p) || manilaChunk(cx, cz, p + 1)) return false;
+    uint64_t h = hash64(key(cx, cz) ^ ((uint64_t)seed * 0x9E3779B97F4A7C15ULL)
+                        ^ ((uint64_t)(uint32_t)p * 0xC2B2AE3D27D4EB4FULL)
+                        ^ ((uint64_t)level * 0x165667B19E3779F9ULL)
+                        ^ ((uint64_t)visit * 0x27D4EB2F165667C5ULL) ^ 0x57A1Au);
+    // A little over a third of chunks join each pair of storeys. Every storey
+    // is in two pairs, so about two chunks in three have a way up or a way down
+    // in them: "randomly segmented rooms, hallways, and stairs", not a building
+    // with one stairwell you have to find.
+    if (h % 100 >= 36) return false;
+    uint32_t r = (uint32_t)(h >> 8);
+    f = VertFeat{};
+    f.lo = p;
+    f.dir = (uint8_t)(r & 3);
+    int kindRoll = (int)((r >> 2) % 100);
+    if (kindRoll < 40)      { f.kind = VK_STAIRWELL; f.wu = 2; f.lv = 4; }
+    else if (kindRoll < 72) { f.kind = VK_STAIR; f.wu = (r >> 9) & 1 ? 2 : 1; f.lv = 6; f.stairU = 0;
+                              f.wallSide = (int8_t)((int)((r >> 10) % 3) - 1); }
+    else if (kindRoll < 86) { f.kind = VK_ATRIUM; f.wu = 4; f.lv = 4; }
+    else                    { f.kind = VK_ATRIUM; f.wu = 4; f.lv = 6; f.stairU = (r >> 11) & 1 ? 3 : 0; }
+    // Footprint on the grid, and where in its half of the chunk it can go. The
+    // room patch is cells 1..13 (the ring corridor has the rest), and every
+    // footprint keeps a cleared margin cell all round, so footprints live in
+    // 2..13: the west half 2..6, the east half 9..13. Not 2..7 and 8..13: two
+    // footprints that touch share an edge, and the storey that carries both
+    // stamps one over the other — a stairwell's wall where the flight beside
+    // it has a rail — while the storeys either side carry only one of them and
+    // keep the rail. The storeys then disagree about that edge, which the
+    // regression's boundary check caught as a body pushed 3 cm differently
+    // either side of the switch.
+    int xlo = (p & 1) ? 9 : 2, xhi = (p & 1) ? 13 : 6;
+    int zlo = 2, zhi = 13;
+    // A flight in a room (lv 6) has one cell of approach before its opening,
+    // so it is the opening's corner that wants the even cell, not the
+    // footprint's. Prefer aligned spots; take any if there are none. A
+    // footprint too long to lie across its half turns to lie along it.
+    int lead = (f.lv == 6) ? 1 : 0;
+    int cands[96][2], nc = 0;
+    for (int turn = 0; turn < 2 && nc == 0; turn++) {
+        if (turn) f.dir = (uint8_t)(f.dir ^ 2);
+        int wx = (f.dir < 2) ? f.wu : f.lv, wz = (f.dir < 2) ? f.lv : f.wu;
+        for (int pass = 0; pass < 2 && nc == 0; pass++)
+            for (int x = xlo; x + wx - 1 <= xhi; x++)
+                for (int z = zlo; z + wz - 1 <= zhi && nc < 96; z++) {
+                    int ax = x + (f.dir >= 2 ? lead : 0), az = z + (f.dir < 2 ? lead : 0);
+                    if (pass == 0 && ((ax & 1) || (az & 1))) continue;
+                    cands[nc][0] = x; cands[nc][1] = z; nc++;
+                }
+    }
+    if (nc == 0) return false;
+    int pick = (int)((r >> 13) % (uint32_t)nc);
+    f.x0 = (int8_t)cands[pick][0]; f.z0 = (int8_t)cands[pick][1];
+    return true;
+}
+
+int World::featuresFor(int cx, int cz, int s, VertFeat *out, int cap) {
+    int n = 0;
+    VertFeat f;
+    if (n < cap && pairFeature(cx, cz, s, f)) out[n++] = f;          // rising from this storey
+    if (n < cap && pairFeature(cx, cz, s - 1, f)) out[n++] = f;      // arriving at it
+    return n;
+}
+
+// The local frame: u across the rise, v along it, from the footprint corner.
+// Four proper rotations of the grid, never a mirror, so a normal computed in
+// the local frame survives the trip to the world one.
+void World::featureLocal(const VertFeat &f, int cx, int cz, float x, float z, float &u, float &v) const {
+    float fx = (cx * CCELLS + f.x0) * CELL, fz = (cz * CCELLS + f.z0) * CELL;
+    float U = f.wu * CELL, V = f.lv * CELL;
+    float lx = x - fx, lz = z - fz;
+    switch (f.dir) {
+    case 0:  u = lx;     v = lz;     break;
+    case 1:  u = U - lx; v = V - lz; break;
+    case 2:  v = lx;     u = U - lz; break;
+    default: v = V - lx; u = lz;     break;
+    }
+}
+Vector3 World::featureWorld(const VertFeat &f, int cx, int cz, float u, float y, float v) const {
+    float fx = (cx * CCELLS + f.x0) * CELL, fz = (cz * CCELLS + f.z0) * CELL;
+    float U = f.wu * CELL, V = f.lv * CELL;
+    switch (f.dir) {
+    case 0:  return { fx + u,     y, fz + v };
+    case 1:  return { fx + U - u, y, fz + V - v };
+    case 2:  return { fx + v,     y, fz + U - u };
+    default: return { fx + V - v, y, fz + u };
+    }
+}
+
+uint8_t World::vflagAt(int ci, int ck) {
+    int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
+    return data(cx, cz).vflag[ci - cx * CCELLS][ck - cz * CCELLS];
+}
+
+// Storey qs's half of one feature. The lower storey (qs == f.lo) gets the
+// flights and an open ceiling; the upper one gets the hole, its rails and the
+// arrival. Walls that run up through both — a stairwell's shaft, the wall a
+// flight is built against — are written on both, on the same edges, so the
+// wall below and the wall above meet at the slab without a seam and collision
+// agrees with itself on either side of the storey boundary.
+void World::stampFeature(ChunkData &d, const VertFeat &f, int cx, int cz) {
+    const bool lower = qs == f.lo;
+    const int W = f.wu, L = f.lv;
+    auto cellOfLocal = [&](int uc, int vc, int &i, int &k) {
+        switch (f.dir) {
+        case 0:  i = f.x0 + uc;           k = f.z0 + vc;           break;
+        case 1:  i = f.x0 + (W - 1 - uc); k = f.z0 + (L - 1 - vc); break;
+        case 2:  i = f.x0 + vc;           k = f.z0 + (W - 1 - uc); break;
+        default: i = f.x0 + (L - 1 - vc); k = f.z0 + uc;           break;
+        }
+    };
+    // Set the edge between two neighbouring local cells (either may lie just
+    // outside the footprint) and protect it.
+    auto edge = [&](int ua, int va, int ub, int vb, uint8_t val) {
+        int i1, k1, i2, k2;
+        cellOfLocal(ua, va, i1, k1); cellOfLocal(ub, vb, i2, k2);
+        if (i1 == i2) { int k = std::max(k1, k2); d.wallN[i1][k] = val; d.prot[i1][k] |= 1; }
+        else          { int i = std::max(i1, i2); d.wallW[i][k1] = val; d.prot[i][k1] |= 2; }
+    };
+    auto flag = [&](int uc, int vc, uint8_t fl) {
+        int i, k; cellOfLocal(uc, vc, i, k);
+        d.vflag[i][k] |= fl;
+        d.vfeat[i][k] = (int8_t)d.nfeat;
+    };
+    // ---- the margin: the footprint and one cell round it are cleared of
+    // furniture, pillars, sunken floors and whatever walls the room partition
+    // ran through them, so a flight never lands in a desk and an opening never
+    // has a wall standing in the middle of it. Edges another feature already
+    // protected are left alone.
+    int ia, ka, ib, kb;
+    cellOfLocal(0, 0, ia, ka); cellOfLocal(W - 1, L - 1, ib, kb);
+    int mx0 = std::min(ia, ib) - 1, mx1 = std::max(ia, ib) + 1;
+    int mz0 = std::min(ka, kb) - 1, mz1 = std::max(ka, kb) + 1;
+    for (int i = mx0; i <= mx1; i++) for (int k = mz0; k <= mz1; k++) {
+        if (i < 0 || k < 0 || i >= CCELLS || k >= CCELLS) continue;
+        d.pillar[i][k] = 0; d.prop[i][k] = PROP_NONE; d.elev[i][k] = 0; d.pool[i][k] = 0;
+        if (k > mz0 && !(d.prot[i][k] & 1)) d.wallN[i][k] = WALL_NONE;
+        if (i > mx0 && !(d.prot[i][k] & 2)) d.wallW[i][k] = WALL_NONE;
+        if (!d.vflag[i][k]) d.vflag[i][k] = VF_KEEP;
+    }
+    for (int uc = 0; uc < W; uc++) for (int vc = 0; vc < L; vc++) flag(uc, vc, VF_KEEP);
+    // Local edges: along a lane (v to v+1) and across lanes (u to u+1).
+    auto sideU = [&](int uc, int vc, int side, uint8_t val) { edge(uc, vc, uc + side, vc, val); };
+    auto endV  = [&](int uc, int vc, int side, uint8_t val) { edge(uc, vc, uc, vc + side, val); };
+    switch (f.kind) {
+    case VK_STAIRWELL: {
+        // A dogleg in a shaft: lane A (u 0) climbs to the half landing across
+        // the far end, lane B (u 1) climbs back to the top landing, which is
+        // the upper storey's floor. Solid round the outside and up the middle
+        // on both storeys — a stair core, not an open well — so the only way in
+        // below is lane A's door and the only way out above is lane B's.
+        for (int uc = 0; uc < 2; uc++) {
+            endV(uc, 0, -1, WALL_SOLID);                 // the near end
+            endV(uc, 3, +1, WALL_SOLID);                 // the far end, behind the half landing
+        }
+        for (int vc = 0; vc < 4; vc++) {
+            sideU(0, vc, -1, WALL_SOLID);                // the two long sides
+            sideU(1, vc, +1, WALL_SOLID);
+            if (vc < 3) sideU(0, vc, +1, WALL_SOLID);    // the core wall between the flights
+            else        sideU(0, vc, +1, WALL_NONE);     // ...open across the half landing
+            if (vc < 3) { endV(0, vc, +1, WALL_NONE); endV(1, vc, +1, WALL_NONE); }
+        }
+        if (lower) {
+            endV(0, 0, -1, WALL_DOOR);                   // in at the foot of lane A
+            for (int uc = 0; uc < 2; uc++) for (int vc = 0; vc < 4; vc++) {
+                uint8_t fl = VF_STAIR | VF_NOWALK;
+                if (!(uc == 1 && vc == 0)) fl |= VF_OPENUP;   // lane B's top landing is the floor above
+                // The foot of the stair is plain floor, and part of this
+                // storey's floor graph: you walk in through the door and stand
+                // here looking up the shaft.
+                if (uc == 0 && vc == 0) fl = VF_OPENUP;
+                flag(uc, vc, fl);
+            }
+        } else {
+            endV(1, 0, -1, WALL_DOOR);                   // out at the head of lane B
+            for (int uc = 0; uc < 2; uc++) for (int vc = 0; vc < 4; vc++)
+                if (!(uc == 1 && vc == 0)) flag(uc, vc, VF_HOLE | VF_WALKHOLE | VF_NOWALK);
+        }
+        break;
+    }
+    case VK_STAIR:
+    case VK_ATRIUM: {
+        // A straight flight is lanes [s0, s1] of rows 1..4, rising from the
+        // approach row 0 to arrive on row 5 of the floor above. An atrium is
+        // an opening over every lane of its rows; with a flight, rows 1..4
+        // only, the flight up one side.
+        bool hasStair = f.kind == VK_STAIR || f.stairU >= 0;
+        int s0 = f.kind == VK_STAIR ? 0 : f.stairU, s1 = f.kind == VK_STAIR ? W - 1 : f.stairU;
+        int r0 = L == 6 ? 1 : 0, r1 = L == 6 ? 4 : L - 1;   // the rows the opening spans
+        auto inStair = [&](int uc) { return hasStair && uc >= s0 && uc <= s1; };
+        // Which long side of the flight is a wall. VK_STAIR says; an atrium's
+        // flight is always against the atrium's outer edge.
+        bool wallLo = f.kind == VK_STAIR ? f.wallSide == -1 : (hasStair && s0 == 0);
+        bool wallHi = f.kind == VK_STAIR ? f.wallSide == +1 : (hasStair && s1 == W - 1);
+        for (int vc = r0; vc <= r1; vc++) {
+            for (int uc = 0; uc < W; uc++) {
+                bool st = inStair(uc);
+                // across to the next lane, or out of the footprint
+                if (uc == 0) sideU(uc, vc, -1, st && wallLo ? WALL_SOLID : (st || !lower) ? WALL_RAIL : WALL_NONE);
+                if (uc == W - 1) sideU(uc, vc, +1, st && wallHi ? WALL_SOLID : (st || !lower) ? WALL_RAIL : WALL_NONE);
+                if (uc < W - 1) {
+                    bool st2 = inStair(uc + 1);
+                    // flight beside open floor: a balustrade below, and above
+                    // a rail between the flight's hole and the void's
+                    sideU(uc, vc, +1, st != st2 ? WALL_RAIL : WALL_NONE);
+                }
+            }
+        }
+        for (int uc = 0; uc < W; uc++) {
+            bool st = inStair(uc);
+            // the near end of the opening
+            if (r0 > 0) endV(uc, r0, -1, lower ? WALL_NONE : WALL_RAIL);
+            else endV(uc, r0, -1, lower ? WALL_NONE : WALL_RAIL);
+            // the far end: the flight runs into the wall under its arrival
+            // below, and arrives through it above; the void is railed off
+            if (st) endV(uc, r1, +1, lower ? WALL_SOLID : WALL_NONE);
+            else    endV(uc, r1, +1, lower ? WALL_NONE : WALL_RAIL);
+            for (int vc = r0; vc < r1; vc++) endV(uc, vc, +1, WALL_NONE);
+            for (int vc = r0; vc <= r1; vc++) {
+                if (lower) flag(uc, vc, st ? (VF_STAIR | VF_OPENUP | VF_NOWALK) : VF_OPENUP);
+                else       flag(uc, vc, st ? (VF_HOLE | VF_WALKHOLE | VF_NOWALK) : (VF_HOLE | VF_NOWALK));
+            }
+        }
+        break;
+    }
+    default: break;
+    }
+    if (d.nfeat < 2) d.feats[d.nfeat++] = f;
+}
+
+bool World::linksStorey(int cx, int cz, int rel) {
+    if (storeyH <= 0.0f || rel == 0) return false;
+    VertFeat f;
+    // rel +1: a feature rising from qs; rel -1: one arriving at qs from below.
+    return pairFeature(cx, cz, rel > 0 ? qs : qs - 1, f);
 }
 
 void World::generate(ChunkData &d, int cx, int cz) {
@@ -100,7 +377,7 @@ void World::generate(ChunkData &d, int cx, int cz) {
     memset(d.pool, 0, sizeof(d.pool));
     memset(d.elev, 0, sizeof(d.elev));
     uint64_t k = key(cx, cz);
-    Rng rng(hash64(k ^ ((uint64_t)seed + (uint64_t)level * 0x51ED270Bu
+    Rng rng(hash64(k ^ ((uint64_t)sseed() + (uint64_t)level * 0x51ED270Bu
                         + (uint64_t)visit * 0x2545F4914F6CDD1DULL) * 0x9E3779B97F4A7C15ULL));
     // Open plazas were one chunk in eight. They are most of what is left of
     // the old wall-less world and they dominate the enclosure average, so cap
@@ -109,7 +386,7 @@ void World::generate(ChunkData &d, int cx, int cz) {
     // They also have to move with the rest of the maze when you come back down
     // to a level (BUG-05), or every revisit has its open rooms in the same
     // places and the maze still feels like the one you just left.
-    bool openChunk = (hash64(k ^ 0xA11CEULL ^ (uint64_t)seed
+    bool openChunk = (hash64(k ^ 0xA11CEULL ^ (uint64_t)sseed()
                              ^ ((uint64_t)visit * 0xD1B54A32D192ED03ULL)) & 15) == 0;
     int nseg = level == 0 ? 12 + rng.ri(0, 5) : level == 1 ? 7 + rng.ri(0, 4)
              : level == 4 ? 9 + rng.ri(0, 4) : 5 + rng.ri(0, 3);
@@ -335,7 +612,7 @@ void World::generate(ChunkData &d, int cx, int cz) {
                 setPool(mx, mz, 0); d.pillar[mx][mz] = 0;
             }
         };
-        uint32_t ch = ih(cx, cz, seed ^ 0x37C0u);
+        uint32_t ch = ih(cx, cz, sseed() ^ 0x37C0u);
         bool grandHall = ch % 4 == 0 && !(cx == 0 && cz == 0);
         if (grandHall) {
             // One unnaturally large room that serves no purpose: a single basin
@@ -351,7 +628,7 @@ void World::generate(ChunkData &d, int cx, int cz) {
             for (int qa = 0; qa < 2; ++qa) for (int qb = 0; qb < 2; ++qb) {
                 int x0 = qa ? 8 : 1, x1 = qa ? CCELLS - 2 : 7;
                 int z0 = qb ? 8 : 1, z1 = qb ? CCELLS - 2 : 7;
-                uint32_t qh = ih(cx * 2 + qa, cz * 2 + qb, seed ^ 0x37D1u);
+                uint32_t qh = ih(cx * 2 + qa, cz * 2 + qb, sseed() ^ 0x37D1u);
                 Rng qr(hash64(((uint64_t)qh << 1) ^ 0x5EA5ULL));
                 int kind = (int)(qh % 10);   // 0-2 bath, 3-4 tunnels, 5-6 stairs, 7 gallery, 8 islands, 9 tubs
                 if (kind <= 2) {
@@ -449,10 +726,10 @@ void World::generate(ChunkData &d, int cx, int cz) {
             if (d.pillar[i][kk]) continue;
             if (d.wallN[i][kk] || d.wallW[i][kk] || d.wallN[i][kk + 1] || d.wallW[i + 1][kk]) continue;
             float gxc = (float)(cx * CCELLS + i), gzc = (float)(cz * CCELLS + kk);
-            if (fbm2(gxc * 0.09f, gzc * 0.09f, seed ^ (level == 0 ? 0x51ABu : 0xD0CCu), 3) > 0.60f)
+            if (fbm2(gxc * 0.09f, gzc * 0.09f, sseed() ^ (level == 0 ? 0x51ABu : 0xD0CCu), 3) > 0.60f)
                 d.elev[i][kk] = level == 0 ? -5 : 6;
             if (level == 1 && d.elev[i][kk] == 6 &&   // some docks carry a second tier
-                fbm2(gxc * 0.09f, gzc * 0.09f, seed ^ 0xD0CCu, 3) > 0.655f) d.elev[i][kk] = 12;
+                fbm2(gxc * 0.09f, gzc * 0.09f, sseed() ^ 0xD0CCu, 3) > 0.655f) d.elev[i][kk] = 12;
         }
         // L0: rare grand atria — the floor falls away in broad carpeted terraces,
         // half a metre per ring, down to a hall two and a half metres below the
@@ -463,23 +740,34 @@ void World::generate(ChunkData &d, int cx, int cz) {
                 if (d.pillar[i][kk]) continue;
                 if (d.wallN[i][kk] || d.wallW[i][kk] || d.wallN[i][kk + 1] || d.wallW[i + 1][kk]) continue;
                 float gxc = (float)(cx * CCELLS + i), gzc = (float)(cz * CCELLS + kk);
-                float n = fbm2(gxc * 0.042f, gzc * 0.042f, seed ^ 0xA7B1u, 3);
+                float n = fbm2(gxc * 0.042f, gzc * 0.042f, sseed() ^ 0xA7B1u, 3);
                 if (n <= 0.615f) continue;
                 int ring = 1 + (int)((n - 0.615f) / 0.028f);   // deeper toward the middle
                 d.elev[i][kk] = (int8_t)(-5 * std::min(ring, 5));
             }
         }
     }
+    // ---- storeys: the stairs and openings that join this floor to the ones
+    // above and below. Stamped here — after the rooms, the furniture and the
+    // sunken floors, before the connectivity flood — so the flood routes round
+    // them and punches its doorways elsewhere. Their edges are marked in
+    // d.prot, and every pass after this one leaves a protected edge alone:
+    // door thinning, the locked door and the noclip walls all had a way of
+    // turning a stairwell's wall into a doorway, and the storey above would
+    // not have agreed.
+    d.nfeat = 0;
+    memset(d.vflag, 0, sizeof(d.vflag));
+    memset(d.vfeat, -1, sizeof(d.vfeat));
+    memset(d.prot, 0, sizeof(d.prot));
+    {
+        VertFeat fs[2];
+        int nf = featuresFor(cx, cz, qs, fs, 2);
+        for (int q = 0; q < nf; q++) stampFeature(d, fs[q], cx, cz);
+    }
     // ---- the Manila Room. Stamped before the connectivity flood so the flood
     // sees it, and stamped again at the end (below) so nothing after the flood
     // — door thinning, the locked door, the exit — can move its four doors.
-    d.manila = false;
-    if (level == 0) {
-        bool nearSpawn = abs(cx) <= 1 && abs(cz) <= 1;
-        bool rolled = (hash64(k ^ 0x3A1111AULL ^ (uint64_t)seed
-                              ^ ((uint64_t)visit * 0xA24BAED4963EE407ULL)) % MANILA_RATE) == 0;
-        d.manila = manilaTest ? (cx == 1 && cz == 0) : (rolled && !nearSpawn);
-    }
+    d.manila = manilaChunk(cx, cz, qs);
     auto stampManila = [&]() {
         // Walls of the room: solid all round, one doorway in each side.
         for (int t = MANILA_LO; t <= MANILA_HI; t++) {
@@ -525,7 +813,8 @@ void World::generate(ChunkData &d, int cx, int cz) {
         auto join = [&](int a, int b) { a = find(a); b = find(b); if (a == b) return false; parent[a] = b; return true; };
         // A pillar or a prop fills its cell outright — canStep() says so — so
         // those cells are not part of the graph and are not worth opening to.
-        auto solidCell = [&](int x, int z) { return d.pillar[x][z] != 0 || d.prop[x][z] != PROP_NONE; };
+        auto solidCell = [&](int x, int z) { return d.pillar[x][z] != 0 || d.prop[x][z] != PROP_NONE ||
+                                                (d.vflag[x][z] & VF_NOWALK) != 0; };
         auto cellId = [](int x, int z) { return x * CCELLS + z; };
         for (int x = 0; x < CCELLS; x++) for (int z = 0; z < CCELLS; z++) {
             if (solidCell(x, z)) continue;
@@ -534,8 +823,12 @@ void World::generate(ChunkData &d, int cx, int cz) {
         }
         for (int x = 0; x < CCELLS; x++) for (int z = 0; z < CCELLS; z++) {
             if (solidCell(x, z)) continue;
-            if (z > 0 && !solidCell(x, z - 1) && join(cellId(x, z), cellId(x, z - 1))) d.wallN[x][z] = WALL_DOOR;
-            if (x > 0 && !solidCell(x - 1, z) && join(cellId(x, z), cellId(x - 1, z))) d.wallW[x][z] = WALL_DOOR;
+            // A stairwell's walls are the storey above's walls too; a doorway
+            // punched here would be a doorway into a shaft on one floor only.
+            if (z > 0 && !solidCell(x, z - 1) && !(d.prot[x][z] & 1) &&
+                join(cellId(x, z), cellId(x, z - 1))) d.wallN[x][z] = WALL_DOOR;
+            if (x > 0 && !solidCell(x - 1, z) && !(d.prot[x][z] & 2) &&
+                join(cellId(x, z), cellId(x - 1, z))) d.wallW[x][z] = WALL_DOOR;
         }
         // The chunk owns the wall line along its west and north seams, and the
         // neighbour across each seam owns the other two, so opening these two
@@ -568,7 +861,8 @@ void World::generate(ChunkData &d, int cx, int cz) {
     // the chunk stays exactly as reachable as the flood above left it, so this
     // can take away a second doorway and can never take away the only one.
     {
-        auto solidCell = [&](int x, int z) { return d.pillar[x][z] != 0 || d.prop[x][z] != PROP_NONE; };
+        auto solidCell = [&](int x, int z) { return d.pillar[x][z] != 0 || d.prop[x][z] != PROP_NONE ||
+                                                (d.vflag[x][z] & VF_NOWALK) != 0; };
         // Is there still a way from one side of this edge to the other?
         //
         // That is the whole test, and it is exact: closing a single edge can
@@ -616,9 +910,10 @@ void World::generate(ChunkData &d, int cx, int cz) {
         // unchanged. Give the door somewhere else to be instead: carve it into
         // blank wall on the same line, as near its old place as will take it,
         // and keep the move only if the room it served is still reachable.
-        auto tidyLine = [&](auto edgeAt, auto sideA, auto sideB, int n) {
+        auto tidyLine = [&](auto edgeAt, auto protAt, auto sideA, auto sideB, int n) {
             for (int t = 1; t < n; t++) {
                 if (edgeAt(t) != WALL_DOOR || edgeAt(t - 1) != WALL_DOOR) continue;
+                if (protAt(t)) continue;                     // a stairwell's door stays where the stamp put it
                 int ax, az, bx, bz;
                 sideA(t, ax, az); sideB(t, bx, bz);
                 if (solidCell(ax, az) || solidCell(bx, bz)) continue;
@@ -629,7 +924,7 @@ void World::generate(ChunkData &d, int cx, int cz) {
                     for (int sgn = -1; sgn <= 1 && !moved; sgn += 2) {
                         int u = t + sgn * off;
                         if (u < 0 || u >= n) continue;
-                        if (edgeAt(u) != WALL_SOLID) continue;   // only into blank wall
+                        if (edgeAt(u) != WALL_SOLID || protAt(u)) continue;   // only into blank wall
                         // ...and not straight back into the problem
                         if ((u > 0 && edgeAt(u - 1) == WALL_DOOR) ||
                             (u + 1 < n && edgeAt(u + 1) == WALL_DOOR)) continue;
@@ -645,10 +940,12 @@ void World::generate(ChunkData &d, int cx, int cz) {
         };
         for (int k = 1; k < CCELLS; k++)
             tidyLine([&](int t) -> uint8_t & { return d.wallN[t][k]; },
+                     [&](int t) { return (d.prot[t][k] & 1) != 0; },
                      [&](int t, int &x, int &z) { x = t; z = k; },
                      [&](int t, int &x, int &z) { x = t; z = k - 1; }, CCELLS);
         for (int i = 1; i < CCELLS; i++)
             tidyLine([&](int t) -> uint8_t & { return d.wallW[i][t]; },
+                     [&](int t) { return (d.prot[i][t] & 2) != 0; },
                      [&](int t, int &x, int &z) { x = i;     z = t; },
                      [&](int t, int &x, int &z) { x = i - 1; z = t; }, CCELLS);
     }
@@ -666,9 +963,10 @@ void World::generate(ChunkData &d, int cx, int cz) {
     //     half a chunk is a wall with extra steps; locking one that strands a
     //     closet is a cupboard worth opening. A door that strands nothing at
     //     all is a shortcut, which is also fine.
-    if (level != 2 && (hash64(k ^ 0x10CCEDULL ^ (uint64_t)seed
+    if (level != 2 && (hash64(k ^ 0x10CCEDULL ^ (uint64_t)sseed()
                 ^ ((uint64_t)visit * 0x9E3779B97F4A7C15ULL)) % 3) == 0) {
-        auto solidCell = [&](int x, int z) { return d.pillar[x][z] != 0 || d.prop[x][z] != PROP_NONE; };
+        auto solidCell = [&](int x, int z) { return d.pillar[x][z] != 0 || d.prop[x][z] != PROP_NONE ||
+                                                (d.vflag[x][z] & VF_NOWALK) != 0; };
         // Cells reachable from (sx,sz) with the walls exactly as they stand.
         auto flood = [&](int sx, int sz, bool (&seen)[CCELLS][CCELLS]) {
             memset(seen, 0, sizeof(seen));
@@ -698,10 +996,13 @@ void World::generate(ChunkData &d, int cx, int cz) {
         int bi[128], bk[128], bw[128], nb = 0;
         for (int x = 1; x < CCELLS && nb < 128; x++)
             for (int z = 1; z < CCELLS && nb < 128; z++) {
-                if (d.wallN[x][z] == WALL_DOOR && !solidCell(x, z) && !solidCell(x, z - 1)) {
+                // Never a stairwell's door: locked from the floor above, it
+                // would shut a wanderer coming up the stairs into a closet
+                // with the key on the far side of the door.
+                if (d.wallN[x][z] == WALL_DOOR && !(d.prot[x][z] & 1) && !solidCell(x, z) && !solidCell(x, z - 1)) {
                     bi[nb] = x; bk[nb] = z; bw[nb] = 0; nb++;
                 }
-                if (nb < 128 && d.wallW[x][z] == WALL_DOOR && !solidCell(x, z) && !solidCell(x - 1, z)) {
+                if (nb < 128 && d.wallW[x][z] == WALL_DOOR && !(d.prot[x][z] & 2) && !solidCell(x, z) && !solidCell(x - 1, z)) {
                     bi[nb] = x; bk[nb] = z; bw[nb] = 1; nb++;
                 }
             }
@@ -745,18 +1046,20 @@ void World::generate(ChunkData &d, int cx, int cz) {
         }
     }
     // rare exit door carved into an existing wall run
-    if (hash64(k ^ 0xE717ULL ^ (uint64_t)seed) % (exitTest ? 1 : 16) == 0) {
+    // (Never in a stairwell's walls: those run up through two storeys, and a
+    // wall you can noclip through on one floor would be solid on the next.)
+    if (hash64(k ^ 0xE717ULL ^ (uint64_t)sseed()) % (exitTest ? 1 : 16) == 0) {
         bool placed = false;
         for (int i = 1; i < CCELLS - 1 && !placed; i++)
             for (int kk = 0; kk < CCELLS && !placed; kk++)
                 if (d.wallN[i][kk] == WALL_SOLID && d.wallN[i - 1][kk] == WALL_SOLID &&
-                    d.wallN[i + 1][kk] == WALL_SOLID) {
+                    d.wallN[i + 1][kk] == WALL_SOLID && !(d.prot[i][kk] & 1)) {
                     d.wallN[i][kk] = WALL_EXIT; placed = true;
                 }
         for (int i = 0; i < CCELLS && !placed; i++)
             for (int kk = 1; kk < CCELLS - 1 && !placed; kk++)
                 if (d.wallW[i][kk] == WALL_SOLID && d.wallW[i][kk - 1] == WALL_SOLID &&
-                    d.wallW[i][kk + 1] == WALL_SOLID) {
+                    d.wallW[i][kk + 1] == WALL_SOLID && !(d.prot[i][kk] & 2)) {
                     d.wallW[i][kk] = WALL_EXIT; placed = true;
                 }
     }
@@ -769,7 +1072,7 @@ void World::generate(ChunkData &d, int cx, int cz) {
             if (d.wallW[i][kk] == WALL_DOOR) d.wallW[i][kk] = WALL_NONE;
         }
     }
-    if (cx == 0 && cz == 0 && level != 2) {   // clear spawn room
+    if (cx == 0 && cz == 0 && level != 2 && qs == 0) {   // clear spawn room (you wake on storey 0)
         for (int i = 5; i <= 10; i++) for (int kk = 5; kk <= 10; kk++) {
             d.wallN[i][kk] = d.wallW[i][kk] = d.pillar[i][kk] = d.prop[i][kk] = d.pool[i][kk] = 0;
             d.elev[i][kk] = 0;
@@ -872,8 +1175,9 @@ void World::unlockEdge(int ci, int ck, bool west) {
 // wall values. Everything else about the chunk — its cells, its props — is
 // untouched; only the geometry is stale.
 void World::rebuildChunk(int cx, int cz) {
-    auto it = chunks.find(key(cx, cz));
-    if (it == chunks.end()) return;
+    auto &m = layer(qs);
+    auto it = m.find(key(cx, cz));
+    if (it == m.end()) return;
     for (int i = 0; i < MESH_COUNT; i++)
         if (it->second.meshes[i].vertexCount > 0) {
             UnloadMesh(it->second.meshes[i]);
@@ -920,7 +1224,53 @@ float World::ceilY(int ci, int ck) {
     // which reads as a broken mesh rather than as architecture. Telling a
     // depression from a genuine lower storey needs something the cell does not
     // store yet; until it does, up only.
-    return std::max(floorY(ci, ck), 0.0f) + wallH;
+    //
+    // A cell open to the storey above has no ceiling of its own: its walls
+    // run to the top of this storey, where the ones above take over, and the
+    // mesher closes the slot between it and a neighbour's ceiling with the
+    // bulkhead the soffit code already draws.
+    int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
+    ChunkData &d = data(cx, cz);
+    int li = ci - cx * CCELLS, lk = ck - cz * CCELLS;
+    if (storeyH > 0.0f && (d.vflag[li][lk] & VF_OPENUP)) return storeyH;
+    return std::max(d.elev[li][lk] * ELEV_UNIT, 0.0f) + wallH;
+}
+
+// The surface of a flight. Stepped: groundAt walks you up tread by tread, the
+// same 180 mm risers the mesher draws, and the glide in the mover smooths each
+// one into the small lift of a real stair. `ramp` gives the nosing line — the
+// straight line a handrail follows — for the balustrade's top.
+float World::stairY(float x, float z, bool ramp) {
+    int ci = cellOf(x), ck = cellOf(z);
+    int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
+    ChunkData &d = data(cx, cz);
+    int li = ci - cx * CCELLS, lk = ck - cz * CCELLS;
+    if (!(d.vflag[li][lk] & VF_STAIR) || d.vfeat[li][lk] < 0) return NAN;
+    const VertFeat &f = d.feats[d.vfeat[li][lk]];
+    float u, v;
+    featureLocal(f, cx, cz, x, z, u, v);
+    const float H = storeyH;
+    const float R = H / 24.0f;                          // one riser: 24 to a storey
+    // n risers over a run starting at v0, `going` apart; the i-th tread is at
+    // (i+1) risers. The ramp passes through the nosings.
+    auto flight = [&](float vv, float v0, float going, int n, float base) {
+        if (vv < v0) return base;
+        float t = (vv - v0) / going;
+        if (ramp) return base + std::min((float)n, t + 0.5f) * R;
+        return base + (float)std::min(n, (int)floorf(t) + 1) * R;
+    };
+    if (f.kind == VK_STAIRWELL) {
+        // Lane A climbs 12 risers over 4 m to the half landing; lane B climbs
+        // the other 12 back over the same 4 m to the top landing.
+        const float G = 4.0f / 12.0f;
+        if (v >= 6.0f) return 12 * R;                   // the half landing, both lanes
+        if (u < CELL) return flight(v, 2.0f, G, 12, 0.0f);
+        if (v < 2.0f) return H;                         // the top landing: the floor above
+        return flight(6.0f - v, 0.0f, G, 12, 12 * R);  // lane B, climbing toward -v
+    }
+    // A straight flight: 24 risers over 8 m, from the approach row to the
+    // arrival row of the floor above.
+    return flight(v, 2.0f, 8.0f / 24.0f, 24, 0.0f);
 }
 
 bool World::manilaAt(int ci, int ck) {
@@ -935,8 +1285,9 @@ bool World::manilaNear(float x, float z, float &rx, float &rz) {
     if (level != 0) return false;
     int pcx = fdiv(cellOf(x), CCELLS), pcz = fdiv(cellOf(z), CCELLS);
     for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
-        auto it = chunks.find(key(pcx + dx, pcz + dz));   // loaded chunks only: never generate from here
-        if (it == chunks.end() || !it->second.manila) continue;
+        auto &m = layer(qs);
+        auto it = m.find(key(pcx + dx, pcz + dz));   // loaded chunks only: never generate from here
+        if (it == m.end() || !it->second.manila) continue;
         rx = ((pcx + dx) * CCELLS + MANILA_HI + 1 - 2) * CELL;   // the corner between cells 7 and 8
         rz = ((pcz + dz) * CCELLS + MANILA_HI + 1 - 2) * CELL;
         return true;
@@ -948,8 +1299,10 @@ bool World::softAt(int ci, int ck) {
     if (level != 0) return false;
     if (manilaAt(ci, ck)) return false;                  // the room has a wooden floor
     if (abs(ci) <= 10 && abs(ck) <= 10) return false;   // never near where you wake up
-    if (ih(ci, ck, (uint32_t)seed ^ 0x50F7u) % 523 != 0) return false;
-    return !pillarAt(ci, ck) && propAt(ci, ck) == PROP_NONE && floorY(ci, ck) == 0.0f;
+    if (ih(ci, ck, (uint32_t)sseed() ^ 0x50F7u) % 523 != 0) return false;
+    // not on a stair or at the lip of an opening either: a floor that gives
+    // way under you should be a floor
+    return !pillarAt(ci, ck) && propAt(ci, ck) == PROP_NONE && floorY(ci, ck) == 0.0f && !vflagAt(ci, ck);
 }
 
 float World::softDip(float x, float z) {
@@ -965,14 +1318,14 @@ float World::softDip(float x, float z) {
 }
 
 bool World::cursedExit(int ci, int ck) {
-    return ih(ci, ck, (uint32_t)seed ^ 0xC0DEu) % 6 == 0;
+    return ih(ci, ck, (uint32_t)sseed() ^ 0xC0DEu) % 6 == 0;
 }
 
 // A shut-off wheel on a floor-to-ceiling standpipe. Rare enough that finding
 // three is a proper errand, and never inside a wall, pillar or furniture.
 bool World::valveAt(int ci, int ck) {
     if (level != 3) return false;
-    if (ih(ci, ck, (uint32_t)seed ^ 0x7A17u) % 149 != 0) return false;
+    if (ih(ci, ck, (uint32_t)sseed() ^ 0x7A17u) % 149 != 0) return false;
     return !pillarAt(ci, ck) && propAt(ci, ck) == PROP_NONE &&
            wallNVal(ci, ck) != WALL_SOLID && wallWVal(ci, ck) != WALL_SOLID;
 }
@@ -1104,9 +1457,63 @@ static void addSolidBox(MB &mb, float x0, float y0, float z0, float x1, float y1
 // between concrete lifts — and a 3 m repeat on a 4.2 m wall would draw a
 // second tide line under the ceiling. Set per chunk bake by ensureMesh.
 static float gWallV = 3.0f;
+// The wallpaper's V at a height. One tile is one wall's height, with the
+// baseboard, the damp and the grime baked in at the heights they live at — so a
+// wall that climbs past it (up a stair shaft, round an opening, to the floor
+// above) must not simply repeat, or a second baseboard runs round the shaft at
+// three metres. Above the tile it carries on from the tile's clean middle, a
+// whole number of pattern repeats down, so the chevrons do not jump.
+// Only on a storeyed level: everywhere else a wall taller than its tile is a
+// deliberate repeat (the Poolrooms' tile, Level 1's docks) and stays one.
+static bool gTallPaper = false;
+static float wallV(float y) { return y <= gWallV + 1e-4f ? 1 - y / gWallV : 1 - (y - gWallV * 0.5f) / gWallV; }
+// A face over a void — an upper storey's wall seen from the shaft below it —
+// stands on no floor, so it must show no baseboard at all. It takes the
+// tile's clean middle, 0.75 m to 2.25 m, repeating by whole chevrons, which
+// means splitting the face wherever that band wraps.
+static void voidFace(MB &mb, Vector3 a0, Vector3 a1, Vector3 n, float ua, float ub, float y0, float y1, Color w) {
+    auto T = [](float y) { return 0.75f + fmodf(y + 0.57f + 150.0f, 1.5f); };
+    float y = y0;
+    while (y < y1 - 1e-4f) {
+        float next = y + (2.25f - T(y));             // where the band wraps
+        float yb = std::min(y1, next);
+        float va = 1 - T(y) / gWallV, vb = 1 - (T(y) + (yb - y)) / gWallV;
+        mb.quad({a0.x,y,a0.z},{a1.x,y,a1.z},{a1.x,yb,a1.z},{a0.x,yb,a0.z}, n, {ua,va},{ub,va},{ub,vb},{ua,vb}, w);
+        y = yb;
+    }
+}
+// voidFaces: which of the four faces look into a hole (same bits as skip).
 static void addBoxSides(MB &mb, float x0, float y0, float z0, float x1, float y1, float z1,
-                        bool bottomFace = false, int skip = 0, Color w = WHITE) {
-    float va = 1 - y0 / gWallV, vb = 1 - y1 / gWallV;
+                        bool bottomFace = false, int skip = 0, Color w = WHITE, int voidFaces = 0) {
+    if (gTallPaper && voidFaces) {
+        if (!(skip & 1) && (voidFaces & 1)) voidFace(mb, {x0,0,z0}, {x1,0,z0}, {0,0,-1}, x0/3, x1/3, y0, y1, w);
+        if (!(skip & 2) && (voidFaces & 2)) voidFace(mb, {x1,0,z1}, {x0,0,z1}, {0,0,1}, x1/3, x0/3, y0, y1, w);
+        if (!(skip & 4) && (voidFaces & 4)) voidFace(mb, {x0,0,z1}, {x0,0,z0}, {-1,0,0}, z1/3, z0/3, y0, y1, w);
+        if (!(skip & 8) && (voidFaces & 8)) voidFace(mb, {x1,0,z0}, {x1,0,z1}, {1,0,0}, z0/3, z1/3, y0, y1, w);
+        addBoxSides(mb, x0, y0, z0, x1, y1, z1, bottomFace, skip | voidFaces, w, 0);
+        return;
+    }
+    if (!gTallPaper) {
+        float va = 1 - y0 / gWallV, vb = 1 - y1 / gWallV;
+        if (!(skip & 1))
+            mb.quad({x0,y0,z0},{x1,y0,z0},{x1,y1,z0},{x0,y1,z0},{0,0,-1},{x0/3,va},{x1/3,va},{x1/3,vb},{x0/3,vb},w);
+        if (!(skip & 2))
+            mb.quad({x1,y0,z1},{x0,y0,z1},{x0,y1,z1},{x1,y1,z1},{0,0,1},{x1/3,va},{x0/3,va},{x0/3,vb},{x1/3,vb},w);
+        if (!(skip & 4))
+            mb.quad({x0,y0,z1},{x0,y0,z0},{x0,y1,z0},{x0,y1,z1},{-1,0,0},{z1/3,va},{z0/3,va},{z0/3,vb},{z1/3,vb},w);
+        if (!(skip & 8))
+            mb.quad({x1,y0,z0},{x1,y0,z1},{x1,y1,z1},{x1,y1,z0},{1,0,0},{z0/3,va},{z1/3,va},{z1/3,vb},{z0/3,vb},w);
+        if (bottomFace)
+            mb.quad({x0,y0,z0},{x1,y0,z0},{x1,y0,z1},{x0,y0,z1},{0,-1,0},{x0/3,z0/3},{x1/3,z0/3},{x1/3,z1/3},{x0/3,z1/3},w);
+        return;
+    }
+    if (y0 < gWallV - 0.01f && y1 > gWallV + 0.01f) {   // straddles the tile: split it there
+        addBoxSides(mb, x0, y0, z0, x1, gWallV, z1, bottomFace, skip, w, 0);
+        addBoxSides(mb, x0, gWallV, z0, x1, y1, z1, false, skip, w, 0);
+        return;
+    }
+    float va = wallV(y0), vb = wallV(y1);
+    if (y0 >= gWallV - 0.01f) { va = 1 - (y0 - gWallV * 0.5f) / gWallV; vb = 1 - (y1 - gWallV * 0.5f) / gWallV; }
     if (!(skip & 1))
         mb.quad({x0,y0,z0},{x1,y0,z0},{x1,y1,z0},{x0,y1,z0},{0,0,-1},{x0/3,va},{x1/3,va},{x1/3,vb},{x0/3,vb},w);
     if (!(skip & 2))
@@ -1117,6 +1524,97 @@ static void addBoxSides(MB &mb, float x0, float y0, float z0, float x1, float y1
         mb.quad({x1,y0,z0},{x1,y0,z1},{x1,y1,z1},{x1,y1,z0},{1,0,0},{z0/3,va},{z1/3,va},{z1/3,vb},{z0/3,vb},w);
     if (bottomFace)
         mb.quad({x0,y0,z0},{x1,y0,z0},{x1,y0,z1},{x0,y0,z1},{0,-1,0},{x0/3,z0/3},{x1/3,z0/3},{x1/3,z1/3},{x0/3,z1/3},w);
+}
+
+// ---- rails. A guard round an opening, or up the open side of a flight, built
+// the way everything else here is: a knee wall papered like the partitions,
+// under a stained timber cap. The top runs from top0 to top1 along the edge,
+// so the same builder does the level rail round a hole and the balustrade that
+// climbs with a stair's nosing line. `bottom` closes the underside, which is
+// only ever seen looking up through the opening it guards.
+static const float RAIL_H = 1.0f;            // top of the cap above what you stand on
+static const Color RAIL_CAP = { 104, 80, 46, 254 };
+static void addRailRun(MB &wa, MB &pr, float ax, float az, float bx, float bz,
+                       float base, float top0, float top1, bool bottom, int voidSide = 0) {
+    float dx = bx - ax, dz = bz - az, len = sqrtf(dx * dx + dz * dz);
+    if (len < 1e-4f) return;
+    float ux = dx / len, uz = dz / len, nx = -uz, nz = ux;
+    const float cap = 0.055f, capW = RAIL_T + 0.02f;
+    bool alongX = fabsf(ux) > 0.5f;
+    auto P = [&](float a, float side, float y) { return Vector3{ ax + ux * a + nx * side, y, az + uz * a + nz * side }; };
+    auto U = [&](float a) { return (alongX ? ax + ux * a : az + uz * a) / 3.0f; };
+    auto V = [&](float y) { return 1.0f - y / gWallV; };
+    float w0 = top0 - cap, w1 = top1 - cap;   // the paper stops under the cap
+    for (int sg = -1; sg <= 1; sg += 2) {
+        float sd = sg * RAIL_T;
+        // The face over a hole is the top of the bulkhead below it, not a
+        // wall standing on a floor: no baseboard, and the paper picks up
+        // where the bulkhead's left off (see the soffit in ensureMesh).
+        auto Vs = [&](float y) { return sg == voidSide ? 1.0f - (y + 2.0f) / gWallV : V(y); };
+        wa.quad(P(0, sd, base), P(len, sd, base), P(len, sd, w1), P(0, sd, w0), { nx * sg, 0, nz * sg },
+                { U(0), Vs(base) }, { U(len), Vs(base) }, { U(len), Vs(w1) }, { U(0), Vs(w0) }, WHITE);
+    }
+    for (int e = 0; e < 2; e++) {   // the two ends, square across
+        float a = e ? len : 0, w = e ? w1 : w0, sg = e ? 1.0f : -1.0f;
+        wa.quad(P(a, -RAIL_T, base), P(a, RAIL_T, base), P(a, RAIL_T, w), P(a, -RAIL_T, w), { ux * sg, 0, uz * sg },
+                { 0, V(base) }, { 0.05f, V(base) }, { 0.05f, V(w) }, { 0, V(w) }, WHITE);
+    }
+    if (bottom)
+        wa.quad(P(0, -RAIL_T, base), P(len, -RAIL_T, base), P(len, RAIL_T, base), P(0, RAIL_T, base), { 0, -1, 0 },
+                { U(0), 0 }, { U(len), 0 }, { U(len), 0.05f }, { U(0), 0.05f }, WHITE);
+    // The cap: a timber slab a little proud of both faces, sloping with the top.
+    const Vector2 m = { 0.375f, 0.75f };
+    float slope = (top1 - top0) / len, sn = 1.0f / sqrtf(1 + slope * slope);
+    Vector3 up = { -ux * slope * sn, sn, -uz * slope * sn };
+    pr.quad(P(0, -capW, top0), P(len, -capW, top1), P(len, capW, top1), P(0, capW, top0), up, m, m, m, m, RAIL_CAP);
+    for (int sg = -1; sg <= 1; sg += 2) {
+        float sd = sg * capW;
+        pr.quad(P(0, sd, w0), P(len, sd, w1), P(len, sd, top1), P(0, sd, top0), { nx * sg, 0, nz * sg }, m, m, m, m, RAIL_CAP);
+    }
+    pr.quad(P(0, -capW, w0), P(len, -capW, w1), P(len, capW, w1), P(0, capW, w0), { -up.x, -up.y, -up.z }, m, m, m, m, RAIL_CAP);
+    for (int e = 0; e < 2; e++) {
+        float a = e ? len : 0, w = e ? w1 : w0, t = e ? top1 : top0, sg = e ? 1.0f : -1.0f;
+        pr.quad(P(a, -capW, w), P(a, capW, w), P(a, capW, t), P(a, -capW, t), { ux * sg, 0, uz * sg }, m, m, m, m, RAIL_CAP);
+    }
+}
+
+// ---- stairs. One step of a flight: a solid block from the floor to its tread,
+// so the flight is a stair and not a ramp of paper-thin treads, with carpet on
+// the tread and up the riser — Level 0's carpet goes wherever the floor goes —
+// and an aluminium nosing on the edge you would catch your heel on. Built in
+// the feature's local frame (u across, v along, y up) through `to`, which is
+// one of four rotations, so the normals come through unmirrored.
+static const Color NOSING_COL = { 168, 160, 138, 254 };
+template <class ToWorld>
+static void addStep(MB &fl, MB &pr, ToWorld to, float u0, float u1, float va, float vb, float y0, float y1,
+                    bool risesPlusV, bool sides) {
+    // va..vb along the rise; the riser is on the downhill face
+    float vr = risesPlusV ? va : vb;            // where the riser stands
+    float vs = risesPlusV ? -1.0f : 1.0f;       // which way it faces, in v
+    auto W = [&](float u, float y, float v) { return to(u, y, v); };
+    auto uvOf = [](Vector3 p) { return Vector2{ p.x / 2, p.z / 2 }; };
+    Vector3 t0 = W(u0, y1, va), t1 = W(u1, y1, va), t2 = W(u1, y1, vb), t3 = W(u0, y1, vb);
+    fl.quad(t0, t1, t2, t3, { 0, 1, 0 }, uvOf(t0), uvOf(t1), uvOf(t2), uvOf(t3), WHITE);
+    Vector3 n0 = W(0, 0, 0), nv = W(0, 0, vs);
+    Vector3 rn = { nv.x - n0.x, 0, nv.z - n0.z };
+    Vector3 r0 = W(u0, y0, vr), r1 = W(u1, y0, vr), r2 = W(u1, y1, vr), r3 = W(u0, y1, vr);
+    fl.quad(r0, r1, r2, r3, rn, { u0 / 2, y0 / 2 }, { u1 / 2, y0 / 2 }, { u1 / 2, y1 / 2 }, { u0 / 2, y1 / 2 }, WHITE);
+    if (sides) {
+        for (int e = 0; e < 2; e++) {
+            float u = e ? u1 : u0;
+            Vector3 nu = W(e ? 1.0f : -1.0f, 0, 0);
+            Vector3 sn = { nu.x - n0.x, 0, nu.z - n0.z };
+            Vector3 s0 = W(u, y0, va), s1 = W(u, y0, vb), s2 = W(u, y1, vb), s3 = W(u, y1, va);
+            fl.quad(s0, s1, s2, s3, sn, { va / 2, y0 / 2 }, { vb / 2, y0 / 2 }, { vb / 2, y1 / 2 }, { va / 2, y1 / 2 }, WHITE);
+        }
+    }
+    // the nosing: 40 mm of aluminium over the front edge of the tread
+    if (y1 > 0.01f) {
+        float a = vr, b = vr - vs * 0.04f;
+        Vector3 q0 = W(u0 + 0.02f, y1 - 0.02f, std::min(a, b)), q1 = W(u1 - 0.02f, y1 + 0.004f, std::max(a, b));
+        addSolidBox(pr, std::min(q0.x, q1.x), y1 - 0.02f, std::min(q0.z, q1.z),
+                    std::max(q0.x, q1.x), y1 + 0.004f, std::max(q0.z, q1.z), NOSING_COL);
+    }
 }
 
 // Where a piece of furniture goes, and the handful of numbers that make each
@@ -1693,6 +2191,7 @@ void World::ensureMesh(int cx, int cz) {
     MB fl, ce, wa, pr, wt, scr, gl, ao, fx;
     float wx = cx * CHUNK, wz = cz * CHUNK;
     gWallV = level == 1 ? wallH : 3.0f;
+    gTallPaper = storeyH > 0.0f;
     Color wcol = WHITE;
     // The ceiling gets no world-space relief (alpha 254, not 255). It hangs level
     // with the light fittings, so every panel lights it edge-on — and a bump under
@@ -1821,6 +2320,9 @@ void World::ensureMesh(int cx, int cz) {
             float fy = d.elev[i][kk] * ELEV_UNIT;
             // the Manila Room lays its own floorboards (addManilaRoom)
             if (d.manila && i >= MANILA_LO && i <= MANILA_HI && kk >= MANILA_LO && kk <= MANILA_HI) continue;
+            // A hole has no floor, and a flight builds its own treads and
+            // landings (buildFlights, below).
+            if (d.vflag[i][kk] & (VF_HOLE | VF_STAIR)) continue;
             if (level == 0 && softAt(cx * CCELLS + i, cz * CCELLS + kk)) {
                 // A rotten patch, and the one thing on Level 0 that will drop you
                 // a floor. It used to be two flat decal quads: a black rectangle
@@ -1929,6 +2431,10 @@ void World::ensureMesh(int cx, int cz) {
         for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++)
             cyc[i][kk] = ceilY(cx * CCELLS + i, cz * CCELLS + kk);
         bool done[CCELLS][CCELLS] = {};
+        // A cell open to the storey above has no ceiling here: the ceiling you
+        // see from it is the next storey's, drawn by that storey's chunk.
+        for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++)
+            if (d.vflag[i][kk] & VF_OPENUP) done[i][kk] = true;
         for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
             if (done[i][kk]) continue;
             float cy = cyc[i][kk];
@@ -1956,16 +2462,34 @@ void World::ensureMesh(int cx, int cz) {
             float gx = wx + i * CELL, gz = wz + kk * CELL;
             int gi = cx * CCELLS + i, gk = cz * CCELLS + kk;
             float cy = cyc[i][kk];
-            auto soffit = [&](float ax, float az, float bx2, float bz2, float hi) {
+            if (d.vflag[i][kk] & VF_OPENUP) continue;   // no ceiling of its own to close off
+            auto soffit = [&](float ax, float az, float bx2, float bz2, float hi, int ni, int nk, uint8_t edge) {
                 if (hi <= cy + 1e-4f) return;
+                if (storeyH > 0.0f && (vflagAt(ni, nk) & VF_OPENUP)) {
+                    // The edge of an opening into the storey above: the ceiling
+                    // stops and a bulkhead runs up past the metre of dark void
+                    // over the tiles to the floor above. Papered like the walls,
+                    // because that is what it is. A wall or a door head on the
+                    // same line already climbs that high and hides it.
+                    if (blocksEdge(edge) && edge != WALL_RAIL) return;
+                    if (edge == WALL_DOOR || edge == WALL_EXIT) return;
+                    float along0 = (ax == bx2) ? az : ax, along1 = (ax == bx2) ? bz2 : bx2;
+                    // From the tile's middle rather than its foot, so no
+                    // baseboard runs round the underside of the floor above.
+                    auto fv = [&](float y) { return 1 - (y - 2.25f) / gWallV; };
+                    wa.quad({ax,cy,az},{bx2,cy,bz2},{bx2,hi,bz2},{ax,hi,az},
+                            {(bz2-az)/CELL,0,(ax-bx2)/CELL},
+                            {along0/3,fv(cy)},{along1/3,fv(cy)},{along1/3,fv(hi)},{along0/3,fv(hi)},wcol);
+                    return;
+                }
                 ce.quad({ax,cy,az},{bx2,cy,bz2},{bx2,hi,bz2},{ax,hi,az},
                         {(bz2-az)/CELL,0,(ax-bx2)/CELL},
                         {(ax+az)/2,0},{(bx2+bz2)/2,0},{(bx2+bz2)/2,(hi-cy)/2},{(ax+az)/2,(hi-cy)/2},ccol);
             };
-            soffit(gx, gz, gx + CELL, gz, ceilY(gi, gk - 1));
-            soffit(gx + CELL, gz + CELL, gx, gz + CELL, ceilY(gi, gk + 1));
-            soffit(gx, gz + CELL, gx, gz, ceilY(gi - 1, gk));
-            soffit(gx + CELL, gz, gx + CELL, gz + CELL, ceilY(gi + 1, gk));
+            soffit(gx, gz, gx + CELL, gz, ceilY(gi, gk - 1), gi, gk - 1, wallNVal(gi, gk));
+            soffit(gx + CELL, gz + CELL, gx, gz + CELL, ceilY(gi, gk + 1), gi, gk + 1, wallNVal(gi, gk + 1));
+            soffit(gx, gz + CELL, gx, gz, ceilY(gi - 1, gk), gi - 1, gk, wallWVal(gi, gk));
+            soffit(gx + CELL, gz, gx + CELL, gz + CELL, ceilY(gi + 1, gk), gi + 1, gk, wallWVal(gi + 1, gk));
         }
     }
     // light panels on the global grid (emissive: alpha=0); spacing varies per level
@@ -1982,6 +2506,15 @@ void World::ensureMesh(int cx, int cz) {
             if (d.manila) {
                 float mx = wx + (MANILA_HI + 1 - 2) * CELL, mz = wz + (MANILA_HI + 1 - 2) * CELL;
                 if (fabsf(lx - mx) < 4.0f && fabsf(lz - mz) < 4.0f) continue;
+            }
+            // No fitting where there is no ceiling to hang it in: a panel whose
+            // tray would overhang an opening into the storey above is left out,
+            // and buildOccupancy tells the shader the same (bit 3), so no light
+            // comes out of the air where a panel is not.
+            if (storeyH > 0.0f) {
+                int pci2 = (int)floorf(lx / CELL + 0.5f), pck2 = (int)floorf(lz / CELL + 0.5f);   // the corner it is centred on
+                if ((vflagAt(pci2, pck2) | vflagAt(pci2 - 1, pck2) | vflagAt(pci2, pck2 - 1) | vflagAt(pci2 - 1, pck2 - 1))
+                    & VF_OPENUP) continue;
             }
             // The fitting hangs in the ceiling, so it goes wherever the ceiling
             // of the cell it is centred in went. The tray is 1.38 m across and a
@@ -2002,7 +2535,7 @@ void World::ensureMesh(int cx, int cz) {
                 // the fitting as its usual square, which at this pitch nobody
                 // can tell apart. Every other one is turned a quarter, so the
                 // grid does not read as rows of identical strips.
-                bool alongX = (ih((int)floorf(lx / ls), (int)floorf(lz / ls), seed ^ 0xBA77u) & 1) != 0;
+                bool alongX = (ih((int)floorf(lx / ls), (int)floorf(lz / ls), sseed() ^ 0xBA77u) & 1) != 0;
                 auto box = [&](float a0, float y0, float b0, float a1, float y1, float b1, Color c) {
                     if (alongX) addSolidBox(pr, lx + a0, y0, lz + b0, lx + a1, y1, lz + b1, c);
                     else        addSolidBox(pr, lx + b0, y0, lz + a0, lx + b1, y1, lz + a1, c);
@@ -2056,6 +2589,41 @@ void World::ensureMesh(int cx, int cz) {
                     {0,0},{0,1},{1,1},{1,0},panel);
         }
     ChunkData &dd = d;
+    // A rail on one cell edge. Its top follows whatever you would be standing
+    // on beside it, whichever side is higher: level round an opening, and up
+    // the nosing line beside a flight. Between two holes there is nothing to
+    // stand on here — the flight that needs guarding is the storey below's,
+    // and so is the balustrade you see — and the edge is collision only.
+    auto railEdge = [&](int a, int b, bool west) {
+        float ex0 = a * CELL, ez0 = b * CELL;
+        float ex1 = west ? ex0 : ex0 + CELL, ez1 = west ? ez0 + CELL : ez0;
+        int oa = west ? a - 1 : a, ob = west ? b : b - 1;          // the cell across the edge
+        float inx = west ? 0.05f : 0.0f, inz = west ? 0.0f : 0.05f;   // a step into cell (a,b)
+        bool any = false, hole = false;
+        int voidSide = 0;
+        float base = 1e9f;
+        auto side = [&](int ca, int cb, float x, float z) {
+            uint8_t f = vflagAt(ca, cb);
+            if (f & VF_HOLE) {
+                hole = true;
+                // which face of the run looks into it (addRailRun's normal is
+                // +z for a north edge and -x for a west one)
+                bool own = ca == a && cb == b;
+                voidSide = west ? (own ? -1 : 1) : (own ? 1 : -1);
+                return -1e9f;
+            }
+            any = true;
+            base = std::min(base, floorY(ca, cb));
+            return (f & VF_STAIR) ? stairY(x, z, true) : floorY(ca, cb);
+        };
+        auto topAt = [&](float x, float z) {
+            return std::max(side(a, b, x + inx, z + inz), side(oa, ob, x - inx, z - inz));
+        };
+        float t0 = topAt(ex0 + (ex1 - ex0) * 0.01f, ez0 + (ez1 - ez0) * 0.01f);
+        float t1 = topAt(ex0 + (ex1 - ex0) * 0.99f, ez0 + (ez1 - ez0) * 0.99f);
+        if (!any) return;
+        addRailRun(wa, pr, ex0, ez0, ex1, ez1, base, t0 + RAIL_H, t1 + RAIL_H, hole, voidSide);
+    };
     for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
         float gx = wx + i * CELL, gz = wz + kk * CELL;
         int gi0 = cx * CCELLS + i, gk0 = cz * CCELLS + kk;
@@ -2081,9 +2649,25 @@ void World::ensureMesh(int cx, int cz) {
         // while collision had already sealed it. AGENTS.md said the mesher came
         // through here; it did not, until now.
         uint8_t nv = wallNVal(gi0, gk0);
+        // Storeys: which side of this cell's two edges has a floor to put a
+        // skirting board, a crease and an outlet against, and which has a
+        // ceiling to crease into. A hole has no floor, a flight buries the foot
+        // of its walls, and an opening has no ceiling — trim or a shadow strip
+        // drawn at floor level beside a hole hangs in the air over it.
+        auto hasFloor = [&](int a, int b) { return storeyH <= 0.0f || !(vflagAt(a, b) & (VF_HOLE | VF_STAIR)); };
+        auto hasCeil  = [&](int a, int b) { return storeyH <= 0.0f || !(vflagAt(a, b) & VF_OPENUP); };
+        const bool flN = hasFloor(gi0, gk0), flS = hasFloor(gi0, gk0 - 1), flW = hasFloor(gi0 - 1, gk0);
+        const bool clN = hasCeil(gi0, gk0),  clS = hasCeil(gi0, gk0 - 1),  clW = hasCeil(gi0 - 1, gk0);
+        // A neighbour's end cap is buried in the next wall along, but not in a
+        // rail, which is thinner than the wall it meets.
+        auto buries = [](uint8_t v) { return blocksEdge(v) && v != WALL_RAIL; };
+        if (nv == WALL_RAIL) railEdge(gi0, gk0, false);
+        // Faces that look into a hole in this storey's floor (see voidFace).
+        auto holeAt = [&](int a, int b) { return storeyH > 0.0f && (vflagAt(a, b) & VF_HOLE); };
         if (nv == WALL_SOLID) {
-            int sk = (blocksEdge(wallNVal(gi0 - 1, gk0)) ? 4 : 0) | (blocksEdge(wallNVal(gi0 + 1, gk0)) ? 8 : 0);
-            addBoxSides(wa, gx - WT, nb, gz - WT, gx + CELL + WT, nt, gz + WT, false, sk);
+            int sk = (buries(wallNVal(gi0 - 1, gk0)) ? 4 : 0) | (buries(wallNVal(gi0 + 1, gk0)) ? 8 : 0);
+            int vfN = (holeAt(gi0, gk0 - 1) ? 1 : 0) | (holeAt(gi0, gk0) ? 2 : 0);
+            addBoxSides(wa, gx - WT, nb, gz - WT, gx + CELL + WT, nt, gz + WT, false, sk, WHITE, vfN);
         }
         else if (nv == WALL_WINDOW) {   // window on x-running wall; behind the glass, nothing
             addBoxSides(wa, gx - WT, nb, gz - WT, gx + CELL + WT, nb + 1.0f, gz + WT);
@@ -2121,7 +2705,7 @@ void World::ensureMesh(int cx, int cz) {
             wa.quad({gx+0.35f,nb,gz},{gx+1.65f,nb,gz},{gx+1.65f,nb+2.3f,gz},{gx+0.35f,nb+2.3f,gz},{0,0,-1},
                     {0,1},{1,1},{1,0},{0,0},glow);
             if (level == 1)
-                addSymbolDoor(pr, fx, 0, gx, gz, nb, crs, ih(gi0, gk0, seed ^ 0x51B0u),
+                addSymbolDoor(pr, fx, 0, gx, gz, nb, crs, ih(gi0, gk0, sseed() ^ 0x51B0u),
                               wallNVal(gi0 + 1, gk0) == WALL_SOLID);
         }
         else if (nv == WALL_DOOR) {   // doorway on x-running wall
@@ -2178,9 +2762,11 @@ void World::ensureMesh(int cx, int cz) {
             }
         }
         uint8_t wv = wallWVal(gi0, gk0);
+        if (wv == WALL_RAIL) railEdge(gi0, gk0, true);
         if (wv == WALL_SOLID) {
-            int sk = (blocksEdge(wallWVal(gi0, gk0 - 1)) ? 1 : 0) | (blocksEdge(wallWVal(gi0, gk0 + 1)) ? 2 : 0);
-            addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wt2, gz + CELL + WT, false, sk);
+            int sk = (buries(wallWVal(gi0, gk0 - 1)) ? 1 : 0) | (buries(wallWVal(gi0, gk0 + 1)) ? 2 : 0);
+            int vfW = (holeAt(gi0 - 1, gk0) ? 4 : 0) | (holeAt(gi0, gk0) ? 8 : 0);
+            addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wt2, gz + CELL + WT, false, sk, WHITE, vfW);
         }
         else if (wv == WALL_WINDOW) {   // window on z-running wall
             addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wb + 1.0f, gz + CELL + WT);
@@ -2214,7 +2800,7 @@ void World::ensureMesh(int cx, int cz) {
             wa.quad({gx,wb,gz+0.35f},{gx,wb,gz+1.65f},{gx,wb+2.3f,gz+1.65f},{gx,wb+2.3f,gz+0.35f},{1,0,0},
                     {0,1},{1,1},{1,0},{0,0},glow);
             if (level == 1)
-                addSymbolDoor(pr, fx, 1, gz, gx, wb, crs, ih(gi0, gk0, seed ^ 0x51B1u),
+                addSymbolDoor(pr, fx, 1, gz, gx, wb, crs, ih(gi0, gk0, sseed() ^ 0x51B1u),
                               wallWVal(gi0, gk0 + 1) == WALL_SOLID);
         }
         else if (wv == WALL_DOOR) {   // doorway on z-running wall
@@ -2258,21 +2844,22 @@ void World::ensureMesh(int cx, int cz) {
             Color trim = level == 0 ? Color{91, 71, 39, 254} : Color{67, 41, 34, 254};
             if (nv == WALL_SOLID || (level == 0 && nv == WALL_EXIT)) {
                 float tS = floorY(gi0, gk0 - 1), tN = floorY(gi0, gk0);
-                addSolidBox(pr, gx, tS, gz-WT-0.025f, gx+CELL, tS + 0.13f, gz-WT, trim);
-                addSolidBox(pr, gx, tN, gz+WT, gx+CELL, tN + 0.13f, gz+WT+0.025f, trim);
+                if (flS) addSolidBox(pr, gx, tS, gz-WT-0.025f, gx+CELL, tS + 0.13f, gz-WT, trim);
+                if (flN) addSolidBox(pr, gx, tN, gz+WT, gx+CELL, tN + 0.13f, gz+WT+0.025f, trim);
             }
             if (wv == WALL_SOLID || (level == 0 && wv == WALL_EXIT)) {
                 float tW = floorY(gi0 - 1, gk0), tE = floorY(gi0, gk0);
-                addSolidBox(pr, gx-WT-0.025f, tW, gz, gx-WT, tW + 0.13f, gz+CELL, trim);
-                addSolidBox(pr, gx+WT, tE, gz, gx+WT+0.025f, tE + 0.13f, gz+CELL, trim);
+                if (flW) addSolidBox(pr, gx-WT-0.025f, tW, gz, gx-WT, tW + 0.13f, gz+CELL, trim);
+                if (flN) addSolidBox(pr, gx+WT, tE, gz, gx+WT+0.025f, tE + 0.13f, gz+CELL, trim);
             }
         }
         // baked AO around this cell's walls: floor strip, ceiling strip, and a
         // wall-face strip on both sides (solid walls and windows; doorways stay clean)
         // A noclip wall has to be indistinguishable from its neighbours by
         // everything except the glitch, so it gets their creases too.
-        bool nvWall = blocksEdge(nv) || (level == 0 && nv == WALL_EXIT);
-        bool wvWall = blocksEdge(wv) || (level == 0 && wv == WALL_EXIT);
+        // A rail is not a wall to crease against: it has its own contact shadow.
+        bool nvWall = (blocksEdge(nv) && nv != WALL_RAIL) || (level == 0 && nv == WALL_EXIT);
+        bool wvWall = (blocksEdge(wv) && wv != WALL_RAIL) || (level == 0 && wv == WALL_EXIT);
         if (nvWall) {
             float fyS = floorY(gi0, gk0 - 1) + 0.005f, fyN = floorY(gi0, gk0) + 0.005f;
             // Ceiling creases follow each side's own ceiling. Pinned to a fixed
@@ -2281,34 +2868,34 @@ void World::ensureMesh(int cx, int cz) {
             float cyS = ceilY(gi0, gk0 - 1) - 0.005f, cyN = ceilY(gi0, gk0) - 0.005f;
             // span exactly one cell — neighbours butt up seamlessly, no double-blend overlap
             float x0 = gx, x1 = gx + CELL;
-            aoStrip({ x0, fyS, gz - WT }, { x1, fyS, gz - WT }, { 0, 0, -AOW }, { 0, 1, 0 }, 0);          // floor, -z side
-            aoStrip({ x0, fyN, gz + WT }, { x1, fyN, gz + WT }, { 0, 0, AOW }, { 0, 1, 0 }, 0);           // floor, +z side
-            aoStrip({ x0, cyS, gz - WT }, { x1, cyS, gz - WT }, { 0, 0, -AOW }, { 0, -1, 0 }, AOC);       // ceiling creases
-            aoStrip({ x0, cyN, gz + WT }, { x1, cyN, gz + WT }, { 0, 0, AOW }, { 0, -1, 0 }, AOC);
-            aoStrip({ x0, fyS, gz - WT - 0.006f }, { x1, fyS, gz - WT - 0.006f }, { 0, AOH, 0 }, { 0, 0, -1 }, 0);   // skirting shadow up the faces
-            aoStrip({ x0, fyN, gz + WT + 0.006f }, { x1, fyN, gz + WT + 0.006f }, { 0, AOH, 0 }, { 0, 0, 1 }, 0);
-            aoStrip({ x0, cyS + 0.005f, gz - WT - 0.006f }, { x1, cyS + 0.005f, gz - WT - 0.006f }, { 0, -AOH, 0 }, { 0, 0, -1 }, AOC);   // and down from the ceiling
-            aoStrip({ x0, cyN + 0.005f, gz + WT + 0.006f }, { x1, cyN + 0.005f, gz + WT + 0.006f }, { 0, -AOH, 0 }, { 0, 0, 1 }, AOC);
+            if (flS) aoStrip({ x0, fyS, gz - WT }, { x1, fyS, gz - WT }, { 0, 0, -AOW }, { 0, 1, 0 }, 0);          // floor, -z side
+            if (flN) aoStrip({ x0, fyN, gz + WT }, { x1, fyN, gz + WT }, { 0, 0, AOW }, { 0, 1, 0 }, 0);           // floor, +z side
+            if (clS) aoStrip({ x0, cyS, gz - WT }, { x1, cyS, gz - WT }, { 0, 0, -AOW }, { 0, -1, 0 }, AOC);       // ceiling creases
+            if (clN) aoStrip({ x0, cyN, gz + WT }, { x1, cyN, gz + WT }, { 0, 0, AOW }, { 0, -1, 0 }, AOC);
+            if (flS) aoStrip({ x0, fyS, gz - WT - 0.006f }, { x1, fyS, gz - WT - 0.006f }, { 0, AOH, 0 }, { 0, 0, -1 }, 0);   // skirting shadow up the faces
+            if (flN) aoStrip({ x0, fyN, gz + WT + 0.006f }, { x1, fyN, gz + WT + 0.006f }, { 0, AOH, 0 }, { 0, 0, 1 }, 0);
+            if (clS) aoStrip({ x0, cyS + 0.005f, gz - WT - 0.006f }, { x1, cyS + 0.005f, gz - WT - 0.006f }, { 0, -AOH, 0 }, { 0, 0, -1 }, AOC);   // and down from the ceiling
+            if (clN) aoStrip({ x0, cyN + 0.005f, gz + WT + 0.006f }, { x1, cyN + 0.005f, gz + WT + 0.006f }, { 0, -AOH, 0 }, { 0, 0, 1 }, AOC);
         }
         if (wvWall) {
             float fyW = floorY(gi0 - 1, gk0) + 0.005f, fyE = floorY(gi0, gk0) + 0.005f;
             float cyW = ceilY(gi0 - 1, gk0) - 0.005f, cyE = ceilY(gi0, gk0) - 0.005f;
             float z0 = gz, z1 = gz + CELL;
-            aoStrip({ gx - WT, fyW, z0 }, { gx - WT, fyW, z1 }, { -AOW, 0, 0 }, { 0, 1, 0 }, 0);
-            aoStrip({ gx + WT, fyE, z0 }, { gx + WT, fyE, z1 }, { AOW, 0, 0 }, { 0, 1, 0 }, 0);
-            aoStrip({ gx - WT, cyW, z0 }, { gx - WT, cyW, z1 }, { -AOW, 0, 0 }, { 0, -1, 0 }, AOC);
-            aoStrip({ gx + WT, cyE, z0 }, { gx + WT, cyE, z1 }, { AOW, 0, 0 }, { 0, -1, 0 }, AOC);
-            aoStrip({ gx - WT - 0.006f, fyW, z0 }, { gx - WT - 0.006f, fyW, z1 }, { 0, AOH, 0 }, { -1, 0, 0 }, 0);
-            aoStrip({ gx + WT + 0.006f, fyE, z0 }, { gx + WT + 0.006f, fyE, z1 }, { 0, AOH, 0 }, { 1, 0, 0 }, 0);
-            aoStrip({ gx - WT - 0.006f, cyW + 0.005f, z0 }, { gx - WT - 0.006f, cyW + 0.005f, z1 }, { 0, -AOH, 0 }, { -1, 0, 0 }, AOC);
-            aoStrip({ gx + WT + 0.006f, cyE + 0.005f, z1 }, { gx + WT + 0.006f, cyE + 0.005f, z0 }, { 0, -AOH, 0 }, { 1, 0, 0 }, AOC);
+            if (flW) aoStrip({ gx - WT, fyW, z0 }, { gx - WT, fyW, z1 }, { -AOW, 0, 0 }, { 0, 1, 0 }, 0);
+            if (flN) aoStrip({ gx + WT, fyE, z0 }, { gx + WT, fyE, z1 }, { AOW, 0, 0 }, { 0, 1, 0 }, 0);
+            if (clW) aoStrip({ gx - WT, cyW, z0 }, { gx - WT, cyW, z1 }, { -AOW, 0, 0 }, { 0, -1, 0 }, AOC);
+            if (clN) aoStrip({ gx + WT, cyE, z0 }, { gx + WT, cyE, z1 }, { AOW, 0, 0 }, { 0, -1, 0 }, AOC);
+            if (flW) aoStrip({ gx - WT - 0.006f, fyW, z0 }, { gx - WT - 0.006f, fyW, z1 }, { 0, AOH, 0 }, { -1, 0, 0 }, 0);
+            if (flN) aoStrip({ gx + WT + 0.006f, fyE, z0 }, { gx + WT + 0.006f, fyE, z1 }, { 0, AOH, 0 }, { 1, 0, 0 }, 0);
+            if (clW) aoStrip({ gx - WT - 0.006f, cyW + 0.005f, z0 }, { gx - WT - 0.006f, cyW + 0.005f, z1 }, { 0, -AOH, 0 }, { -1, 0, 0 }, AOC);
+            if (clN) aoStrip({ gx + WT + 0.006f, cyE + 0.005f, z1 }, { gx + WT + 0.006f, cyE + 0.005f, z0 }, { 0, -AOH, 0 }, { 1, 0, 0 }, AOC);
         }
-        if (level == 1 && nv == WALL_SOLID && ih(gi0, gk0, seed ^ 0xE1E7u) % 71 == 0 &&
+        if (level == 1 && nv == WALL_SOLID && ih(gi0, gk0, sseed() ^ 0xE1E7u) % 71 == 0 &&
             wallNVal(gi0 - 1, gk0) == WALL_SOLID && wallNVal(gi0 + 1, gk0) == WALL_SOLID) {
             // A lift. The article gives Level 1 "staircases, elevators, isolated
             // rooms, and hallways"; the doors are shut and nobody has found the
             // car, but the call button is lit, which is worse than if it were not.
-            float sgn = (ih(gi0, gk0, seed ^ 0xE1E8u) & 1) ? 1.0f : -1.0f;
+            float sgn = (ih(gi0, gk0, sseed() ^ 0xE1E8u) & 1) ? 1.0f : -1.0f;
             float zf = gz + sgn * WT;
             auto zb = [&](float x0, float y0, float x1, float y1, float d0, float d1, Color c) {
                 addSolidBox(pr, x0, y0, std::min(zf + sgn * d0, zf + sgn * d1), x1, y1, std::max(zf + sgn * d0, zf + sgn * d1), c);
@@ -2324,7 +2911,7 @@ void World::ensureMesh(int cx, int cz) {
             zb(gx + 1.89f, nb + 1.12f, gx + 1.93f, nb + 1.18f, 0.02f, 0.03f, Color{ 255, 236, 180, 60 });
         }
         if (level == 1) {   // spalls on the walls too, rarer than on the columns
-            uint32_t sn = ih(gi0, gk0, seed ^ 0x5BA2u), sw2 = ih(gi0, gk0, seed ^ 0x5BA3u);
+            uint32_t sn = ih(gi0, gk0, sseed() ^ 0x5BA2u), sw2 = ih(gi0, gk0, sseed() ^ 0x5BA3u);
             if (nv == WALL_SOLID && sn % 13 == 0) {
                 float sgn = (sn >> 4) & 1 ? 1.0f : -1.0f;
                 addSpall(fx, pr, { gx + 0.5f + ((sn >> 5) & 7) * 0.14f, nb + 0.5f + ((sn >> 8) & 15) * 0.16f, gz + sgn * WT },
@@ -2390,18 +2977,18 @@ void World::ensureMesh(int cx, int cz) {
                 return false;
             };
             if (nv == WALL_SOLID) {
-                uint32_t h = ih(gi, gk, seed ^ 0x71F0u);
+                uint32_t h = ih(gi, gk, sseed() ^ 0x71F0u);
                 float yc; int id;
-                if (pick(h, yc, id)) {
+                if (pick(h, yc, id) && ((h & 16) ? flN : flS)) {   // not on a face over a hole or a flight
                     bool plus = (h & 16) != 0;
                     float zf = plus ? gz + WT + 0.006f : gz - WT - 0.006f;
                     decalN(gx + 0.45f + ((h >> 7) & 7) * 0.155f, yc, zf, plus, id);
                 }
             }
             if (wv == WALL_SOLID) {
-                uint32_t h = ih(gi, gk, seed ^ 0x71F9u);
+                uint32_t h = ih(gi, gk, sseed() ^ 0x71F9u);
                 float yc; int id;
-                if (pick(h, yc, id)) {
+                if (pick(h, yc, id) && ((h & 16) ? flN : flW)) {
                     bool plus = (h & 16) != 0;
                     float xf = plus ? gx + WT + 0.006f : gx - WT - 0.006f;
                     decalW(gz + 0.45f + ((h >> 7) & 7) * 0.155f, yc, xf, plus, id);
@@ -2411,9 +2998,11 @@ void World::ensureMesh(int cx, int cz) {
             // sprinkler hangs below it on a dropper — flat-on-the-ceiling is
             // exactly wrong for a sprinkler, which you almost always see from
             // underneath and off to one side.
-            uint32_t hc = ih(gi, gk, seed ^ 0x71E3u);
+            uint32_t hc = ih(gi, gk, sseed() ^ 0x71E3u);
             float ccx = gx + CELL * 0.5f, ccz = gz + CELL * 0.5f;
-            if (level != 2 && hc % DIFFUSER_RATE == 0) {
+            if (!clN) {
+                // no ceiling here to put a diffuser or a sprinkler in
+            } else if (level != 2 && hc % DIFFUSER_RATE == 0) {
                 const FixtureRect &f = FIXTURES[FIX_DIFFUSER];
                 float yq = cyc - 0.008f;
                 fx.quad({ccx-f.halfW,yq,ccz-f.halfH},{ccx-f.halfW,yq,ccz+f.halfH},
@@ -2436,17 +3025,18 @@ void World::ensureMesh(int cx, int cz) {
             // halfway along.
             const Color STEEL = { 138, 136, 130, 254 };
             const float CDY = 0.052f;          // how far it stands off the wall
-            if (nv == WALL_SOLID) {
+            // Conduit runs under a ceiling; a wall climbing an opening has none.
+            if (nv == WALL_SOLID && clN && clS) {
                 float cy = nt - 0.155f;
-                uint32_t hr = ih(gi / CONDUIT_RUN, gk, seed ^ 0x71C5u);
+                uint32_t hr = ih(gi / CONDUIT_RUN, gk, sseed() ^ 0x71C5u);
                 if (hr % 7 == 0) {
                     float z0 = (hr & 32) ? gz + WT : gz - WT - CDY;
                     addSolidBox(fx, gx - WT, cy, z0, gx + CELL + WT, cy + 0.046f, z0 + CDY, STEEL);
                 }
             }
-            if (wv == WALL_SOLID) {
+            if (wv == WALL_SOLID && clN && clW) {
                 float cy = wt2 - 0.155f;
-                uint32_t hr = ih(gi, gk / CONDUIT_RUN, seed ^ 0x71CBu);
+                uint32_t hr = ih(gi, gk / CONDUIT_RUN, sseed() ^ 0x71CBu);
                 if (hr % 7 == 0) {
                     float x0 = (hr & 32) ? gx + WT : gx - WT - CDY;
                     addSolidBox(fx, x0, cy, gz - WT, x0 + CDY, cy + 0.046f, gz + CELL + WT, STEEL);
@@ -2478,8 +3068,8 @@ void World::ensureMesh(int cx, int cz) {
             };
             auto tiltOf = [](uint32_t hs) { return ((int)((hs >> 12) & 15) - 7.5f) * 0.0085f; };
             if (nv == WALL_SOLID) {
-                uint32_t hs = ih(gi, gk, seed ^ 0x5C1Bu);
-                if (hs % SCRAWL_RATE == 0) {
+                uint32_t hs = ih(gi, gk, sseed() ^ 0x5C1Bu);
+                if (hs % SCRAWL_RATE == 0 && ((hs & 8) ? flN : flS)) {
                     float u0, v0, u1, v1; uvOf((hs >> 5) % SCRAWL_PHRASES, u0, v0, u1, v1);
                     float y0 = nb + 0.95f + ((hs >> 9) & 3) * 0.12f, y1 = y0 + 0.66f;
                     float x0 = gx + 0.28f, x1 = gx + 1.72f;
@@ -2498,8 +3088,8 @@ void World::ensureMesh(int cx, int cz) {
                 }
             }
             if (wv == WALL_SOLID) {
-                uint32_t hs = ih(gi, gk, seed ^ 0x5C2Du);
-                if (hs % SCRAWL_RATE == 0) {
+                uint32_t hs = ih(gi, gk, sseed() ^ 0x5C2Du);
+                if (hs % SCRAWL_RATE == 0 && ((hs & 8) ? flN : flW)) {
                     float u0, v0, u1, v1; uvOf((hs >> 5) % SCRAWL_PHRASES, u0, v0, u1, v1);
                     float y0 = wb + 0.95f + ((hs >> 9) & 3) * 0.12f, y1 = y0 + 0.66f;
                     float z0 = gz + 0.28f, z1 = gz + 1.72f;
@@ -2520,7 +3110,7 @@ void World::ensureMesh(int cx, int cz) {
         }
         if (dd.pillar[i][kk]) {
             addBoxSides(wa, gx + 0.42f, fyc, gz + 0.42f, gx + 1.58f, cyc, gz + 1.58f);
-            uint32_t sh = ih(gi0, gk0, seed ^ 0x5BA1u);
+            uint32_t sh = ih(gi0, gk0, sseed() ^ 0x5BA1u);
             if (level == 1 && sh % 3 == 0) {   // a column with its cover blown off
                 int f = (int)((sh >> 3) & 3);
                 const Vector3 NS[4] = { {0,0,-1}, {0,0,1}, {-1,0,0}, {1,0,0} };
@@ -2548,12 +3138,53 @@ void World::ensureMesh(int cx, int cz) {
                               dd.elev[i][kk] * ELEV_UNIT,     // furniture sits on the local floor
                               dd.propRot[i][kk] * 1.5708f,    // a quarter turn at a time
                               cx * CCELLS + i, cz * CCELLS + kk };
-            addProp(dd.prop[i][kk], site, seed, level, pr, ce, ao);
+            addProp(dd.prop[i][kk], site, sseed(), level, pr, ce, ao);
+        }
+    }
+    // ---- the flights that rise from this storey (stampFeature has the plan).
+    // Steps belong to the storey they stand on; the storey above draws only
+    // its hole, its rails and the floor you arrive on.
+    for (int q = 0; q < d.nfeat; q++) {
+        const VertFeat &f = d.feats[q];
+        if (f.lo != qs) continue;
+        auto to = [&](float u, float y, float v) { return featureWorld(f, cx, cz, u, y, v); };
+        const float R = storeyH / 24.0f;
+        if (f.kind == VK_STAIRWELL) {
+            // Lane A: 12 risers from the foot of the stair (plain floor, drawn
+            // with the rest) to the half landing.
+            const float G = 4.0f / 12.0f;
+            Vector3 a, b, c, e;
+            for (int i = 0; i < 12; i++)
+                addStep(fl, pr, to, 0, CELL, 2 + i * G, 2 + (i + 1) * G, 0, (i + 1) * R, true, false);
+            // The half landing, right across the shaft at the far end.
+            a = to(0, 12 * R, 6); b = to(2 * CELL, 12 * R, 6); c = to(2 * CELL, 12 * R, 8); e = to(0, 12 * R, 8);
+            fl.quad(a, b, c, e, { 0, 1, 0 }, { a.x / 2, a.z / 2 }, { b.x / 2, b.z / 2 }, { c.x / 2, c.z / 2 },
+                    { e.x / 2, e.z / 2 }, WHITE);
+            // Lane B: 12 more, climbing back toward the door above. Its top
+            // landing is the upper storey's floor, drawn by that storey.
+            for (int j = 0; j < 12; j++)
+                addStep(fl, pr, to, CELL, 2 * CELL, 6 - (j + 1) * G, 6 - j * G, 0, 12 * R + (j + 1) * R, false, false);
+            // The landing light: a batten on the end wall, 2.25 m over the half
+            // landing, where it lights both flights. Its steel body is here;
+            // its tube is drawn by the renderer, because it goes out in a
+            // blackout and a chunk mesh cannot. It is the shaft's only light:
+            // the tray grid has no fitting over an opening.
+            Vector3 lamp = landingLamp(f, cx, cz);
+            Vector3 lo2 = to(CELL - 0.55f, lamp.y - 0.06f, 8 - WT - 0.13f), hi2 = to(CELL + 0.55f, lamp.y + 0.06f, 8 - WT);
+            addSolidBox(pr, std::min(lo2.x, hi2.x), lamp.y - 0.06f, std::min(lo2.z, hi2.z),
+                        std::max(lo2.x, hi2.x), lamp.y + 0.06f, std::max(lo2.z, hi2.z), Color{ 150, 150, 142, 254 });
+        } else if (f.kind == VK_STAIR || f.stairU >= 0) {
+            // A straight flight: 24 risers over rows 1..4, between its wall and
+            // its balustrade (both of which cover the steps' ends).
+            int s0 = f.kind == VK_STAIR ? 0 : f.stairU, s1 = f.kind == VK_STAIR ? f.wu - 1 : f.stairU;
+            const float G = 8.0f / 24.0f;
+            for (int i = 0; i < 24; i++)
+                addStep(fl, pr, to, s0 * CELL, (s1 + 1) * CELL, 2 + i * G, 2 + (i + 1) * G, 0, (i + 1) * R, true, false);
         }
     }
     if (d.manila) {
         float mx = wx + (MANILA_HI + 1 - 2) * CELL, mz = wz + (MANILA_HI + 1 - 2) * CELL;
-        addManilaRoom(pr, fx, ao, mx, mz, ceilY(cellOf(mx), cellOf(mz)), ih(cx, cz, seed ^ 0x3A11u));
+        addManilaRoom(pr, fx, ao, mx, mz, ceilY(cellOf(mx), cellOf(mz)), ih(cx, cz, sseed() ^ 0x3A11u));
     }
     if (level == 3 || level == 1) {
         // Service pipework — the Red Halls' plumbing, and Level 1's: a warehouse
@@ -2570,7 +3201,7 @@ void World::ensureMesh(int cx, int cz) {
             // a wall, so an edge the building has closed behind you should grow
             // one on the rebake rather than stay bare.
             if (wallNVal(gi, gk) == WALL_SOLID) {
-                uint32_t rh = ih(gk, 7717, seed ^ 0x9191u);
+                uint32_t rh = ih(gk, 7717, sseed() ^ 0x9191u);
                 if (rh % 4 == 0) {
                     float py = ceilY(gi, gk) - 0.22f - ((rh >> 5) & 3) * 0.09f;
                     float side = ((rh >> 9) & 1) ? 0.34f : -0.34f;
@@ -2585,7 +3216,7 @@ void World::ensureMesh(int cx, int cz) {
                 }
             }
             if (wallWVal(gi, gk) == WALL_SOLID) {
-                uint32_t rh = ih(gi, 3313, seed ^ 0x9292u);
+                uint32_t rh = ih(gi, 3313, sseed() ^ 0x9292u);
                 if (rh % 4 == 0) {
                     float py = ceilY(gi, gk) - 0.22f - ((rh >> 5) & 3) * 0.09f;
                     float side = ((rh >> 9) & 1) ? 0.34f : -0.34f;
@@ -2610,7 +3241,7 @@ void World::ensureMesh(int cx, int cz) {
         }
     }
     if (level == 4) {   // crepe streamers sag from the ceiling, in pairs of quads
-        Rng srng(hash64(key(cx, cz) ^ 0xFE57AULL ^ (uint64_t)seed));
+        Rng srng(hash64(key(cx, cz) ^ 0xFE57AULL ^ (uint64_t)sseed()));
         int ns = 3 + srng.ri(0, 3);
         for (int s = 0; s < ns; s++) {
             float ax = wx + srng.f01() * CHUNK, az = wz + srng.f01() * CHUNK;
@@ -2647,8 +3278,21 @@ void World::ensureMesh(int cx, int cz) {
 int World::gatherCellAABBs(int ci, int ck, AABB *out, int cap, int cnt, bool includeProps) {
     float x0 = ci * CELL, z0 = ck * CELL;
     uint8_t nv = wallNVal(ci, ck), wv = wallWVal(ci, ck);
-    if (cnt < cap && blocksEdge(nv)) out[cnt++] = { x0 - WT, z0 - WT, x0 + CELL + WT, z0 + WT, wallH };
-    if (cnt < cap && blocksEdge(wv)) out[cnt++] = { x0 - WT, z0 - WT, x0 + WT, z0 + CELL + WT, wallH };
+    // Full-height blockers report FULL_H, not wallH. Standing on something tall
+    // used to be enough to step over a wall, which nothing could do — until
+    // flights put bodies four metres up beside walls that climb a whole storey.
+    // A rail is the same box, marked see-through: waist high, so it stops a
+    // body at any height and stops no look at all.
+    //
+    // Unlike a wall's, a rail's box stops at the ends of its edge. A wall
+    // overhangs by WT so corners close; a rail overhanging would reach into a
+    // stairwell's wall beside it, and a body in that stairwell's corner would
+    // brush a rail that exists on one storey and not the next — a jolt at the
+    // very moment the frame changes (tools/regression.cpp checks for it).
+    if (cnt < cap && nv == WALL_RAIL) out[cnt++] = { x0, z0 - RAIL_T, x0 + CELL, z0 + RAIL_T, FULL_H, true };
+    else if (cnt < cap && blocksEdge(nv)) out[cnt++] = { x0 - WT, z0 - WT, x0 + CELL + WT, z0 + WT, FULL_H };
+    if (cnt < cap && wv == WALL_RAIL) out[cnt++] = { x0 - RAIL_T, z0, x0 + RAIL_T, z0 + CELL, FULL_H, true };
+    else if (cnt < cap && blocksEdge(wv)) out[cnt++] = { x0 - WT, z0 - WT, x0 + WT, z0 + CELL + WT, FULL_H };
     // A doorway is passable — blocksEdge says so, and pathfinding, line of sight
     // and the light all take it at that. Its jambs are not: without these two
     // boxes you walk through the frame, which is worse than the bare gap the
@@ -2659,17 +3303,17 @@ int World::gatherCellAABBs(int ci, int ck, AABB *out, int cap, int cnt, bool inc
     // them in and the player walks into a 0.7 m pier that is not there.
     if (nv == WALL_DOOR) {
         if (cnt < cap && wallNVal(ci - 1, ck) != WALL_DOOR)
-            out[cnt++] = { x0 - WT, z0 - WT, x0 + 0.35f, z0 + WT, wallH };
+            out[cnt++] = { x0 - WT, z0 - WT, x0 + 0.35f, z0 + WT, FULL_H };
         if (cnt < cap && wallNVal(ci + 1, ck) != WALL_DOOR)
-            out[cnt++] = { x0 + 1.65f, z0 - WT, x0 + CELL + WT, z0 + WT, wallH };
+            out[cnt++] = { x0 + 1.65f, z0 - WT, x0 + CELL + WT, z0 + WT, FULL_H };
     }
     if (wv == WALL_DOOR) {
         if (cnt < cap && wallWVal(ci, ck - 1) != WALL_DOOR)
-            out[cnt++] = { x0 - WT, z0 - WT, x0 + WT, z0 + 0.35f, wallH };
+            out[cnt++] = { x0 - WT, z0 - WT, x0 + WT, z0 + 0.35f, FULL_H };
         if (cnt < cap && wallWVal(ci, ck + 1) != WALL_DOOR)
-            out[cnt++] = { x0 - WT, z0 + 1.65f, x0 + WT, z0 + CELL + WT, wallH };
+            out[cnt++] = { x0 - WT, z0 + 1.65f, x0 + WT, z0 + CELL + WT, FULL_H };
     }
-    if (cnt < cap && pillarAt(ci, ck)) out[cnt++] = { x0 + 0.42f, z0 + 0.42f, x0 + 1.58f, z0 + 1.58f, wallH };
+    if (cnt < cap && pillarAt(ci, ck)) out[cnt++] = { x0 + 0.42f, z0 + 0.42f, x0 + 1.58f, z0 + 1.58f, FULL_H };
     // A riser taller than one step is terrain, not a ramp. The box covers the
     // whole high cell and tops out at its floor, which is the same trick the
     // furniture above uses: collideCircle skips any box you are already standing
@@ -2698,7 +3342,7 @@ int World::gatherCellAABBs(int ci, int ck, AABB *out, int cap, int cnt, bool inc
         uint8_t pv = propAt(ci, ck);
         if (pv) {
             float ey = floorY(ci, ck);
-            uint32_t h = ih(ci, ck, seed ^ 0xB0B5u);   // same hash the mesher uses
+            uint32_t h = ih(ci, ck, sseed() ^ 0xB0B5u);   // same hash the mesher uses
             float r1 = (h & 0xFF) / 255.0f, r2 = ((h >> 8) & 0xFF) / 255.0f;
             // Tops here must match the heights addProp actually builds, and
             // Game::bottleShelfY quotes the same numbers again for the surfaces
@@ -2758,14 +3402,25 @@ void World::collideCircle(float &px, float &pz, float r, float feetY) {
 
 // floor height here, counting prop tops at or below your feet (so you can stand on furniture)
 float World::groundAt(float x, float z, float feetY) {
+    int ci = cellOf(x), ck = cellOf(z);
+    uint8_t vf = storeyH > 0.0f ? vflagAt(ci, ck) : 0;
+    if (vf & VF_HOLE) {
+        // No floor on this storey: what you stand on is whatever is under the
+        // hole, one storey down — the flight coming up through it, or the floor
+        // of the hall an atrium opens onto. Asked in that storey's own frame and
+        // brought back into this one. Bounded, so a mistake in the generator is
+        // a long fall and not a stack overflow.
+        if (qs <= storey - STOREY_REACH) return -STOREY_REACH * storeyH;
+        StoreyScope sc(*this, qs - 1);
+        return groundAt(x, z, feetY + storeyH) - storeyH;
+    }
     // A rotten patch is dished in the mesh, so walk into it rather than across
     // the top of it: the give underfoot is the warning, and a player standing
     // level on a floor that is visibly bowed under them is not warned of
     // anything. Furniture tops below still win, as they always did.
-    float g = floorY(cellOf(x), cellOf(z)) - softDip(x, z);
+    float g = (vf & VF_STAIR) ? stairY(x, z) : floorY(ci, ck) - softDip(x, z);
     AABB boxes[MAX_NEARBY_AABBS];
     int cnt = 0;
-    int ci = cellOf(x), ck = cellOf(z);
     for (int dx = -1; dx <= 1; dx++)
         for (int dz = -1; dz <= 1; dz++)
             cnt = gatherCellAABBs(ci + dx, ck + dz, boxes, MAX_NEARBY_AABBS, cnt);
@@ -2789,11 +3444,13 @@ bool World::lineOfSight(float ax, float az, float bx, float bz) {
         // Only full-height blockers stop a sight line. Props are already out via
         // the flag above; the elevation risers are the other short box, and a
         // knee-high terrace lip does not hide anything — treating one as opaque
-        // would blind every actor standing on a terrace, itself included. When
-        // real multi-storey geometry arrives (WORLD-03 on) this test needs the
-        // heights of both endpoints rather than just the blocker's.
+        // would blind every actor standing on a terrace, itself included.
+        // Storeys did not change this: each is its own floorplan, so a sight
+        // line is always drawn on one of them, and the callers that care about
+        // a flight's worth of height between two actors test it themselves.
+        // A rail is full height to a body and waist height to an eye.
         for (int i = 0; i < cnt; i++)
-            if (boxes[i].top >= wallH - 0.01f &&
+            if (boxes[i].top >= wallH - 0.01f && !boxes[i].seeThrough &&
                 x > boxes[i].minx && x < boxes[i].maxx && z > boxes[i].minz && z < boxes[i].maxz) return false;
     }
     return true;
@@ -2805,6 +3462,9 @@ bool World::lineOfSight(float ax, float az, float bx, float bz) {
 // Only full-height blockers count: an exit doorway (2) is a hole, a window (3)
 // is glass, and furniture is too short to seal a cell — all let light through.
 void World::buildOccupancy(int originI, int originK, int n, unsigned char *out) {
+    // The storey you are on, through the accessors, so the overlays — walls the
+    // building closed behind you, doors you unlocked — shadow like the walls
+    // they are.
     for (int z = 0; z < n; z++)
         for (int x = 0; x < n; x++) {
             int ci = originI + x, ck = originK + z;
@@ -2812,17 +3472,98 @@ void World::buildOccupancy(int originI, int originK, int n, unsigned char *out) 
             if (blocksLight(wallNVal(ci, ck))) v |= 1;
             if (blocksLight(wallWVal(ci, ck))) v |= 2;
             if (pillarAt(ci, ck)) v |= 4;
-            out[z * n + x] = v;
+            if (storeyH > 0.0f) {
+                // A fitting is centred on this cell's min corner (every panel
+                // centre is a cell corner) and overhangs all four cells round
+                // it; if any of them is open to the storey above, the fitting
+                // would hang in the opening, so the mesher leaves it out and
+                // the shader must not light from it.
+                uint8_t own = vflagAt(ci, ck);
+                uint8_t corner = own | vflagAt(ci - 1, ck) | vflagAt(ci, ck - 1) | vflagAt(ci - 1, ck - 1);
+                if (own & VF_OPENUP) v |= 16;
+                if (corner & VF_OPENUP) v |= 8;
+                // ...and bit 5: a hole touches this fitting's corner, so its
+                // light falls through into the storey below as well.
+                if (corner & VF_HOLE) v |= 32;
+            }
+            unsigned char *o = out + (z * n + x) * 4;
+            o[0] = v; o[1] = o[2] = o[3] = 0;
         }
+    if (storeyH <= 0.0f) return;
+    // The storeys below (byte 1) and above (byte 2): only ever seen through an
+    // opening, and only their chunks near one are loaded, so read what is
+    // there and generate nothing. Their overlays are left out: the building
+    // only rearranges the floor you are on.
+    for (int rel = -1; rel <= 1; rel += 2) {
+        auto &m = layer(storey + rel);
+        const int ch = rel < 0 ? 1 : 2;
+        auto peek = [&](int ci, int ck) -> const ChunkData * {
+            auto it = m.find(key(fdiv(ci, CCELLS), fdiv(ck, CCELLS)));
+            return it == m.end() ? nullptr : &it->second;
+        };
+        auto flagOf = [&](int ci, int ck) -> uint8_t {
+            const ChunkData *d = peek(ci, ck);
+            return d ? d->vflag[ci - fdiv(ci, CCELLS) * CCELLS][ck - fdiv(ck, CCELLS) * CCELLS] : 0;
+        };
+        for (int z = 0; z < n; z++)
+            for (int x = 0; x < n; x++) {
+                int ci = originI + x, ck = originK + z;
+                const ChunkData *d = peek(ci, ck);
+                if (!d) continue;
+                int li = ci - fdiv(ci, CCELLS) * CCELLS, lk = ck - fdiv(ck, CCELLS) * CCELLS;
+                unsigned char v = 0;
+                if (blocksLight(d->wallN[li][lk])) v |= 1;
+                if (blocksLight(d->wallW[li][lk])) v |= 2;
+                if (d->pillar[li][lk]) v |= 4;
+                uint8_t corner = d->vflag[li][lk] | flagOf(ci - 1, ck) | flagOf(ci, ck - 1) | flagOf(ci - 1, ck - 1);
+                if (d->vflag[li][lk] & VF_OPENUP) v |= 16;
+                if (corner & VF_OPENUP) v |= 8;
+                if (corner & VF_HOLE) v |= 32;
+                out[(z * n + x) * 4 + ch] = v;
+            }
+    }
+    // Bit 6: an opening is near enough that one of the nine fittings the
+    // shader sums for a point in this cell could be missing, or this cell
+    // could be under one. The shader only looks fittings up where it is set,
+    // so everywhere else pays one fetch rather than ten. The nine sit within
+    // 1.5 grid pitches of the point; one more cell for rounding and one for
+    // the shadow lookup's 16 cm bias off the surface.
+    const int R = (int)ceilf(0.75f * LEVELS[level].ls) + 2;
+    std::vector<unsigned char> row((size_t)n * n);
+    for (int ch = 0; ch < 3; ch++) {
+        for (int z = 0; z < n; z++)          // along x
+            for (int x = 0; x < n; x++) {
+                unsigned char hit = 0;
+                for (int d = -R; d <= R && !hit; d++) {
+                    int xx = x + d;
+                    if (xx >= 0 && xx < n && (out[(z * n + xx) * 4 + ch] & (8 | 16 | 32))) hit = 1;
+                }
+                row[z * n + x] = hit;
+            }
+        for (int z = 0; z < n; z++)          // then along z
+            for (int x = 0; x < n; x++)
+                for (int d = -R; d <= R; d++) {
+                    int zz = z + d;
+                    if (zz >= 0 && zz < n && row[zz * n + x]) { out[(z * n + x) * 4 + ch] |= 64; break; }
+                }
+    }
 }
 
 bool World::canStep(int ci, int ck, int ni, int nk) {
     if (pillarAt(ni, nk) || propAt(ni, nk) != PROP_NONE) return false;   // furniture and pillars are solid
+    // Storeys: a hole with nothing coming up through it is a drop, not a
+    // route. A flight and the hole it rises through are walkable, and their
+    // heights are continuous along every edge the walls and rails leave open,
+    // so the cell-height riser rule below — which reads the nominal floor, 0
+    // on every stair cell — has nothing to say about them.
+    uint8_t fa = storeyH > 0.0f ? vflagAt(ci, ck) : 0, fb = storeyH > 0.0f ? vflagAt(ni, nk) : 0;
+    if ((fb & VF_HOLE) && !(fb & VF_WALKHOLE)) return false;
+    bool vertical = ((fa | fb) & (VF_STAIR | VF_HOLE)) != 0;
     // A body cannot route up or down a face it cannot walk. The BFS used to
     // test walls alone, so the pack and Clark crossed a terrace edge as if it
     // were flat and stood 1.2 m inside a loading dock. Pools stay passable:
     // wading in and out of one is movement the mover handles, not a wall.
-    if (!poolAt(ci, ck) && !poolAt(ni, nk) &&
+    if (!vertical && !poolAt(ci, ck) && !poolAt(ni, nk) &&
         fabsf(floorY(ni, nk) - floorY(ci, ck)) > MAX_STEP) return false;
     // the edge the two cells share: a wall or window blocks it, a doorway does not
     if (nk == ck - 1)      { if (blocksEdge(wallNVal(ci, ck)))     return false; }
@@ -2867,32 +3608,50 @@ Vector2 World::findOpenSpot(float x, float z) {
         for (int dx = -r; dx <= r; dx++)
             for (int dz = -r; dz <= r; dz++) {
                 if (std::max(abs(dx), abs(dz)) != r) continue;
+                // never on a flight or over a hole: an arrival, a spawn or a
+                // dropped doubloon wants a floor
                 if (!pillarAt(ci0 + dx, ck0 + dz) && propAt(ci0 + dx, ck0 + dz) == PROP_NONE &&
-                    !poolAt(ci0 + dx, ck0 + dz))
+                    !poolAt(ci0 + dx, ck0 + dz) &&
+                    !(storeyH > 0.0f && (vflagAt(ci0 + dx, ck0 + dz) & (VF_STAIR | VF_HOLE))))
                     return { (ci0 + dx) * CELL + 1.0f, (ck0 + dz) * CELL + 1.0f };
             }
     return { x, z };
 }
 
+static void unloadChunkMeshes(ChunkData &c) {
+    if (!c.built) return;
+    for (int i = 0; i < MESH_COUNT; i++)
+        if (c.meshes[i].vertexCount > 0) UnloadMesh(c.meshes[i]);
+}
+
 void World::unloadFar(int pcx, int pcz, int radius) {
-    for (auto it = chunks.begin(); it != chunks.end();) {
-        int cx = (int)(int32_t)(it->first >> 32), cz = (int)(int32_t)(it->first & 0xFFFFFFFF);
-        if (abs(cx - pcx) > radius || abs(cz - pcz) > radius) {
-            if (it->second.built)
-                for (int i = 0; i < MESH_COUNT; i++)
-                    if (it->second.meshes[i].vertexCount > 0) UnloadMesh(it->second.meshes[i]);
-            it = chunks.erase(it);
-        } else ++it;
+    auto sweep = [&](std::unordered_map<uint64_t, ChunkData> &m) {
+        for (auto it = m.begin(); it != m.end();) {
+            int cx = (int)(int32_t)(it->first >> 32), cz = (int)(int32_t)(it->first & 0xFFFFFFFF);
+            if (abs(cx - pcx) > radius || abs(cz - pcz) > radius) {
+                unloadChunkMeshes(it->second);
+                it = m.erase(it);
+            } else ++it;
+        }
+    };
+    sweep(chunks);
+    // The storeys next to yours are drawn through the openings and kept by the
+    // same radius; anything further up or down is a floor you have left behind
+    // and will be regenerated identically if you ever climb back to it.
+    for (auto it = layers.begin(); it != layers.end();) {
+        if (abs(it->first - storey) > 2) {
+            for (auto &kv : it->second) unloadChunkMeshes(kv.second);
+            it = layers.erase(it);
+        } else { sweep(it->second); ++it; }
     }
 }
 
 void World::unloadAll() {
     shifted.clear();   // a different floor is a different building; it has not moved on you yet
-    for (auto &kv : chunks)
-        if (kv.second.built)
-            for (int i = 0; i < MESH_COUNT; i++)
-                if (kv.second.meshes[i].vertexCount > 0) UnloadMesh(kv.second.meshes[i]);
+    for (auto &kv : chunks) unloadChunkMeshes(kv.second);
     chunks.clear();
+    for (auto &lv : layers) for (auto &kv : lv.second) unloadChunkMeshes(kv.second);
+    layers.clear();
 }
 
 

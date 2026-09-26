@@ -22,8 +22,10 @@ static void capture(Game &g, const char *name) {
     ++captureCount;
     g.updateLook();
     // Fill the complete visible ring; three calls previously left black holes
-    // in shots after moving the camera or changing level.
-    for (int i=0;i<7;++i) g.streamChunks();
+    // in shots after moving the camera or changing level. And the storeys seen
+    // through an opening, which stream after your own storey's ring: seven
+    // calls filled the ring and left the floor below an atrium black.
+    for (int i=0;i<24;++i) g.streamChunks();
     g.updateOccupancy();
     for (int i=0;i<3;++i) { g.renderScene(4); g.renderUI(4); }
     TakeScreenshot(name);
@@ -862,6 +864,186 @@ int main() {
         g.applyLevel(0);
     }
 
+    // ---- storeys (Level 0). The floors are generated blind of each other and
+    // joined by features both of them stamp from one pure function, and the
+    // player changes frame halfway up a flight. Everything below asserts a
+    // mechanism, not a map: the two halves agree, collision and ground height
+    // agree across the boundary where the switch happens, and a real movement
+    // loop takes you up a flight, onto the next floor, and back.
+    {
+        g.applyLevel(0); g.inMenu=false; g.deathT=0;
+        World &w=g.world;
+        const float H=w.storeyH;
+        CHECK(H>4.0f && H<5.0f && w.storey==0);
+        int nWell=0,nStair=0,nAtr=0,nAtrStair=0,checkedPts=0;
+        struct Found { VertFeat f; int cx,cz; bool ok=false; } straight, atrium, well;
+        for (int cz=-5;cz<=5;++cz) for (int cx=-5;cx<=5;++cx) for (int p=-2;p<=2;++p) {
+            VertFeat f; if (!w.pairFeature(cx,cz,p,f)) continue;
+            nWell+=f.kind==VK_STAIRWELL; nStair+=f.kind==VK_STAIR;
+            nAtr+=f.kind==VK_ATRIUM && f.stairU<0; nAtrStair+=f.kind==VK_ATRIUM && f.stairU>=0;
+            if (p==0 && f.kind==VK_STAIR && !straight.ok) straight={f,cx,cz,true};
+            if (p==0 && f.kind==VK_ATRIUM && f.stairU<0 && !atrium.ok) atrium={f,cx,cz,true};
+            if (p==0 && f.kind==VK_STAIRWELL && !well.ok) well={f,cx,cz,true};
+            // (1) cell for cell: open above below exactly where there is a hole
+            // above, and a flight below exactly where the hole can be walked
+            for (int uc=0;uc<f.wu;++uc) for (int vc=0;vc<f.lv;++vc) {
+                Vector3 c=w.featureWorld(f,cx,cz,(uc+0.5f)*CELL,0,(vc+0.5f)*CELL);
+                int ci=cellOf(c.x), ck=cellOf(c.z);
+                uint8_t lo,hi;
+                { StoreyScope s(w,p); lo=w.vflagAt(ci,ck); }
+                { StoreyScope s(w,p+1); hi=w.vflagAt(ci,ck); }
+                CHECK(((lo&VF_OPENUP)!=0)==((hi&VF_HOLE)!=0));
+                // a flight coming up through a hole can be walked down from
+                // above, and a walkable hole always has something under it
+                if ((lo&VF_STAIR) && (lo&VF_OPENUP)) CHECK(hi&VF_WALKHOLE);
+                if (hi&VF_WALKHOLE) CHECK(lo&VF_OPENUP);
+                CHECK((lo&VF_KEEP) && (hi&VF_KEEP));
+            }
+            if (f.kind==VK_ATRIUM && f.stairU<0) continue;
+            // (2) where the frame changes — the stretch of flight at half a
+            // storey — the storey above and the storey below must agree about
+            // what is under your feet and what stops you, or the switch is a
+            // step, a drop or a wall that was not there a frame ago.
+            for (float u=0.2f; u<f.wu*CELL; u+=0.4f) for (float v=0.1f; v<f.lv*CELL; v+=0.2f) {
+                Vector3 pt=w.featureWorld(f,cx,cz,u,0,v);
+                float gl; { StoreyScope s(w,p); if (!(w.vflagAt(cellOf(pt.x),cellOf(pt.z))&VF_STAIR)) continue;
+                            gl=w.groundAt(pt.x,pt.z,H*0.5f+0.3f); }
+                if (fabsf(gl-H*0.5f)>0.35f) continue;
+                float gh; { StoreyScope s(w,p+1); gh=w.groundAt(pt.x,pt.z,H*0.5f+0.3f-H); }
+                CHECK_NEAR(gl,gh+H,0.002f);
+                for (int d=0;d<8;++d) {
+                    float a=d*PI/4, x1=pt.x+cosf(a)*0.9f, z1=pt.z+sinf(a)*0.9f, x2=x1, z2=z1;
+                // only probes that start inside the footprint, clear of its
+                // walls: one that starts on the far side of a shaft wall is
+                // somewhere you cannot get to from the stairs
+                float pu, pv; w.featureLocal(f,cx,cz,x1,z1,pu,pv);
+                if (pu<WT+0.02f || pv<WT+0.02f || pu>f.wu*CELL-WT-0.02f || pv>f.lv*CELL-WT-0.02f) continue;
+                    { StoreyScope s(w,p);   w.collideCircle(x1,z1,Game::PR,gl); }
+                    { StoreyScope s(w,p+1); w.collideCircle(x2,z2,Game::PR,gl-H); }
+                    CHECK_NEAR(x1,x2,0.01f); CHECK_NEAR(z1,z2,0.01f);
+                }
+                checkedPts++;
+            }
+        }
+        printf("Storeys: %d stairwells, %d stairs, %d atria (%d with a flight) over 121 chunks x 5 pairs; "
+               "%d boundary points agree\n", nWell, nStair, nAtr+nAtrStair, nAtrStair, checkedPts);
+        CHECK(nWell>0 && nStair>0 && nAtr>0 && nAtrStair>0 && checkedPts>50);
+        CHECK(straight.ok && atrium.ok && well.ok);
+
+        // (3) climb a straight flight with the real mover, Clark close behind.
+        const VertFeat &sf=straight.f;
+        float su=sf.wu*CELL*0.5f;
+        Vector3 foot=w.featureWorld(sf,straight.cx,straight.cz,su,0,0.8f);
+        Vector3 up1=w.featureWorld(sf,straight.cx,straight.cz,su,0,1.8f);
+        float dx=up1.x-foot.x, dz=up1.z-foot.z;
+        g.px=foot.x; g.pz=foot.z; g.py=0; g.vy=0; g.grounded=true; g.fallFrom=0;
+        g.health=1; g.hurtT=0; g.swimming=false; g.squeezing=false;
+        g.ent.st=EState::Chase; g.ent.x=g.px-dx*2.5f; g.ent.z=g.pz-dz*2.5f; g.ent.dispY=0; g.entDist=2.5f;
+        int climbFrames=0; bool rose=false; float lastPy=0, worstDrop=0;
+        for (; climbFrames<400 && !(w.storey==1 && g.py>-0.02f); ++climbFrames) {
+            g.velx=dx*4.0f; g.velz=dz*4.0f;
+            g.updateMovement(1.0f/30);
+            if (w.storey==0) { worstDrop=fmaxf(worstDrop,lastPy-g.py); lastPy=g.py; }
+            if (w.storey==1 && !rose) {
+                rose=true;
+                // He came up after you: on the flight, below you, in the new frame.
+                CHECK(g.ent.st==EState::Chase);
+                CHECK(g.ent.dispY < g.py-1.0f);
+                CHECK(w.vflagAt(cellOf(g.ent.x),cellOf(g.ent.z)) & VF_WALKHOLE);
+            }
+        }
+        CHECK(rose && w.storey==1);
+        CHECK(worstDrop<MAX_STEP);                 // no step down on the way up
+        CHECK(fabsf(g.py)<0.05f && g.grounded);   // standing on the floor above
+        CHECK(g.health==1);                        // walking up stairs is not a fall
+        CHECK(g.storeyNoted && g.deckNoteT>0);     // and the first time, it says so
+        g.ent.st=EState::Hidden;
+        // ...and back down the same flight
+        for (int i=0;i<400 && !(w.storey==0 && g.py<0.05f && g.py>-0.05f &&
+                                 w.vflagAt(cellOf(g.px),cellOf(g.pz))==VF_KEEP);++i) {
+            g.velx=-dx*4.0f; g.velz=-dz*4.0f;
+            g.updateMovement(1.0f/30);
+        }
+        CHECK(w.storey==0 && fabsf(g.py)<0.05f && g.health==1);
+
+        // (4) over an atrium's railing: a storey's fall, into the hall below
+        const VertFeat &af=atrium.f;
+        Vector3 over=w.featureWorld(af,atrium.cx,atrium.cz,af.wu*CELL*0.5f,0,af.lv*CELL*0.5f);
+        g.changeStorey(1,100);
+        CHECK(w.storey==1 && (w.vflagAt(cellOf(over.x),cellOf(over.z))&VF_HOLE));
+        // the rail round it stops a body, not a look, and no route crosses it
+        {
+            Vector3 edge=w.featureWorld(af,atrium.cx,atrium.cz,af.wu*CELL*0.5f,0,-0.3f);
+            Vector3 in=w.featureWorld(af,atrium.cx,atrium.cz,af.wu*CELL*0.5f,0,0.6f);
+            float bx=edge.x,bz=edge.z; w.collideCircle(bx,bz,Game::PR,0.0f);
+            CHECK(fabsf(bx-edge.x)+fabsf(bz-edge.z)>0.1f);
+            CHECK(w.lineOfSight(edge.x,edge.z,in.x,in.z));
+            CHECK(!w.canStep(cellOf(edge.x),cellOf(edge.z),cellOf(in.x),cellOf(in.z)));
+        }
+        g.px=over.x; g.pz=over.z; g.py=0; g.vy=0; g.grounded=false; g.fallFrom=0;
+        g.health=1; g.hurtT=0; g.velx=g.velz=0;
+        for (int i=0;i<200 && !(w.storey==0 && g.grounded);++i) g.updateMovement(1.0f/30);
+        CHECK(w.storey==0 && g.grounded && fabsf(g.py)<0.05f);
+        float fallDmg=1-g.health;
+        printf("  a storey's fall through an atrium took %.2f of the health meter\n", fallDmg);
+        CHECK(fallDmg>0.3f && fallDmg<0.5f && !g.inMenu);
+
+        // (5) every floor is its own set of rooms and of things left in them
+        {
+            int same=0, total=0;
+            std::vector<int> a0;
+            for (int a=-20;a<20;++a) for (int b=-20;b<20;++b) a0.push_back((int)g.pickupAt(a,b));
+            g.changeStorey(1,100);
+            size_t q=0;
+            for (int a=-20;a<20;++a) for (int b=-20;b<20;++b,++q) {
+                int k=(int)g.pickupAt(a,b);
+                if (k || a0[q]) { total++; if (k==a0[q]) same++; }
+            }
+            CHECK(total>4 && same*2<total);
+            g.changeStorey(-1,100);
+        }
+
+        // (6) what it looks like: the foot of a stairwell, a flight halfway up,
+        // and an atrium from the balcony above
+        g.ent.st=EState::Hidden; g.fear=0;
+        {
+            const VertFeat &wf=well.f;
+            Vector3 at=w.featureWorld(wf,well.cx,well.cz,1.0f,0,0.7f), to=w.featureWorld(wf,well.cx,well.cz,1.0f,0,1.7f);
+            g.px=at.x; g.pz=at.z; g.py=0; g.eyeY=1.62f; g.pitch=0.25f; g.yaw=atan2f(to.z-at.z,to.x-at.x);
+            capture(g,"storey-stairwell.png");
+        }
+        {
+            Vector3 at=w.featureWorld(sf,straight.cx,straight.cz,su,0,4.5f);
+            g.px=at.x; g.pz=at.z; g.py=w.groundAt(at.x,at.z,3.0f); g.eyeY=g.py+1.62f; g.pitch=0.05f;
+            g.yaw=atan2f(dz,dx);
+            capture(g,"storey-stair.png");
+        }
+        {
+            g.changeStorey(1,100);
+            Vector3 at=w.featureWorld(af,atrium.cx,atrium.cz,af.wu*CELL*0.5f,0,-1.0f);
+            Vector3 to=w.featureWorld(af,atrium.cx,atrium.cz,af.wu*CELL*0.5f,0,1.0f);
+            g.px=at.x; g.pz=at.z; g.py=0; g.eyeY=1.62f; g.pitch=-0.55f; g.yaw=atan2f(to.z-at.z,to.x-at.x);
+            capture(g,"storey-atrium.png");
+            g.changeStorey(-1,100);
+        }
+        {   // the same atrium from the floor of the hall, looking up at the balcony
+            Vector3 at=w.featureWorld(af,atrium.cx,atrium.cz,af.wu*CELL*0.5f,0,-1.2f);
+            Vector3 to=w.featureWorld(af,atrium.cx,atrium.cz,af.wu*CELL*0.5f,0,1.0f);
+            g.px=at.x; g.pz=at.z; g.py=0; g.eyeY=1.62f; g.pitch=0.42f; g.yaw=atan2f(to.z-at.z,to.x-at.x);
+            capture(g,"storey-atrium-below.png");
+        }
+        {   // the head of the straight flight, from the floor it arrives at
+            g.changeStorey(1,100);
+            Vector3 at=w.featureWorld(sf,straight.cx,straight.cz,su,0,11.2f);
+            Vector3 to=w.featureWorld(sf,straight.cx,straight.cz,su,0,9.0f);
+            g.px=at.x; g.pz=at.z; g.py=0; g.eyeY=1.62f; g.pitch=-0.38f; g.yaw=atan2f(to.z-at.z,to.x-at.x);
+            capture(g,"storey-stair-top.png");
+            g.changeStorey(-1,100);
+        }
+        g.applyLevel(0);
+        CHECK(w.storey==0);
+    }
+
     // ---- headless captures must not be able to black out (BUG-08)
     CHECK(g.noBlackout && g.nextBlackout >= Game::BLACKOUT_NEVER);
 
@@ -872,6 +1054,8 @@ int main() {
            "     through, the catch ending the run only out of a committed\n"
            "     lunge, arrivals that are not all from the fog, a pack that hunts by sound,\n"
            "     a building that moves out of sight, the grip meter as an ending,\n"
-           "     deterministic captures; %d visual captures\n", captureCount);
+           "     deterministic captures, storeys that agree with each other, a flight climbed\n"
+           "     and descended by the real mover, Clark on the stairs behind you, a fall that hurts;\n"
+           "     %d visual captures\n", captureCount);
     g.shutdown();
 }

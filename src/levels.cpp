@@ -15,8 +15,10 @@ const LevelCfg LEVELS[NLEVELS] = {
     // fluorescent lighting" asks for. lightMul comes down because a point
     // under the grid is now summing four near panels instead of one. The
     // carpet's wet patches are the last column (see uWet in shaders.cpp).
+    // The last column is the storey pitch: Level 0 is floors stacked on floors
+    // (see storeyH in levels.h).
     { 3.0f,  4.0f, 0.20f, 0.36f, 0.050f, 0.06f, {1.00f,0.95f,0.76f}, {0.045f,0.042f,0.030f}, {0.140f,0.125f,0.070f}, "LEVEL 0 · THRESHOLD",
-      0.42f, 0.16f, 1.0f, 0.60f },
+      0.42f, 0.16f, 1.0f, 0.60f, 4.32f },
     // Level 1 — "Habitable Zone": "a large, sprawling warehouse" of concrete
     // floors and walls under "dim fluorescent lights" that "are prone to
     // flicker and fail at inconsistent intervals", in "a low-hanging fog with
@@ -67,24 +69,58 @@ static float lhashCPU(float gx, float gz) {
     float v = sinf(gx * 127.1f + gz * 311.7f) * 43758.5453f;
     return v - floorf(v);
 }
+static StoreyLightCPU gStoreyCPU;
+void setStoreyLightCPU(const StoreyLightCPU &s) { gStoreyCPU = s; }
+// One byte of the occupancy snapshot: `ch` 0 = your storey, 1 = below, 2 = above.
+static int occCPU(int ci, int ck, int ch) {
+    const StoreyLightCPU &s = gStoreyCPU;
+    if (!s.occ || ch < 0 || ch > 2) return 0;
+    int x = ci - s.originI, z = ck - s.originK;
+    if (x < 0 || z < 0 || x >= s.occN || z >= s.occN) return 0;
+    return s.occ[(z * s.occN + x) * 4 + ch];
+}
+static int chanOf(int rel) { return rel == 0 ? 0 : rel == -1 ? 1 : rel == 1 ? 2 : -1; }
+// Each storey's tubes fail in their own places: the panel hash is offset per
+// storey. Bounded (a golden-ratio fraction of 97 cells) rather than growing
+// with the storey number, because the shader's sin() loses the hash at large
+// arguments. Storey 0 is offset 0, so its tubes are the ones it always had.
+float storeyHashOffset(int s) {
+    float t = (float)s * 0.6180339f;
+    return (t - floorf(t)) * 97.0f;
+}
 float lightAtCPU(float x, float y, float z, float blackout,
                         float ls, float ly, float dead, float mul, float ambLum,
                         float entX, float entZ, float entDark, float vary) {
     float bx = floorf((x - ls * 0.5f) / ls + 0.5f), bz = floorf((z - ls * 0.5f) / ls + 0.5f);
     float sum = 0;
+    // Storeys, exactly as roomLight() takes them: which floor this point is
+    // on, its own tubes (less any over an opening), and — standing where there
+    // is no ceiling — the tubes of the floor above that hang over the hole.
+    const float SH = gStoreyCPU.storeyH;
+    int rel = SH > 0.0f ? (int)floorf((y + 0.3f) / SH) : 0;
+    int ci0 = (int)floorf(x / 2.0f), ck0 = (int)floorf(z / 2.0f);
+    int layers = (SH > 0.0f && rel < 1 && (occCPU(ci0, ck0, chanOf(rel)) & 16)) ? 2 : 1;
+    for (int layer = 0; layer < layers; layer++) {
+    int lrel = rel + layer;
+    float lly = ly + lrel * SH, so = storeyHashOffset(gStoreyCPU.storey + lrel);
     for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
         float gx = bx + dx, gz = bz + dz;
-        float h = lhashCPU(gx, gz);
+        float lx = gx * ls + ls * 0.5f, lz = gz * ls + ls * 0.5f;
+        if (SH > 0.0f) {
+            int po = occCPU((int)floorf(lx * 0.5f + 0.5f), (int)floorf(lz * 0.5f + 0.5f), chanOf(lrel));
+            if (po & 8) continue;                        // no fitting: it would hang in an opening
+            if (layer == 1 && !(po & 32)) continue;      // above you, but over floor, not the hole
+        }
+        float h = lhashCPU(gx + so, gz + so * 1.7f);
         if (h < dead) continue;
         float out = 1.0f - vary * (h * 53.7f - floorf(h * 53.7f));   // same spread as lightState()
-        float lx = gx * ls + ls * 0.5f, lz = gz * ls + ls * 0.5f;
         if (lx >= gMaskCPU[0] && lx <= gMaskCPU[2] && lz >= gMaskCPU[1] && lz <= gMaskCPU[3]) continue;
         // the panel is a rectangle, and the shader shades from the point on it
         // closest to the surface — mirror that, or a sprite standing under a
         // fitting comes out dimmer than the floor it is standing on
         float cx = clampf(x, lx - PANEL_HALF_CPU, lx + PANEL_HALF_CPU);
         float cz = clampf(z, lz - PANEL_HALF_CPU, lz + PANEL_HALF_CPU);
-        float d2 = (cx - x) * (cx - x) + (ly - y) * (ly - y) + (cz - z) * (cz - z);
+        float d2 = (cx - x) * (cx - x) + (lly - y) * (lly - y) + (cz - z) * (cz - z);
         float st = 1.0f;
         if (entDark > 0.01f) {   // mirror the shader: the fluorescents near it die
             float ed = sqrtf((lx - entX) * (lx - entX) + (lz - entZ) * (lz - entZ));
@@ -102,6 +138,7 @@ float lightAtCPU(float x, float y, float z, float blackout,
         float w = clampf(PANEL_HALF_CPU / sqrtf(d2 + PANEL_HALF_CPU * PANEL_HALF_CPU), 0.10f, 0.80f);
         float ndl = (0.55f + w) / (1.0f + w);
         sum += out * st / (1.0f + 0.22f * d2) * 5.4f * mul * ndl * wx * wz;
+    }
     }
     float ambT = ambLum * 1.4f;
     ambT *= 1.0f + 5.5f / (1.0f + 40.0f * ambT);   // same toe compensation as the shader

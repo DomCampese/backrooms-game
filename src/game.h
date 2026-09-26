@@ -15,6 +15,7 @@
 // one thrown flare: arcs, clatters off walls, burns on the floor
 struct FlareProj {
     bool active = false, flying = false;
+    bool onStorey = true;    // burning on the storey you are on (not one seen through an opening)
     float x = 0, y = 0, z = 0, vx = 0, vy = 0, vz = 0, burn = 0;
 };
 
@@ -69,7 +70,9 @@ extern const char *const MANILA_NOTES[MANILA_NOTE_COUNT][4];
 
 // `mine` separates the marks you drew from the ones that were already there.
 // They are the same arrow; only the chalk has aged.
-struct ChalkMark { Vector3 pos; float yaw; bool mine; };
+// `storey` is the floor it was drawn on: chalk on the floor below is not on
+// this one, and is drawn where it lies when you can see down to it.
+struct ChalkMark { Vector3 pos; float yaw; bool mine; int storey = 0; };
 
 struct Game {
     // tuning
@@ -131,7 +134,9 @@ struct Game {
     Mesh deckMesh{}, reelMesh{}, deckLampMesh{};   // the tape player, its reels, its record lamp
     // light-occlusion grid: the floorplan around you, uploaded for the shader to
     // march. Recentred as you walk; OCC_N cells wide, so it always covers more
-    // than the fog can show you.
+    // than the fog can show you. Four bytes a cell (World::buildOccupancy): the
+    // storey you are on, the one below and the one above, for the fragments you
+    // see of those through an opening.
     static constexpr int OCC_N = 64;
     std::vector<unsigned char> occBuf;
     int occOriginI = 0, occOriginK = 0;
@@ -145,7 +150,8 @@ struct Game {
         locAmb = -1, locFogCol = -1, locFogDen = -1, locLightCol = -1, locLS = -1, locLY = -1,
         locDead = -1, locLightMul = -1, locFlarePos = -1, locFlareInt = -1, locGloss = -1,
         locEntPos = -1, locEntDark = -1, locOccOrigin = -1, locOccN = -1, locEntBlock = -1,
-        locVary = -1, locFaulty = -1, locWet = -1, locWetFrom = -1, locRoomMask = -1, locLamp = -1;
+        locVary = -1, locFaulty = -1, locWet = -1, locWetFrom = -1, locRoomMask = -1, locLamp = -1,
+        locStoreyH = -1, locStorey = -1, locLampCol = -1;
     int locPTime = -1, locPFear = -1, locPWater = -1, locPMigraine = -1;
     Material mats[MAT_COUNT]{};
     Sound steps[4]{}, sndNoclip{}, splashIn[3]{}, splashOut[3]{}, swimStrokes[4]{}, sndClick{}, sndScare{}, sndWin{},
@@ -171,6 +177,11 @@ struct Game {
     float yaw = 0.8f, pitch = 0.0f;
     float velx = 0, velz = 0;
     float py = 0, vy = 0;                     // feet height relative to the dry deck
+                                              // (and to the floor of the storey you are on)
+    // ---- storeys. The storey you are on is world.storey; these remember how
+    // you came to it, for the one-line notes and for Clark following you up.
+    bool storeyNoted = false;                 // the first time you change floors, this descent
+    float fallFrom = 0;                       // highest py since you last stood on something
     bool grounded = true;
     bool swimming = false;
     float swimPhase = 0, swimClimb = 0;
@@ -414,6 +425,12 @@ struct Game {
 
     // deterministic world pickups, keyed by cell
     static uint64_t cellKey2(int a, int b) { return ((uint64_t)(uint32_t)a << 32) | (uint32_t)b; }
+    // A cell on the storey you are on. The same cell a floor down is a
+    // different room: a can taken up here is still lying on the floor below.
+    // Storey 0 keys exactly as cellKey2 always did.
+    uint64_t cellKey(int a, int b) const {
+        return cellKey2(a, b) ^ ((uint64_t)(uint32_t)world.storey * 0x9E3779B97F4A7C15ULL);
+    }
     // Which loose item, if any, this cell holds. One cell can only offer one
     // thing, so the checks run in a fixed priority order; both the renderer and
     // the pickup test go through here so they can never disagree.
@@ -473,6 +490,12 @@ struct Game {
     void updateEntity(float dt, double now);
     void updateDogs(float dt, double now);    // the Red Halls pack: hunts by sound
     void updateExits(double now);
+    // Climb or drop a whole storey: move the floating origin by one pitch,
+    // and everything positioned in it along with you (see World::storeyH).
+    void changeStorey(int dir, double now);
+    // Hurt from a landing, by how far you fell. Nothing under a couple of
+    // metres; a storey hurts; two nearly kill you; three do.
+    void landFrom(float drop, double now);
     void streamChunks();
     void updateOccupancy();                   // recentre + re-upload the light-occlusion grid
 
