@@ -303,10 +303,16 @@ void Game::renderScene(double now) {
     std::sort(visible+ownCount, visible+visibleCount, [](const VisibleChunk &a, const VisibleChunk &b) {
         return a.distance2 < b.distance2;
     });
+    // The storey a chunk belongs to, for the shader's lighting (uDrawRel).
+    auto setDrawRel = [&](float yOff) {
+        float rel = world.storeyH > 0.0f ? roundf(yOff / world.storeyH) : 0.0f;
+        SetShaderValue(worldShader, locDrawRel, &rel, SHADER_UNIFORM_FLOAT);
+    };
     // Front to back lets depth rejection avoid expensive lighting on hidden rooms.
     for (int i=0; i<visibleCount; ++i) {
         ChunkData &chunk = *visible[i].data;
         Matrix xf = MatrixTranslate(0, visible[i].yOff, 0);
+        setDrawRel(visible[i].yOff);
         for (int m=MESH_FLOOR; m<=MESH_PROPS; ++m)
             if (chunk.meshes[m].vertexCount > 0) DrawMesh(chunk.meshes[m], mats[m], xf);
         if (chunk.meshes[MESH_SCRAWL].vertexCount > 0)
@@ -319,6 +325,7 @@ void Game::renderScene(double now) {
     for (int i=visibleCount-1; i>=0; --i) {
         ChunkData &chunk = *visible[i].data;
         Matrix xf = MatrixTranslate(0, visible[i].yOff, 0);
+        setDrawRel(visible[i].yOff);
         if (chunk.meshes[MESH_AO].vertexCount > 0)
             DrawMesh(chunk.meshes[MESH_AO], mats[MAT_AO], xf);
         if (chunk.meshes[MESH_WATER].vertexCount > 0)
@@ -326,6 +333,7 @@ void Game::renderScene(double now) {
         if (chunk.meshes[MESH_GLASS].vertexCount > 0)
             DrawMesh(chunk.meshes[MESH_GLASS], mats[MAT_FLOOR], xf);
     }
+    setDrawRel(0.0f);   // everything drawn after the chunks is on your storey
     // Stairwell landing lights: the tube on each batten near you, as bright as
     // the tubes are tonight (blackoutCur), drawn here because a chunk mesh
     // cannot go out. The one nearest is also the shader's uLamp.

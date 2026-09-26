@@ -153,6 +153,7 @@ void Game::init() {
     locGloss = GetShaderLocation(worldShader, "uGloss");
     locStoreyH = GetShaderLocation(worldShader, "uStoreyH");
     locStorey = GetShaderLocation(worldShader, "uStorey");
+    locDrawRel = GetShaderLocation(worldShader, "uDrawRel");
     locLampCol = GetShaderLocation(worldShader, "uLampCol");
     postShader = LoadShaderFromMemory(NULL, POST_FS);
     if (postShader.id == rlGetShaderIdDefault())

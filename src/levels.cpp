@@ -97,7 +97,9 @@ float lightAtCPU(float x, float y, float z, float blackout,
     // on, its own tubes (less any over an opening), and — standing where there
     // is no ceiling — the tubes of the floor above that hang over the hole.
     const float SH = gStoreyCPU.storeyH;
-    int rel = SH > 0.0f ? (int)floorf((y + 0.3f) / SH) : 0;
+    // Nearest storey floor, not "30 cm below counts as the floor below": a
+    // sprite standing in a sunken pit is still on your storey.
+    int rel = SH > 0.0f ? (int)floorf((y + SH * 0.5f) / SH) : 0;
     int ci0 = (int)floorf(x / 2.0f), ck0 = (int)floorf(z / 2.0f);
     int layers = (SH > 0.0f && rel < 1 && (occCPU(ci0, ck0, chanOf(rel)) & 16)) ? 2 : 1;
     for (int layer = 0; layer < layers; layer++) {
