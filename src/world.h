@@ -186,7 +186,7 @@ enum VertFlag : uint8_t {
     VF_NOWALK   = 32,   // not part of this storey's 2D floor graph (connectivity, flood fills)
 };
 // Deepest a groundAt will look through holes for something to stand on.
-constexpr int STOREY_REACH = 4;
+constexpr int STOREY_REACH = 6;
 // Height an AABB reports for something that stops a body at any height: walls,
 // jambs, pillars, rails. Walls around an opening run up a whole storey, and an
 // actor on a flight is well above a 3 m wall-top, so wallH is no longer "tall

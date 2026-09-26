@@ -131,6 +131,19 @@ bool World::manilaChunk(int cx, int cz, int s) {
 
 bool World::pairFeature(int cx, int cz, int p, VertFeat &f) {
     if (storeyH <= 0.0f) return false;
+    // A few chunks are tall courts: one aligned void through 3, 5, or 7
+    // floors. Reserve the entire eight-storey band, including its caps, so
+    // ordinary pair features cannot overlap the court on an end floor.
+    int band=fdiv(p,8), base=band*8;
+    unsigned tower=ih(cx,cz,seed ^ (unsigned)visit*0x9E3779B9u ^ 0xA771u);
+    if (level==0 && (cx!=0 || cz!=0) && tower%8==0) {
+        int floors=3+2*((tower>>8)%3);
+        for(int st=base;st<base+8;++st) if(manilaChunk(cx,cz,st)) return false;
+        if(p>=base+floors-1) return false;
+        f=VertFeat{};f.lo=p;f.kind=VK_ATRIUM;f.wu=4;f.lv=4;
+        f.x0=4;f.z0=4;f.dir=0;
+        return true;
+    }
     // The arrival: nothing may be stamped over the room you wake in.
     if (cx == 0 && cz == 0 && (p == 0 || p == -1)) return false;
     // A Manila Room fills the middle of its chunk on its own storey.
@@ -527,16 +540,37 @@ void World::generate(ChunkData &d, int cx, int cz) {
             if (splitX) {
                 int cut = r.x0 + MINR + rng.ri(0, rw - 2 * MINR);
                 for (int z = r.z0; z <= r.z1; z++) roomEdge(d.wallW[cut][z], WALL_SOLID);
-                d.wallW[cut][r.z0 + rng.ri(0, rh - 1)] = WALL_DOOR;
+                d.wallW[cut][r.z0 + rh / 4] = WALL_DOOR;
+                d.wallW[cut][r.z1 - rh / 4] = WALL_DOOR;
                 stack[sp++] = { r.x0, r.z0, cut - 1, r.z1 };
                 stack[sp++] = { cut, r.z0, r.x1, r.z1 };
             } else {
                 int cut = r.z0 + MINR + rng.ri(0, rh - 2 * MINR);
                 for (int x = r.x0; x <= r.x1; x++) roomEdge(d.wallN[x][cut], WALL_SOLID);
-                d.wallN[r.x0 + rng.ri(0, rw - 1)][cut] = WALL_DOOR;
+                d.wallN[r.x0 + rw / 4][cut] = WALL_DOOR;
+                d.wallN[r.x1 - rw / 4][cut] = WALL_DOOR;
                 stack[sp++] = { r.x0, r.z0, r.x1, cut - 1 };
                 stack[sp++] = { r.x0, cut, r.x1, r.z1 };
             }
+        }
+    }
+    // Break the seam highways with shared-axis baffles. Neighbours agree on
+    // the cut, so neither half of a seam provides a straight bypass. Paired
+    // entrances turn the rooms into through-routes on both sides of the baffle.
+    if (!openChunk && level != 2) {
+        int cutX = 6 + ih(cx, 0, sseed() ^ 0xBAFFu) % 4;
+        int cutZ = 6 + ih(0, cz, sseed() ^ 0xBAFFu) % 4;
+        for (int t=0; t<CCELLS; ++t) {
+            if (t < HALL_LO || t >= CCELLS-HALL_HI) {
+                d.wallW[cutX][t] = WALL_SOLID;
+                d.wallN[t][cutZ] = WALL_SOLID;
+            }
+        }
+        for (int offset : {-2, 2}) {
+            d.wallN[cutX+offset][HALL_LO] = WALL_DOOR;
+            d.wallN[cutX+offset][CCELLS-HALL_HI] = WALL_DOOR;
+            d.wallW[HALL_LO][cutZ+offset] = WALL_DOOR;
+            d.wallW[CCELLS-HALL_HI][cutZ+offset] = WALL_DOOR;
         }
     }
     int np = level == 0 ? 4 + rng.ri(0, 5) : level == 1 ? 10 + rng.ri(0, 8) : 2 + rng.ri(0, 3);
@@ -1051,16 +1085,20 @@ void World::generate(ChunkData &d, int cx, int cz) {
     if (hash64(k ^ 0xE717ULL ^ (uint64_t)sseed()) % (exitTest ? 1 : 16) == 0) {
         bool placed = false;
         for (int i = 1; i < CCELLS - 1 && !placed; i++)
-            for (int kk = 0; kk < CCELLS && !placed; kk++)
+            for (int kk = 1; kk < CCELLS && !placed; kk++)
                 if (d.wallN[i][kk] == WALL_SOLID && d.wallN[i - 1][kk] == WALL_SOLID &&
                     d.wallN[i + 1][kk] == WALL_SOLID && !(d.prot[i][kk] & 1)) {
                     d.wallN[i][kk] = WALL_EXIT; placed = true;
+                    d.pillar[i][kk]=d.pillar[i][kk-1]=0;
+                    d.prop[i][kk]=d.prop[i][kk-1]=PROP_NONE;
                 }
-        for (int i = 0; i < CCELLS && !placed; i++)
+        for (int i = 1; i < CCELLS && !placed; i++)
             for (int kk = 1; kk < CCELLS - 1 && !placed; kk++)
                 if (d.wallW[i][kk] == WALL_SOLID && d.wallW[i][kk - 1] == WALL_SOLID &&
                     d.wallW[i][kk + 1] == WALL_SOLID && !(d.prot[i][kk] & 2)) {
                     d.wallW[i][kk] = WALL_EXIT; placed = true;
+                    d.pillar[i][kk]=d.pillar[i-1][kk]=0;
+                    d.prop[i][kk]=d.prop[i-1][kk]=PROP_NONE;
                 }
     }
     if (d.manila) stampManila();   // see above: its doors are its own
@@ -1333,21 +1371,6 @@ bool World::valveAt(int ci, int ck) {
 // Baked contact-shadow tint. The AO strip texture carries the falloff in its
 // alpha channel, so wall creases and furniture shadows all share this one colour.
 static const Color AO_TINT = { 10, 9, 9, 255 };
-
-// Level 0 has no exit doors. "Exiting Level 0 is only possible by noclipping"
-// — so an exit there is a stretch of ordinary wall that is not quite there:
-// full geometry, no collision (WALL_EXIT never had any), and a vertex alpha of
-// 250 that the world shader reads as "this wallpaper is tearing". It sits in
-// the gap between the 0.62 textured cutoff and the 254 relief opt-out, so it
-// is textured, unbumped, and matches no other code in the alpha table. A
-// cursed one is 247: the Red Rooms are behind that wall, and its tears show
-// crimson rather than light.
-static Color noclipCol(bool cursed) {
-    // Alpha, not colour, says which kind: the Red Rooms' tint (MB::tint) is
-    // multiplied into everything near a cursed wall, so a cursed wall wears
-    // the same red as its neighbours and colour could not tell the two apart.
-    return { 255, 255, 255, (unsigned char)(cursed ? 247 : 250) };
-}
 
 // A rounded contact shadow shared by props and pillars. Only the footprint
 // is solid; the skirt samples the AO gradient down to zero at its outer edge.
@@ -2691,10 +2714,6 @@ void World::ensureMesh(int cx, int cz) {
                     {0,0,-1},{0,1},{1,1},{1,0},{0,0}, glass);
             }
         }
-        else if (nv == WALL_EXIT && level == 0) {   // Level 0: a wall you can noclip through
-            addBoxSides(wa, gx - WT, nb, gz - WT, gx + CELL + WT, nt, gz + WT, false, 0,
-                        noclipCol(cursedExit(gi0, gk0)));
-        }
         else if (nv == WALL_EXIT) {   // exit doorway on x-running wall
             addBoxSides(wa, gx - WT, nb, gz - WT, gx + 0.35f, nt, gz + WT);
             addBoxSides(wa, gx + 1.65f, nb, gz - WT, gx + CELL + WT, nt, gz + WT);
@@ -2703,6 +2722,8 @@ void World::ensureMesh(int cx, int cz) {
             bool crs = cursedExit(cx * CCELLS + i, cz * CCELLS + kk);
             Color glow = crs ? Color{ 255, 60, 40, 70 } : Color{ 255, 248, 225, 70 };
             wa.quad({gx+0.35f,nb,gz},{gx+1.65f,nb,gz},{gx+1.65f,nb+2.3f,gz},{gx+0.35f,nb+2.3f,gz},{0,0,-1},
+                    {0,1},{1,1},{1,0},{0,0},glow);
+            wa.quad({gx+1.65f,nb,gz},{gx+0.35f,nb,gz},{gx+0.35f,nb+2.3f,gz},{gx+1.65f,nb+2.3f,gz},{0,0,1},
                     {0,1},{1,1},{1,0},{0,0},glow);
             if (level == 1)
                 addSymbolDoor(pr, fx, 0, gx, gz, nb, crs, ih(gi0, gk0, sseed() ^ 0x51B0u),
@@ -2787,10 +2808,6 @@ void World::ensureMesh(int cx, int cz) {
                     {1,0,0},{0,1},{1,1},{1,0},{0,0}, glass);
             }
         }
-        else if (wv == WALL_EXIT && level == 0) {   // see the x-running case
-            addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wt2, gz + CELL + WT, false, 0,
-                        noclipCol(cursedExit(gi0, gk0)));
-        }
         else if (wv == WALL_EXIT) {   // exit doorway on z-running wall
             addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wt2, gz + 0.35f);
             addBoxSides(wa, gx - WT, wb, gz + 1.65f, gx + WT, wt2, gz + CELL + WT);
@@ -2798,6 +2815,8 @@ void World::ensureMesh(int cx, int cz) {
             bool crs = cursedExit(cx * CCELLS + i, cz * CCELLS + kk);
             Color glow = crs ? Color{ 255, 60, 40, 70 } : Color{ 255, 248, 225, 70 };
             wa.quad({gx,wb,gz+0.35f},{gx,wb,gz+1.65f},{gx,wb+2.3f,gz+1.65f},{gx,wb+2.3f,gz+0.35f},{1,0,0},
+                    {0,1},{1,1},{1,0},{0,0},glow);
+            wa.quad({gx,wb,gz+1.65f},{gx,wb,gz+0.35f},{gx,wb+2.3f,gz+0.35f},{gx,wb+2.3f,gz+1.65f},{-1,0,0},
                     {0,1},{1,1},{1,0},{0,0},glow);
             if (level == 1)
                 addSymbolDoor(pr, fx, 1, gz, gx, wb, crs, ih(gi0, gk0, sseed() ^ 0x51B1u),
@@ -2842,12 +2861,12 @@ void World::ensureMesh(int cx, int cz) {
             // Thin timber trim catches grazing light. Keep the extrusion within
             // the collision clearance; no separate obstacle or draw call.
             Color trim = level == 0 ? Color{91, 71, 39, 254} : Color{67, 41, 34, 254};
-            if (nv == WALL_SOLID || (level == 0 && nv == WALL_EXIT)) {
+            if (nv == WALL_SOLID) {
                 float tS = floorY(gi0, gk0 - 1), tN = floorY(gi0, gk0);
                 if (flS) addSolidBox(pr, gx, tS, gz-WT-0.025f, gx+CELL, tS + 0.13f, gz-WT, trim);
                 if (flN) addSolidBox(pr, gx, tN, gz+WT, gx+CELL, tN + 0.13f, gz+WT+0.025f, trim);
             }
-            if (wv == WALL_SOLID || (level == 0 && wv == WALL_EXIT)) {
+            if (wv == WALL_SOLID) {
                 float tW = floorY(gi0 - 1, gk0), tE = floorY(gi0, gk0);
                 if (flW) addSolidBox(pr, gx-WT-0.025f, tW, gz, gx-WT, tW + 0.13f, gz+CELL, trim);
                 if (flN) addSolidBox(pr, gx+WT, tE, gz, gx+WT+0.025f, tE + 0.13f, gz+CELL, trim);
@@ -2858,8 +2877,8 @@ void World::ensureMesh(int cx, int cz) {
         // A noclip wall has to be indistinguishable from its neighbours by
         // everything except the glitch, so it gets their creases too.
         // A rail is not a wall to crease against: it has its own contact shadow.
-        bool nvWall = (blocksEdge(nv) && nv != WALL_RAIL) || (level == 0 && nv == WALL_EXIT);
-        bool wvWall = (blocksEdge(wv) && wv != WALL_RAIL) || (level == 0 && wv == WALL_EXIT);
+        bool nvWall = (blocksEdge(nv) && nv != WALL_RAIL);
+        bool wvWall = (blocksEdge(wv) && wv != WALL_RAIL);
         if (nvWall) {
             float fyS = floorY(gi0, gk0 - 1) + 0.005f, fyN = floorY(gi0, gk0) + 0.005f;
             // Ceiling creases follow each side's own ceiling. Pinned to a fixed
@@ -3672,7 +3691,7 @@ void World::unloadFar(int pcx, int pcz, int radius) {
     // same radius; anything further up or down is a floor you have left behind
     // and will be regenerated identically if you ever climb back to it.
     for (auto it = layers.begin(); it != layers.end();) {
-        if (abs(it->first - storey) > 2) {
+        if (abs(it->first - storey) > STOREY_REACH) {
             for (auto &kv : it->second) unloadChunkMeshes(kv.second);
             it = layers.erase(it);
         } else { sweep(it->second); ++it; }

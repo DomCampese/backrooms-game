@@ -1,3 +1,20 @@
+# Room routes and taller courts (September 2026)
+
+- Level 0 exits are visible, two-sided glowing doors again. Do not replace them
+  with noclip wall geometry: players need to recognise the exit from either
+  approach. Placement clears both landing cells; detection checks both axes
+  and returns immediately after changing level.
+- Ordinary floors have clean albedo and no procedural wet patches; rotten
+  Level 0 cells retain their dark sagging geometry and gameplay.
+- Seam baffles and paired BSP entrances make interior rooms through-routes.
+  This runs before vertical feature stamping so protected stairs stay intact.
+- Rare courts align openings through 3, 5, or 7 real storeys. Their eight-storey
+  band reserves its caps against conflicting pair features. Intermediate
+  storeys carry both HOLE and OPENUP; the arriving feature supplies the rails.
+  Streaming, portal-chain rendering, retention and falling use STOREY_REACH=6.
+  Only the linked chunk streams beyond adjacent storeys; do not stream whole
+  distant floorplans. Existing occupancy lighting remains detailed on ±1.
+
 # Storeys (September 2026)
 
 Level 0 is no longer one floorplan. The Threshold article's wanderers stumble

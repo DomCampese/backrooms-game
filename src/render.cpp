@@ -197,7 +197,7 @@ void Game::renderScene(double now) {
     ClearBackground(level==2 ? Color{48,70,66,255} : BLACK);
     BeginMode3D(cam);
     struct VisibleChunk { ChunkData *data; float distance2; float yOff; };
-    VisibleChunk visible[25 + 2 * 25];
+    VisibleChunk visible[25 + 2 * STOREY_REACH * 25];
     int visibleCount = 0;
     Vector3 cameraRight = Vector3Normalize(Vector3CrossProduct(fwd, cam.up));
     Vector3 cameraUp = Vector3Normalize(Vector3CrossProduct(cameraRight, fwd));
@@ -289,10 +289,15 @@ void Game::renderScene(double now) {
                     // beside the next one, and through that one's opening is
                     // the storey after. Its own chunk is all you can see of it,
                     // and only through both openings.
-                    Portal p2;
-                    if (portalOf(cx, cz, rel > 0 ? 1 : -2, p2) &&
-                        through(p2, cx, cz, 2 * rel * world.storeyH) && through(p1, cx, cz, 2 * rel * world.storeyH))
-                        consider(world.layer(world.storey + 2 * rel), cx, cz, 2 * rel * world.storeyH);
+                    Portal chain[STOREY_REACH];chain[0]=p1;
+                    for(int depth=2;depth<=STOREY_REACH;++depth) {
+                        if(!portalOf(cx,cz,rel>0 ? depth-1 : -depth,chain[depth-1])) break;
+                        bool seen=true;
+                        for(int j=0;j<depth;++j)
+                            if(!through(chain[j],cx,cz,depth*rel*world.storeyH)) { seen=false;break; }
+                        if(!seen) break;
+                        consider(world.layer(world.storey+depth*rel),cx,cz,depth*rel*world.storeyH);
+                    }
                 }
             }
     std::sort(visible+ownCount, visible+visibleCount, [](const VisibleChunk &a, const VisibleChunk &b) {

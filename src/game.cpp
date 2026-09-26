@@ -2584,21 +2584,18 @@ void Game::updateExits(double now) {
     // ---- exit doors
     if (escapeT <= 0) {
         int ci = cellOf(px), ck = cellOf(pz);
-        for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+        for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++)
+        for (int west = 0; west < 2; ++west) {
             int i = ci + dx, k = ck + dz;
-            float doorX = -1, doorZ = -1;
-            if (world.wallNVal(i, k) == WALL_EXIT) { doorX = i * CELL + 1.0f; doorZ = k * CELL; }
-            else if (world.wallWVal(i, k) == WALL_EXIT) { doorX = i * CELL; doorZ = k * CELL + 1.0f; }
-            else continue;
+            if ((west ? world.wallWVal(i,k) : world.wallNVal(i,k)) != WALL_EXIT) continue;
+            float doorX = i * CELL + (west ? 0.0f : CELL*0.5f);
+            float doorZ = k * CELL + (west ? CELL*0.5f : 0.0f);
             float ddx = px - doorX, ddz = pz - doorZ;
             if (ddx * ddx + ddz * ddz < 0.72f * 0.72f) {
                 bool cursed = world.cursedExit(i, k);
                 if (wayOpen() && !cursed) { winRun(now); return; }   // the true way out
-                // otherwise a normal door: cursed ones drop you into the Red Halls.
-                // On Level 0 there are no doors, only walls that fail to hold
-                // you — the lore's one way out is noclipping — so it sounds
-                // and reads like passing through something solid.
-                noclipped = level == 0;
+                // Cursed doors lead to the Red Halls; white doors lead onward.
+                noclipped = false;
                 PlaySound(noclipped ? sndNoclip : sndWin);
                 escapeT = 6.0f; escapeCount++;
                 saveBest();
@@ -2606,6 +2603,7 @@ void Game::updateExits(double now) {
                 Vector2 spot = world.findOpenSpot(px, pz);
                 px = spot.x; pz = spot.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
                 ent.st = EState::Hidden; ent.nextSpawn = now + 30;
+                return; // Stop scanning the old coordinates after the transition.
             }
         }
     }
@@ -2641,11 +2639,16 @@ void Game::streamChunks() {
                             // it, or the light that should fall down this
                             // opening waits until you have walked 12 m.
                             if (!d.built) { world.ensureMesh(pcx + dx + ex, pcz + dz + ez); budget--; occValid = false; }
-                            // and the storey beyond, through an opening on that one
-                            if (budget > 0 && world.linksStorey(pcx + dx + ex, pcz + dz + ez, rel)) {
-                                StoreyScope sc2(world, world.storey + 2 * rel);
-                                ChunkData &d2 = world.data(pcx + dx + ex, pcz + dz + ez);
-                                if (!d2.built) { world.ensureMesh(pcx + dx + ex, pcz + dz + ez); budget--; }
+                            // Follow visible chains through tall courts, one chunk
+                            // per layer; normal rooms stop the chain immediately.
+                            for(int depth=2;depth<=STOREY_REACH && budget>0;++depth) {
+                                StoreyScope prev(world,world.storey+(depth-1)*rel);
+                                VertFeat link;
+                                if(!world.pairFeature(pcx+dx+ex,pcz+dz+ez,
+                                    world.storey+(rel>0 ? depth-1 : -depth),link)) break;
+                                StoreyScope next(world,world.storey+depth*rel);
+                                auto &dn=world.data(pcx+dx+ex,pcz+dz+ez);
+                                if(!dn.built) { world.ensureMesh(pcx+dx+ex,pcz+dz+ez);--budget; }
                             }
                         }
                 }

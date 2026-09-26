@@ -382,14 +382,13 @@ make run
   tiles that have come down.
 - **Level 0, by the book** — mono-yellow chevron wallpaper (the paper in the
   2002 photograph), lay-in troffers crowded into a drop ceiling with a fifth
-  of them dead and the rest uneven, carpet with damp patches that catch the
-  tubes, and a hum that gives you a migraine which
-  follows you out. There are no exit doors: the only way out of Level 0 is
-  noclipping, through a stretch of wall whose paper tears for a moment like a
-  bad tape. If the paper around it turns red, that wall leads to the red places.
+  of them dead and the rest uneven, clean carpet with visibly rotten patches, and a hum that gives you a migraine
+  which follows you out. Glowing white doors lead onward; red doors lead to the
+  Red Halls. Connected rooms offer routes around interrupted corridors, and
+  occasional courts have 3, 5, or 7 stacked floors overlooking the same void.
 - **Level 1, by the book** — the Habitable Zone's warehouse: bare concrete with
   a damp tide line at the foot of every wall and rebar showing where the cover
-  has blown off, a low fog lying on the floor, puddles only here and there, and
+  has blown off, a low fog lying on the clean floor, and
   twin-tube battens, three in ten of them dead. Supply crates stand about with
   something useful inside — or crayons, shoelaces, loose change — and after
   every blackout they are somewhere else. The ways on are steel doors with a

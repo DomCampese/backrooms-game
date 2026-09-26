@@ -1044,6 +1044,49 @@ int main() {
         CHECK(w.storey==0);
     }
 
+    // Both orientations and both approaches must activate white Level 0 exits.
+    // Put both orientations at one cell to catch an else-if masking the west door.
+    for (int west=0; west<2; ++west) for (int side : {-1,1}) {
+        g.applyLevel(0); g.escapeT=0; g.coins=0;
+        int ci=7,ck=7;
+        while (g.world.cursedExit(ci,ck)) ++ci;
+        auto &d=g.world.data(0,0);
+        d.wallN[ci][ck]=d.wallW[ci][ck]=WALL_EXIT;
+        g.px=ci*CELL+(west ? side*.5f : 1.0f);
+        g.pz=ck*CELL+(west ? 1.0f : side*.5f);
+        int count=g.escapeCount;
+        g.updateExits(100);
+        CHECK(g.level==1 && g.escapeCount==count+1 && g.escapeT>0);
+    }
+    // Aligned tall courts preserve a closed cap, matching holes on every
+    // intermediate storey, and a real floor at the bottom of a long fall.
+    for(int floors : {3,5,7}) {
+        g.applyLevel(0);auto &w=g.world;bool found=false;
+        for(int cx=-10;cx<=10 && !found;++cx) for(int cz=-10;cz<=10 && !found;++cz) {
+            VertFeat f;
+            if(!w.pairFeature(cx,cz,0,f) || f.kind!=VK_ATRIUM || f.x0!=4 || f.z0!=4 || f.lv!=4) continue;
+            int count=0;VertFeat next;
+            while(count<7 && w.pairFeature(cx,cz,count,next) && next.x0==4 && next.z0==4 && next.lv==4) ++count;
+            if(count!=floors-1) continue;
+            int ci=cx*CCELLS+5,ck=cz*CCELLS+5;
+            for(int st=0;st<floors;++st) {
+                StoreyScope sc(w,st);auto flags=w.vflagAt(ci,ck);
+                CHECK(bool(flags&VF_HOLE)==(st>0));
+                CHECK(bool(flags&VF_OPENUP)==(st<floors-1));
+            }
+            { StoreyScope sc(w,floors-1);
+              CHECK_NEAR(w.groundAt(ci*CELL+1,ck*CELL+1,0),-(floors-1)*w.storeyH,.001f); }
+            g.px=cx*CHUNK+12;g.pz=cz*CHUNK+12;g.py=0;g.eyeY=1.62f;
+            g.pitch=.85f;g.yaw=.3f;g.ent.st=EState::Hidden;
+            for(int i=0;i<80;++i) g.streamChunks();
+            CHECK(w.layer(floors-1).at(World::key(cx,cz)).built);
+            char name[40];snprintf(name,sizeof(name),"stacked-court-%d.png",floors);
+            capture(g,name);found=true;
+        }
+        CHECK(found);
+    }
+    printf("PASS white doors from both axes/sides and 3/5/7-storey court caps/holes/streaming\n");
+
     // ---- headless captures must not be able to black out (BUG-08)
     CHECK(g.noBlackout && g.nextBlackout >= Game::BLACKOUT_NEVER);
 
