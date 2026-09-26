@@ -977,6 +977,21 @@ int main() {
             Vector3 in=w.featureWorld(af,atrium.cx,atrium.cz,af.wu*CELL*0.5f,0,0.6f);
             float bx=edge.x,bz=edge.z; w.collideCircle(bx,bz,Game::PR,0.0f);
             CHECK(fabsf(bx-edge.x)+fabsf(bz-edge.z)>0.1f);
+            // A normal jump peaks above the knee wall; walking remains blocked.
+            bx=edge.x;bz=edge.z;w.collideCircle(bx,bz,Game::PR,.72f);
+            CHECK_NEAR(bx,edge.x,.001f);CHECK_NEAR(bz,edge.z,.001f);
+            for(int hz : {30,60,144}) {
+                g.px=edge.x;g.pz=edge.z;g.py=0;g.vy=5.6f;g.grounded=false;
+                g.health=1;g.hurtT=0;g.fallFrom=0;g.swimming=false;
+                float dx=in.x-edge.x,dz=in.z-edge.z,len=sqrtf(dx*dx+dz*dz);
+                bool crossed=false;
+                for(int frame=0;frame<hz;++frame) {
+                    g.velx=dx/len*4;g.velz=dz/len*4;g.updateMovement(1.0f/hz);
+                    if(w.vflagAt(cellOf(g.px),cellOf(g.pz))&VF_HOLE) { crossed=true;break; }
+                }
+                CHECK(crossed);
+                if(w.storey!=1) g.changeStorey(1-w.storey,100);
+            }
             CHECK(w.lineOfSight(edge.x,edge.z,in.x,in.z));
             CHECK(!w.canStep(cellOf(edge.x),cellOf(edge.z),cellOf(in.x),cellOf(in.z)));
         }
@@ -1081,11 +1096,22 @@ int main() {
             for(int i=0;i<80;++i) g.streamChunks();
             CHECK(w.layer(floors-1).at(World::key(cx,cz)).built);
             char name[40];snprintf(name,sizeof(name),"stacked-court-%d.png",floors);
+            capture(g,name);
+            for(int st=1;st<floors;++st) g.changeStorey(1,100);
+            g.px=cx*CHUNK+12;g.pz=cz*CHUNK+17;g.py=0;g.eyeY=1.62f;
+            g.pitch=-.65f;g.yaw=-PI*.5f;
+            for(int i=0;i<80;++i) g.streamChunks();
+            snprintf(name,sizeof(name),"stacked-court-top-%d.png",floors);
             capture(g,name);found=true;
         }
         CHECK(found);
     }
     printf("PASS white doors from both axes/sides and 3/5/7-storey court caps/holes/streaming\n");
+
+    g.applyLevel(0);g.ent.st=EState::Stalk;g.ent.x=g.px+10;g.ent.z=g.pz;
+    g.ent.gaze=-100;g.updateEntity(1.0f/60,100);CHECK(g.synth.growlTarget==0);
+    g.ent.st=EState::Chase;g.ent.lungeCd=10;g.updateEntity(1.0f/60,100);
+    CHECK(g.synth.growlTarget==0);
 
     // ---- headless captures must not be able to black out (BUG-08)
     CHECK(g.noBlackout && g.nextBlackout >= Game::BLACKOUT_NEVER);

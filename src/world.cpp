@@ -1555,7 +1555,7 @@ static void addBoxSides(MB &mb, float x0, float y0, float z0, float x1, float y1
 // so the same builder does the level rail round a hole and the balustrade that
 // climbs with a stair's nosing line. `bottom` closes the underside, which is
 // only ever seen looking up through the opening it guards.
-static const float RAIL_H = 1.0f;            // top of the cap above what you stand on
+static const float RAIL_H = 0.65f;            // top of the cap above what you stand on
 static const Color RAIL_CAP = { 104, 80, 46, 254 };
 static void addRailRun(MB &wa, MB &pr, float ax, float az, float bx, float bz,
                        float base, float top0, float top1, bool bottom, int voidSide = 0) {
@@ -3300,17 +3300,26 @@ int World::gatherCellAABBs(int ci, int ck, AABB *out, int cap, int cnt, bool inc
     // Full-height blockers report FULL_H, not wallH. Standing on something tall
     // used to be enough to step over a wall, which nothing could do — until
     // flights put bodies four metres up beside walls that climb a whole storey.
-    // A rail is the same box, marked see-through: waist high, so it stops a
-    // body at any height and stops no look at all.
+    // Balcony guards have their visible height so a jump can clear them.
+    // Flight guards retain full-height collision across the storey rebase.
     //
     // Unlike a wall's, a rail's box stops at the ends of its edge. A wall
     // overhangs by WT so corners close; a rail overhanging would reach into a
     // stairwell's wall beside it, and a body in that stairwell's corner would
     // brush a rail that exists on one storey and not the next — a jolt at the
     // very moment the frame changes (tools/regression.cpp checks for it).
-    if (cnt < cap && nv == WALL_RAIL) out[cnt++] = { x0, z0 - RAIL_T, x0 + CELL, z0 + RAIL_T, FULL_H, true };
+    auto railTop = [&](bool west) {
+        int ai=west ? ci-1 : ci, ak=west ? ck : ck-1;
+        uint8_t own=vflagAt(ci,ck), other=vflagAt(ai,ak);
+        if ((own|other)&(VF_STAIR|VF_WALKHOLE)) return FULL_H;
+        float top=-1e9f;
+        if (!(own&VF_HOLE)) top=floorY(ci,ck);
+        if (!(other&VF_HOLE)) top=std::max(top,floorY(ai,ak));
+        return top+RAIL_H;
+    };
+    if (cnt < cap && nv == WALL_RAIL) out[cnt++] = { x0, z0 - RAIL_T, x0 + CELL, z0 + RAIL_T, railTop(false), true };
     else if (cnt < cap && blocksEdge(nv)) out[cnt++] = { x0 - WT, z0 - WT, x0 + CELL + WT, z0 + WT, FULL_H };
-    if (cnt < cap && wv == WALL_RAIL) out[cnt++] = { x0 - RAIL_T, z0, x0 + RAIL_T, z0 + CELL, FULL_H, true };
+    if (cnt < cap && wv == WALL_RAIL) out[cnt++] = { x0 - RAIL_T, z0, x0 + RAIL_T, z0 + CELL, railTop(true), true };
     else if (cnt < cap && blocksEdge(wv)) out[cnt++] = { x0 - WT, z0 - WT, x0 + WT, z0 + CELL + WT, FULL_H };
     // A doorway is passable — blocksEdge says so, and pathfinding, line of sight
     // and the light all take it at that. Its jambs are not: without these two

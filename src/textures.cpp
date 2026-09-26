@@ -100,7 +100,7 @@ Texture2D makeCarpetTex() {
         float loop = sinf(y * 1.55f + vnoise2(x * 0.30f, y * 0.05f, 34u) * 3.4f);
         float v = 1.0f + n + fiber + loop * 0.045f;
         // Clean pile; rotten-floor geometry still supplies its damp tint.
-        p[y * W + x] = { cl8(141 * v), cl8(124 * v), cl8(66 * v), 255 };
+        p[y * W + x] = { cl8(166 * v), cl8(151 * v), cl8(116 * v), 255 };
     }
     return finishTexture(img, true);
 }

@@ -2345,8 +2345,9 @@ void Game::updateEntity(float dt, double now) {
                 : (ent.st == EState::Flee)   ? 0.2f : 0.0f;
     if (level == 2) darkT *= 0.5f;   // the poolrooms never fully go out
     entDarkCur += (darkT - entDarkCur) * fminf(1, 1.6f * dt);
-    synth.growlTarget = (ent.st == EState::Chase) ? 0.75f * clampf(1 - entDist / 35.0f, 0.1f, 1.0f)
-                      : (ent.st == EState::Stalk && entVisible) ? 0.22f * clampf(1 - entDist / 35.0f, 0, 1) : 0.0f;
+    // Presence/state must not announce a spawn or a chase through the walls.
+    // Actual footsteps and close-range attack audio still belong to actions.
+    synth.growlTarget = 0.0f;
     synth.update();
 }
 
