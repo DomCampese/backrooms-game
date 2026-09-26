@@ -240,21 +240,16 @@ float sheen(vec3 N, vec3 V, vec3 L, float shin){
     return pow(nh, shin) * (shin + 8.0) * 0.03978874 * f;   // (n+8)/8pi normalization
 }
 // The nine fittings of one storey's grid around P, lit, shadowed and summed.
-// `ly` is that grid's light plane. With `masked`, each fitting is looked up in
-// that storey's byte of the occupancy grid (`lch`) first: there is none over an
-// opening (bit 3), and from the storey above (`upper`) only the ones over the
-// hole shine down it (bit 5).
-vec3 panelSum(vec3 P, vec3 N, vec2 base, vec2 shP, float ly, float so, vec4 lch, bool upper, bool masked){
+// `ly` is that grid's light plane, and bit (dx+1)*3 + (dz+1) of `mask` says
+// whether the fitting at base + (dx, dz) is there to light anything (see the
+// fitting masks in roomLight). `upper`: these hang a storey up, over the hole.
+vec3 panelSum(vec3 P, vec3 N, vec2 base, vec2 shP, float ly, float so, bool upper, int mask){
     vec3 light = vec3(0.0);
     for (int dx=-1; dx<=1; dx++)
     for (int dz=-1; dz<=1; dz++){
+        if (((mask >> ((dx + 1) * 3 + (dz + 1))) & 1) == 0) continue;
         vec2 g = base + vec2(float(dx), float(dz));
         vec3 lc = vec3(g.x*uLS + uLS*0.5, ly, g.y*uLS + uLS*0.5);   // panel centre
-        if (masked){
-            int po = occAtC(ivec2(floor(lc.xz * 0.5 + 0.5)), lch);
-            if ((po & 8) != 0) continue;                     // no fitting: it would hang in an opening
-            if (upper && (po & 32) == 0) continue;           // above you, but over floor rather than the hole
-        }
         float st = lightState(g, so);
         if (st <= 0.001) continue;
         if (uEntDark > 0.01){                        // fluorescents die in a pool around the hunter
@@ -299,7 +294,13 @@ vec3 panelSum(vec3 P, vec3 N, vec2 base, vec2 shP, float ly, float so, vec4 lch,
         // tracing altogether, which is where the time comes back.
         float sw = 1.0 - smoothstep(10.0, 15.0, l1);
         float vis;
-        if (sw < 0.002) {
+        // Nor is a fitting a storey up, shining down the hole this point is
+        // under (`upper`): the line between them stays inside the opening's
+        // footprint, where nothing stands but rails, which pass light, and a
+        // stairwell's core wall, which runs directly under those fittings
+        // and would have each of them light one flight and not the other.
+        // Tracing them cost a seventh of the frame in a stair shaft.
+        if (upper || sw < 0.002) {
             vis = 1.0;                                   // too far to shadow; it's faint anyway
         } else {
             // two taps for a little penumbra up close, closing onto one by 6 m
@@ -347,18 +348,36 @@ vec3 roomLight(vec3 P, vec3 N){
     // Storeys: your own storey's tubes, less any that would hang in an
     // opening; and where this point has no ceiling (bit 4), the tubes of the
     // storey above that hang over the hole as well — the light that falls
-    // down a stairwell, into a double-height hall. All of that is only paid
-    // for near an opening: bit 6 marks every cell whose nine fittings could
-    // include one that is missing (World::buildOccupancy), and everywhere
-    // else — nearly every fragment — is the plain nine-panel sum, for one
-    // extra fetch. Looking each fitting up everywhere cost 13% of the frame.
+    // down a stairwell, into a double-height hall. Which fittings are there is
+    // one fetch of the fitting masks (the occupancy texture's second n rows,
+    // World::buildOccupancy): a byte per storey, and the ninth bits in alpha.
+    // A fitting a storey up shines down the hole exactly where it exists up
+    // there and is missing here, because a hole above is an opening below.
+    // Only near an opening, which bit 6 marks: everywhere else — nearly every
+    // fragment — is the plain nine-panel sum, for one extra fetch.
     int own = uStoreyH > 0.0 ? occAt(ivec2(floor(shP * 0.5))) : 0;
-    bool nearOpen = (own & 64) != 0;
+    int ownMask = 511, upMask = 0;
+    if ((own & 64) != 0){
+        int n = int(uOccN);
+        ivec2 t = ivec2(base * (uLS * 0.5)) - ivec2(uOccOrigin);   // the block's first cell
+        if (t.x >= 0 && t.y >= 0 && t.x < n && t.y < n){
+            vec4 m = texelFetch(texture2, ivec2(t.x, t.y + n), 0) * 255.0;
+            int hi = int(m.a + 0.5);
+            int ci = int(dot(vec4(0.0, 1.0, 2.0, 0.0), gChan) + 0.5);   // R, G or B
+            ownMask = int(dot(m, gChan) + 0.5) | (((hi >> ci) & 1) << 8);
+            if (gRel < 1 && (own & 16) != 0){
+                vec4 uc = chanFor(gRel + 1);
+                int cu = int(dot(vec4(0.0, 1.0, 2.0, 0.0), uc) + 0.5);
+                int upper = int(dot(m, uc) + 0.5) | (((hi >> cu) & 1) << 8);
+                upMask = upper & ~ownMask & 511;
+            }
+        }
+    }
     float ownLY = uLY + float(gRel) * uStoreyH;
-    light += panelSum(P, N, base, shP, ownLY, storeyOffset(uStorey + float(gRel)), gChan, false, nearOpen);
-    if (nearOpen && gRel < 1 && (own & 16) != 0)
+    light += panelSum(P, N, base, shP, ownLY, storeyOffset(uStorey + float(gRel)), false, ownMask);
+    if (upMask != 0)
         light += panelSum(P, N, base, shP, ownLY + uStoreyH, storeyOffset(uStorey + float(gRel + 1)),
-                          chanFor(gRel + 1), true, true);
+                          true, upMask);
     // Specular, once, for the one panel the surface is actually reflecting.
     // Running a lobe per light inside the loop cost about a fifth of the frame on
     // every level — including the matte ones, whose gloss is far too low for the

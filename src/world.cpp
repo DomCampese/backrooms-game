@@ -3489,6 +3489,7 @@ void World::buildOccupancy(int originI, int originK, int n, unsigned char *out) 
             unsigned char *o = out + (z * n + x) * 4;
             o[0] = v; o[1] = o[2] = o[3] = 0;
         }
+    memset(out + (size_t)n * n * 4, 0, (size_t)n * n * 4);   // the fitting masks, below
     if (storeyH <= 0.0f) return;
     // The storeys below (byte 1) and above (byte 2): only ever seen through an
     // opening, and only their chunks near one are loaded, so read what is
@@ -3524,8 +3525,8 @@ void World::buildOccupancy(int originI, int originK, int n, unsigned char *out) 
     }
     // Bit 6: an opening is near enough that one of the nine fittings the
     // shader sums for a point in this cell could be missing, or this cell
-    // could be under one. The shader only looks fittings up where it is set,
-    // so everywhere else pays one fetch rather than ten. The nine sit within
+    // could be under one. The shader only reads the fitting masks (below)
+    // where it is set, so everywhere else pays one fetch. The nine sit within
     // 1.5 grid pitches of the point; one more cell for rounding and one for
     // the shadow lookup's 16 cm bias off the surface.
     const int R = (int)ceilf(0.75f * LEVELS[level].ls) + 2;
@@ -3547,6 +3548,38 @@ void World::buildOccupancy(int originI, int originK, int n, unsigned char *out) 
                     if (zz >= 0 && zz < n && row[zz * n + x]) { out[(z * n + x) * 4 + ch] |= 64; break; }
                 }
     }
+    // The second n rows: for each light block, which of the nine fittings the
+    // shader sums there exist, one byte per storey (bit (dx+1)*3 + (dz+1), the
+    // shader's loop order) and the three ninth bits in the spare byte. A
+    // fitting exists where bit 3 is clear at the cell corner under its centre.
+    // Looking bit 3 up per fitting cost the shader nine fetches a fragment
+    // near every opening, and nine more for the storey above: in a stair
+    // shaft, where every fragment is near one, that was most of the frame.
+    // Stored at every cell, for the block it lies in; the shader fetches the
+    // block's first cell. Assumes the grid pitch is a whole number of cells,
+    // which it is on every storeyed level.
+    const float ls = LEVELS[level].ls;
+    auto occByte = [&](int ci, int ck, int ch) -> int {
+        int x = ci - originI, z = ck - originK;
+        return (x < 0 || z < 0 || x >= n || z >= n) ? 0 : out[(z * n + x) * 4 + ch];
+    };
+    for (int z = 0; z < n; z++)
+        for (int x = 0; x < n; x++) {
+            int bx = (int)floorf((originI + x) * CELL / ls), bz = (int)floorf((originK + z) * CELL / ls);
+            unsigned char *o = out + (size_t)n * n * 4 + (z * n + x) * 4;
+            for (int ch = 0; ch < 3; ch++) {
+                int mask = 0;
+                for (int dx = -1; dx <= 1; dx++)
+                    for (int dz = -1; dz <= 1; dz++) {
+                        // the corner the shader looked up: floor(centre / CELL + 0.5)
+                        int kx = (int)floorf(((bx + dx) * ls + ls * 0.5f) / CELL + 0.5f);
+                        int kz = (int)floorf(((bz + dz) * ls + ls * 0.5f) / CELL + 0.5f);
+                        if (!(occByte(kx, kz, ch) & 8)) mask |= 1 << ((dx + 1) * 3 + (dz + 1));
+                    }
+                o[ch] = (unsigned char)(mask & 255);
+                o[3] |= (unsigned char)(((mask >> 8) & 1) << ch);
+            }
+        }
 }
 
 bool World::canStep(int ci, int ck, int ni, int nk) {

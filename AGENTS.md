@@ -59,20 +59,33 @@ byte-identical. How it fits together, and what will bite:
   `qs - 1` (up to `STOREY_REACH`), so a fall into an atrium lands where the floor
   below is. Landing calls `Game::landFrom`: about 0.4 of the health meter for
   one storey, most of it for two.
-- **Occupancy is RGBA**: byte 0 your storey, 1 the one below, 2 the one above.
-  Bit 3 = no fitting at this cell's min corner (it would hang in an opening),
-  bit 4 = no ceiling here, bit 5 = a hole touches the corner, bit 6 = one of
-  those is within reach of the nine fittings the shader sums here. The shader
-  picks the byte by `gRel` (`floor((y + 0.3) / H)`), lights OPENUP cells with a
-  second pass over the storey above's fittings, and hashes each storey's tubes
-  with its own offset (`storeyOffset` ⇔ `storeyHashOffset` in levels.cpp — change
-  both). `lightAtCPU` mirrors all of it through `StoreyLightCPU`.
-- **Bit 6 is a performance gate and must be conservative.** Looking up all nine
-  fittings for every fragment cost 13% of the frame on llvmpipe; now only cells
-  near an opening pay. If a fragment's nine fittings could include a missing
-  one and bit 6 is clear, that fragment is lit by a fitting that is not there.
-  The radius is `ceil(0.75 * ls) + 2` cells: 1.5 pitches, one for rounding, one
-  for the shadow lookup's 16 cm bias.
+- **Occupancy is RGBA, and twice as tall as it is wide.** Rows 0..n-1 are
+  cells: byte 0 your storey, 1 the one below, 2 the one above. Bit 3 = no
+  fitting at this cell's min corner (it would hang in an opening), bit 4 = no
+  ceiling here, bit 5 = a hole touches the corner, bit 6 = an opening is within
+  reach of the nine fittings the shader sums here. Rows n..2n-1 are *fitting
+  masks*: per light block, a 9-bit "which of the nine exist" for each storey
+  (a byte each, the ninth bits in alpha). The shader picks its byte by `gRel`
+  (`floor((y + 0.3) / H)`), lights OPENUP cells with a second pass over the
+  storey above's fittings — the ones that exist up there and are missing here,
+  since a hole above is an opening below — and hashes each storey's tubes with
+  its own offset (`storeyOffset` ⇔ `storeyHashOffset` in levels.cpp: change
+  both). `lightAtCPU` mirrors the lighting through `StoreyLightCPU`, looking
+  bit 3 up per fitting, which is fine on the CPU.
+- **Where the frame goes, and why it is shaped like this.** Looking bit 3 up per
+  fitting in the shader cost 13% of the frame everywhere, so bit 6 gates it and
+  only cells near an opening pay. In a stair shaft every cell is near one, and
+  nine fetches per storey per fragment took the view up a stairwell to 2.3x the
+  old frame; the masks make it one fetch. Bit 6 must stay conservative — clear
+  where a fitting could be missing and that fragment is lit by a tube that is
+  not there. The radius is `ceil(0.75 * ls) + 2` cells: 1.5 pitches, one for
+  rounding, one for the shadow lookup's 16 cm bias. The masks assume the grid
+  pitch is a whole number of cells, and are keyed by the block's first cell.
+  Fittings a storey up are *not* shadow-traced: the line to them stays inside
+  the opening's footprint, where only rails (which pass light) and a
+  stairwell's core wall (directly under them) stand. Moving the per-fitting
+  lookup after the cheap early-outs was tried and was slower: a missing
+  fitting was then doing its arithmetic before being thrown out.
 - **Other storeys are drawn only through an opening you can see.** Outside a
   footprint the slab is closed (ceiling below, floor above, fascia round the
   edge), so `renderScene` projects each candidate chunk's box from the eye onto

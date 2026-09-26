@@ -362,6 +362,8 @@ struct World {
     // per-fitting lookups, so it must never be clear where one would matter.
     // Four bytes a cell: the storey you are on, the one below, the one above,
     // and a spare — the shader picks the byte by which storey the fragment is on.
+    // `out` holds 2n rows: after the n of cells, n of fitting masks (which of
+    // the nine fittings the shader sums in each light block exist, per storey).
     void buildOccupancy(int originI, int originK, int n, unsigned char *out);
     // can the hunter walk from cell (ci,ck) into the adjacent cell (ni,nk)?
     // Furniture and pillars are solid; only a doorway opens a walled edge.

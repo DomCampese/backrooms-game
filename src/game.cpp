@@ -164,9 +164,10 @@ void Game::init() {
 
     texAO = makeAOStripTex();
     {   // light-occlusion grid: four bytes per cell (this storey, below, above,
-        // spare), point-sampled, never filtered
-        occBuf.assign(OCC_N * OCC_N * 4, 0);
-        Image occImg = { occBuf.data(), OCC_N, OCC_N, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
+        // spare), then as many rows again of fitting masks (World::buildOccupancy);
+        // point-sampled, never filtered
+        occBuf.assign(OCC_N * OCC_N * 4 * 2, 0);
+        Image occImg = { occBuf.data(), OCC_N, OCC_N * 2, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
         texOcc = LoadTextureFromImage(occImg);
         SetTextureFilter(texOcc, TEXTURE_FILTER_POINT);
         SetTextureWrap(texOcc, TEXTURE_WRAP_CLAMP);
