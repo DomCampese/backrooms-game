@@ -239,18 +239,30 @@ float sheen(vec3 N, vec3 V, vec3 L, float shin){
     float f = 0.045 + 0.955*(u2*u2*u);                      // Schlick, by multiplies not pow()
     return pow(nh, shin) * (shin + 8.0) * 0.03978874 * f;   // (n+8)/8pi normalization
 }
-// The nine fittings of one storey's grid around P, lit, shadowed and summed.
-// `ly` is that grid's light plane, and bit (dx+1)*3 + (dz+1) of `mask` says
-// whether the fitting at base + (dx, dz) is there to light anything (see the
-// fitting masks in roomLight). `upper`: these hang a storey up, over the hole.
-vec3 panelSum(vec3 P, vec3 N, vec2 base, vec2 shP, float ly, float so, bool upper, int mask){
+// The nine fittings of your storey's grid around P, then — where upMask has
+// any bit set — the nine of the storey above, lit, shadowed and summed. Bit
+// (dx+1)*3 + (dz+1) of each mask says whether the fitting at base + (dx, dz)
+// is there (see the fitting masks in roomLight).
+//
+// ONE loop, and the masks multiply rather than branch. The first version
+// called a nine-fitting function twice, and in a desktop browser the floor
+// below an atrium — the only place both calls run — came out black while
+// every native build lit it. Nothing else differs there, so it reads as the
+// same family of ANGLE miscompile as the lightState note in AGENTS.md.
+vec3 panelSum(vec3 P, vec3 N, vec2 base, vec2 shP, float ownLY, float soOwn, float soUp,
+              int ownMask, int upMask){
     vec3 light = vec3(0.0);
-    for (int dx=-1; dx<=1; dx++)
-    for (int dz=-1; dz<=1; dz++){
-        if (((mask >> ((dx + 1) * 3 + (dz + 1))) & 1) == 0) continue;
+    int count = upMask != 0 ? 18 : 9;
+    for (int i = 0; i < 18; i++){
+        if (i >= count) break;
+        bool upper = i >= 9;
+        int k = upper ? i - 9 : i;
+        int dx = k / 3 - 1, dz = k - (k / 3) * 3 - 1;
+        float ly = upper ? ownLY + uStoreyH : ownLY;
+        float on = float(((upper ? upMask : ownMask) >> k) & 1);
         vec2 g = base + vec2(float(dx), float(dz));
         vec3 lc = vec3(g.x*uLS + uLS*0.5, ly, g.y*uLS + uLS*0.5);   // panel centre
-        float st = lightState(g, so);
+        float st = lightState(g, upper ? soUp : soOwn) * on;
         if (st <= 0.001) continue;
         if (uEntDark > 0.01){                        // fluorescents die in a pool around the hunter
             float ed = distance(lc.xz, uEntPos.xz);
@@ -374,10 +386,8 @@ vec3 roomLight(vec3 P, vec3 N){
         }
     }
     float ownLY = uLY + float(gRel) * uStoreyH;
-    light += panelSum(P, N, base, shP, ownLY, storeyOffset(uStorey + float(gRel)), false, ownMask);
-    if (upMask != 0)
-        light += panelSum(P, N, base, shP, ownLY + uStoreyH, storeyOffset(uStorey + float(gRel + 1)),
-                          true, upMask);
+    light += panelSum(P, N, base, shP, ownLY, storeyOffset(uStorey + float(gRel)),
+                      storeyOffset(uStorey + float(gRel + 1)), ownMask, upMask);
     // Specular, once, for the one panel the surface is actually reflecting.
     // Running a lobe per light inside the loop cost about a fifth of the frame on
     // every level — including the matte ones, whose gloss is far too low for the
