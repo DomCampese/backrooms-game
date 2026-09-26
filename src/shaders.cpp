@@ -63,6 +63,7 @@ uniform float uOccN;             // grid side in cells; 0 = no grid, everything 
 uniform float uEntBlock;         // 1 while the thing is out — it occludes light too
 uniform float uStoreyH;          // floor-to-floor pitch; 0 on a level that is one floorplan
 uniform float uStorey;           // the storey you are on, for its tubes' own failures
+uniform float uDrawRel;          // which storey the mesh being drawn belongs to, relative to yours
 out vec4 finalColor;
 
 // Storeys (World::storeyH). The storey you stand on is always the one at y = 0,
@@ -535,11 +536,13 @@ void main(){
     vec3 dpdx = dFdx(fragPos), dpdy = dFdy(fragPos);
     vec2 duvdx = dFdx(fragUV), duvdy = dFdy(fragUV);
     gGloss = uGloss;
-    // Which storey this fragment is on: a floor belongs to its own storey,
-    // a ceiling and the plenum over it to the one they hang in, and the last
-    // 30 cm of a flight to the floor it arrives at.
+    // Which storey this fragment is on: the one whose mesh it is, which the
+    // renderer sets per chunk (uDrawRel). It used to be worked out from the
+    // height, and a sunken floor more than 30 cm down on your own storey was
+    // then lit as the storey below, with that storey's tubes and shadow grid:
+    // the bottom of every pit came out black.
     if (uStoreyH > 0.0){
-        gRel = int(floor((fragPos.y + 0.3) / uStoreyH));
+        gRel = int(floor(uDrawRel + 0.5));
         gChan = chanFor(gRel);
     }
     vec3 col;
