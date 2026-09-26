@@ -145,7 +145,7 @@ soundscape, and things that live there. Exits lead deeper — usually.
 
 | | |
 |---|---|
-| ![Level 0](docs/levels/level_0.png) **LEVEL 0 · THRESHOLD** — empty rooms, mono-yellow chevron wallpaper, sodden carpet, a humming, uneven grid of tubes, and no way out but through a wall. Home of Pirate Clark. | ![Level 1](docs/levels/level_1.png) **LEVEL 1 · HABITABLE ZONE** — a concrete warehouse under dim, failing tube lights, fog lying on the slab, exposed rebar, supply crates that move in the blackouts, and doors marked with symbols. Where a Smiler waits in the dark. |
+| ![Level 0](docs/levels/level_0.png) **LEVEL 0 · THRESHOLD** — empty rooms, mono-yellow chevron wallpaper, sodden carpet, a humming, uneven grid of tubes, stairs up to floors that look exactly like this one and railed openings down to more of them, and no way out but through a wall. Home of Pirate Clark. | ![Level 1](docs/levels/level_1.png) **LEVEL 1 · HABITABLE ZONE** — a concrete warehouse under dim, failing tube lights, fog lying on the slab, exposed rebar, supply crates that move in the blackouts, and doors marked with symbols. Where a Smiler waits in the dark. |
 | ![The Poolrooms](docs/levels/level_2.png) **THE POOLROOMS** — endless white tile and still water: colonnaded halls, flooded tunnels, staircases sinking into deep water, windows onto white light. No blackouts, no exit in a hurry. | ![The Red Halls](docs/levels/level_3.png) **THE RED HALLS** — oppressive dark-red brick, someone's abandoned bedroom furniture. |
 | ![Level Fun](docs/levels/level_4.png) **LEVEL FUN =)** — the party that never ended: deep red carpet, a ceiling gone black so the lights hang like a party hall's, bunting, balloons, party tables, and a resident who is very glad you came. | |
 
@@ -170,7 +170,7 @@ make run
 | `src/main.cpp` | entry point: init, frame loop, shutdown |
 | `src/game.*` | run state (`Game` struct) + per-frame update logic, in frame order |
 | `src/render.cpp` | 3D scene pass, weapon viewmodel, HUD, overlays |
-| `src/world.*` | infinite maze: chunk generation, mesh baking, collision, line of sight |
+| `src/world.*` | infinite maze: chunk generation, storeys and the stairs between them, mesh baking, collision, line of sight |
 | `src/levels.*` | per-level look/feel tables (fog, lights, palette) + exit rotation |
 | `src/entity.h` | the hunter's state — Clark, the Smiler or the Partygoer by level (the state machine runs in `Game::updateEntity`) |
 | `src/textures.*` | every surface, synthesized at startup |
@@ -184,14 +184,27 @@ make run
 - **Infinite world** — deterministic chunk generation (32 m chunks, hashed from
   a world seed): wall runs with doorway gaps, pillars, all baked into 3 meshes
   per chunk. Chunks stream in around you and unload behind you.
+- **Storeys** — Level 0 is a stack of whole floors, 4.32 m apart, joined by
+  enclosed dogleg stairwells, straight flights rising through openings in the
+  ceiling, and double-height halls railed round on the floor above. Every floor
+  is its own maze, generated from its own seed. The one you stand on is always
+  at y = 0, so collision, pathfinding, sight lines and the shadow march stay
+  two-dimensional; the floors above and below are drawn a storey up or down,
+  and only through an opening you can see. Walk past the middle of a flight and
+  the world re-bases by one storey under you. The stairs, openings and the
+  rails round them are a pure function of the chunk and the two floors they
+  join, so both floors build the same stairwell without ever reading each
+  other. Light falls down the openings from the tubes above, stairwells have a
+  batten on the half landing, Clark follows you up the stairs, and a drop over
+  a railing hurts.
 - **Lighting** — ceiling lights sit on a global 8 m grid, so the fragment shader
   computes the 9 nearest fluorescents *procedurally* — zero light data. A hash
   decides which tubes are dead and which strobe. Periodic blackout events kill
   the whole floor.
 - **Light actually stops at walls** — every source in the game is occluded by
   real geometry: the fluorescents, your flashlight, a burning flare, the muzzle
-  flash. The trick is that this maze is a 2D floorplan extruded floor-to-ceiling,
-  so "can this light reach this point" is a *2D* question. The cells around you
+  flash. The trick is that each floor of this maze is a 2D floorplan extruded
+  floor-to-ceiling, so "can this light reach this point" is a *2D* question. The cells around you
   are packed into a small byte grid (one bit per wall edge, one for pillars) and
   uploaded as a texture; the fragment shader runs a DDA across it, testing the
   wall edge it crosses at each step. No shadow maps, no light volumes, no extra
@@ -510,7 +523,8 @@ Details that reward paying attention:
 
 With the F3 debug HUD open, dev hotkeys are live: `B` force blackout,
 `E` spawn the level's hunter stalking ahead, `C` force a chase, `H` despawn it,
-`G` refill flares + ammo, `N` jump to the next level (including the Red Halls).
+`G` refill flares + ammo, `N` jump to the next level (including the Red Halls),
+`PageUp`/`PageDown` up or down a storey where you stand (Level 0).
 
 - `BACKROOMS_SHOT=out.png` — run headlessly, save a screenshot, exit.
 - `BACKROOMS_SHOTFRAME=n` — which frame that screenshot is taken on (default 600).
@@ -521,6 +535,7 @@ With the F3 debug HUD open, dev hotkeys are live: `B` force blackout,
 - `BACKROOMS_POS="x,z,yaw"` — start at a specific spot (visual testing).
 - `BACKROOMS_LEVEL=n` — start on level n (visual testing).
 - `BACKROOMS_SEED=n` — fix the world seed (repeatable maze).
+- `BACKROOMS_STOREY=n` — start on storey n of Level 0 (0 is the floor you wake on).
 - `BACKROOMS_NOBLACKOUT=1` — never schedule a blackout. Defaults to on whenever
   `BACKROOMS_SHOT` is set, because blackouts run on the wall clock and a headless
   capture is slow enough to land inside one; pass `0` to capture a blackout
@@ -537,9 +552,11 @@ Capture logs are retained and shader failures stop the scripts.
   after 60 warmup frames; skip the forced screenshot-test enemy spawn.
 - `BACKROOMS_BIN=/absolute/path`: select a binary for `tools/shot.sh`.
 
-`make regression` checks sprint recovery, restart reset, battery retention, and that
-a doorway's jambs and a locked door actually stop a body, then
-captures nine held-item and navigation views in `shots/regression`. It needs a display.
+`make regression` checks sprint recovery, restart reset, battery retention, that
+a doorway's jambs and a locked door actually stop a body, and that neighbouring
+storeys agree about every stair and opening (a flight climbed and descended by the
+real mover, Clark following, a fall through an atrium), then
+captures held-item, navigation and storey views in `shots/regression`. It needs a display.
 `tools/bench.sh /absolute/baseline /absolute/new 2 3` interleaves runs and retains logs;
 legacy binaries report total runtime only. Automated captures do not save player records.
 

@@ -30,6 +30,11 @@ struct LevelCfg {
     // carpetWetCPU). 0.60 wets about a quarter of Level 0's carpet; Level 1's
     // concrete only pools "in inconsistent areas", about 3% at 0.78.
     float wetFrom = 0.60f;
+    // Floor-to-floor pitch, metres; 0 for a level that is one floorplan. Level
+    // 0's is its 3 m room, the metre of dark "cramped space" the Threshold
+    // article puts above the ceiling tiles, and a slab: 4.32 m, which is 24
+    // risers of 180 mm — a building's stair, not a ladder. See World::storeyH.
+    float storeyH = 0.0f;
 };
 constexpr int NLEVELS = 5;
 extern const LevelCfg LEVELS[NLEVELS];
@@ -49,3 +54,19 @@ float carpetWetCPU(float x, float z, float from = 0.60f);
 // The Manila Room's panel mask (x0,z0,x1,z1) and chandelier (x,y,z,output),
 // for lightAtCPU — the same values Game hands the shader as uRoomMask/uLamp.
 void setLightExtrasCPU(const float mask[4], const float lamp[4]);
+
+// Storeys, for lightAtCPU: the pitch, the storey you are on, and the same
+// occupancy snapshot the shader marches (four bytes a cell: this storey, the
+// one below, the one above). A sprite on a flight is lit by the tubes of the
+// floor it is nearest, a panel over an opening is not there to light it, and a
+// sprite in a double-height hall gets the floor above's tubes as well — exactly
+// as the shader does it, or sprites and rooms stop agreeing (see AGENTS.md).
+struct StoreyLightCPU {
+    float storeyH = 0.0f;
+    int storey = 0;
+    const unsigned char *occ = nullptr;
+    int occN = 0, originI = 0, originK = 0;
+};
+void setStoreyLightCPU(const StoreyLightCPU &s);
+// The per-storey offset into the tube hash — the shader's uStorey term.
+float storeyHashOffset(int s);

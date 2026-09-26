@@ -52,14 +52,33 @@ uniform float uFaulty;           // share of tubes that stutter
 uniform float uWet;              // Level 0's sodden carpet: 1 = damp patches on the floor
 uniform float uWetFrom;          // where on the patch field they start: 0.60 L0 carpet, 0.78 L1 puddles
 uniform vec4 uRoomMask;          // x0,z0,x1,z1: ceiling panels centred in here are dark (the Manila Room)
-uniform vec4 uLamp;              // xyz: the Manila Room's chandelier, w: its output (0 = none near)
+uniform vec4 uLamp;              // xyz: the one spare point light — the Manila Room's chandelier, or
+                                 // the nearest stairwell's landing batten — w: its output (0 = none near)
+uniform vec3 uLampCol;           // ...and its colour: filament warm, or fluorescent
 uniform sampler2D texture1; // packed material slopes / gloss mask
 float gGloss;
 uniform sampler2D texture2;      // occupancy grid (material normal-map slot)
 uniform vec2 uOccOrigin;         // world cell coords of texel (0,0)
 uniform float uOccN;             // grid side in cells; 0 = no grid, everything lit
 uniform float uEntBlock;         // 1 while the thing is out — it occludes light too
+uniform float uStoreyH;          // floor-to-floor pitch; 0 on a level that is one floorplan
+uniform float uStorey;           // the storey you are on, for its tubes' own failures
 out vec4 finalColor;
+
+// Storeys (World::storeyH). The storey you stand on is always the one at y = 0,
+// and the ones above and below are drawn a pitch up or down, seen through the
+// openings between them. Which one a fragment belongs to decides whose tubes
+// light it, and which byte of the occupancy grid its shadows march: r is yours,
+// g the storey below, b the one above. Two storeys off there is no grid; it is
+// taken as open. gChan picks the byte by a dot product, not a branch.
+int gRel = 0;
+vec4 gChan = vec4(1.0, 0.0, 0.0, 0.0);
+vec4 chanFor(int rel){
+    return vec4(rel == 0 ? 1.0 : 0.0, rel == -1 ? 1.0 : 0.0, rel == 1 ? 1.0 : 0.0, 0.0);
+}
+// The per-storey offset into the tube hash. MUST match storeyHashOffset() in
+// levels.cpp. Bounded, because sin() loses the hash at large arguments.
+float storeyOffset(float st){ return fract(st * 0.6180339) * 97.0; }
 
 // Half-width of one ceiling diffuser. MUST match `hp` in world.cpp's panel
 // mesher: the lighting treats the panel as the rectangle it actually draws, so
@@ -88,8 +107,8 @@ vec3 detailNormal(vec3 N, vec2 slope, vec3 dpdx, vec3 dpdy, vec2 duvdx, vec2 duv
     float inv = inversesqrt(max(max(dot(T,T), dot(B,B)), 1e-12));
     return normalize(N - (T * slope.x + B * slope.y) * inv);
 }
-float lightState(vec2 g){
-    float h = lhash(g);
+float lightState(vec2 g, float so){
+    float h = lhash(g + vec2(so, so * 1.7));
     // Not every tube that works works well: some run at part output, a
     // spread uVary wide. levels.cpp's lightAtCPU applies the same factor.
     float s = 1.0 - uVary * fract(h*53.7);
@@ -106,12 +125,13 @@ float lightState(vec2 g){
                  * step(uRoomMask.y, pc.y) * step(pc.y, uRoomMask.w);
     return s * uBlackout * step(uDead, h) * (1.0 - masked);
 }
-int occAt(ivec2 c){
+int occAtC(ivec2 c, vec4 ch){
     ivec2 t = c - ivec2(uOccOrigin);
     int n = int(uOccN);
     if (t.x < 0 || t.y < 0 || t.x >= n || t.y >= n) return 0;   // off-grid: assume open
-    return int(texelFetch(texture2, t, 0).r * 255.0 + 0.5);
+    return int(dot(texelFetch(texture2, t, 0), ch) * 255.0 + 0.5);
 }
+int occAt(ivec2 c){ return occAtC(c, gChan); }
 // Pillars occupy 1.16 m inside a 2 m cell (World::ensureMesh / collision).
 // Test that footprint even in the ray's first and last cells. Skipping those
 // cells left a bright square around every pillar, followed by oversized shadows.
@@ -219,23 +239,19 @@ float sheen(vec3 N, vec3 V, vec3 L, float shin){
     float f = 0.045 + 0.955*(u2*u2*u);                      // Schlick, by multiplies not pow()
     return pow(nh, shin) * (shin + 8.0) * 0.03978874 * f;   // (n+8)/8pi normalization
 }
-vec3 roomLight(vec3 P, vec3 N){
-    vec2 base = floor((P.xz - uLS*0.5)/uLS + 0.5);
+// The nine fittings of one storey's grid around P, lit, shadowed and summed.
+// `ly` is that grid's light plane, and bit (dx+1)*3 + (dz+1) of `mask` says
+// whether the fitting at base + (dx, dz) is there to light anything (see the
+// fitting masks in roomLight). `upper`: these hang a storey up, over the hole.
+vec3 panelSum(vec3 P, vec3 N, vec2 base, vec2 shP, float ly, float so, bool upper, int mask){
     vec3 light = vec3(0.0);
-    vec3 V = normalize(uViewPos - P);
-    float shin = mix(20.0, 210.0, gGloss);
-    // reflection ray, for picking the point on a panel this surface can actually
-    // see a highlight from — see the representative-point note below
-    vec3 R = reflect(-V, N);
-    // Bias along geometry, never tile relief: a perturbed floor normal can
-    // move the lookup across an adjoining wall and light a strip behind it.
-    vec2 shP = P.xz + normalize(fragN).xz * 0.16;
     for (int dx=-1; dx<=1; dx++)
     for (int dz=-1; dz<=1; dz++){
+        if (((mask >> ((dx + 1) * 3 + (dz + 1))) & 1) == 0) continue;
         vec2 g = base + vec2(float(dx), float(dz));
-        float st = lightState(g);
+        vec3 lc = vec3(g.x*uLS + uLS*0.5, ly, g.y*uLS + uLS*0.5);   // panel centre
+        float st = lightState(g, so);
         if (st <= 0.001) continue;
-        vec3 lc = vec3(g.x*uLS + uLS*0.5, uLY, g.y*uLS + uLS*0.5);   // panel centre
         if (uEntDark > 0.01){                        // fluorescents die in a pool around the hunter
             float ed = distance(lc.xz, uEntPos.xz);
             st *= mix(1.0, smoothstep(2.0, 9.0, ed), uEntDark);
@@ -246,7 +262,7 @@ vec3 roomLight(vec3 P, vec3 N){
         // point on the panel *closest to the surface* — the standard representative
         // point — which costs two clamps and gives the near field the soft, broad
         // pour of light a real fluorescent tray actually throws.
-        vec3 lp = vec3(clamp(P.x, lc.x - PANEL_HALF, lc.x + PANEL_HALF), uLY,
+        vec3 lp = vec3(clamp(P.x, lc.x - PANEL_HALF, lc.x + PANEL_HALF), ly,
                        clamp(P.z, lc.z - PANEL_HALF, lc.z + PANEL_HALF));
         vec3 ld = lp - P;
         float d2 = dot(ld,ld);
@@ -278,7 +294,13 @@ vec3 roomLight(vec3 P, vec3 N){
         // tracing altogether, which is where the time comes back.
         float sw = 1.0 - smoothstep(10.0, 15.0, l1);
         float vis;
-        if (sw < 0.002) {
+        // Nor is a fitting a storey up, shining down the hole this point is
+        // under (`upper`): the line between them stays inside the opening's
+        // footprint, where nothing stands but rails, which pass light, and a
+        // stairwell's core wall, which runs directly under those fittings
+        // and would have each of them light one flight and not the other.
+        // Tracing them cost a seventh of the frame in a stair shaft.
+        if (upper || sw < 0.002) {
             vis = 1.0;                                   // too far to shadow; it's faint anyway
         } else {
             // two taps for a little penumbra up close, closing onto one by 6 m
@@ -310,6 +332,52 @@ vec3 roomLight(vec3 P, vec3 N){
         float ndl = clamp((dot(N, Ln) + w)/(1.0 + w), 0.0, 1.0);
         light += uLightCol*(st*atten*ndl*5.4*uLightMul);
     }
+    return light;
+}
+vec3 roomLight(vec3 P, vec3 N){
+    vec2 base = floor((P.xz - uLS*0.5)/uLS + 0.5);
+    vec3 light = vec3(0.0);
+    vec3 V = normalize(uViewPos - P);
+    float shin = mix(20.0, 210.0, gGloss);
+    // reflection ray, for picking the point on a panel this surface can actually
+    // see a highlight from — see the representative-point note below
+    vec3 R = reflect(-V, N);
+    // Bias along geometry, never tile relief: a perturbed floor normal can
+    // move the lookup across an adjoining wall and light a strip behind it.
+    vec2 shP = P.xz + normalize(fragN).xz * 0.16;
+    // Storeys: your own storey's tubes, less any that would hang in an
+    // opening; and where this point has no ceiling (bit 4), the tubes of the
+    // storey above that hang over the hole as well — the light that falls
+    // down a stairwell, into a double-height hall. Which fittings are there is
+    // one fetch of the fitting masks (the occupancy texture's second n rows,
+    // World::buildOccupancy): a byte per storey, and the ninth bits in alpha.
+    // A fitting a storey up shines down the hole exactly where it exists up
+    // there and is missing here, because a hole above is an opening below.
+    // Only near an opening, which bit 6 marks: everywhere else — nearly every
+    // fragment — is the plain nine-panel sum, for one extra fetch.
+    int own = uStoreyH > 0.0 ? occAt(ivec2(floor(shP * 0.5))) : 0;
+    int ownMask = 511, upMask = 0;
+    if ((own & 64) != 0){
+        int n = int(uOccN);
+        ivec2 t = ivec2(base * (uLS * 0.5)) - ivec2(uOccOrigin);   // the block's first cell
+        if (t.x >= 0 && t.y >= 0 && t.x < n && t.y < n){
+            vec4 m = texelFetch(texture2, ivec2(t.x, t.y + n), 0) * 255.0;
+            int hi = int(m.a + 0.5);
+            int ci = int(dot(vec4(0.0, 1.0, 2.0, 0.0), gChan) + 0.5);   // R, G or B
+            ownMask = int(dot(m, gChan) + 0.5) | (((hi >> ci) & 1) << 8);
+            if (gRel < 1 && (own & 16) != 0){
+                vec4 uc = chanFor(gRel + 1);
+                int cu = int(dot(vec4(0.0, 1.0, 2.0, 0.0), uc) + 0.5);
+                int upper = int(dot(m, uc) + 0.5) | (((hi >> cu) & 1) << 8);
+                upMask = upper & ~ownMask & 511;
+            }
+        }
+    }
+    float ownLY = uLY + float(gRel) * uStoreyH;
+    light += panelSum(P, N, base, shP, ownLY, storeyOffset(uStorey + float(gRel)), false, ownMask);
+    if (upMask != 0)
+        light += panelSum(P, N, base, shP, ownLY + uStoreyH, storeyOffset(uStorey + float(gRel + 1)),
+                          true, upMask);
     // Specular, once, for the one panel the surface is actually reflecting.
     // Running a lobe per light inside the loop cost about a fifth of the frame on
     // every level — including the matte ones, whose gloss is far too low for the
@@ -322,16 +390,16 @@ vec3 roomLight(vec3 P, vec3 N){
     // room light and you cannot see it at any exposure, but the levels that are
     // nearly matte were still paying a shadow march per fragment to compute it.
     if (gGloss > 0.10 && R.y > 0.02){
-        float t = (uLY - P.y) / R.y;
+        float t = (ownLY - P.y) / R.y;
         if (t > 0.0){
             vec3 hit = P + R * t;
             vec2 gs = floor((hit.xz - uLS*0.5)/uLS + 0.5);
-            float st = lightState(gs);
+            float st = lightState(gs, storeyOffset(uStorey + float(gRel)));
             if (st > 0.002){
-                vec3 lc = vec3(gs.x*uLS + uLS*0.5, uLY, gs.y*uLS + uLS*0.5);
+                vec3 lc = vec3(gs.x*uLS + uLS*0.5, ownLY, gs.y*uLS + uLS*0.5);
                 if (uEntDark > 0.01)
                     st *= mix(1.0, smoothstep(2.0, 9.0, distance(lc.xz, uEntPos.xz)), uEntDark);
-                vec3 sp = vec3(clamp(hit.x, lc.x - PANEL_HALF, lc.x + PANEL_HALF), uLY,
+                vec3 sp = vec3(clamp(hit.x, lc.x - PANEL_HALF, lc.x + PANEL_HALF), ownLY,
                                clamp(hit.z, lc.z - PANEL_HALF, lc.z + PANEL_HALF));
                 vec3 ld = sp - P;
                 float d2 = dot(ld, ld);
@@ -403,7 +471,7 @@ vec3 roomLight(vec3 P, vec3 N){
             float li = uLamp.w * 3.2/(1.0 + 0.26*d2) * (1.0 - smoothstep(55.0, 90.0, d2));
             li *= lightVis(uLamp.xz, shP);
             vec3 Ll = lv3 * inversesqrt(max(d2, 1e-6));
-            vec3 lcol = vec3(1.0, 0.70, 0.42) * li;
+            vec3 lcol = uLampCol * li;
             light += lcol * clamp(dot(N, Ll)*0.75 + 0.25, 0.0, 1.0);
             if (gGloss > 0.10) light += lcol * (sheen(N, V, Ll, shin) * gGloss * 0.6);
         }
@@ -457,13 +525,20 @@ void main(){
     vec3 dpdx = dFdx(fragPos), dpdy = dFdy(fragPos);
     vec2 duvdx = dFdx(fragUV), duvdy = dFdy(fragUV);
     gGloss = uGloss;
+    // Which storey this fragment is on: a floor belongs to its own storey,
+    // a ceiling and the plenum over it to the one they hang in, and the last
+    // 30 cm of a flight to the floor it arrives at.
+    if (uStoreyH > 0.0){
+        gRel = int(floor((fragPos.y + 0.3) / uStoreyH));
+        gChan = chanFor(gRel);
+    }
     vec3 col;
     float aOut = 1.0;
     float dist = distance(fragPos, uViewPos);
     if (fragC.a < 0.62){
         if (fragC.a < 0.1){                          // light panel (emissive, flickers)
             vec2 g = floor((fragPos.xz - uLS*0.5)/uLS + 0.5);
-            float st = lightState(g);
+            float st = lightState(g, storeyOffset(uStorey + float(gRel)));
             // A dead diffuser is still a sheet of white plastic catching the room,
             // not a hole in the ceiling — that is what the first term is for.
             col = vec3(0.72,0.70,0.65) * roomLight(fragPos, vec3(0.0,-1.0,0.0)) + uLightCol*5.2*st;
@@ -534,7 +609,7 @@ void main(){
         // has the gloss to mirror the tubes overhead, and flattened relief,
         // because liquid fills the loops. Floors only (up-facing, at or below
         // deck level), and in world space so the patches never tile.
-        if (uWet > 0.0 && fragN.y > 0.7 && fragPos.y < 0.3){
+        if (uWet > 0.0 && fragN.y > 0.7 && fragPos.y - float(gRel) * uStoreyH < 0.3){
             float wn = vnoise(fragPos.xz*0.42)*0.62 + vnoise(fragPos.xz*1.35 + 17.0)*0.38;
             float wet = smoothstep(uWetFrom, uWetFrom + 0.12, wn) * uWet;
             texel.rgb *= mix(vec3(1.0), vec3(0.60, 0.56, 0.48), wet);

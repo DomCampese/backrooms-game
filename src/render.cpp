@@ -139,19 +139,52 @@ void Game::renderScene(double now) {
     // ...and it's solid: a beam that catches it throws its shadow down the hall
     float entBlock = (ent.st == EState::Hidden || ent.st == EState::Die) ? 0.0f : 1.0f;
     SetShaderValue(worldShader, locEntBlock, &entBlock, SHADER_UNIFORM_FLOAT);
+    // The nearest enclosed stairwell's landing light, in this storey's frame:
+    // the one rising from here, or the one arriving here whose landing is a
+    // storey down. The tray grid has no fitting over an opening, so without
+    // this a stair shaft is lit only by what falls down it from 7 m up.
+    Vector3 wellLamp = { 0, 0, 0 };
+    float wellD2 = 1e30f;
+    if (world.storeyH > 0.0f) {
+        for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+            int cx = pcx + dx, cz = pcz + dz;
+            auto it = world.chunks.find(World::key(cx, cz));
+            if (it == world.chunks.end()) continue;
+            const ChunkData &cd = it->second;
+            for (int q = 0; q < cd.nfeat; q++) {
+                const VertFeat &f = cd.feats[q];
+                if (f.kind != VK_STAIRWELL) continue;
+                Vector3 lp = world.landingLamp(f, cx, cz);
+                lp.y += (f.lo - world.storey) * world.storeyH;
+                float d2 = (lp.x - px) * (lp.x - px) + (lp.y - eyeY) * (lp.y - eyeY) + (lp.z - pz) * (lp.z - pz);
+                if (d2 < wellD2) { wellD2 = d2; wellLamp = lp; }
+            }
+        }
+    }
     {   // the Manila Room, when one is near: its tubes out, its chandelier on.
         // An inverted rectangle masks nothing. The chandelier ignores the
         // blackouts — it is the one light down here that does — and wavers
         // like an old filament rather than stuttering like a tube.
         float mask[4] = { 1e6f, 1e6f, -1e6f, -1e6f }, lamp[4] = { 0, 0, 0, 0 };
+        Vector3 lampCol = { 1.0f, 0.70f, 0.42f };
+        float manD2 = manilaNear ? (manilaX - px) * (manilaX - px) + (manilaZ - pz) * (manilaZ - pz) : 1e30f;
         if (manilaNear) {
             mask[0] = manilaX - 4.0f; mask[1] = manilaZ - 4.0f; mask[2] = manilaX + 4.0f; mask[3] = manilaZ + 4.0f;
+        }
+        if (manilaNear && manD2 <= wellD2) {
             float waver = 0.96f + 0.04f * sinf((float)now * 7.3f) * sinf((float)now * 2.9f + 1.1f);
             lamp[0] = manilaX; lamp[1] = world.ceilY(cellOf(manilaX), cellOf(manilaZ)) - 0.80f;
             lamp[2] = manilaZ; lamp[3] = 1.0f * waver;
+        } else if (wellD2 < 22.0f * 22.0f) {
+            // A tube like any other: it goes out in a blackout and stutters
+            // with the rest, rather than holding on the way the chandelier does.
+            lamp[0] = wellLamp.x; lamp[1] = wellLamp.y; lamp[2] = wellLamp.z;
+            lamp[3] = 0.95f * blackoutCur * flick;
+            lampCol = { 0.95f, 0.93f, 0.80f };
         }
         SetShaderValue(worldShader, locRoomMask, mask, SHADER_UNIFORM_VEC4);
         SetShaderValue(worldShader, locLamp, lamp, SHADER_UNIFORM_VEC4);
+        SetShaderValue(worldShader, locLampCol, &lampCol, SHADER_UNIFORM_VEC3);
         setLightExtrasCPU(mask, lamp);
     }
     Vector2 occOrigin = { (float)occOriginI, (float)occOriginK };
@@ -163,51 +196,151 @@ void Game::renderScene(double now) {
     // Long pool galleries fade into atmospheric colour beyond the streamed ring.
     ClearBackground(level==2 ? Color{48,70,66,255} : BLACK);
     BeginMode3D(cam);
-    Matrix ident = MatrixIdentity();
-    struct VisibleChunk { ChunkData *data; float distance2; };
-    VisibleChunk visible[25];
+    struct VisibleChunk { ChunkData *data; float distance2; float yOff; };
+    VisibleChunk visible[25 + 2 * 25];
     int visibleCount = 0;
     Vector3 cameraRight = Vector3Normalize(Vector3CrossProduct(fwd, cam.up));
     Vector3 cameraUp = Vector3Normalize(Vector3CrossProduct(cameraRight, fwd));
     float tanV = tanf(cam.fovy * DEG2RAD * 0.5f);
     float tanH = tanV * rt.texture.width / rt.texture.height;
-    // Bounds include the deepest atrium, ceiling and slight wall overlap.
-    float halfY = (LEVELS[level].wallH + 2.5f) * 0.5f;
+    // Bounds include the deepest atrium, ceiling and slight wall overlap — and,
+    // on a storeyed level, flights and shaft walls that climb to the next floor.
+    float yLo = -2.5f, yHi = fmaxf(LEVELS[level].wallH, world.storeyH) + 1.2f;
+    float halfY = (yHi - yLo) * 0.5f;
     float radius = sqrtf(CHUNK*CHUNK*0.5f + halfY*halfY) + 0.5f;
-    for (int dx=-2; dx<=2; ++dx) for (int dz=-2; dz<=2; ++dz) {
-        int cx=pcx+dx, cz=pcz+dz;
-        auto it = world.chunks.find(World::key(cx, cz));
-        if (it == world.chunks.end() || !it->second.built) continue;
-        Vector3 delta{cx*CHUNK+CHUNK*0.5f-px, halfY-2.5f-eyeY, cz*CHUNK+CHUNK*0.5f-pz};
+    // A sphere against the view frustum, conservatively.
+    auto sphereVisible = [&](Vector3 c, float r) {
+        Vector3 delta{c.x - px, c.y - eyeY, c.z - pz};
         float depth = Vector3DotProduct(delta, fwd);
-        if (depth < -radius ||
-            fabsf(Vector3DotProduct(delta, cameraRight)) > depth*tanH + radius*sqrtf(1+tanH*tanH) ||
-            fabsf(Vector3DotProduct(delta, cameraUp)) > depth*tanV + radius*sqrtf(1+tanV*tanV)) continue;
-        visible[visibleCount++] = {&it->second, Vector3LengthSqr(delta)};
-    }
+        return !(depth < -r ||
+                 fabsf(Vector3DotProduct(delta, cameraRight)) > depth*tanH + r*sqrtf(1+tanH*tanH) ||
+                 fabsf(Vector3DotProduct(delta, cameraUp)) > depth*tanV + r*sqrtf(1+tanV*tanV));
+    };
+    auto consider = [&](std::unordered_map<uint64_t, ChunkData> &m, int cx, int cz, float yOff) {
+        auto it = m.find(World::key(cx, cz));
+        if (it == m.end() || !it->second.built) return;
+        for (int q = 0; q < visibleCount; q++) if (visible[q].data == &it->second) return;
+        Vector3 c{cx*CHUNK+CHUNK*0.5f, yLo + halfY + yOff, cz*CHUNK+CHUNK*0.5f};
+        if (!sphereVisible(c, radius)) return;
+        if (visibleCount < (int)(sizeof(visible) / sizeof(visible[0])))
+            visible[visibleCount++] = {&it->second, Vector3LengthSqr(Vector3{c.x-px, c.y-eyeY, c.z-pz}), yOff};
+    };
+    for (int dx=-2; dx<=2; ++dx) for (int dz=-2; dz<=2; ++dz) consider(world.chunks, pcx+dx, pcz+dz, 0.0f);
     std::sort(visible, visible+visibleCount, [](const VisibleChunk &a, const VisibleChunk &b) {
+        return a.distance2 < b.distance2;
+    });
+    // The storeys above and below, through the openings near you: the chunks
+    // round each opening, drawn a pitch up or down in their own frame. After
+    // this storey's, so the floors and ceilings you are between have already
+    // filled the depth buffer and most of the other floor is rejected before
+    // it is lit.
+    //
+    // And only what an opening actually shows. Outside a feature's footprint
+    // the slab between two storeys is closed — ceiling below, floor above,
+    // fascias round the edge — so every line of sight into the other storey
+    // crosses the plane of the upper floor inside that footprint. A chunk is
+    // drawn only if its box, projected from the eye onto that plane, overlaps
+    // the footprint: a portal test, one rectangle per opening. Drawing every
+    // chunk round every link in the frustum put 22 chunks of other storeys
+    // behind the 9 of this one and cost a tenth of the frame.
+    struct Portal { float x0, z0, x1, z1, y; bool up; };
+    Vector3 eye = cam.position;
+    // The opening between storeys lo and lo + 1 (relative to yours) in a chunk.
+    auto portalOf = [&](int cx, int cz, int lo, Portal &p) {
+        VertFeat f;
+        if (!world.pairFeature(cx, cz, world.storey + lo, f)) return false;
+        float ax = (float)((cx * CCELLS + f.x0) * CELL), az = (float)((cz * CCELLS + f.z0) * CELL);
+        float ex = (f.dir < 2 ? f.wu : f.lv) * CELL, ez = (f.dir < 2 ? f.lv : f.wu) * CELL;
+        p = { ax - 0.1f, az - 0.1f, ax + ex + 0.1f, az + ez + 0.1f, (lo + 1) * world.storeyH, lo >= 0 };
+        // The prism between the two floors has to be in view at all.
+        Vector3 c{ax + ex * 0.5f, (lo + 0.5f) * world.storeyH, az + ez * 0.5f};
+        return sphereVisible(c, sqrtf(ex*ex + ez*ez + world.storeyH*world.storeyH) * 0.5f + 0.5f);
+    };
+    // Can anything in this chunk's box (at storey offset yOff) be seen through p?
+    auto through = [&](const Portal &p, int cx, int cz, float yOff) {
+        // An eye at or past the plane — halfway down a flight, below the hole
+        // it came through — is inside the opening: everything past it shows.
+        if ((p.y > eye.y) != p.up || fabsf(p.y - eye.y) < 0.05f) return true;
+        float y0 = yOff + yLo, y1 = yOff + yHi;
+        if (p.up) y0 = fmaxf(y0, p.y); else y1 = fminf(y1, p.y);   // only the far side counts
+        if (y0 > y1) return false;
+        float mnx = 1e30f, mxx = -1e30f, mnz = 1e30f, mxz = -1e30f;
+        for (int i = 0; i < 8; i++) {
+            float x = cx * CHUNK + ((i & 1) ? CHUNK : 0.0f), z = cz * CHUNK + ((i & 2) ? CHUNK : 0.0f);
+            float y = (i & 4) ? y1 : y0;
+            float t = (p.y - eye.y) / (y - eye.y);     // in (0, 1]: y is on the far side
+            float X = eye.x + (x - eye.x) * t, Z = eye.z + (z - eye.z) * t;
+            mnx = fminf(mnx, X); mxx = fmaxf(mxx, X); mnz = fminf(mnz, Z); mxz = fmaxf(mxz, Z);
+        }
+        return !(mxx < p.x0 || mnx > p.x1 || mxz < p.z0 || mnz > p.z1);
+    };
+    int ownCount = visibleCount;
+    if (world.storeyH > 0.0f)
+        for (int rel = -1; rel <= 1; rel += 2)
+            for (int dx=-1; dx<=1; ++dx) for (int dz=-1; dz<=1; ++dz) {
+                Portal p1;
+                if (!portalOf(pcx+dx, pcz+dz, rel > 0 ? 0 : -1, p1)) continue;
+                auto &m = world.layer(world.storey + rel);
+                for (int ex=-1; ex<=1; ++ex) for (int ez=-1; ez<=1; ++ez) {
+                    int cx = pcx+dx+ex, cz = pcz+dz+ez;
+                    if (!through(p1, cx, cz, rel * world.storeyH)) continue;
+                    consider(m, cx, cz, rel * world.storeyH);
+                    // Stairs stack: the flight you are looking up often lands
+                    // beside the next one, and through that one's opening is
+                    // the storey after. Its own chunk is all you can see of it,
+                    // and only through both openings.
+                    Portal p2;
+                    if (portalOf(cx, cz, rel > 0 ? 1 : -2, p2) &&
+                        through(p2, cx, cz, 2 * rel * world.storeyH) && through(p1, cx, cz, 2 * rel * world.storeyH))
+                        consider(world.layer(world.storey + 2 * rel), cx, cz, 2 * rel * world.storeyH);
+                }
+            }
+    std::sort(visible+ownCount, visible+visibleCount, [](const VisibleChunk &a, const VisibleChunk &b) {
         return a.distance2 < b.distance2;
     });
     // Front to back lets depth rejection avoid expensive lighting on hidden rooms.
     for (int i=0; i<visibleCount; ++i) {
         ChunkData &chunk = *visible[i].data;
+        Matrix xf = MatrixTranslate(0, visible[i].yOff, 0);
         for (int m=MESH_FLOOR; m<=MESH_PROPS; ++m)
-            if (chunk.meshes[m].vertexCount > 0) DrawMesh(chunk.meshes[m], mats[m], ident);
+            if (chunk.meshes[m].vertexCount > 0) DrawMesh(chunk.meshes[m], mats[m], xf);
         if (chunk.meshes[MESH_SCRAWL].vertexCount > 0)
-            DrawMesh(chunk.meshes[MESH_SCRAWL], mats[MAT_SCRAWL], ident);
+            DrawMesh(chunk.meshes[MESH_SCRAWL], mats[MAT_SCRAWL], xf);
         if (chunk.meshes[MESH_FIXTURES].vertexCount > 0)
-            DrawMesh(chunk.meshes[MESH_FIXTURES], mats[MAT_FIXTURES], ident);
+            DrawMesh(chunk.meshes[MESH_FIXTURES], mats[MAT_FIXTURES], xf);
     }
     // Share the frustum test with transparent geometry, and blend distant chunks
     // first. Within a chunk, the existing AO / water / glass order is retained.
     for (int i=visibleCount-1; i>=0; --i) {
         ChunkData &chunk = *visible[i].data;
+        Matrix xf = MatrixTranslate(0, visible[i].yOff, 0);
         if (chunk.meshes[MESH_AO].vertexCount > 0)
-            DrawMesh(chunk.meshes[MESH_AO], mats[MAT_AO], ident);
+            DrawMesh(chunk.meshes[MESH_AO], mats[MAT_AO], xf);
         if (chunk.meshes[MESH_WATER].vertexCount > 0)
-            DrawMesh(chunk.meshes[MESH_WATER], mats[MAT_FLOOR], ident);
+            DrawMesh(chunk.meshes[MESH_WATER], mats[MAT_FLOOR], xf);
         if (chunk.meshes[MESH_GLASS].vertexCount > 0)
-            DrawMesh(chunk.meshes[MESH_GLASS], mats[MAT_FLOOR], ident);
+            DrawMesh(chunk.meshes[MESH_GLASS], mats[MAT_FLOOR], xf);
+    }
+    // Stairwell landing lights: the tube on each batten near you, as bright as
+    // the tubes are tonight (blackoutCur), drawn here because a chunk mesh
+    // cannot go out. The one nearest is also the shader's uLamp.
+    if (world.storeyH > 0.0f) {
+        for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+            auto it = world.chunks.find(World::key(pcx + dx, pcz + dz));
+            if (it == world.chunks.end()) continue;
+            for (int q = 0; q < it->second.nfeat; q++) {
+                const VertFeat &f = it->second.feats[q];
+                if (f.kind != VK_STAIRWELL) continue;
+                float yo = (f.lo - world.storey) * world.storeyH;
+                Vector3 c = world.featureWorld(f, pcx + dx, pcz + dz, CELL, world.storeyH * 0.5f + 2.25f - 0.065f + yo,
+                                               4 * CELL - WT - 0.145f);
+                Vector3 e = world.featureWorld(f, pcx + dx, pcz + dz, CELL + 1.0f, 0, 0);
+                Vector3 o = world.featureWorld(f, pcx + dx, pcz + dz, CELL, 0, 0);
+                bool alongX = fabsf(e.x - o.x) > 0.5f;
+                unsigned char g8 = cl8(60 + 195 * blackoutCur * flick);
+                DrawCube(c, alongX ? 0.96f : 0.035f, 0.035f, alongX ? 0.035f : 0.96f, { g8, g8, cl8(g8 * 0.92f), 255 });
+            }
+        }
     }
     // small props draw with raylib's unlit default shader, so estimate the room
     // light at each one (plus flare/muzzle glow) — no more balloons shining
@@ -244,7 +377,7 @@ void Game::renderScene(double now) {
     }
     for (int dx = -7; dx <= 7; dx++) for (int dz = -7; dz <= 7; dz++) {   // world pickups nearby
         int a = pci + dx, b = pck + dz;
-        if (taken.count(cellKey2(a, b))) continue;
+        if (taken.count(cellKey(a, b))) continue;
         Pickup kind = pickupAt(a, b);            // the same call the pickup test makes
         if (kind == Pickup::None) continue;
         Vector2 spot = pickupSpot(a, b);
@@ -300,7 +433,7 @@ void Game::renderScene(double now) {
         drawDeck(MatrixMultiply(MatrixRotateY(deck.yaw), MatrixTranslate(deck.x, deck.y, deck.z)),
                  deck.playing);
     for (auto &cw : coinsWorld) {
-        float gy = world.floorY(cellOf(cw.x), cellOf(cw.z));
+        float gy = cw.y;   // the floor they fell on, in this storey's frame
         float bob = sinf((float)now * 2.4f + cw.x) * 0.03f;
         DrawCylinder({ cw.x, gy + 0.06f + bob, cw.z }, 0.085f, 0.085f, 0.024f, 12,
                      lit({ 234, 188, 74, 255 }, propLum(cw.x, gy + 0.1f, cw.z)));
@@ -344,7 +477,13 @@ void Game::renderScene(double now) {
             DrawCube(c.pos, 0.05f, 0.05f, 0.05f, cc);
         }
     }
-    for (const auto &mark : chalk[level]) {
+    for (const auto &m0 : chalk[level]) {
+        // Chalk stays on the floor it was drawn on: a storey away it is drawn
+        // where it lies (seen down a stairwell, if you can), further not at all.
+        int ds = m0.storey - world.storey;
+        if (ds < -1 || ds > 1) continue;
+        ChalkMark mark = m0;
+        mark.pos.y += ds * world.storeyH;
         const Vector3 &cm = mark.pos;
         if (fabsf(cm.x-px) > 30 || fabsf(cm.z-pz) > 30) continue;
         // The stranger's chalk has been down longer than yours: duller, yellower,

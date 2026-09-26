@@ -151,6 +151,9 @@ void Game::init() {
     locOccN = GetShaderLocation(worldShader, "uOccN");
     locEntBlock = GetShaderLocation(worldShader, "uEntBlock");
     locGloss = GetShaderLocation(worldShader, "uGloss");
+    locStoreyH = GetShaderLocation(worldShader, "uStoreyH");
+    locStorey = GetShaderLocation(worldShader, "uStorey");
+    locLampCol = GetShaderLocation(worldShader, "uLampCol");
     postShader = LoadShaderFromMemory(NULL, POST_FS);
     if (postShader.id == rlGetShaderIdDefault())
         TraceLog(LOG_ERROR, "post shader failed to compile - see the SHADER lines above");
@@ -160,9 +163,11 @@ void Game::init() {
     locPMigraine = GetShaderLocation(postShader, "uMigraine");
 
     texAO = makeAOStripTex();
-    {   // light-occlusion grid: one byte per cell, point-sampled, never filtered
-        occBuf.assign(OCC_N * OCC_N, 0);
-        Image occImg = { occBuf.data(), OCC_N, OCC_N, 1, PIXELFORMAT_UNCOMPRESSED_GRAYSCALE };
+    {   // light-occlusion grid: four bytes per cell (this storey, below, above,
+        // spare), then as many rows again of fitting masks (World::buildOccupancy);
+        // point-sampled, never filtered
+        occBuf.assign(OCC_N * OCC_N * 4 * 2, 0);
+        Image occImg = { occBuf.data(), OCC_N, OCC_N * 2, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
         texOcc = LoadTextureFromImage(occImg);
         SetTextureFilter(texOcc, TEXTURE_FILTER_POINT);
         SetTextureWrap(texOcc, TEXTURE_WRAP_CLAMP);
@@ -265,6 +270,16 @@ void Game::init() {
 
     applyLevel(0);
     if (const char *lvEnv = getenv("BACKROOMS_LEVEL")) applyLevel(atoi(lvEnv) % NLEVELS);   // testing
+    // Testing: start on another storey of a storeyed level. The floor you
+    // stand on is still the one at y = 0 (World::storeyH), so BACKROOMS_POS
+    // means the same thing on every storey.
+    if (const char *stEnv = getenv("BACKROOMS_STOREY")) {
+        if (world.storeyH > 0.0f) {
+            world.setStorey(atoi(stEnv));
+            Vector2 s2 = world.findOpenSpot(px, pz);
+            px = s2.x; pz = s2.y;
+        }
+    }
 
     // Testing: the torch is the only light in the game you aim, so it is the only
     // one a fixed-position screenshot cannot otherwise exercise — and the beam
@@ -558,7 +573,7 @@ void Game::seedStrangerChalk() {
         float a = r.f01() * 6.2831853f, d = 18 + r.f01() * 22;
         Vector2 spot = world.findOpenSpot(px + cosf(a) * d, pz + sinf(a) * d);
         chalk[level].push_back({{ spot.x, world.groundAt(spot.x, spot.y, 0.0f) + 0.016f, spot.y },
-                                r.f01() * 6.2831853f, false });
+                                r.f01() * 6.2831853f, false, world.storey });
     }
 }
 
@@ -587,6 +602,15 @@ void Game::applyLevel(int lv) {
     world.unloadAll();
     world.level = lv;
     world.wallH = c.wallH;
+    // Every level begins on its storey 0, the floor you wake on.
+    world.storeyH = c.storeyH;
+    world.storey = world.qs = 0;
+    storeyNoted = false;
+    SetShaderValue(worldShader, locStoreyH, &c.storeyH, SHADER_UNIFORM_FLOAT);
+    {
+        float st0 = 0.0f;
+        SetShaderValue(worldShader, locStorey, &st0, SHADER_UNIFORM_FLOAT);
+    }
     mats[MAT_FLOOR].maps[MATERIAL_MAP_DIFFUSE].texture = floorTexs[lv];
     mats[MAT_CEILING].maps[MATERIAL_MAP_DIFFUSE].texture = ceilTexs[lv];
     mats[MAT_WALLS].maps[MATERIAL_MAP_DIFFUSE].texture = wallTexs[lv];
@@ -695,6 +719,9 @@ Pickup Game::pickupAt(int a, int b) {
     // A key first: it is placed at one named cell rather than hashed, and it is
     // the one pickup whose position means something, so nothing may mask it.
     if (world.keyAt(a, b)) return Pickup::Key;
+    // Nothing lies on a flight or over a hole: a can on a stair tread would
+    // stand on the cell's nominal floor, under the steps or in mid-air.
+    if (world.storeyH > 0.0f && (world.vflagAt(a, b) & (VF_STAIR | VF_HOLE))) return Pickup::None;
     if (bottleAt(a, b))  return Pickup::AlmondWater;
     if (coinAt(a, b))    return Pickup::Doubloon;
     if (batteryAt(a, b)) return Pickup::Battery;
@@ -708,8 +735,11 @@ Pickup Game::pickupAt(int a, int b) {
 // where it had been. Level 0 on its first visit still hashes to the bare seed,
 // so the world a fresh descent opens on is unchanged.
 uint32_t Game::pickupSalt() const {
+    // ...and the storey: every floor of Level 0 is its own set of rooms, and
+    // its own set of things left lying in them. Storey 0 salts as it always did.
     return (uint32_t)world.seed ^ ((uint32_t)level * 0x9E3779B9u)
-                                ^ (world.visit * 0x85EBCA6Bu);
+                                ^ (world.visit * 0x85EBCA6Bu)
+                                ^ ((uint32_t)world.storey * 0xC2B2AE35u);
 }
 
 bool Game::coinAt(int a, int b) {
@@ -1184,8 +1214,10 @@ void Game::updateMovement(float dt) {
     if (!grounded && !afloat) {
         vy -= 20.0f * dt;
         py += vy * dt;
+        fallFrom = fmaxf(fallFrom, py);
         if (py <= groundY) {
             py = groundY; grounded = true;
+            landFrom(fallFrom - groundY, GetTime());
             if (groundY < -0.1f && world.poolAt(cellOf(px), cellOf(pz))) {
                 Sound &in = splashIn[grng.ri(0, 2)];
                 SetSoundPitch(in, 0.9f + grng.f01() * 0.15f); SetSoundVolume(in, clampf(-vy * 0.12f, 0.4f, 0.8f)); PlaySound(in);
@@ -1199,6 +1231,17 @@ void Game::updateMovement(float dt) {
             landDip = clampf(-vy * 0.028f, 0.0f, 0.22f);   // knees absorb the drop
             vy = 0;
         }
+    }
+    if (grounded || afloat) fallFrom = py;
+    // ---- storeys. Past the middle of a flight — or halfway down a fall into
+    // the floor below — the storey you are on changes: the floating origin
+    // moves by one pitch and you are at the bottom of the upper storey's frame
+    // (or the top of the lower one's). The 10 cm either side is hysteresis, so
+    // standing on the tread at the midpoint cannot flicker between two floors.
+    if (world.storeyH > 0.0f && deathT <= 0) {
+        float half = world.storeyH * 0.5f;
+        if (py > half + 0.1f) changeStorey(+1, GetTime());
+        else if (py < -half - 0.1f) changeStorey(-1, GetTime());
     }
 
     // Head bob and footsteps run off ONE phase, because the footfall *is* the
@@ -1331,6 +1374,12 @@ void Game::updateDevKeys(double now) {
             ent.st = EState::Hidden; ent.nextSpawn = now + 20 + grng.f01() * 20;
         }
         if (inKeyPressed(KEY_G)) { flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; }   // refill weapons
+        if (world.storeyH > 0.0f && (inKeyPressed(KEY_PAGE_UP) || inKeyPressed(KEY_PAGE_DOWN))) {
+            // up or down a storey where you stand, for looking at one
+            changeStorey(inKeyPressed(KEY_PAGE_UP) ? 1 : -1, now);
+            Vector2 spot = world.findOpenSpot(px, pz);
+            px = spot.x; pz = spot.y; py = 0; vy = 0; grounded = true; fallFrom = 0;
+        }
         if (inKeyPressed(KEY_N)) {   // jump to next level (incl. Red Halls)
             applyLevel((level + 1) % NLEVELS);
             Vector2 spot = world.findOpenSpot(px, pz);
@@ -1428,24 +1477,32 @@ void Game::updateBullets(float dt) {
         };
         // Test actual triangles, so door openings and the gaps under furniture
         // remain open. Chunk bounds keep this local even in a large streamed maze.
-        for (auto &entry : world.chunks) {
-            int cx=(int32_t)(entry.first >> 32), cz=(int32_t)entry.first;
-            Vector3 end=Vector3Add(ray.position,Vector3Scale(ray.direction,travel));
-            if (fmaxf(ray.position.x,end.x)<cx*CHUNK-1 || fminf(ray.position.x,end.x)>(cx+1)*CHUNK+1 ||
-                fmaxf(ray.position.z,end.z)<cz*CHUNK-1 || fminf(ray.position.z,end.z)>(cz+1)*CHUNK+1) continue;
-            auto &chunk = entry.second;
-            if (!chunk.built) continue;
-            for (int m = MESH_FLOOR; m <= MESH_GLASS; ++m) {
-                if (m == MESH_SCRAWL || m == MESH_WATER) continue;
-                const Mesh &mesh = chunk.meshes[m];
-                if (!mesh.vertexCount) continue;
-                BoundingBox box=GetMeshBoundingBox(mesh);
-                bool inside=ray.position.x>=box.min.x && ray.position.x<=box.max.x &&
-                    ray.position.y>=box.min.y && ray.position.y<=box.max.y &&
-                    ray.position.z>=box.min.z && ray.position.z<=box.max.z;
-                RayCollision bounds = GetRayCollisionBox(ray, box);
-                if (!inside && (!bounds.hit || bounds.distance > travel)) continue;
-                consider(GetRayCollisionMesh(ray, mesh, MatrixIdentity()), -1);
+        // The storeys above and below too, where their meshes are loaded: a
+        // round fired down a stairwell hits the flight, not the void under it.
+        // Their meshes are in their own frame, drawn a pitch up or down.
+        for (int rel = -1; rel <= 1; rel++) {
+            if (rel != 0 && world.storeyH <= 0.0f) continue;
+            float oy = rel * world.storeyH;
+            for (auto &entry : world.layer(world.storey + rel)) {
+                int cx=(int32_t)(entry.first >> 32), cz=(int32_t)entry.first;
+                Vector3 end=Vector3Add(ray.position,Vector3Scale(ray.direction,travel));
+                if (fmaxf(ray.position.x,end.x)<cx*CHUNK-1 || fminf(ray.position.x,end.x)>(cx+1)*CHUNK+1 ||
+                    fmaxf(ray.position.z,end.z)<cz*CHUNK-1 || fminf(ray.position.z,end.z)>(cz+1)*CHUNK+1) continue;
+                auto &chunk = entry.second;
+                if (!chunk.built) continue;
+                for (int m = MESH_FLOOR; m <= MESH_GLASS; ++m) {
+                    if (m == MESH_SCRAWL || m == MESH_WATER) continue;
+                    const Mesh &mesh = chunk.meshes[m];
+                    if (!mesh.vertexCount) continue;
+                    BoundingBox box=GetMeshBoundingBox(mesh);
+                    box.min.y += oy; box.max.y += oy;
+                    bool inside=ray.position.x>=box.min.x && ray.position.x<=box.max.x &&
+                        ray.position.y>=box.min.y && ray.position.y<=box.max.y &&
+                        ray.position.z>=box.min.z && ray.position.z<=box.max.z;
+                    RayCollision bounds = GetRayCollisionBox(ray, box);
+                    if (!inside && (!bounds.hit || bounds.distance > travel)) continue;
+                    consider(GetRayCollisionMesh(ray, mesh, rel ? MatrixTranslate(0, oy, 0) : MatrixIdentity()), -1);
+                }
             }
         }
         auto body = [&](float x, float z, float y, float h, float radius, int id) {
@@ -1493,7 +1550,7 @@ void Game::updateBullets(float dt) {
                 ent.st = EState::Die; ent.life = 0;
                 for (int c2 = 0; c2 < 5; c2++) {   // he spills his doubloons
                     float aa = c2 * 1.2566f + grng.f01();
-                    coinsWorld.push_back({ ent.x + cosf(aa) * 0.5f, 0, ent.z + sinf(aa) * 0.5f });
+                    coinsWorld.push_back({ ent.x + cosf(aa) * 0.5f, ent.dispY, ent.z + sinf(aa) * 0.5f });
                 }
                 saveBest();
             } else {             // hurt, and now it knows exactly where you are
@@ -1527,6 +1584,7 @@ const FlareProj *Game::nearestLitFlare(float x, float z) const {
     float bestD2 = 1e30f;
     for (const FlareProj &f : litFlares) {
         if (!f.active) continue;
+        if (!f.onStorey) continue;   // a fire on the floor below wards nothing up here
         float dx = f.x - x, dz = f.z - z, d2 = dx * dx + dz * dz;
         if (d2 < bestD2) { bestD2 = d2; best = &f; }
     }
@@ -1535,6 +1593,7 @@ const FlareProj *Game::nearestLitFlare(float x, float z) const {
 
 float Game::flarePresence(const FlareProj &f, float x, float z) {
     if (!f.active) return 0.0f;
+    if (!f.onStorey) return 0.0f;     // nor lights, nor hisses
     float dx = f.x - x, dz = f.z - z;
     return clampf(f.burn / FLAREFADE, 0, 1) / (1.0f + FLAREFALL * (dx * dx + dz * dz));
 }
@@ -1605,6 +1664,10 @@ void Game::updateFlare(float dt, double now) {
         }
         flare.burn -= dt;
         if (flare.burn <= 0) { flare.active = false; continue; }
+        // Is it on the floor you are on? One lying on the storey below, seen
+        // down a stairwell, burns and is drawn where it lies — but it is not
+        // the point light in this storey's rooms, and it wards nothing here.
+        flare.onStorey = world.storeyH <= 0.0f || (flare.y > -0.6f && flare.y < world.storeyH - 0.2f);
         // The synth has one hiss channel, so whichever fire is loudest at your
         // ear takes it, rather than all of them summing into a roar. Same
         // weighting the renderer picks the point light by, so the fire you can
@@ -1719,7 +1782,7 @@ void Game::updateInteraction() {
     int pci = cellOf(px), pck = cellOf(pz);
     for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
         int a = pci + dx, b = pck + dz;
-        uint64_t ky = cellKey2(a, b);
+        uint64_t ky = cellKey(a, b);
         if (taken.count(ky)) continue;
         Pickup kind = pickupAt(a, b);
         if (kind == Pickup::None) continue;
@@ -1767,7 +1830,8 @@ void Game::updateInteraction() {
     }
     for (size_t c2 = 0; c2 < coinsWorld.size();) {   // spilled doubloons
         float ddx = px - coinsWorld[c2].x, ddz = pz - coinsWorld[c2].z;
-        if (ddx * ddx + ddz * ddz < 0.7f * 0.7f) {
+        // .y is the floor they lie on: not one a storey down, seen through a stairwell
+        if (ddx * ddx + ddz * ddz < 0.7f * 0.7f && fabsf(coinsWorld[c2].y - py) < 1.2f) {
             coins++;
             SetSoundPitch(sndClick, 1.6f); PlaySound(sndClick);
             coinsWorld.erase(coinsWorld.begin() + c2);
@@ -1834,7 +1898,7 @@ void Game::updateInteraction() {
                         for (int c2 = 0; c2 < 9; c2++) {   // the pipes give up their cache
                             float aa = c2 * 0.698f + grng.f01();
                             float rr = 1.2f + grng.f01() * 1.1f;
-                            coinsWorld.push_back({ px + cosf(aa) * rr, 0, pz + sinf(aa) * rr });
+                            coinsWorld.push_back({ px + cosf(aa) * rr, py, pz + sinf(aa) * rr });
                         }
                     }
                 }
@@ -1893,7 +1957,7 @@ void Game::updateInteraction() {
         float x = px + f2x * 0.5f, z = pz + f2z * 0.5f;
         if (!grounded || !world.lineOfSight(px, pz, x, z)) return;
         auto &marks = chalk[level];
-        marks.push_back({{x, world.groundAt(x, z, py) + 0.016f, z}, yaw, true});
+        marks.push_back({{x, world.groundAt(x, z, py) + 0.016f, z}, yaw, true, world.storey});
         // Over the cap, drop your own oldest mark rather than whatever is at the
         // front: the stranger's arrows are laid first, and evicting those would
         // quietly delete the rarest thing on the floor.
@@ -2117,7 +2181,7 @@ void Game::updateEntity(float dt, double now) {
             ent.x = sx; ent.z = sz;
             ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.hp = 3; ent.stagger = 0;
             ent.gait = 0;   // he is standing still when you first see him; stand him in the neutral cel
-            ent.dispY = world.floorY(cellOf(ent.x), cellOf(ent.z));
+            ent.dispY = world.groundAt(ent.x, ent.z, py + 1.0f);
         }
     } else {
         float entPrevX = ent.x, entPrevZ = ent.z;   // for the gait, below
@@ -2157,7 +2221,10 @@ void Game::updateEntity(float dt, double now) {
             // walking away does not, which is the choice the tell is for.
             ent.lunge = fmaxf(0, ent.lunge - dt);
             ent.lungeCd = fmaxf(0, ent.lungeCd - dt);
-            if (entDist < LUNGE_REACH && ent.lunge <= 0 && ent.lungeCd <= 0 && !hidden) {
+            // Only from the same level: a stair's worth of height between you
+            // is a flight he still has to climb, not a reach.
+            bool level2 = fabsf(ent.dispY - py) < 1.4f;
+            if (entDist < LUNGE_REACH && level2 && ent.lunge <= 0 && ent.lungeCd <= 0 && !hidden) {
                 ent.lunge = LUNGE_TIME;
                 ent.lungeCd = LUNGE_TIME + 1.2f;   // a breath between attempts, so it is not a grind
                 SetSoundPitch(sndScare, 0.62f);    // the growl drops and spikes: he has decided
@@ -2201,7 +2268,7 @@ void Game::updateEntity(float dt, double now) {
             // bare proximity test this replaces fired the instant you came
             // within 1.25 m, silently and with no windup, which is survivable
             // when being caught is free and simply unfair once it is not.
-            if (entDist < CATCH_REACH && ent.lunge > 0 && !hidden && hurtT <= 0) {
+            if (entDist < CATCH_REACH && level2 && ent.lunge > 0 && !hidden && hurtT <= 0) {
                 if (hurtPlayer(now, ENTITY_HIT, hunterName(), ent.x, ent.z))
                     return;   // beginDescent has already replaced the world under us
                 // He landed it: the lunge is spent and he reels from his own swing.
@@ -2264,7 +2331,9 @@ void Game::updateEntity(float dt, double now) {
     }
     entPrevX = ent.x; entPrevZ = ent.z;
     if (ent.st != EState::Hidden) {   // he takes the stairs too, smoothly
-        float egt = world.floorY(cellOf(ent.x), cellOf(ent.z));
+        // groundAt, not the cell's nominal floor: on a flight that is the tread
+        // under him, and over a hole it is the flight coming up through it.
+        float egt = world.groundAt(ent.x, ent.z, ent.dispY + MAX_STEP);
         ent.dispY += (egt - ent.dispY) * fminf(1, 10 * dt);
     }
     fear += (fearT - fear) * fminf(1, 2.2f * dt);
@@ -2326,7 +2395,7 @@ void Game::updateDogs(float dt, double now) {
             Vector2 spot = world.findOpenSpot(px + cosf(a) * dist, pz + sinf(a) * dist);
             d.x = spot.x; d.z = spot.y;
             d.st = DState::Prowl; d.life = 0; d.lost = 0; d.hp = 2;
-            d.dispY = world.floorY(cellOf(d.x), cellOf(d.z));
+            d.dispY = world.groundAt(d.x, d.z, py + 1.0f);
             d.repathT = 0; d.wpx = d.x; d.wpz = d.z;
             d.nextBark = now + grng.f01() * 3.0;
             break;
@@ -2422,9 +2491,93 @@ void Game::updateDogs(float dt, double now) {
                     return;   // beginDescent has already replaced the world under us
             }
         }
-        float gy = world.floorY(cellOf(d.x), cellOf(d.z));
+        float gy = world.groundAt(d.x, d.z, d.dispY + MAX_STEP);
         d.dispY += (gy - d.dispY) * fminf(1, 10 * dt);
     }
+}
+
+// The floating origin moves by a storey. Everything that has a position in the
+// old frame is moved into the new one by the same pitch, so nothing jumps: the
+// flare burning on the landing below is still burning on that landing, now
+// drawn a storey down. What cannot sensibly come with you does not — the shadow
+// grid is rebuilt for the new floor, and the hunt either follows you onto the
+// flight or loses you.
+void Game::changeStorey(int dir, double now) {
+    const float sh = dir * world.storeyH;
+    // Which flight you are on, for Clark: looked up in the frame you are
+    // leaving, before it stops being the one the accessors read.
+    VertFeat used; int ucx = 0, ucz = 0; bool onFlight = false;
+    {
+        int ci = cellOf(px), ck = cellOf(pz);
+        ucx = fdiv(ci, CCELLS); ucz = fdiv(ck, CCELLS);
+        ChunkData &d = world.data(ucx, ucz);
+        int li = ci - ucx * CCELLS, lk = ck - ucz * CCELLS;
+        if (d.vfeat[li][lk] >= 0) {
+            used = d.feats[d.vfeat[li][lk]];
+            onFlight = used.kind == VK_STAIRWELL || used.kind == VK_STAIR || used.stairU >= 0;
+        }
+    }
+    world.setStorey(world.storey + dir);
+    py -= sh; fallFrom -= sh; eyeY -= sh;
+    for (FlareProj &f : litFlares) {
+        if (!f.active) continue;
+        f.y -= sh;
+        f.onStorey = f.y > -0.6f && f.y < world.storeyH - 0.2f;
+        // a flare still in the air lands where it is: its arc was being
+        // resolved against the floor you have just left
+        if (f.flying) { f.flying = false; f.vx = f.vy = f.vz = 0; }
+    }
+    if (!deck.carried) { deck.y -= sh; if (deck.flying) { deck.flying = false; deck.vx = deck.vy = deck.vz = 0; } }
+    for (auto &b : bullets) { b.pos.y -= sh; b.tail.y -= sh; }
+    for (auto &im : bulletImpacts) im.pos.y -= sh;
+    for (auto &cw : coinsWorld) cw.y -= sh;
+    for (auto &c : confetti) c.pos.y -= sh;
+    for (auto &d : dogs) d.dispY -= sh;
+    ent.dispY -= sh;
+    // Clark. If he was on you — chasing, and close — he takes the stairs after
+    // you: put him on the flight you just used, below you if you climbed,
+    // above you if you came down, in the new frame. Anything else loses you;
+    // he will find this floor the usual way.
+    if (ent.st != EState::Hidden && ent.st != EState::Die) {
+        if (ent.st == EState::Chase && entDist < 16.0f && onFlight) {
+            float u, v;
+            if (used.kind == VK_STAIRWELL) { u = dir > 0 ? 1.0f : 3.0f; v = dir > 0 ? 3.0f : 3.2f; }
+            else {
+                int s0 = used.kind == VK_STAIR ? 0 : used.stairU;
+                int s1 = used.kind == VK_STAIR ? used.wu - 1 : used.stairU;
+                u = (s0 + s1 + 1) * CELL * 0.5f; v = dir > 0 ? 3.0f : 9.0f;
+            }
+            Vector3 at = world.featureWorld(used, ucx, ucz, u, 0, v);
+            ent.x = at.x; ent.z = at.z;
+            ent.dispY = world.groundAt(ent.x, ent.z, py + 1.0f);
+            ent.wpx = ent.x; ent.wpz = ent.z; ent.repathT = 0;
+        } else {
+            ent.st = EState::Hidden;
+            ent.nextSpawn = now + 25 + grng.f01() * 25;
+        }
+    }
+    occValid = false;
+    manilaNear = inManila = false;
+    if (!storeyNoted) {
+        // The first time only. The Threshold has "no two rooms identical" and
+        // no floor that looks any different from the last.
+        storeyNoted = true;
+        deckNoteT = 3.4f;
+        deckNote = dir > 0 ? "another floor. it looks exactly like the last one."
+                           : "a floor below. it looks exactly like the one above.";
+    }
+}
+
+// Landing. `drop` is how far you came down since you last stood on anything.
+// A jump, a step off a sunken lounge's lip, the last few treads: nothing. A
+// storey through an atrium's railing: most of what a hit from Clark takes. Two
+// storeys leaves you on the carpet with almost nothing left, and a third
+// storey is the end of it.
+void Game::landFrom(float drop, double now) {
+    if (drop < 2.2f || deathT > 0 || inMenu) return;
+    float dmg = clampf((drop - 2.2f) * 0.19f, 0.0f, 1.6f);
+    fear = fmaxf(fear, 0.7f);
+    hurtPlayer(now, dmg, "THE FALL", px, pz);
 }
 
 void Game::updateExits(double now) {
@@ -2469,6 +2622,34 @@ void Game::streamChunks() {
                 ChunkData &d = world.data(pcx + dx, pcz + dz);
                 if (!d.built) { world.ensureMesh(pcx + dx, pcz + dz); budget--; }
             }
+    // The storeys above and below, where you can see them: through the
+    // openings in the chunks round you. A feature's own chunk is where the
+    // opening is, and its neighbours are what you see past the edges of it.
+    if (world.storeyH > 0.0f && budget > 0) {
+        for (int rel = -1; rel <= 1 && budget > 0; rel += 2)
+            for (int dx = -1; dx <= 1 && budget > 0; dx++)
+                for (int dz = -1; dz <= 1 && budget > 0; dz++) {
+                    if (!world.linksStorey(pcx + dx, pcz + dz, rel)) continue;
+                    StoreyScope sc(world, world.storey + rel);
+                    for (int ex = -1; ex <= 1 && budget > 0; ex++)
+                        for (int ez = -1; ez <= 1 && budget > 0; ez++) {
+                            if (abs(dx + ex) > 2 || abs(dz + ez) > 2) continue;
+                            ChunkData &d = world.data(pcx + dx + ex, pcz + dz + ez);
+                            // The shadow grid carries this storey too (bytes 1
+                            // and 2), read from whatever is loaded when it is
+                            // built — so a chunk arriving here means rebuilding
+                            // it, or the light that should fall down this
+                            // opening waits until you have walked 12 m.
+                            if (!d.built) { world.ensureMesh(pcx + dx + ex, pcz + dz + ez); budget--; occValid = false; }
+                            // and the storey beyond, through an opening on that one
+                            if (budget > 0 && world.linksStorey(pcx + dx + ex, pcz + dz + ez, rel)) {
+                                StoreyScope sc2(world, world.storey + 2 * rel);
+                                ChunkData &d2 = world.data(pcx + dx + ex, pcz + dz + ez);
+                                if (!d2.built) { world.ensureMesh(pcx + dx + ex, pcz + dz + ez); budget--; }
+                            }
+                        }
+                }
+    }
     if (frame % 90 == 0) world.unloadFar(pcx, pcz, 5);
 }
 
@@ -2482,6 +2663,14 @@ void Game::updateOccupancy() {
     world.buildOccupancy(occOriginI, occOriginK, OCC_N, occBuf.data());
     UpdateTexture(texOcc, occBuf.data());
     occValid = true;
+    // The CPU half of the lighting reads the same snapshot, so a sprite on a
+    // flight is lit by the same tubes the treads under it are.
+    StoreyLightCPU sl;
+    sl.storeyH = world.storeyH; sl.storey = world.storey;
+    sl.occ = occBuf.data(); sl.occN = OCC_N; sl.originI = occOriginI; sl.originK = occOriginK;
+    setStoreyLightCPU(sl);
+    float st = (float)world.storey;
+    SetShaderValue(worldShader, locStorey, &st, SHADER_UNIFORM_FLOAT);
 }
 
 // What the wanderers who got here before you left on the table. The Manila
@@ -2539,7 +2728,8 @@ void Game::markWayOut() {
     }
     float mx = DOORS[pick][2] + DOORS[pick][0] * 1.3f, mz = DOORS[pick][3] + DOORS[pick][1] * 1.3f;
     float yawTo = atan2f(tz - mz, tx - mx);
-    chalk[level].insert(chalk[level].begin(), ChalkMark{ { mx, world.groundAt(mx, mz, 0.0f) + 0.016f, mz }, yawTo, false });
+    chalk[level].insert(chalk[level].begin(), ChalkMark{ { mx, world.groundAt(mx, mz, 0.0f) + 0.016f, mz }, yawTo, false,
+                                                         world.storey });
 }
 
 void Game::updateManila(float dt, double now) {
