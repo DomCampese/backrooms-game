@@ -66,7 +66,7 @@ Texture2D makeWallpaperTex() {
         else if (sx < 17) base *= 0.985f + 0.015f * ((sx - 3) / 14.0f);
         // mono-yellow ground, ochre-olive ink; the ink fades where the paper
         // has yellowed hardest, which is what keeps it from reading as new
-        float r = 204 * base, g = 184 * base, b = 108 * base;
+        float r = 232 * base, g = 216 * base, b = 160 * base;
         float k = ink * (0.50f - 0.18f * grime);
         r = r * (1 - k) + 128 * base * k; g = g * (1 - k) + 112 * base * k; b = b * (1 - k) + 52 * base * k;
         // damp creeping up from the skirting, worst in the corners of the roll
@@ -99,11 +99,7 @@ Texture2D makeCarpetTex() {
         float fiber = (fbm2(x * 0.09f, y * 0.42f, 33u, 2) - 0.5f) * 0.17f;
         float loop = sinf(y * 1.55f + vnoise2(x * 0.30f, y * 0.05f, 34u) * 3.4f);
         float v = 1.0f + n + fiber + loop * 0.045f;
-        // walked lanes: the pile lies flat and goes darker and slightly shinier
-        float lane = fbm2(x * 0.004f, y * 0.010f, 35u, 3);
-        if (lane > 0.55f) v *= 1.0f - (lane - 0.55f) * 0.55f;
-        float blotch = fbm2(x * 0.008f, y * 0.008f, 21u, 4);
-        if (blotch > 0.56f) v *= 1.0f - (blotch - 0.56f) * 0.9f;
+        // Clean pile; rotten-floor geometry still supplies its damp tint.
         p[y * W + x] = { cl8(141 * v), cl8(124 * v), cl8(66 * v), 255 };
     }
     return finishTexture(img, true);
@@ -1149,7 +1145,7 @@ Texture2D makeConcreteWallTex() {
         int hrow = y / 128;
         int hx = (x + 64 + (hrow & 1) * 64) % 128, hy = y % 128;
         float hd = sqrtf((float)((hx - 64) * (hx - 64) + (hy - 64) * (hy - 64)));
-        float r = 119 * v, g = 117 * v, b = 111 * v;
+        float r = 149 * v, g = 147 * v, b = 141 * v;
         if (hd < 6.0f) { float t = 1.0f - hd / 6.0f; float m = 1.0f - 0.55f * t * t; r *= m; g *= m; b *= m; }
         else if (hd < 22.0f && hy > 64) {                              // the rust streak below it
             float t = (1.0f - (hd - 6.0f) / 16.0f) * 0.30f;
@@ -1202,11 +1198,6 @@ Texture2D makeConcreteFloorTex() {
         float agg = lat(x >> 1, y >> 1, 79u);
         if (agg > 0.972f) v *= 1.13f; else if (agg < 0.028f) v *= 0.88f;
         float r = 93 * v, g = 91 * v, b = 87 * v;
-        float oil = fbm2(x * 0.009f, y * 0.009f, 86u, 4);
-        if (oil > 0.60f) {                                             // old oil stains
-            float t = std::min(0.75f, (oil - 0.60f) * 2.6f);
-            r = r * (1 - t) + 52 * t; g = g * (1 - t) + 48 * t; b = b * (1 - t) + 40 * t;
-        }
         p[y * W + x] = { cl8(r), cl8(g), cl8(b), 255 };
     }
     return finishTexture(img, true);
@@ -1247,7 +1238,7 @@ Texture2D makeRedBrickTex() {
         int bi = (x + (row % 2) * 64) / 128;
         float bh = lat(bi, row, 99u);
         float v = 1.0f + (fbm2(x * 0.04f, y * 0.04f, 96u, 3) - 0.5f) * 0.35f + (bh - 0.5f) * 0.30f;
-        float r = 118 * v, g = 26 * v, b = 20 * v;
+        float r = 140 * v, g = 36 * v, b = 29 * v;
         if (bh > 0.93f) { r *= 0.72f; g *= 0.80f; b *= 0.88f; }        // the odd blue-burnt header
         // Mortar is raked back behind the brick face, so the joint is not a flat
         // dark stripe: it is a shadow at the top of the course and a lit ledge at
@@ -1310,7 +1301,7 @@ Texture2D makePartyWallTex() {
         float stain = fbm2(x * 0.006f + 17.0f, y * 0.006f, 212u, 4);
         float base = (0.985f + 0.015f * sinf(x * 0.9f)) * (1.0f - 0.14f * grime) * (1.0f - 0.08f * vy);
         if (stain > 0.64f) base *= 1.0f - (stain - 0.64f) * 0.8f;
-        float r = 226 * base, g = 206 * base, b = 168 * base;
+        float r = 240 * base, g = 223 * base, b = 190 * base;
         // confetti print, gone dingy
         uint32_t ch = ih(x >> 3, y >> 3, 209u);
         if (ch % 11 == 0) {
@@ -1363,9 +1354,7 @@ Texture2D makePartyCarpetTex() {
     for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
         float n = lat(x, y, 205u) * 0.16f - 0.08f;
         float fiber = (fbm2(x * 0.18f, y * 0.18f, 233u, 2) - 0.5f) * 0.14f;
-        float blotch = fbm2(x * 0.008f, y * 0.008f, 221u, 4);
         float v = 1.0f + n + fiber;
-        if (blotch > 0.54f) v *= 1.0f - (blotch - 0.54f) * 1.0f;   // trodden-dark patches
         float r = 156 * v, g = 34 * v, b = 42 * v;
         uint32_t fh = ih(x >> 2, y >> 2, 231u);
         if (fh % 24 == 0) {   // trodden-in confetti, brighter than the carpet

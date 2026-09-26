@@ -18,7 +18,7 @@ const LevelCfg LEVELS[NLEVELS] = {
     // The last column is the storey pitch: Level 0 is floors stacked on floors
     // (see storeyH in levels.h).
     { 3.0f,  4.0f, 0.20f, 0.36f, 0.050f, 0.06f, {1.00f,0.95f,0.76f}, {0.045f,0.042f,0.030f}, {0.140f,0.125f,0.070f}, "LEVEL 0 · THRESHOLD",
-      0.42f, 0.16f, 1.0f, 0.60f, 4.32f },
+      0.42f, 0.16f, 0.0f, 0.60f, 4.32f },
     // Level 1 — "Habitable Zone": "a large, sprawling warehouse" of concrete
     // floors and walls under "dim fluorescent lights" that "are prone to
     // flicker and fail at inconsistent intervals", in "a low-hanging fog with
@@ -35,7 +35,7 @@ const LevelCfg LEVELS[NLEVELS] = {
     // range and the frame cost 58% more on the software rasteriser.
     // lightMul is up to carry the sparser fittings.
     { 4.2f, 12.0f, 0.30f, 1.05f, 0.070f, 0.07f, {0.93f,0.97f,0.86f}, {0.054f,0.057f,0.052f}, {0.070f,0.075f,0.068f}, "LEVEL 1 · HABITABLE ZONE",
-      0.35f, 0.20f, 1.0f, 0.78f },
+      0.35f, 0.20f, 0.0f, 0.78f },
     // Tall vaulted bathing halls: warm diffuse light over pristine ceramic, with
     // restrained exposure so white grout and underwater steps stay readable.
     // The panels sit 7.4 m up, so lightMul carries the extra throw.
