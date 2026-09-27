@@ -18,8 +18,10 @@ ifeq ($(UNAME_S),Linux)
   LIBS_RL += -lm -ldl -lpthread
 endif
 
-SRCS := $(wildcard src/*.cpp)
-HDRS := $(wildcard src/*.h)
+# src/ is the raylib platform; src/core and src/sim are the engine-independent
+# layers (docs/migration.md).
+SRCS := $(wildcard src/*.cpp src/core/*.cpp src/sim/*.cpp)
+HDRS := $(wildcard src/*.h src/core/*.h src/sim/*.h)
 
 src/object_materials.generated.h: tools/embed-materials.py $(wildcard assets/materials/*.jpg)
 	python3 tools/embed-materials.py objects

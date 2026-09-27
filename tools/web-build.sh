@@ -37,10 +37,15 @@ python3 tools/embed-materials.py
 mkdir -p "$OUT"
 rm -f "$OUT/index.html" "$OUT/index.js" "$OUT/index.wasm"
 
+# The game is src/ plus the engine-independent layers (docs/migration.md).
+shopt -s nullglob
+SRCS=(src/*.cpp src/core/*.cpp src/sim/*.cpp)
+shopt -u nullglob
+
 em++ -std=c++17 -O2 -DPLATFORM_WEB \
     -Wall -Wno-missing-field-initializers \
     -I"$RAYLIB_SRC" \
-    src/*.cpp "$RAYLIB_SRC/libraylib.a" \
+    "${SRCS[@]}" "$RAYLIB_SRC/libraylib.a" \
     -o "$OUT/index.html" \
     --shell-file web/shell.html \
     -sUSE_GLFW=3 \
