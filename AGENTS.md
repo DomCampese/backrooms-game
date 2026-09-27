@@ -27,6 +27,19 @@ selling almond water. What will bite:
   the shelf lips are geometry, so they slide across the cans as you move. The
   first build put that quad 1.5 mm *inside* the cabinet body and the glass
   showed a dark box: front is -z, so "in front of" is `ZBODY - 0.0015`.
+- **Nothing on the machine is layered a hair over anything else.** The first
+  version stood each painted door face 1.5 mm off its box's front, the display
+  1.5 mm off the paint, the price strips 1.5 mm off the shelf and the cans
+  1.5 mm off the cabinet front. Every capture here was clean — the sandbox's
+  software rasteriser has depth to spare — and on an iPhone in the web build
+  the whole front flickered: the dark box fronts shimmered through the keypad
+  and door, and patches of cans blinked out. The "stand decals 1.5 mm off"
+  rule is for a small decal on a wall, not for a face the size of a door. Now
+  the local `sbox` takes a mask of faces to emit and leaves out any face that
+  something else covers or that lies in another face's plane (box fronts
+  under the paint, the cabinet front under the cans, shelf ends in the
+  stiles); the paint *is* the door's front, and the display is cut into the
+  control column rather than laid on it. Add a part and keep it that way.
 - **Machines stand with their backs to a wall.** The last pass in
   `World::generate` turns each one to put a `WALL_SOLID` behind it and open floor
   in front (skipping lift doors, via `liftHash`), and sets `PROP_AGAINST_WALL`
