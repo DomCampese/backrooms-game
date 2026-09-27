@@ -261,8 +261,7 @@ void World::stampFeature(ChunkData &d, const VertFeat &f, int cx, int cz) {
         for (int uc = 0; uc < W; uc++) {
             bool st = inStair(uc);
             // the near end of the opening
-            if (r0 > 0) endV(uc, r0, -1, lower ? WALL_NONE : WALL_RAIL);
-            else endV(uc, r0, -1, lower ? WALL_NONE : WALL_RAIL);
+            endV(uc, r0, -1, lower ? WALL_NONE : WALL_RAIL);
             // the far end: below, the flight runs into the wall under its arrival; above,
             // it arrives through it; the void is railed off
             if (st) endV(uc, r1, +1, lower ? WALL_SOLID : WALL_NONE);
@@ -292,7 +291,7 @@ bool liftHash(int gi, int gk, unsigned s) { return ih(gi, gk, s ^ 0xE1E7u) % 71 
 static constexpr float VEND_BACK_OFFSET = CELL * 0.5f - WT - 0.08f - VEND_DEPTH_BACK;
 void vendFootprint(uint8_t rotByte, float cx, float cz, float &px, float &pz,
                    float &x0, float &z0, float &x1, float &z1) {
-    float yaw = (rotByte & 3) * 1.5708f, ca = cosf(yaw), sa = sinf(yaw);
+    float yaw = (rotByte & 3) * PROP_TURN, ca = cosf(yaw), sa = sinf(yaw);
     float o = (rotByte & PROP_AGAINST_WALL) ? VEND_BACK_OFFSET : 0.0f;
     px = cx - o * sa; pz = cz + o * ca;                   // local +z is the back
     x0 = z0 = 1e9f; x1 = z1 = -1e9f;
@@ -842,7 +841,7 @@ void World::generate(ChunkData &d, int cx, int cz) {
             int ax = x, az = z, bx2 = west ? x - 1 : x, bz2 = west ? z : z - 1;
             uint8_t &e = west ? d.wallW[x][z] : d.wallN[x][z];
             e = WALL_LOCKED;
-            static bool seenA[CCELLS][CCELLS], seenB[CCELLS][CCELLS];
+            bool seenA[CCELLS][CCELLS], seenB[CCELLS][CCELLS];
             int na = flood(ax, az, seenA);
             if (seenA[bx2][bz2]) {
                 // Not a bridge: a shortcut, and the key can go on either side.
@@ -1112,8 +1111,8 @@ bool World::manilaNear(float x, float z, float &rx, float &rz) {
         auto &m = layer(qs);
         auto it = m.find(key(pcx + dx, pcz + dz));   // loaded chunks only: never generate from here
         if (it == m.end() || !it->second.manila) continue;
-        rx = ((pcx + dx) * CCELLS + MANILA_HI + 1 - 2) * CELL;   // the corner between cells 7 and 8
-        rz = ((pcz + dz) * CCELLS + MANILA_HI + 1 - 2) * CELL;
+        rx = ((pcx + dx) * CCELLS + MANILA_MID) * CELL;
+        rz = ((pcz + dz) * CCELLS + MANILA_MID) * CELL;
         return true;
     }
     return false;
@@ -1181,17 +1180,17 @@ int World::gatherCellAABBs(int ci, int ck, AABB *out, int cap, int cnt, bool inc
     // is not drawn.
     if (nv == WALL_DOOR) {
         if (cnt < cap && wallNVal(ci - 1, ck) != WALL_DOOR)
-            out[cnt++] = { x0 - WT, z0 - WT, x0 + 0.35f, z0 + WT, FULL_H };
+            out[cnt++] = { x0 - WT, z0 - WT, x0 + DOOR_LO, z0 + WT, FULL_H };
         if (cnt < cap && wallNVal(ci + 1, ck) != WALL_DOOR)
-            out[cnt++] = { x0 + 1.65f, z0 - WT, x0 + CELL + WT, z0 + WT, FULL_H };
+            out[cnt++] = { x0 + DOOR_HI, z0 - WT, x0 + CELL + WT, z0 + WT, FULL_H };
     }
     if (wv == WALL_DOOR) {
         if (cnt < cap && wallWVal(ci, ck - 1) != WALL_DOOR)
-            out[cnt++] = { x0 - WT, z0 - WT, x0 + WT, z0 + 0.35f, FULL_H };
+            out[cnt++] = { x0 - WT, z0 - WT, x0 + WT, z0 + DOOR_LO, FULL_H };
         if (cnt < cap && wallWVal(ci, ck + 1) != WALL_DOOR)
-            out[cnt++] = { x0 - WT, z0 + 1.65f, x0 + WT, z0 + CELL + WT, FULL_H };
+            out[cnt++] = { x0 - WT, z0 + DOOR_HI, x0 + WT, z0 + CELL + WT, FULL_H };
     }
-    if (cnt < cap && pillarAt(ci, ck)) out[cnt++] = { x0 + 0.42f, z0 + 0.42f, x0 + 1.58f, z0 + 1.58f, FULL_H };
+    if (cnt < cap && pillarAt(ci, ck)) out[cnt++] = { x0 + PILLAR_LO, z0 + PILLAR_LO, x0 + PILLAR_HI, z0 + PILLAR_HI, FULL_H };
     // A riser taller than MAX_STEP blocks: the box covers the high cell and tops
     // out at its floor, so a body on top walks over it (collideCircle skips boxes at
     // or below the feet) and a body below is stopped. Pools are exempt on both sides
@@ -1213,7 +1212,7 @@ int World::gatherCellAABBs(int ci, int ck, AABB *out, int cap, int cnt, bool inc
         uint8_t pv = propAt(ci, ck);
         if (pv) {
             float ey = floorY(ci, ck);
-            uint32_t h = ih(ci, ck, sseed() ^ 0xB0B5u);   // same hash the mesher uses
+            uint32_t h = ih(ci, ck, sseed() ^ PROP_HASH_SALT);
             float r1 = (h & 0xFF) / 255.0f, r2 = ((h >> 8) & 0xFF) / 255.0f;
             // Tops must match the heights addProp builds and Game::bottleShelfY; change
             // all three together. PROP_FALLEN_TILE has no box: rubble is walked over.

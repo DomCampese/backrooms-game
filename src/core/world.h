@@ -31,8 +31,9 @@ enum WallKind : uint8_t {
     WALL_SOLID  = 1,
     WALL_EXIT   = 2,   // a doorway out of this level
     WALL_WINDOW = 3,   // glass, with nothing behind it
-    // A doorway: a 1.3 m opening under a 2.3 m header, with a frame and a
-    // threshold. Passable, but its jambs are solid (gatherCellAABBs).
+    // A doorway: the opening between DOOR_LO and DOOR_HI along the edge, under
+    // a header at DOOR_HEAD, with a frame and a threshold. Passable, but its
+    // jambs are solid (gatherCellAABBs).
     WALL_DOOR   = 4,
     // A doorway with a shut, locked leaf. Blocks bodies and light until
     // World::unlockEdge turns it into a WALL_DOOR through the wall overlay.
@@ -42,6 +43,14 @@ enum WallKind : uint8_t {
     // sight.
     WALL_RAIL   = 6,
 };
+
+// A doorway's opening (and an exit's): from DOOR_LO to DOOR_HI along its edge,
+// 1.3 m, under a header DOOR_HEAD above the floor. Collision and the mesher
+// both read these.
+constexpr float DOOR_LO = 0.35f, DOOR_HI = CELL - DOOR_LO;
+constexpr float DOOR_HEAD = 2.3f;
+// A pillar fills the middle of its cell, PILLAR_LO to PILLAR_HI on both axes.
+constexpr float PILLAR_LO = 0.42f, PILLAR_HI = CELL - PILLAR_LO;
 
 // What stands in a cell. The generator picks these per level; addProp
 // (world_mesh.cpp) builds each and gatherCellAABBs gives it a collision box.
@@ -71,6 +80,12 @@ enum PropKind : uint8_t {
 // Only vending machines. World::generate sets it after every pass that changes
 // an edge, so the mesher and collision (vendFootprint) agree.
 constexpr uint8_t PROP_AGAINST_WALL = 4;
+// propRot's quarter turn, radians, as authored (not TAU / 4: the mesher and
+// collision both use this value, and changing it moves every prop).
+constexpr float PROP_TURN = 1.5708f;
+// Per-piece variation of a prop: ih(gi, gk, sseed() ^ PROP_HASH_SALT). The
+// mesher builds from it and collision reads the same heights.
+constexpr uint32_t PROP_HASH_SALT = 0xB0B5u;
 
 // The vending machine's body: half-width, height, and reach behind and in
 // front of its centre (the door hardware stands proud). The mesher builds it
@@ -93,6 +108,8 @@ bool liftHash(int gi, int gk, unsigned s);
 // the chunks round spawn.
 constexpr uint32_t MANILA_RATE = 20;
 constexpr int MANILA_LO = 6, MANILA_HI = 9;
+// The room's centre is the min corner of chunk cell (MANILA_MID, MANILA_MID).
+constexpr int MANILA_MID = MANILA_LO + 2;
 
 // ChunkData::elev is stored in decimetres so it fits in an int8_t.
 constexpr float ELEV_UNIT = 0.1f;

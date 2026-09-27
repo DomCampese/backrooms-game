@@ -170,7 +170,7 @@ static void addRailRun(WallBuilder &wa, MB &pr, float ax, float az, float bx, fl
         wa.quad(P(0, -RAIL_T, base), P(len, -RAIL_T, base), P(len, RAIL_T, base), P(0, RAIL_T, base), { 0, -1, 0 },
                 { U(0), 0 }, { U(len), 0 }, { U(len), 0.05f }, { U(0), 0.05f }, WHITE);
     // The cap: a timber slab a little proud of both faces, sloping with the top.
-    const Vector2 m = { 0.375f, 0.75f };
+    const Vector2 m = PLAIN_UV;
     float slope = (top1 - top0) / len, sn = 1.0f / sqrtf(1 + slope * slope);
     Vector3 up = { -ux * slope * sn, sn, -uz * slope * sn };
     pr.quad(P(0, -capW, top0), P(len, -capW, top1), P(len, capW, top1), P(0, capW, top0), up, m, m, m, m, RAIL_CAP);
@@ -236,7 +236,7 @@ struct PropSite {
 static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level,
                     MB &pr, MB &ce, MB &ao, MB &fx) {
     const float pcx = site.cx, pcz = site.cz, rot = site.rot, ey = site.floorY;
-    uint32_t h = ih(site.gi, site.gk, seed ^ 0xB0B5u);
+    uint32_t h = ih(site.gi, site.gk, seed ^ PROP_HASH_SALT);
     float r1 = (h & 0xFF) / 255.0f, r2 = ((h >> 8) & 0xFF) / 255.0f, r3 = ((h >> 16) & 0xFF) / 255.0f;
     // UV regions of the props atlas (makePropsTex). Cardboard has two: a carton's
     // side, and its top with the flap seam, tape and label.
@@ -259,7 +259,7 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
                    surface==Surface::Fabric ? 0.016f : surface==Surface::Wood ? 0.006f : 0.0f);
     };
     auto roundPart = [&](float ox,float oz,float r0,float r1,float y0,float y1,Color tint) {
-        const Vector2 uv{0.375f,0.75f};
+        const Vector2 uv = PLAIN_UV;
         float cx=pcx+ox*ca-oz*sa,cz=pcz+ox*sa+oz*ca;
         for (int i=0;i<16;++i) {
             float a=TAU*i/16,b=TAU*(i+1)/16;
@@ -437,7 +437,7 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
             Vector3 a = P(x0, y0, z0), b = P(x1, y1, z1);
             float wx0 = std::min(a.x, b.x), wx1 = std::max(a.x, b.x), wz0 = std::min(a.z, b.z), wz1 = std::max(a.z, b.z);
             float wy0 = y0 + ey, wy1 = y1 + ey;
-            const Vector2 u = { 0.375f, 0.75f };               // the plain metal addSolidBox samples
+            const Vector2 u = PLAIN_UV;               // the plain metal addSolidBox samples
             auto emit = [&](Vector3 q0, Vector3 q1, Vector3 q2, Vector3 q3, Vector3 n) {
                 float d = n.x * fn.x + n.z * fn.z;
                 int kind = n.y > 0.5f ? TOP : n.y < -0.5f ? BOTTOM : d > 0.5f ? FRONT : d < -0.5f ? BACK : SIDES;
@@ -510,7 +510,7 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
         }
         // the glass last, so it blends over everything behind it (alpha 100: the
         // shader's window-glass path)
-        const Vector2 m = { 0.375f, 0.75f };
+        const Vector2 m = PLAIN_UV;
         fx.quad(P(w.x0, w.y0, -0.352f), P(w.x1, w.y0, -0.352f), P(w.x1, w.y1, -0.352f), P(w.x0, w.y1, -0.352f),
                 fn, m, m, m, m, Color{ 7, 8, 9, 100 });
         break;
@@ -564,7 +564,7 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
             Vector3 base{pcx,yy,pcz},tip{pcx+dx,yy+0.17f,pcz+dz};
             Vector3 left{pcx+dx*0.55f-dz*0.20f,yy+0.14f,pcz+dz*0.55f+dx*0.20f};
             Vector3 right{pcx+dx*0.55f+dz*0.20f,yy+0.14f,pcz+dz*0.55f-dx*0.20f};
-            Vector2 uv{0.375f,0.75f};
+            Vector2 uv = PLAIN_UV;
             pr.tri(base,left,tip,{0,1,0},uv,uv,uv,{64,111,53,254});
             pr.tri(base,tip,right,{0,1,0},uv,uv,uv,{48,88,39,254});
         }
@@ -579,7 +579,7 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
 // stay boxes.
 static void addSpall(MB &fx, MB &pr, Vector3 c, Vector3 n, Vector3 u, float rw, float rh, uint32_t h) {
     Rng r(((uint64_t)h << 1) ^ 0x5BA11ULL);
-    const Vector2 uv = { 0.375f, 0.75f };                // the fixtures atlas's plain metal, darkened
+    const Vector2 uv = PLAIN_UV;                // the fixtures atlas's plain metal, darkened
     auto ring = [&](float scale, float off, Color col) {
         const int N = 11;
         Vector3 pts[N];
@@ -630,12 +630,12 @@ static void addSymbolDoor(MB &pr, MB &fx, int ax, float a0, float w0, float base
         addSolidBox(mb, std::min(lo.x, hi.x), y0, std::min(lo.z, hi.z), std::max(lo.x, hi.x), y1, std::max(lo.z, hi.z), c);
     };
     Color steel = { 84, 88, 86, 254 }, dark = { 50, 52, 52, 254 };
-    const float o0 = a0 + 0.35f, o1 = a0 + 1.65f, T = 0.05f;
+    const float o0 = a0 + DOOR_LO, o1 = a0 + DOOR_HI, T = 0.05f;
     for (int sd = -1; sd <= 1; sd += 2) {                 // the frame, proud of both faces
         float nf = sd * (WT + T * 0.5f);
         box(pr, o0 - 0.09f, base, nf - T * 0.5f, o0, base + 2.39f, nf + T * 0.5f, steel);
         box(pr, o1, base, nf - T * 0.5f, o1 + 0.09f, base + 2.39f, nf + T * 0.5f, steel);
-        box(pr, o0 - 0.09f, base + 2.30f, nf - T * 0.5f, o1 + 0.09f, base + 2.39f, nf + T * 0.5f, steel);
+        box(pr, o0 - 0.09f, base + DOOR_HEAD, nf - T * 0.5f, o1 + 0.09f, base + 2.39f, nf + T * 0.5f, steel);
     }
     if (leafRoom) {   // the leaf, swung back flat against the -side face beside the frame
         float nf = -(WT + 0.035f);
@@ -648,7 +648,7 @@ static void addSymbolDoor(MB &pr, MB &fx, int ax, float a0, float w0, float base
     int pts[6], np = 4 + r.ri(0, 2);
     for (int i = 0; i < np; i++) pts[i] = r.ri(0, 8);
     Color paint = cursed ? Color{ 210, 40, 30, 254 } : Color{ 250, 238, 190, 254 };
-    const Vector2 uv = { 0.375f, 0.75f };
+    const Vector2 uv = PLAIN_UV;
     float sc = 0.30f, cA = (o0 + o1) * 0.5f, cY = base + 2.78f;
     for (int sd = -1; sd <= 1; sd += 2) {
         float nf = sd * (WT + 0.0025f);
@@ -695,7 +695,7 @@ static void addManilaRoom(MB &pr, MB &fx, MB &ao, float rx, float rz, float cy, 
     // gloss.
     {
         const Vector3 up = { 0, 1, 0 };
-        const Vector2 u = { 0.375f, 0.75f };
+        const Vector2 u = PLAIN_UV;
         pr.quad({rx-R,0.002f,rz-R},{rx-R,0.002f,rz+R},{rx+R,0.002f,rz+R},{rx+R,0.002f,rz-R}, up,
                 u, u, u, u, Color{ 34, 24, 18, 254 });
         const float PW = 0.145f;
@@ -753,8 +753,8 @@ static void addManilaRoom(MB &pr, MB &fx, MB &ao, float rx, float rz, float cy, 
     // + 1.65.
     auto face = [&](int axis, float fixed, float nsgn, int doorCell) {
         float a0 = (axis == 0 ? rx : rz) - IN, a1 = (axis == 0 ? rx : rz) + IN;
-        float o0 = (axis == 0 ? rx : rz) - R + (doorCell - MANILA_LO) * CELL + 0.35f, o1 = o0 + 1.30f;
-        const float y0 = 0.135f, yo = 2.30f;
+        float o0 = (axis == 0 ? rx : rz) - R + (doorCell - MANILA_LO) * CELL + DOOR_LO, o1 = o0 + 1.30f;
+        const float y0 = 0.135f, yo = DOOR_HEAD;
         tileRect(axis, fixed, nsgn, a0, o0 - 0.06f, y0, cy);    // left of the frame
         tileRect(axis, fixed, nsgn, o1 + 0.06f, a1, y0, cy);    // right of it
         tileRect(axis, fixed, nsgn, o0 - 0.06f, o1 + 0.06f, yo + 0.06f, cy);   // over the head
@@ -1036,7 +1036,7 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
                 // Safety edging along every drop off a loading dock: yellow and black, 100 mm
                 // wide, 250 mm stripes, just in from the lip.
                 auto edging = [&](float ex0, float ez0, float ex1, float ez1, float inx, float inz) {
-                    const Vector2 uv = { 0.375f, 0.75f };
+                    const Vector2 uv = PLAIN_UV;
                     float len = sqrtf((ex1 - ex0) * (ex1 - ex0) + (ez1 - ez0) * (ez1 - ez0));
                     int n = (int)(len / 0.25f);
                     for (int q = 0; q < n; q++) {
@@ -1132,7 +1132,7 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             if (lx < wx || lx >= wx + CHUNK || lz < wz || lz >= wz + CHUNK) continue;
             // No tubes in the Manila Room; the shader masks the same panels (uRoomMask).
             if (d.manila) {
-                float mx = wx + (MANILA_HI + 1 - 2) * CELL, mz = wz + (MANILA_HI + 1 - 2) * CELL;
+                float mx = wx + MANILA_MID * CELL, mz = wz + MANILA_MID * CELL;
                 if (fabsf(lx - mx) < 4.0f && fabsf(lz - mz) < 4.0f) continue;
             }
             // No fitting whose tray would overhang an opening into the storey above;
@@ -1201,7 +1201,6 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             ce.quad({lx-hp,yq,lz-hp},{lx-hp,yq,lz+hp},{lx+hp,yq,lz+hp},{lx+hp,yq,lz-hp},{0,-1,0},
                     {0,0},{0,1},{1,1},{1,0},panel);
         }
-    ChunkData &dd = d;
     // A rail on one cell edge. Its top follows what you stand on beside it,
     // whichever side is higher: level round an opening, up the nosing beside a
     // flight. Between two holes nothing is drawn (the storey below draws that
@@ -1291,15 +1290,15 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             }
         }
         else if (nv == WALL_EXIT) {   // exit doorway on x-running wall
-            addBoxSides(wa, gx - WT, nb, gz - WT, gx + 0.35f, nt, gz + WT);
-            addBoxSides(wa, gx + 1.65f, nb, gz - WT, gx + CELL + WT, nt, gz + WT);
-            addBoxSides(wa, gx + 0.35f, nb + 2.3f, gz - WT, gx + 1.65f, nt, gz + WT, true);
+            addBoxSides(wa, gx - WT, nb, gz - WT, gx + DOOR_LO, nt, gz + WT);
+            addBoxSides(wa, gx + DOOR_HI, nb, gz - WT, gx + CELL + WT, nt, gz + WT);
+            addBoxSides(wa, gx + DOOR_LO, nb + DOOR_HEAD, gz - WT, gx + DOOR_HI, nt, gz + WT, true);
             // cursed exits glow red
             bool crs = w.cursedExit(cx * CCELLS + i, cz * CCELLS + kk);
             Color glow = crs ? Color{ 255, 60, 40, 70 } : Color{ 255, 248, 225, 70 };
-            wa.quad({gx+0.35f,nb,gz},{gx+1.65f,nb,gz},{gx+1.65f,nb+2.3f,gz},{gx+0.35f,nb+2.3f,gz},{0,0,-1},
+            wa.quad({gx + DOOR_LO,nb,gz},{gx + DOOR_HI,nb,gz},{gx + DOOR_HI,nb + DOOR_HEAD,gz},{gx + DOOR_LO,nb + DOOR_HEAD,gz},{0,0,-1},
                     {0,1},{1,1},{1,0},{0,0},glow);
-            wa.quad({gx+1.65f,nb,gz},{gx+0.35f,nb,gz},{gx+0.35f,nb+2.3f,gz},{gx+1.65f,nb+2.3f,gz},{0,0,1},
+            wa.quad({gx + DOOR_HI,nb,gz},{gx + DOOR_LO,nb,gz},{gx + DOOR_LO,nb + DOOR_HEAD,gz},{gx + DOOR_HI,nb + DOOR_HEAD,gz},{0,0,1},
                     {0,1},{1,1},{1,0},{0,0},glow);
             if (w.level == 1)
                 addSymbolDoor(pr, fx, 0, gx, gz, nb, crs, ih(gi0, gk0, w.sseed() ^ 0x51B0u),
@@ -1312,37 +1311,37 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             // the matching jamb boxes.
             bool mW = w.wallNVal(gi0 - 1, gk0) == WALL_DOOR;
             bool mE = w.wallNVal(gi0 + 1, gk0) == WALL_DOOR;
-            if (mW) addBoxSides(wa, gx - WT, nb + 2.3f, gz - WT, gx + 0.35f, nt, gz + WT, true);
-            else    addBoxSides(wa, gx - WT, nb, gz - WT, gx + 0.35f, nt, gz + WT);
-            if (mE) addBoxSides(wa, gx + 1.65f, nb + 2.3f, gz - WT, gx + CELL + WT, nt, gz + WT, true);
-            else    addBoxSides(wa, gx + 1.65f, nb, gz - WT, gx + CELL + WT, nt, gz + WT);
-            addBoxSides(wa, gx + 0.35f, nb + 2.3f, gz - WT, gx + 1.65f, nt, gz + WT, true);
+            if (mW) addBoxSides(wa, gx - WT, nb + DOOR_HEAD, gz - WT, gx + DOOR_LO, nt, gz + WT, true);
+            else    addBoxSides(wa, gx - WT, nb, gz - WT, gx + DOOR_LO, nt, gz + WT);
+            if (mE) addBoxSides(wa, gx + DOOR_HI, nb + DOOR_HEAD, gz - WT, gx + CELL + WT, nt, gz + WT, true);
+            else    addBoxSides(wa, gx + DOOR_HI, nb, gz - WT, gx + CELL + WT, nt, gz + WT);
+            addBoxSides(wa, gx + DOOR_LO, nb + DOOR_HEAD, gz - WT, gx + DOOR_HI, nt, gz + WT, true);
             // The architrave stands proud of both faces. A merged side has no jamb, so its
             // post goes and the head runs on to meet the neighbour's.
             float tx0 = mW ? gx - WT : gx + 0.29f, tx1 = mE ? gx + CELL + WT : gx + 1.71f;
             for (int sgn = -1; sgn <= 1; sgn += 2) {
                 float zf = (sgn < 0) ? gz - WT - TRIM_T : gz + WT;
-                if (!mW) addSolidBox(pr, gx + 0.29f, nb, zf, gx + 0.35f, nb + 2.36f, zf + TRIM_T, TRIM_COL);
-                if (!mE) addSolidBox(pr, gx + 1.65f, nb, zf, gx + 1.71f, nb + 2.36f, zf + TRIM_T, TRIM_COL);
-                addSolidBox(pr, tx0, nb + 2.30f, zf, tx1, nb + 2.36f, zf + TRIM_T, TRIM_COL);
+                if (!mW) addSolidBox(pr, gx + 0.29f, nb, zf, gx + DOOR_LO, nb + 2.36f, zf + TRIM_T, TRIM_COL);
+                if (!mE) addSolidBox(pr, gx + DOOR_HI, nb, zf, gx + 1.71f, nb + 2.36f, zf + TRIM_T, TRIM_COL);
+                addSolidBox(pr, tx0, nb + DOOR_HEAD, zf, tx1, nb + 2.36f, zf + TRIM_T, TRIM_COL);
             }
             // and a threshold strip
             float fy0 = w.floorY(cx * CCELLS + i, cz * CCELLS + kk);
-            addSolidBox(pr, mW ? gx : gx + 0.35f, fy0, gz - 0.07f,
-                        mE ? gx + CELL : gx + 1.65f, fy0 + 0.013f, gz + 0.07f, SILL_COL);
+            addSolidBox(pr, mW ? gx : gx + DOOR_LO, fy0, gz - 0.07f,
+                        mE ? gx + CELL : gx + DOOR_HI, fy0 + 0.013f, gz + 0.07f, SILL_COL);
         }
         else if (nv == WALL_LOCKED) {   // a door with the leaf still in it
-            addBoxSides(wa, gx - WT, nb, gz - WT, gx + 0.35f, nt, gz + WT);
-            addBoxSides(wa, gx + 1.65f, nb, gz - WT, gx + CELL + WT, nt, gz + WT);
-            addBoxSides(wa, gx + 0.35f, nb + 2.3f, gz - WT, gx + 1.65f, nt, gz + WT, true);
+            addBoxSides(wa, gx - WT, nb, gz - WT, gx + DOOR_LO, nt, gz + WT);
+            addBoxSides(wa, gx + DOOR_HI, nb, gz - WT, gx + CELL + WT, nt, gz + WT);
+            addBoxSides(wa, gx + DOOR_LO, nb + DOOR_HEAD, gz - WT, gx + DOOR_HI, nt, gz + WT, true);
             float fy0 = w.floorY(cx * CCELLS + i, cz * CCELLS + kk);
             // The leaf fills the opening: a slab, visible from both sides.
             addSolidBox(pr, gx + 0.36f, fy0, gz - 0.025f, gx + 1.64f, nb + 2.28f, gz + 0.025f, LEAF_COL);
             for (int sgn = -1; sgn <= 1; sgn += 2) {   // architrave, as on an open one
                 float zf = (sgn < 0) ? gz - WT - TRIM_T : gz + WT;
-                addSolidBox(pr, gx + 0.29f, nb, zf, gx + 0.35f, nb + 2.36f, zf + TRIM_T, TRIM_COL);
-                addSolidBox(pr, gx + 1.65f, nb, zf, gx + 1.71f, nb + 2.36f, zf + TRIM_T, TRIM_COL);
-                addSolidBox(pr, gx + 0.29f, nb + 2.30f, zf, gx + 1.71f, nb + 2.36f, zf + TRIM_T, TRIM_COL);
+                addSolidBox(pr, gx + 0.29f, nb, zf, gx + DOOR_LO, nb + 2.36f, zf + TRIM_T, TRIM_COL);
+                addSolidBox(pr, gx + DOOR_HI, nb, zf, gx + 1.71f, nb + 2.36f, zf + TRIM_T, TRIM_COL);
+                addSolidBox(pr, gx + 0.29f, nb + DOOR_HEAD, zf, gx + 1.71f, nb + 2.36f, zf + TRIM_T, TRIM_COL);
                 // handle and escutcheon, 1.02 m up on the latch side
                 addSolidBox(pr, gx + 1.34f, fy0 + 0.97f, zf - 0.02f,
                             gx + 1.50f, fy0 + 1.07f, zf + TRIM_T, LOCK_COL);
@@ -1375,14 +1374,14 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             }
         }
         else if (wv == WALL_EXIT) {   // exit doorway on z-running wall
-            addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wt2, gz + 0.35f);
-            addBoxSides(wa, gx - WT, wb, gz + 1.65f, gx + WT, wt2, gz + CELL + WT);
-            addBoxSides(wa, gx - WT, wb + 2.3f, gz + 0.35f, gx + WT, wt2, gz + 1.65f, true);
+            addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wt2, gz + DOOR_LO);
+            addBoxSides(wa, gx - WT, wb, gz + DOOR_HI, gx + WT, wt2, gz + CELL + WT);
+            addBoxSides(wa, gx - WT, wb + DOOR_HEAD, gz + DOOR_LO, gx + WT, wt2, gz + DOOR_HI, true);
             bool crs = w.cursedExit(cx * CCELLS + i, cz * CCELLS + kk);
             Color glow = crs ? Color{ 255, 60, 40, 70 } : Color{ 255, 248, 225, 70 };
-            wa.quad({gx,wb,gz+0.35f},{gx,wb,gz+1.65f},{gx,wb+2.3f,gz+1.65f},{gx,wb+2.3f,gz+0.35f},{1,0,0},
+            wa.quad({gx,wb,gz + DOOR_LO},{gx,wb,gz + DOOR_HI},{gx,wb + DOOR_HEAD,gz + DOOR_HI},{gx,wb + DOOR_HEAD,gz + DOOR_LO},{1,0,0},
                     {0,1},{1,1},{1,0},{0,0},glow);
-            wa.quad({gx,wb,gz+1.65f},{gx,wb,gz+0.35f},{gx,wb+2.3f,gz+0.35f},{gx,wb+2.3f,gz+1.65f},{-1,0,0},
+            wa.quad({gx,wb,gz + DOOR_HI},{gx,wb,gz + DOOR_LO},{gx,wb + DOOR_HEAD,gz + DOOR_LO},{gx,wb + DOOR_HEAD,gz + DOOR_HI},{-1,0,0},
                     {0,1},{1,1},{1,0},{0,0},glow);
             if (w.level == 1)
                 addSymbolDoor(pr, fx, 1, gz, gx, wb, crs, ih(gi0, gk0, w.sseed() ^ 0x51B1u),
@@ -1392,33 +1391,33 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             // Merged as on the x-running wall above.
             bool mN = w.wallWVal(gi0, gk0 - 1) == WALL_DOOR;
             bool mS = w.wallWVal(gi0, gk0 + 1) == WALL_DOOR;
-            if (mN) addBoxSides(wa, gx - WT, wb + 2.3f, gz - WT, gx + WT, wt2, gz + 0.35f, true);
-            else    addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wt2, gz + 0.35f);
-            if (mS) addBoxSides(wa, gx - WT, wb + 2.3f, gz + 1.65f, gx + WT, wt2, gz + CELL + WT, true);
-            else    addBoxSides(wa, gx - WT, wb, gz + 1.65f, gx + WT, wt2, gz + CELL + WT);
-            addBoxSides(wa, gx - WT, wb + 2.3f, gz + 0.35f, gx + WT, wt2, gz + 1.65f, true);
+            if (mN) addBoxSides(wa, gx - WT, wb + DOOR_HEAD, gz - WT, gx + WT, wt2, gz + DOOR_LO, true);
+            else    addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wt2, gz + DOOR_LO);
+            if (mS) addBoxSides(wa, gx - WT, wb + DOOR_HEAD, gz + DOOR_HI, gx + WT, wt2, gz + CELL + WT, true);
+            else    addBoxSides(wa, gx - WT, wb, gz + DOOR_HI, gx + WT, wt2, gz + CELL + WT);
+            addBoxSides(wa, gx - WT, wb + DOOR_HEAD, gz + DOOR_LO, gx + WT, wt2, gz + DOOR_HI, true);
             float tz0 = mN ? gz - WT : gz + 0.29f, tz1 = mS ? gz + CELL + WT : gz + 1.71f;
             for (int sgn = -1; sgn <= 1; sgn += 2) {
                 float xf = (sgn < 0) ? gx - WT - TRIM_T : gx + WT;
-                if (!mN) addSolidBox(pr, xf, wb, gz + 0.29f, xf + TRIM_T, wb + 2.36f, gz + 0.35f, TRIM_COL);
-                if (!mS) addSolidBox(pr, xf, wb, gz + 1.65f, xf + TRIM_T, wb + 2.36f, gz + 1.71f, TRIM_COL);
-                addSolidBox(pr, xf, wb + 2.30f, tz0, xf + TRIM_T, wb + 2.36f, tz1, TRIM_COL);
+                if (!mN) addSolidBox(pr, xf, wb, gz + 0.29f, xf + TRIM_T, wb + 2.36f, gz + DOOR_LO, TRIM_COL);
+                if (!mS) addSolidBox(pr, xf, wb, gz + DOOR_HI, xf + TRIM_T, wb + 2.36f, gz + 1.71f, TRIM_COL);
+                addSolidBox(pr, xf, wb + DOOR_HEAD, tz0, xf + TRIM_T, wb + 2.36f, tz1, TRIM_COL);
             }
             float fy0 = w.floorY(cx * CCELLS + i, cz * CCELLS + kk);
-            addSolidBox(pr, gx - 0.07f, fy0, mN ? gz : gz + 0.35f,
-                        gx + 0.07f, fy0 + 0.013f, mS ? gz + CELL : gz + 1.65f, SILL_COL);
+            addSolidBox(pr, gx - 0.07f, fy0, mN ? gz : gz + DOOR_LO,
+                        gx + 0.07f, fy0 + 0.013f, mS ? gz + CELL : gz + DOOR_HI, SILL_COL);
         }
         else if (wv == WALL_LOCKED) {   // a door with the leaf still in it
-            addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wt2, gz + 0.35f);
-            addBoxSides(wa, gx - WT, wb, gz + 1.65f, gx + WT, wt2, gz + CELL + WT);
-            addBoxSides(wa, gx - WT, wb + 2.3f, gz + 0.35f, gx + WT, wt2, gz + 1.65f, true);
+            addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wt2, gz + DOOR_LO);
+            addBoxSides(wa, gx - WT, wb, gz + DOOR_HI, gx + WT, wt2, gz + CELL + WT);
+            addBoxSides(wa, gx - WT, wb + DOOR_HEAD, gz + DOOR_LO, gx + WT, wt2, gz + DOOR_HI, true);
             float fy0 = w.floorY(cx * CCELLS + i, cz * CCELLS + kk);
             addSolidBox(pr, gx - 0.025f, fy0, gz + 0.36f, gx + 0.025f, wb + 2.28f, gz + 1.64f, LEAF_COL);
             for (int sgn = -1; sgn <= 1; sgn += 2) {
                 float xf = (sgn < 0) ? gx - WT - TRIM_T : gx + WT;
-                addSolidBox(pr, xf, wb, gz + 0.29f, xf + TRIM_T, wb + 2.36f, gz + 0.35f, TRIM_COL);
-                addSolidBox(pr, xf, wb, gz + 1.65f, xf + TRIM_T, wb + 2.36f, gz + 1.71f, TRIM_COL);
-                addSolidBox(pr, xf, wb + 2.30f, gz + 0.29f, xf + TRIM_T, wb + 2.36f, gz + 1.71f, TRIM_COL);
+                addSolidBox(pr, xf, wb, gz + 0.29f, xf + TRIM_T, wb + 2.36f, gz + DOOR_LO, TRIM_COL);
+                addSolidBox(pr, xf, wb, gz + DOOR_HI, xf + TRIM_T, wb + 2.36f, gz + 1.71f, TRIM_COL);
+                addSolidBox(pr, xf, wb + DOOR_HEAD, gz + 0.29f, xf + TRIM_T, wb + 2.36f, gz + 1.71f, TRIM_COL);
                 addSolidBox(pr, xf - 0.02f, fy0 + 0.97f, gz + 1.34f,
                             xf + TRIM_T, fy0 + 1.07f, gz + 1.50f, LOCK_COL);
             }
@@ -1660,8 +1659,8 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
                 }
             }
         }
-        if (dd.pillar[i][kk]) {
-            addBoxSides(wa, gx + 0.42f, fyc, gz + 0.42f, gx + 1.58f, cyc, gz + 1.58f);
+        if (d.pillar[i][kk]) {
+            addBoxSides(wa, gx + PILLAR_LO, fyc, gz + PILLAR_LO, gx + PILLAR_HI, cyc, gz + PILLAR_HI);
             uint32_t sh = ih(gi0, gk0, w.sseed() ^ 0x5BA1u);
             if (w.level == 1 && sh % 3 == 0) {   // a column with its cover blown off
                 int f = (int)((sh >> 3) & 3);
@@ -1675,7 +1674,7 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             addContactShadow(ao, gx + 1.0f, gz + 1.0f, fyc, 0.0f, 0.58f, 0.58f);
             // AO up the pillar's foot and a ceiling crease round its head
             float pfy = fyc + 0.005f;
-            float px0 = gx + 0.42f, px1 = gx + 1.58f, pz0 = gz + 0.42f, pz1 = gz + 1.58f, cy = cyc - 0.005f;
+            float px0 = gx + PILLAR_LO, px1 = gx + PILLAR_HI, pz0 = gz + PILLAR_LO, pz1 = gz + PILLAR_HI, cy = cyc - 0.005f;
             aoStrip({ px0, pfy, pz0 - 0.006f }, { px1, pfy, pz0 - 0.006f }, { 0, AOH, 0 }, { 0, 0, -1 }, 0);
             aoStrip({ px0, pfy, pz1 + 0.006f }, { px1, pfy, pz1 + 0.006f }, { 0, AOH, 0 }, { 0, 0, 1 }, 0);
             aoStrip({ px0 - 0.006f, pfy, pz0 }, { px0 - 0.006f, pfy, pz1 }, { 0, AOH, 0 }, { -1, 0, 0 }, 0);
@@ -1685,16 +1684,16 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             aoStrip({ px0, cy, pz0 }, { px0, cy, pz1 }, { -AOW, 0, 0 }, { 0, -1, 0 }, AOC);
             aoStrip({ px1, cy, pz0 }, { px1, cy, pz1 }, { AOW, 0, 0 }, { 0, -1, 0 }, AOC);
         }
-        if (dd.prop[i][kk] != PROP_NONE) {
+        if (d.prop[i][kk] != PROP_NONE) {
             PropSite site = { gx + 1.0f, gz + 1.0f,
-                              dd.elev[i][kk] * ELEV_UNIT,     // furniture sits on the local floor
-                              (dd.propRot[i][kk] & 3) * 1.5708f,   // a quarter turn at a time
+                              d.elev[i][kk] * ELEV_UNIT,     // furniture sits on the local floor
+                              (d.propRot[i][kk] & 3) * PROP_TURN,
                               cx * CCELLS + i, cz * CCELLS + kk };
-            if (dd.prop[i][kk] == PROP_VENDING) {
+            if (d.prop[i][kk] == PROP_VENDING) {
                 float bx0, bz0, bx1, bz1;
-                vendFootprint(dd.propRot[i][kk], gx + 1.0f, gz + 1.0f, site.cx, site.cz, bx0, bz0, bx1, bz1);
+                vendFootprint(d.propRot[i][kk], gx + 1.0f, gz + 1.0f, site.cx, site.cz, bx0, bz0, bx1, bz1);
             }
-            addProp(dd.prop[i][kk], site, w.sseed(), w.level, pr, ce, ao, fx);
+            addProp(d.prop[i][kk], site, w.sseed(), w.level, pr, ce, ao, fx);
         }
     }
     // ---- the flights rising from this storey (stampFeature has the plan). Steps
@@ -1736,7 +1735,7 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
         }
     }
     if (d.manila) {
-        float mx = wx + (MANILA_HI + 1 - 2) * CELL, mz = wz + (MANILA_HI + 1 - 2) * CELL;
+        float mx = wx + MANILA_MID * CELL, mz = wz + MANILA_MID * CELL;
         addManilaRoom(pr, fx, ao, mx, mz, w.ceilY(cellOf(mx), cellOf(mz)), ih(cx, cz, w.sseed() ^ 0x3A11u));
     }
     if (w.level == 3 || w.level == 1) {
@@ -1780,7 +1779,7 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             }
             // valve station: a standpipe floor to ceiling; the renderer draws the wheel
             if (w.valveAt(gi, gk)) {
-                float vx = gx + 1.0f, vz = gz + 1.0f, fy = dd.elev[i][kk] * ELEV_UNIT;
+                float vx = gx + 1.0f, vz = gz + 1.0f, fy = d.elev[i][kk] * ELEV_UNIT;
                 addSolidBox(pr, vx - 0.085f, fy, vz - 0.085f, vx + 0.085f, w.ceilY(gi, gk), vz + 0.085f,
                             Color{ 84, 60, 44, 255 });
                 addSolidBox(pr, vx - 0.13f, fy + 1.02f, vz - 0.13f, vx + 0.13f, fy + 1.24f, vz + 0.13f,
@@ -1801,7 +1800,7 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             Color sc = PARTY[srng.ri(0, 4)];
             float dx2 = bx2 - ax, dz2 = bz2 - az, dl = sqrtf(dx2 * dx2 + dz2 * dz2) + 1e-4f;
             Vector3 nrm = { dz2 / dl, 0, -dx2 / dl };
-            Vector2 uvp = { 0.375f, 0.75f };   // plain-metal corner of the prop atlas: flat colour
+            Vector2 uvp = PLAIN_UV;   // plain-metal corner of the prop atlas: flat colour
             pr.quad({ ax, ytop, az }, { mx2, ymid + 0.06f, mz2 }, { mx2, ymid, mz2 }, { ax, ytop - 0.06f, az },
                     nrm, uvp, uvp, uvp, uvp, sc);
             pr.quad({ mx2, ymid + 0.06f, mz2 }, { bx2, ytop, bz2 }, { bx2, ytop - 0.06f, bz2 }, { mx2, ymid, mz2 },

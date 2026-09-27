@@ -157,7 +157,7 @@ Mesh buildDeckLampMesh() {
 // a recess.
 static void weaponTube(MB &b, float y, float z0, float z1, float radius,
                        float bore, Color metal, int sides = 24) {
-    Vector2 uv{0.375f, 0.75f};
+    Vector2 uv = PLAIN_UV;
     for (int i = 0; i < sides; ++i) {
         float a = TAU * i / sides, c = TAU * (i + 1) / sides;
         Vector3 n0{cosf(a), sinf(a), 0}, n1{cosf(c), sinf(c), 0};

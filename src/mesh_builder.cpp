@@ -44,7 +44,7 @@ void addPropBox(MB &mb, float cx, float cz, float yaw, float hx, float hz, float
 }
 
 void addSolidBox(MB &mb, float x0, float y0, float z0, float x1, float y1, float z1, Color t) {
-    const Vector2 u = { 0.375f, 0.75f };
+    const Vector2 u = PLAIN_UV;
     mb.quad({x0,y0,z0},{x1,y0,z0},{x1,y1,z0},{x0,y1,z0},{0,0,-1},u,u,u,u,t);
     mb.quad({x1,y0,z1},{x0,y0,z1},{x0,y1,z1},{x1,y1,z1},{0,0,1},u,u,u,u,t);
     mb.quad({x0,y0,z1},{x0,y0,z0},{x0,y1,z0},{x0,y1,z1},{-1,0,0},u,u,u,u,t);

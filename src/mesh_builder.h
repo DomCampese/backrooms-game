@@ -67,11 +67,15 @@ struct MB {
     }
 };
 
+// Where the atlases keep plain opaque material: the props and fixtures atlases
+// both keep a metal swatch at this UV, and flat-coloured geometry samples it.
+// Move the swatch and every box drawn from it disappears.
+constexpr Vector2 PLAIN_UV = { 0.375f, 0.75f };
+
 // A box turned by `yaw` about (cx, cz): four sides from one UV region, the top
 // from another. A bevel chamfers the vertical edges and the top rim.
 void addPropBox(MB &mb, float cx, float cz, float yaw, float hx, float hz, float y0, float y1,
                 float u0, float v0, float u1, float v1,
                 float tu0, float tv0, float tu1, float tv1, Color tint = WHITE, float bevel = 0);
-// An axis-aligned box in a flat colour. Every face samples UV (0.375, 0.75), so
-// any atlas it draws from needs plain opaque material there.
+// An axis-aligned box in a flat colour; every face samples PLAIN_UV.
 void addSolidBox(MB &mb, float x0, float y0, float z0, float x1, float y1, float z1, Color t);
