@@ -131,7 +131,7 @@ struct Game {
     Texture2D texClark{}, texEntity{}, texEntityGlow{}, texPartygoer{}, texProps{}, texScrawl{}, texFixtures{}, texAO{}, texOcc{}, texDog{},
               texAlmondWrap{}, texDeck{}, texParticle{};
     Revolver revolver;
-    HeldHand hand;   // the gloved hand on the revolver (hand.cpp)
+    HeldHand hand;   // the hand holding the revolver (hand.cpp)
     Mesh flareMesh{};
     Mesh canMesh{};                            // the almond water can, real geometry
     Mesh deckMesh{}, reelMesh{}, deckLampMesh{};   // the tape player, its reels, its record lamp

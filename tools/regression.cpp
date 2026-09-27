@@ -235,7 +235,7 @@ int main() {
     // relaxes the number instead of reading it.
     CHECK(0.155f + maxRadius * 0.48f < 0.34f);
     printf("Imported reload maximum model-space radius: %.4f m\n",maxRadius);
-    // The gloved hand and the sleeve ride the same hold. The sleeve runs back
+    // The hand and the sleeve ride the same hold. The sleeve runs back
     // past the eye and off the bottom of the screen, so its model-space radius
     // is half a metre and the proxy above would fail it; what matters is how
     // far each vertex ends up from the eye. Measured on the rest hold (the
@@ -243,8 +243,11 @@ int main() {
     // and against the offset's own length, not just its forward component.
     {
         float worst=0;
-        for (const Mesh *mesh : { &g.hand.glove, &g.hand.sleeve }) {
-            CHECK(mesh->vertexCount>1000 && mesh->vertexCount<65535);
+        std::vector<const Mesh *> parts={&g.hand.sleeve};
+        for (const auto *grp : {&g.hand.skin,&g.hand.knuckles,&g.hand.nails}) for (const Mesh &m : *grp) parts.push_back(&m);
+        CHECK(!g.hand.skin.empty() && g.hand.nails.size()==1 && g.hand.knuckles.size()==1);
+        for (const Mesh *mesh : parts) {
+            CHECK(mesh->vertexCount>50 && mesh->vertexCount<65535);
             for (int i=0;i<mesh->vertexCount;i++) {
                 Vector3 v={mesh->vertices[3*i],mesh->vertices[3*i+1],mesh->vertices[3*i+2]};
                 for (float sx : {-1.0f,1.0f}) {

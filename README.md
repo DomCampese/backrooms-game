@@ -148,12 +148,13 @@ and with real relief:
   its tubes along the top strap, the walls in the level's own colour down the
   flats, the floor underneath — instead of shading as grey plastic, and it has
   checkered walnut stocks where the source's grip was the same grey as the steel.
-- **A hand on the gun.** The revolver no longer floats: a gloved right hand
+- **A hand on the gun.** The revolver no longer floats: a bare right hand
   holds it, built procedurally at startup. The thumb runs along the frame, the
   index finger sits through the guard on the trigger and the other three wrap
-  the grip. The leather has pebble grain, side seams and creases over the
-  knuckles, and a knitted jacket cuff runs off the bottom of the screen. The
-  hand rides the gun's handle bone, so it follows the recoil and the reload.
+  the grip. The skin is pale and uneven: redder over the knuckles, pinker at
+  the fingertips, with nails and fine wrinkles over each joint. A black jersey
+  cuff runs off the bottom of the screen. The hand rides the gun's handle
+  bone, so it follows the recoil and the reload.
 - **The gun has weight.** It trails a quick turn by a few degrees and swings
   back with a little overshoot. The shot snaps it up and twists it in the hand,
   and the wrist catches it below where it started before it settles.
@@ -220,7 +221,7 @@ make run
 | `src/entity.h` | the hunter's state — Clark, the Smiler or the Partygoer by level (the state machine runs in `Game::updateEntity`) |
 | `src/surfaces.cpp` | the floors, walls and ceilings: colour, height and gloss per surface, generated per level on first visit |
 | `src/textures.*` | sprites, decals, fixtures, props, the can and the tape deck, synthesized at startup |
-| `src/hand.*` | the gloved hand and sleeve holding the revolver: a signed-distance hand polygonised at startup |
+| `src/hand.*` | the hand and sleeve holding the revolver: a signed-distance hand polygonised at startup |
 | `src/sfx.*` | one-shot sounds (footsteps, gunshot, splash, ...) |
 | `src/audio.*` | streaming ambience synth (hum, drone, room); water and LEVEL FUN music are recordings |
 | `src/shaders.*` | world + post-process GLSL |

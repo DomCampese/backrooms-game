@@ -788,9 +788,9 @@ void Game::drawHeldWeapon(const Camera3D &cam) {
         float refl = 1.0f;
         SetShaderValue(worldShader, locObjRefl, &refl, SHADER_UNIFORM_FLOAT);
         revolver.draw(mats[MAT_PROPS],m);
-        // The gloved hand and the sleeve, in the gun's model space: the hand
-        // rides the handle bone, so it goes with the gun through recoil and
-        // the reload. Same reflection window, so the leather keeps its sheen.
+        // The hand and the sleeve, in the gun's model space: the hand rides
+        // the handle bone, so it goes with the gun through recoil and the
+        // reload. Same reflection window, so skin and nails keep their sheen.
         {
             const Transform &hp = revolver.asset.sampledPose[revolver.handle];
             Matrix handleMat = MatrixMultiply(MatrixMultiply(MatrixScale(hp.scale.x, hp.scale.y, hp.scale.z),
@@ -806,7 +806,9 @@ void Game::drawHeldWeapon(const Camera3D &cam) {
                 maps[MATERIAL_MAP_SPECULAR].texture = detail;
                 DrawMesh(mesh, mat, handXf);
             };
-            drawWith(hand.glove, hand.leather, hand.leatherDetail);
+            for (const Mesh &mesh : hand.skin) drawWith(mesh, hand.skinTex, hand.skinDetail);
+            for (const Mesh &mesh : hand.knuckles) drawWith(mesh, hand.knuckleTex, hand.knuckleDetail);
+            for (const Mesh &mesh : hand.nails) drawWith(mesh, hand.white, hand.nailDetail);
             drawWith(hand.sleeve, hand.knit, hand.knitDetail);
         }
         refl = 0.0f;

@@ -1,20 +1,48 @@
 # The hand on the revolver, and the gun's weight (September 2026)
 
 The revolver floated in front of the camera. It is held now: `src/hand.cpp`
-builds a gloved right hand and a jacket sleeve once at startup, and
+builds a bare right hand and a black jersey sleeve once at startup, and
 `drawHeldWeapon` draws them with the handle bone's transform, so they recoil
 and reload with the gun. What will bite:
 
-- **The hand is a signed-distance field, not a model.** Tapered capsules and
-  ellipsoids are joined with a polynomial smooth-min and polygonised by naive
-  surface nets on a 2 mm grid; normals are the field's gradient. Nothing
-  licensed fits this gun's grip, and a hand built from capsules is forgiving
-  in a glove in a way bare skin is not.
+- **It was a leather glove first, and the owner called it inhuman.** The
+  reference it was rebuilt against is a photograph of a real hand held the
+  same way: pale skin, a thumbnail, fine lines over the thumb's knuckle, a
+  black cuff. Hair on the wrist was built as strands walked along the skin,
+  and was taken out on request. Do not put it back without asking.
+- **The hand is a signed-distance field, not a model.** Tapered capsules
+  (flattened: a finger is wider than it is deep) and oriented ellipsoids are
+  joined with a polynomial smooth-min and polygonised by naive surface nets
+  on a 1.8 mm grid; normals are the field's gradient. The field is sampled
+  coarsely first and only evaluated finely near the surface. Nothing licensed
+  fits this gun's grip. It builds in about 0.3 s.
+- **The palm is one wide blend (`PALM_K`, 18 mm).** With the fingers' narrow
+  blend, the pad behind the back strap stood between the thenar and the back
+  of the hand as a third finger, with a groove down each side: from the
+  sights the hand read as a claw. The wide blend also swells what it joins,
+  so those radii were cut to match.
 - **16-bit indices cap a raylib mesh at 65535 vertices, and the cap is
-  silent.** At 1.7 mm the glove came to 33k vertices, which looked safe until
-  the cuff moved. At 2 mm it is ~24k and builds in ~0.2 s. The regression
-  asserts both meshes stay under the cap. A finer grid needs splitting into
-  two meshes.
+  silent.** `bakeSplit` splits any group by triangles into meshes under the
+  cap. Skin that is pressed inside the (solid) grip or runs up the sleeve is
+  dropped before that (`hidden`). The regression asserts every mesh is under
+  the cap.
+- **Tone is in the vertex colours, the textures are near white.** Skin,
+  knuckle patches and nails are separate meshes with separate maps (nails
+  need their own gloss), and they meet at shared vertices. With the tone in
+  the textures the seams between groups showed. The base (0.80, 0.61, 0.53)
+  is darker than the photograph's lit side: at that value the hand came out a
+  mannequin in the building's light. Knuckles are redder, fingertips pinker,
+  folds redder and darker, and a little blotching is everywhere.
+- **Knuckle wrinkles are texture patches.** Real ones are a millimetre apart,
+  finer than the mesh, so triangles on the back of each joint go into their
+  own mesh, UV-mapped in the joint's frame into a 2x2 atlas. Straight joints
+  (the thumb, lying along the frame) get deep lines; bent ones, where the
+  skin is taut, get faint ones. The lines fade out before a cell's edge, so a
+  patch meets the tiled skin with nothing to show where. The atlas must be
+  mipmapped (`finishTexture(..., true)`): unfiltered, the lines drew as dots.
+- **Nails are ellipsoids on the last bone of each digit**, standing a third
+  of a millimetre proud and sinking into the skin at their sides. They are
+  coloured by position on the plate: half-moon, pink bed, pale free edge.
 - **Everything is placed against measured gun geometry**, in the GLB's model
   space (metres, +z muzzle, +y up, +x the gun's right; the camera sees -x).
   The measurements are in the header of `hand.cpp`. The walnut panels reach
@@ -22,24 +50,13 @@ and reload with the gun. What will bite:
   grain above the web. Re-measure if the model is ever reimported.
 - **Each bone knows its back (`dorsal`)**, computed as "away from what the
   finger is holding" through the anchor function passed to `finger()`. The
-  seams (where the dorsal dot product crosses 0) and the knuckle creases hang
-  off it.
-- **Relief is in the normals, not the mesh.** Wrinkles and creases tilt the
-  gradient normal by the slope of a height laid out in each bone's frame, so
-  they run across the finger. Keep features at 4.5 mm or longer: vertices are
-  2 mm apart, and the first 3 mm crease aliased into a faint smudge.
-- **Colour took three tries.** Near-black leather read as a hole in the
-  frame. Tan read as bare skin. Mid brown (88,57,36) with dark seams reads as
-  a glove.
+  nails, the knuckle patches and the flattening all hang off it.
 - **Clearance.** The sleeve's model-space radius is half a metre (it runs
   back past the eye), so the gun's `0.155 + r * 0.48 < 0.34` proxy would fail
-  it. The regression measures each vertex's distance from the eye instead:
-  about 0.20 m.
-- **Cost.** 44k triangles drawn every frame the revolver is out: +2.6% frame
-  on the software rasteriser (best of five on Level 0, 289 -> 296 ms). They
-  are drawn inside the `uObjRefl` window, like the gun.
-- **Grain UV is cylindrical round the grip axis.** A projection plane picked
-  per vertex put square seams all over the grain.
+  it. The regression measures each vertex's distance from the eye instead.
+- **Previewing.** `./texdump out/ hand` writes each mesh group as OBJ with
+  vertex colours. Each in-game capture takes about 45 s, so iterate on shape
+  there.
 - **Inertia** (`updateViewmodelLag`) is a sub-stepped spring, 0.7 of
   critical damping, three times stiffer at full aim. The input is the view's
   angular velocity, so the trail is frame-rate independent. It is capped at
@@ -496,7 +513,7 @@ time so the executable remains independent of its working directory.
 | `shaders.cpp` | the world and post-process GLSL, as string literals |
 | `surfaces.cpp` | the world surfaces: colour, height (m) and gloss per level surface, wrapped and at real scale |
 | `textures.cpp` | sprites, decals, fixtures, props atlas (with the CC0 material tiles), can, deck |
-| `hand.cpp` | the gloved hand and sleeve on the revolver: SDF hand, surface nets, leather and knit maps |
+| `hand.cpp` | the bare hand and sleeve on the revolver: SDF hand, surface nets, skin, knuckle and knit maps |
 | `revolver.{h,cpp}` | embedded authored revolver, pose interpolation, two material batches |
 | `sfx.cpp` | one-shot sounds synthesized into `Wave` buffers, plus the loaders for embedded recordings |
 | `audio.cpp` | the streaming ambience synth (hum, drone); recorded loops live in `Game::updateLoopAudio` |

@@ -109,18 +109,28 @@ static void sprite(const char *name, Texture2D (*make)()) {
     dump(name, make(), false);
 }
 
-static void dumpMesh(const char *name, const Mesh &m) {
+// OBJ with the vertex colour after each position (the common "v x y z r g b"
+// extension), several meshes merged into one file.
+static void dumpMeshes(const char *name, const std::vector<Mesh> &ms) {
     std::string path = gOut + "/" + name + ".obj";
     FILE *f = fopen(path.c_str(), "w");
     if (!f) return;
-    for (int i = 0; i < m.vertexCount; i++) fprintf(f, "v %f %f %f\n", m.vertices[i * 3], m.vertices[i * 3 + 1], m.vertices[i * 3 + 2]);
-    for (int i = 0; i < m.vertexCount; i++) fprintf(f, "vn %f %f %f\n", m.normals[i * 3], m.normals[i * 3 + 1], m.normals[i * 3 + 2]);
-    for (int t = 0; t < m.triangleCount; t++) {
-        int a = m.indices[t * 3] + 1, b = m.indices[t * 3 + 1] + 1, c = m.indices[t * 3 + 2] + 1;
-        fprintf(f, "f %d//%d %d//%d %d//%d\n", a, a, b, b, c, c);
+    int base = 1, verts = 0, tris = 0;
+    for (const Mesh &m : ms) {
+        for (int i = 0; i < m.vertexCount; i++) {
+            const unsigned char *c = m.colors ? m.colors + i * 4 : nullptr;
+            fprintf(f, "v %f %f %f %.3f %.3f %.3f\n", m.vertices[i * 3], m.vertices[i * 3 + 1], m.vertices[i * 3 + 2],
+                    c ? c[0] / 255.0f : 1.0f, c ? c[1] / 255.0f : 1.0f, c ? c[2] / 255.0f : 1.0f);
+        }
+        for (int i = 0; i < m.vertexCount; i++) fprintf(f, "vn %f %f %f\n", m.normals[i * 3], m.normals[i * 3 + 1], m.normals[i * 3 + 2]);
+        for (int t = 0; t < m.triangleCount; t++) {
+            int a = m.indices[t * 3] + base, b = m.indices[t * 3 + 1] + base, c = m.indices[t * 3 + 2] + base;
+            fprintf(f, "f %d//%d %d//%d %d//%d\n", a, a, b, b, c, c);
+        }
+        base += m.vertexCount; verts += m.vertexCount; tris += m.triangleCount;
     }
     fclose(f);
-    printf("%-16s %d vertices, %d triangles -> %s\n", name, m.vertexCount, m.triangleCount, path.c_str());
+    printf("%-16s %d vertices, %d triangles in %d meshes -> %s\n", name, verts, tris, (int)ms.size(), path.c_str());
 }
 
 int main(int argc, char **argv) {
@@ -149,8 +159,9 @@ int main(int argc, char **argv) {
     if (wanted("hand")) {
         HeldHand h = timed([] { return buildHeldHand(); });
         printf("%-16s generated in %.0f ms\n", "hand", gGenMs);
-        dumpMesh("glove", h.glove); dumpMesh("sleeve", h.sleeve);
-        dump("leather", h.leather, true); dump("knit", h.knit, true);
+        dumpMeshes("skin", h.skin); dumpMeshes("knuckles", h.knuckles); dumpMeshes("nails", h.nails);
+        dumpMeshes("sleeve", { h.sleeve });
+        dump("skintex", h.skinTex, true); dump("knuckletex", h.knuckleTex, false); dump("knit", h.knit, true);
     }
     sprite("fixtures", makeFixturesTex);
     sprite("scrawl", makeScrawlTex);
