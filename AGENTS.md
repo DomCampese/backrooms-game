@@ -5,6 +5,42 @@
 - docs/migration.md: the core / sim / platform layers and what may depend on
   what. docs/unreal-handoff.md: the planned move to Unreal Engine 5.
 
+# Core library (September 2026)
+
+The generator is a library with no raylib in it, so an engine port can reuse
+it (docs/migration.md has the layers and their status). What moved, and what
+will bite:
+
+- **`src/core/` includes only itself and the standard library.** It holds the
+  math types (`Vec2`, `Vec3`, `TAU`, `clampf`), hashes and noise (`hash.h`),
+  the per-level rules (`level_rules.h`: wall height, light pitch, storey
+  pitch, name, `EXIT_NEXT`) and the world (`world.{h,cpp}`: generation,
+  storeys, collision, sight, pathfinding, the occupancy grid).
+  `tools/core-check.sh` compiles each file alone with `-fno-exceptions
+  -fno-rtti` and fails on any include outside the layer, raylib or GL. Run it
+  after touching core. Platform code converts with `toRl`/`fromRl`
+  (`src/vec_rl.h`).
+- **`LevelCfg` extends `LevelRules`.** `LEVELS[lv].wallH` and
+  `LEVEL_RULES[lv].wallH` are one number; add a rule field to `LevelRules`,
+  a look field (colour, fog, gloss, light output) to `LevelCfg`.
+- **The mesher is `bakeChunk` in `src/world_mesh.cpp`, and ChunkData holds no
+  meshes.** `Game::chunkMeshes` (`ChunkMeshCache`) keys baked chunks by
+  absolute storey and chunk. Core appends to `World::staleChunks` wherever a
+  chunk's geometry goes stale (`unloadFar`, `unloadAll`, `rebuildChunk`, and so
+  `shiftEdge`/`unlockEdge`), and every cache call drains that list first.
+  Draw or ray-test a chunk only through `chunkMeshes.find`; a pointer kept
+  across a world mutation can outlive its mesh. A new place in core that drops
+  or invalidates a chunk must append to `staleChunks`, or its old meshes stay
+  on screen (and in GPU memory).
+- **Numbers collision and the mesher share live in core/world.h**: the doorway
+  opening (`DOOR_LO`, `DOOR_HI`, `DOOR_HEAD`), the pillar footprint, the rail
+  size (`RAIL_T`, `RAIL_H`), the vending body (`VEND_HW`, `VEND_Y1`, depths,
+  `vendFootprint`), `PROP_TURN`, `PROP_HASH_SALT`. textures.h reads the vending
+  body from core.
+- **The wall paper's vertical mapping is state on the wall builder**
+  (`WallBuilder::tileV`, `tallPaper` in world_mesh.cpp), set per bake; it used
+  to be two file globals (`gWallV`, `gTallPaper`).
+
 # Vending machine (September 2026)
 
 `PROP_VENDING` (Levels 1 and 4) was one grey box with a flat blue quad on it.
@@ -15,11 +51,12 @@ selling almond water. What will bite:
   The fittings keep the left half at the same pixels (`FIXPX`); `FIXTURES`
   divides u by 1024. The door is `VEND_PX` and the price strips
   `VEND_STRIP_PX`, both in the right half. Every rect on the door is in metres
-  in textures.h (`VEND_WIN`, `VEND_BIN`, ...), and both the painter
+  in textures.h (`VEND_WIN`, `VEND_BIN`, ...; the body's `VEND_HW` and `VEND_Y1`
+  are core's), and both the painter
   (`drawVendingFront`) and the mesher go through `vendUV`, so move a rect there
   and the paint moves with the geometry. Widening the atlas moved UV
   (0.375, 0.75) from pixel (192, 384) to (384, 384), so the plain-metal swatch
-  `addSolidBox` samples moved with it — to the strip between the diffuser and
+  `addSolidBox` samples (`PLAIN_UV`) moved with it — to the strip between the diffuser and
   the exit sign. Lose it and every conduit, sprinkler and lift door vanishes.
 - **Door x is mirrored against local x.** Seen from the front (local -z) local
   +x is on the viewer's left, the same thing that flipped the carton lettering.
@@ -74,7 +111,7 @@ objects were redrawn. What changed, and what will bite:
   anything scattered. `./texdump out/` writes each surface and a `_wrap` copy
   shifted half a tile, so a seam is in the middle of the picture.
 - **Things are their real size.** Floors/ceilings map 2 m to a repeat, walls
-  3 m across and `gWallV` down. Level 0's boards are 2/3 m (three to a repeat),
+  3 m across and `WallBuilder::tileV` down. Level 0's boards are 2/3 m (three to a repeat),
   so a grid line runs through every light centre (2 + 4k m) and the tray's
   0.69 m half-width lands on the next one: a troffer fills a 2x2 bay. Brick is
   13 x 40 to a 3 m wall (231 x 75 mm on centre). Pool tile is 1/6 m on floors
@@ -170,7 +207,7 @@ Level 0 is no longer one floorplan. The Threshold article's wanderers stumble
 and the photograph it began with is of a building's second floor, so Level 0
 is now a stack of floors joined by enclosed stairwells, straight flights under
 openings in the ceiling, and double-height atria railed round on the floor
-above (CREDITS.md). `LevelCfg::storeyH` is the floor-to-floor pitch: 4.32 m on
+above (CREDITS.md). `LevelRules::storeyH` is the floor-to-floor pitch: 4.32 m on
 Level 0 (24 risers of 180 mm), 0 on every other level, which is how they stay
 byte-identical. How it fits together, and what will bite:
 
@@ -260,13 +297,13 @@ byte-identical. How it fits together, and what will bite:
   opening that is *not* inside a feature footprint breaks this.
 - **Wallpaper on tall walls.** The L0 tile has its baseboard baked into the
   bottom, so a wall that climbs past 3 m (a shaft, the fascia round an opening,
-  the void side of a rail) repeats it at 3 m. `gTallPaper` (storeyed levels
+  the void side of a rail) repeats it at 3 m. `WallBuilder::tallPaper` (storeyed levels
   only) carries on from the tile's clean middle instead, and faces over a void
   (`voidFace`) never show the baseboard at all. Every other level keeps its
   deliberate repeat, byte for byte.
 - **Streaming.** Adjacent storeys are generated and meshed only round chunks
   that link to them (and ±2 through stacked links); `unloadFar` drops layers
-  more than two storeys away. The regression's `capture()` runs `streamChunks`
+  more than `STOREY_REACH` storeys away. The regression's `capture()` runs `streamChunks`
   24 times, not 7: with 7 the storey above had not been meshed yet and every
   opening in a capture was black.
 - **The landing lamp.** Enclosed stairwells have no ceiling grid over them, so
@@ -297,7 +334,7 @@ Level 1 follows the wiki's "Habitable Zone" article (CREDITS.md). What changed:
   dead, a fifth stuttering, faint green-white; the tubes sit on uLY. An 8 m grid
   was tried and cost 58% more frame: nearly all nine summed fittings then fall
   inside shadow-trace range. Brighter or more live tubes cost frame the same way.
-- **Walls run floor to ceiling once.** `gWallV` (world.cpp) is the vertical
+- **Walls run floor to ceiling once.** `WallBuilder::tileV` (world_mesh.cpp) is the vertical
   metres per wall-texture tile: 3 everywhere, `wallH` on L1, because the
   concrete now carries a damp band, tide line and pour joints at real heights
   and a 3 m repeat drew a second tide line under the 4.2 m slab. Anything baked
@@ -327,7 +364,7 @@ entries, and the 2002 photograph (CREDITS.md). What changed, and what will bite:
   drawn from the rng and discarded so the stream stays aligned. The regression
   asserts zero furnished cells and zero windows. Cartons are Clark's level's
   only cover, so do not thin them further without looking at `hide spot` in mapdump.
-- **Light grid.** L0 `ls` is 4 m (was 8). The panel mesher reads `LEVELS[].ls`
+- **Light grid.** L0 `ls` is 4 m (was 8). The panel mesher reads `LEVEL_RULES[].ls`
   now; it used to hardcode `level == 1 ? 12 : 8` and would have drawn fittings
   where no light came from. `vary`/`faulty` (LevelCfg) make tubes uneven and
   stutter; lightState() and lightAtCPU both apply `vary`, change both. L0 trays
@@ -494,8 +531,14 @@ time so the executable remains independent of its working directory.
 | `main.cpp` | `init()`, the `while (!WindowShouldClose())` loop, `shutdown()` |
 | `game.{h,cpp}` | all run state; per-frame update in `tick()` |
 | `render.cpp` | 3D scene pass, viewmodels, HUD, overlays |
-| `world.{h,cpp}` | infinite maze: chunk generation, mesh baking, collision, line of sight. `WallKind` / `PropKind` / `ChunkMesh` name the codes stored per cell |
-| `levels.{h,cpp}` | per-level look/feel table; CPU mirror of the shader's lighting |
+| `core/world.{h,cpp}` | infinite maze: chunk generation, storeys, collision, line of sight, pathfinding, occupancy grid. `WallKind` / `PropKind` name the codes stored per cell. No raylib |
+| `core/level_rules.h` | per-level rules: wall height, light pitch, storey pitch, name, exits |
+| `core/hash.{h,cpp}`, `core/vec.h` | hashes, RNG, value noise; `Vec2`/`Vec3`, `TAU`, `clampf` |
+| `world_mesh.{h,cpp}` | the chunk mesher (`bakeChunk`), `ChunkMesh` slots, `ChunkMeshCache` |
+| `mesh_builder.{h,cpp}` | `MB`, `addPropBox`, `addSolidBox`, `PLAIN_UV` |
+| `object_meshes.{h,cpp}` | can, tape deck, reels, flare, supply crate |
+| `vec_rl.h` | `toRl` / `fromRl` between core and raylib vectors |
+| `levels.{h,cpp}` | per-level look table (`LevelCfg` extends `LevelRules`); CPU mirror of the shader's lighting |
 | `shaders.cpp` | the world and post-process GLSL, as string literals |
 | `surfaces.cpp` | the world surfaces: colour, height (m) and gloss per level surface, wrapped and at real scale |
 | `textures.cpp` | sprites, decals, fixtures, props atlas (with the CC0 material tiles), can, deck |
@@ -503,7 +546,7 @@ time so the executable remains independent of its working directory.
 | `sfx.cpp` | one-shot sounds synthesized into `Wave` buffers, plus the loaders for embedded recordings |
 | `audio.cpp` | the streaming ambience synth (hum, drone); recorded loops live in `Game::updateLoopAudio` |
 | `entity.h` | `Entity` (Clark on Level 0, the Smiler on 1 and 3, the Partygoer on 4) and `Dog` state |
-| `util.{h,cpp}` | hashes, RNG, value noise, shared helpers |
+| `util.{h,cpp}` | platform helpers (`cl8`, `SAMPLE_RATE`, `PARTY`); includes core's math and hashes |
 
 `tick()` calls the update functions in a fixed order — look, movement, dev
 keys, weapons, flare, tape deck, interaction, drink, ambience, entity, dogs,
@@ -947,8 +990,8 @@ cannot otherwise reach.
 
 ## Measuring the layout, which screenshots will lie to you about
 
-`tools/mapdump.cpp` links the game's own `world.cpp` and calls `generate()`
-directly — no window, no GL, no Xvfb, about a second for a 258 m square:
+`tools/mapdump.cpp` links `src/core` alone and calls `generate()` directly —
+no window, no GL, no raylib, about a second for a 258 m square:
 
 ```bash
 tools/sandbox-build.sh mapdump                       # second build target
@@ -1319,7 +1362,8 @@ the number instead of reading it.
 `tests/fixtures` or it exits immediately on its first `CHECK` — which reads as
 a broken build rather than a missing variable. `tools/sandbox-build.sh` has no
 regression target, so nothing in the repo tells you that; build it by hand with
-`src/*.cpp` minus `main.cpp` plus `tools/regression.cpp`.
+`src/*.cpp` and `src/core/*.cpp` (and `src/sim/*.cpp` once it exists) minus
+`main.cpp`, plus `tools/regression.cpp`.
 
 **raylib 6.0 redefined `SetSoundPan`'s argument without renaming it.** 5.5 took
 0..1 with **0 = hard right**; 6.0 takes -1..1 with **-1 = hard left**. The
@@ -1450,7 +1494,7 @@ and a spawn sets `dispY` exactly, so nothing ever legitimately stands on a cell
 whose riser it would otherwise be pushed off.
 
 **Vertical faces need three separate things to agree, or terrain is decorative.**
-`MAX_STEP` (world.h) is the whole rule: `gatherCellAABBs` emits a full-height
+`MAX_STEP` (core/world.h) is the whole rule: `gatherCellAABBs` emits a full-height
 blocker on any cell more than that above a neighbour, `canStep` refuses to route
 across one, and the mover leaves the floor instead of gliding down one. The
 generator *also* relaxes its own elevations to within `MAX_STEP` — without that
@@ -1665,7 +1709,7 @@ that works.
 
 ### Chunk mesh slots
 
-`ChunkData::meshes[MESH_COUNT]` is indexed by `enum ChunkMesh` (world.h) and
+`ChunkMeshes::meshes[MESH_COUNT]` is indexed by `enum ChunkMesh` (world_mesh.h) and
 `Game::mats[MAT_COUNT]` by `enum MatSlot` (game.h). The first four entries of
 each are the same four surfaces in the same order — floor, ceiling, walls,
 props — which is what lets `renderScene` draw them in one loop. Keep that
@@ -1739,7 +1783,7 @@ brightness seam along every light-cell boundary.
 
 A panel is shaded as the **1.24 m square of glowing plastic it actually is**,
 not as a point: `PANEL_HALF` in `shaders.cpp` is the same half-extent as `hp`
-in world.cpp's panel mesher, and the shading point is `P` clamped into that
+in world_mesh.cpp's panel mesher, and the shading point is `P` clamped into that
 rectangle. Change the quad's size and change `PANEL_HALF` with it. Two things
 fall out of treating it as an area:
 
@@ -1852,13 +1896,13 @@ pass, and both obey the same three rules, learned the hard way:
   first version drew each fitting inside part of a square cell and hung the
   whole cell, and every outlet in the building came out a narrow vertical
   sliver.
-- **`addSolidBox` hardcodes UV (0.375, 0.75)** for every face it emits, so any
+- **`addSolidBox` samples `PLAIN_UV` (0.375, 0.75)** for every face it emits, so any
   atlas it draws from needs plain, opaque material at that spot. Both the props
   atlas and the fixtures atlas keep their metal swatch there deliberately. Move
   it and the boxes sample a transparent cell and disappear.
 - **The scrawl atlas grid lives in two places and they must agree**:
   `makeScrawlTex` (textures.cpp) lays the phrases out 4 across and 8 down, and
-  `SCRAWL_PHRASES` / the `uvOf` lambda in world.cpp cut the UVs to match. Add a
+  `SCRAWL_PHRASES` / the `uvOf` lambda in world_mesh.cpp cut the UVs to match. Add a
   phrase without changing both and walls start showing you half of one line and
   half of another. The pen clips every dab to its own cell for the same reason —
   an atlas cell that bleeds puts a stray stroke from a neighbouring phrase on a
@@ -1871,7 +1915,7 @@ pass, and both obey the same three rules, learned the hard way:
   the gap did. `WALL_EXIT` still has no collision at all, so its jambs are
   phantom; that is pre-existing, not a pattern to copy.
 - **A prop's height lives in three places and they must agree**: `addProp`
-  builds it (world.cpp), `gatherCellAABBs` gives it a collision box, and
+  builds it (world_mesh.cpp), `gatherCellAABBs` gives it a collision box, and
   `Game::bottleShelfY` says how high a carton stands on it. Change one, change
   all three, or you get furniture you fall through or cartons floating.
 - **The rotten floor patches are a shortcut, not an accident, and three things

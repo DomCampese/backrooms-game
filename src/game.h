@@ -3,7 +3,9 @@
 // instance owns the world, the player, the weapons, and PIRATE CLARK.
 #include "raylib.h"
 #include "util.h"
-#include "world.h"
+#include "world_mesh.h"
+#include "object_meshes.h"
+#include "vec_rl.h"
 #include "levels.h"
 #include "entity.h"
 #include "audio.h"
@@ -178,6 +180,7 @@ struct Game {
     Sound entStepsThrough[4]{};
     AudioSynth synth;
     World world;
+    ChunkMeshCache chunkMeshes;   // the world's chunks, baked
     Rng grng{1};
     RenderTexture2D rt{};
 

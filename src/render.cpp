@@ -154,7 +154,7 @@ void Game::renderScene(double now) {
             for (int q = 0; q < cd.nfeat; q++) {
                 const VertFeat &f = cd.feats[q];
                 if (f.kind != VK_STAIRWELL) continue;
-                Vector3 lp = world.landingLamp(f, cx, cz);
+                Vector3 lp = toRl(world.landingLamp(f, cx, cz));
                 lp.y += (f.lo - world.storey) * world.storeyH;
                 float d2 = (lp.x - px) * (lp.x - px) + (lp.y - eyeY) * (lp.y - eyeY) + (lp.z - pz) * (lp.z - pz);
                 if (d2 < wellD2) { wellD2 = d2; wellLamp = lp; }
@@ -196,7 +196,7 @@ void Game::renderScene(double now) {
     // Long pool galleries fade into atmospheric colour beyond the streamed ring.
     ClearBackground(level==2 ? Color{48,70,66,255} : BLACK);
     BeginMode3D(cam);
-    struct VisibleChunk { ChunkData *data; float distance2; float yOff; };
+    struct VisibleChunk { const ChunkMeshes *data; float distance2; float yOff; };
     VisibleChunk visible[25 + 2 * STOREY_REACH * 25];
     int visibleCount = 0;
     Vector3 cameraRight = Vector3Normalize(Vector3CrossProduct(fwd, cam.up));
@@ -216,16 +216,16 @@ void Game::renderScene(double now) {
                  fabsf(Vector3DotProduct(delta, cameraRight)) > depth*tanH + r*sqrtf(1+tanH*tanH) ||
                  fabsf(Vector3DotProduct(delta, cameraUp)) > depth*tanV + r*sqrtf(1+tanV*tanV));
     };
-    auto consider = [&](std::unordered_map<uint64_t, ChunkData> &m, int cx, int cz, float yOff) {
-        auto it = m.find(World::key(cx, cz));
-        if (it == m.end() || !it->second.built) return;
-        for (int q = 0; q < visibleCount; q++) if (visible[q].data == &it->second) return;
+    auto consider = [&](int storey, int cx, int cz, float yOff) {
+        const ChunkMeshes *baked = chunkMeshes.find(world, storey, cx, cz);
+        if (!baked) return;
+        for (int q = 0; q < visibleCount; q++) if (visible[q].data == baked) return;
         Vector3 c{cx*CHUNK+CHUNK*0.5f, yLo + halfY + yOff, cz*CHUNK+CHUNK*0.5f};
         if (!sphereVisible(c, radius)) return;
         if (visibleCount < (int)(sizeof(visible) / sizeof(visible[0])))
-            visible[visibleCount++] = {&it->second, Vector3LengthSqr(Vector3{c.x-px, c.y-eyeY, c.z-pz}), yOff};
+            visible[visibleCount++] = {baked, Vector3LengthSqr(Vector3{c.x-px, c.y-eyeY, c.z-pz}), yOff};
     };
-    for (int dx=-2; dx<=2; ++dx) for (int dz=-2; dz<=2; ++dz) consider(world.chunks, pcx+dx, pcz+dz, 0.0f);
+    for (int dx=-2; dx<=2; ++dx) for (int dz=-2; dz<=2; ++dz) consider(world.storey, pcx+dx, pcz+dz, 0.0f);
     std::sort(visible, visible+visibleCount, [](const VisibleChunk &a, const VisibleChunk &b) {
         return a.distance2 < b.distance2;
     });
@@ -280,11 +280,10 @@ void Game::renderScene(double now) {
             for (int dx=-1; dx<=1; ++dx) for (int dz=-1; dz<=1; ++dz) {
                 Portal p1;
                 if (!portalOf(pcx+dx, pcz+dz, rel > 0 ? 0 : -1, p1)) continue;
-                auto &m = world.layer(world.storey + rel);
                 for (int ex=-1; ex<=1; ++ex) for (int ez=-1; ez<=1; ++ez) {
                     int cx = pcx+dx+ex, cz = pcz+dz+ez;
                     if (!through(p1, cx, cz, rel * world.storeyH)) continue;
-                    consider(m, cx, cz, rel * world.storeyH);
+                    consider(world.storey + rel, cx, cz, rel * world.storeyH);
                     // Stairs stack: the flight you are looking up often lands
                     // beside the next one, and through that one's opening is
                     // the storey after. Its own chunk is all you can see of it,
@@ -296,7 +295,7 @@ void Game::renderScene(double now) {
                         for(int j=0;j<depth;++j)
                             if(!through(chain[j],cx,cz,depth*rel*world.storeyH)) { seen=false;break; }
                         if(!seen) break;
-                        consider(world.layer(world.storey+depth*rel),cx,cz,depth*rel*world.storeyH);
+                        consider(world.storey+depth*rel,cx,cz,depth*rel*world.storeyH);
                     }
                 }
             }
@@ -310,7 +309,7 @@ void Game::renderScene(double now) {
     };
     // Front to back lets depth rejection avoid expensive lighting on hidden rooms.
     for (int i=0; i<visibleCount; ++i) {
-        ChunkData &chunk = *visible[i].data;
+        const ChunkMeshes &chunk = *visible[i].data;
         Matrix xf = MatrixTranslate(0, visible[i].yOff, 0);
         setDrawRel(visible[i].yOff);
         for (int m=MESH_FLOOR; m<=MESH_PROPS; ++m)
@@ -323,7 +322,7 @@ void Game::renderScene(double now) {
     // Share the frustum test with transparent geometry, and blend distant chunks
     // first. Within a chunk, the existing AO / water / glass order is retained.
     for (int i=visibleCount-1; i>=0; --i) {
-        ChunkData &chunk = *visible[i].data;
+        const ChunkMeshes &chunk = *visible[i].data;
         Matrix xf = MatrixTranslate(0, visible[i].yOff, 0);
         setDrawRel(visible[i].yOff);
         if (chunk.meshes[MESH_AO].vertexCount > 0)
@@ -345,10 +344,10 @@ void Game::renderScene(double now) {
                 const VertFeat &f = it->second.feats[q];
                 if (f.kind != VK_STAIRWELL) continue;
                 float yo = (f.lo - world.storey) * world.storeyH;
-                Vector3 c = world.featureWorld(f, pcx + dx, pcz + dz, CELL, world.storeyH * 0.5f + 2.25f - 0.065f + yo,
-                                               4 * CELL - WT - 0.145f);
-                Vector3 e = world.featureWorld(f, pcx + dx, pcz + dz, CELL + 1.0f, 0, 0);
-                Vector3 o = world.featureWorld(f, pcx + dx, pcz + dz, CELL, 0, 0);
+                Vector3 c = toRl(world.featureWorld(f, pcx + dx, pcz + dz, CELL, world.storeyH * 0.5f + 2.25f - 0.065f + yo,
+                                                    4 * CELL - WT - 0.145f));
+                Vector3 e = toRl(world.featureWorld(f, pcx + dx, pcz + dz, CELL + 1.0f, 0, 0));
+                Vector3 o = toRl(world.featureWorld(f, pcx + dx, pcz + dz, CELL, 0, 0));
                 bool alongX = fabsf(e.x - o.x) > 0.5f;
                 unsigned char g8 = cl8(60 + 195 * blackoutCur * flick);
                 DrawCube(c, alongX ? 0.96f : 0.035f, 0.035f, alongX ? 0.035f : 0.96f, { g8, g8, cl8(g8 * 0.92f), 255 });

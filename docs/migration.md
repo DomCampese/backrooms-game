@@ -47,3 +47,63 @@ done; done
 ## Status
 
 Filled in as each seam lands.
+
+### Seam 1: core (September 2026)
+
+`src/core/` compiles alone under `tools/core-check.sh` (C++17,
+`-fno-exceptions -fno-rtti`, only `src/` on the include path).
+
+| file | holds |
+|---|---|
+| `vec.h` | `Vec2`, `Vec3`, `TAU`, `clampf` |
+| `hash.{h,cpp}` | `hash64`, `Rng`, `ih`, `lat`, `vnoise2`, `fbm2` |
+| `level_rules.h` | `LevelRules` (wall height, light pitch, storey pitch, name), `LEVEL_RULES`, `EXIT_NEXT` |
+| `world.{h,cpp}` | `ChunkData`, generation, storeys and vertical features, the wall/prop/floor/ceiling accessors and overlays, collision (`gatherCellAABBs`, `collideCircle`, `groundAt`), `lineOfSight`, `canStep`, `pathStep`, `findOpenSpot`, `buildOccupancy`, the Manila Room, vending placement (`vendFootprint`, `liftHash`) |
+
+The platform side of the seam:
+
+| file | holds |
+|---|---|
+| `src/world_mesh.{h,cpp}` | `bakeChunk` (the mesher), `ChunkMesh` slots, `ChunkMeshCache` |
+| `src/mesh_builder.{h,cpp}` | `MB`, `addPropBox`, `addSolidBox`, `PLAIN_UV` |
+| `src/object_meshes.{h,cpp}` | can, deck, reels, lamp, flare, crate and lid |
+| `src/vec_rl.h` | `toRl` / `fromRl` |
+| `src/levels.{h,cpp}` | `LevelCfg : LevelRules` (the look), `lightAtCPU` and the other CPU lighting mirrors |
+| `src/util.{h,cpp}` | `cl8`, `SAMPLE_RATE`, `PARTY` |
+
+How meshes follow core's chunks: `ChunkData` holds no meshes. Core appends a
+`ChunkRef {storey, cx, cz}` to `World::staleChunks` wherever geometry goes
+stale (`unloadFar`, `unloadAll`, `rebuildChunk`, and through it `shiftEdge`
+and `unlockEdge`). `ChunkMeshCache` keys baked chunks by absolute storey and
+chunk and drains that list at the start of every call, so a mesh lives exactly
+as long as its chunk data and `setStorey` needs no event.
+
+Still coupled, and why:
+
+- The mesher reads the world through `World`'s accessors (`bakeChunk(World &,
+  ...)`), and it still decides decoration itself from hashes: which walls carry
+  fittings, scrawl, conduit, lift doors, spalls and pipes, the light-fitting
+  grid, the Red Rooms tint. A second renderer would have to repeat those rules.
+  The planned `ChunkLayout` (core describes what to build) is not done.
+- Game rules that read the world live in `src/game.cpp` (seam 2): hide spots,
+  coins and crates hash cells there, and `tools/mapdump.cpp` mirrors
+  `hideSpotAt` and `coinAt`.
+- A prop's height is written in three places: `addProp` (mesher),
+  `gatherCellAABBs` (core) and `Game::bottleShelfY`.
+- Lighting constants are mirrored by hand between core, the mesher, the
+  shader and `lightAtCPU`: the panel half-size (0.62), the light plane
+  (`wallH - 0.12`), the occupancy bits.
+- The render loop reads `ChunkData` directly for the stairwell landing lights
+  (`nfeat`, `feats`).
+
+Proofs, against a build of main before the seam (374a84e; two captures of
+that binary give the noise floor):
+
+| proof | result |
+|---|---|
+| mapdump set (this file) | byte-identical, all 11 runs |
+| `tools/proof-shots.sh` | all 11 world frames 0 pixels differing (>16), the noise floor; menu.png 3613 against a floor of 736-3054 across three baseline pairs (its camera drifts on the wall clock) |
+| regression harness | exit 0, 59 captures |
+| `tools/core-check.sh` | passes; fails as expected on a core header that includes `src/util.h` or any `src/` header |
+| code that only moved or was renamed | identical assembly: `ih`, `lat`, `vnoise2`, `fbm2` in their new file; `world_mesh.cpp`, `mesh_builder.cpp`, `object_meshes.cpp` before and after naming shared constants |
+| comment rewrite | every touched file token-identical with comments removed (`c++ -fpreprocessed -E`) |

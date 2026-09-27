@@ -1,45 +1,31 @@
 #pragma once
-// Per-level look and feel: wall height, light grid, fog, palette. The level
-// index doubles as the world generator's mode switch (see world.cpp).
+// How each level looks: light colour and output, fog, gloss, damp. The numbers
+// the generator and the rules read (wall height, light pitch, storey pitch,
+// name, exits) are core's LEVEL_RULES; LevelCfg extends that table, so
+// LEVELS[lv].wallH and LEVEL_RULES[lv].wallH are one definition.
 #include "raylib.h"
+#include "core/level_rules.h"
 
-struct LevelCfg {
-    float wallH;      // floor-to-ceiling height, metres
-    float ls;         // light spacing: ceiling panels sit on a grid this many metres apart
-    float dead;       // fraction of panels that are simply out (0 = all lit)
-    float lightMul;   // overall brightness of the ones that work
-    float fogDen;     // exponential fog density — how soon the corridor disappears
-    float gloss;      // specular sheen on the floor: dry carpet ~0, wet tile high
+struct LevelCfg : LevelRules {
+    float dead;       // fraction of panels that are out (0 = all lit)
+    float lightMul;   // brightness of the ones that work
+    float fogDen;     // exponential fog density
+    float gloss;      // floor specular; the shader skips specular below 0.10
     Vector3 lightCol; // colour of the fluorescents
     Vector3 amb;      // ambient floor, so unlit corners are not pure black
     Vector3 fogCol;   // what the fog fades to at range
-    const char *name; // shown on the intro card and in the window title
-    // Level 0's lighting is "inconsistently placed" in every version of the
-    // lore, so its fittings are not all equally good: `vary` is how much dimmer
-    // the worst working tube is than the best (0 = all identical), and
-    // `faulty` the share of tubes that stutter. Both are read by the shader's
-    // lightState() and mirrored in lightAtCPU — change one, change the other.
+    // `vary`: how much dimmer the worst working tube is than the best (0 = all
+    // identical); `faulty`: the share of tubes that stutter. The shader's
+    // lightState() and lightAtCPU both read them; change one, change the other.
     float vary = 0.0f;
     float faulty = 0.07f;
-    // "Old moist carpet": 1 turns on the shader's world-space damp patches,
-    // which darken the pile and give it the gloss to mirror the tubes. World
-    // space rather than baked into the 2 m carpet tile, because a puddle that
-    // repeats every two metres is a pattern, not a leak.
+    // World-space damp patches in the shader (uWet), and where on the 0..1
+    // patch field they start (uWetFrom, carpetWetCPU): 0.60 wets about a
+    // quarter of the floor, 0.78 about 1-3%.
     float wet = 0.0f;
-    // Where on the damp-patch field the patches start (the field is 0..1, see
-    // carpetWetCPU). 0.60 wets about a quarter of Level 0's carpet; Level 1's
-    // concrete only pools "in inconsistent areas", about 3% at 0.78.
     float wetFrom = 0.60f;
-    // Floor-to-floor pitch, metres; 0 for a level that is one floorplan. Level
-    // 0's is its 3 m room, the metre of dark "cramped space" the Threshold
-    // article puts above the ceiling tiles, and a slab: 4.32 m, which is 24
-    // risers of 180 mm — a building's stair, not a ladder. See World::storeyH.
-    float storeyH = 0.0f;
 };
-constexpr int NLEVELS = 5;
 extern const LevelCfg LEVELS[NLEVELS];
-// where each level's exit door leads; the Red Halls and the party both dump you back at the start
-extern const int EXIT_NEXT[NLEVELS];
 // World-space variation the shader lays over the tiled surfaces (uMacro, uBoard
 // in shaders.cpp). SURF_MACRO is how far the tone wanders, +/- as a fraction:
 // a texture repeats every 2-3 m and its grime repeats with it, and a real floor
