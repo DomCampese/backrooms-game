@@ -21,6 +21,7 @@
 // repeat is in the middle of the picture instead of at its edges.
 #include "raylib.h"
 #include "../src/textures.h"
+#include "../src/hand.h"
 #include <chrono>
 #include <cstdio>
 #include <cstring>
@@ -46,6 +47,9 @@ void UnloadTexture(Texture2D t) {
     auto it = gImages.find(t.id);
     if (it != gImages.end()) { UnloadImage(it->second); gImages.erase(it); }
 }
+// Meshes stay on the CPU here: dumpMesh writes them out as OBJ.
+void UploadMesh(Mesh *, bool) {}
+void UnloadMesh(Mesh) {}
 Image LoadImageFromTexture(Texture2D t) {
     auto it = gImages.find(t.id);
     return it != gImages.end() ? ImageCopy(it->second) : GenImageColor(1, 1, BLANK);
@@ -105,6 +109,20 @@ static void sprite(const char *name, Texture2D (*make)()) {
     dump(name, make(), false);
 }
 
+static void dumpMesh(const char *name, const Mesh &m) {
+    std::string path = gOut + "/" + name + ".obj";
+    FILE *f = fopen(path.c_str(), "w");
+    if (!f) return;
+    for (int i = 0; i < m.vertexCount; i++) fprintf(f, "v %f %f %f\n", m.vertices[i * 3], m.vertices[i * 3 + 1], m.vertices[i * 3 + 2]);
+    for (int i = 0; i < m.vertexCount; i++) fprintf(f, "vn %f %f %f\n", m.normals[i * 3], m.normals[i * 3 + 1], m.normals[i * 3 + 2]);
+    for (int t = 0; t < m.triangleCount; t++) {
+        int a = m.indices[t * 3] + 1, b = m.indices[t * 3 + 1] + 1, c = m.indices[t * 3 + 2] + 1;
+        fprintf(f, "f %d//%d %d//%d %d//%d\n", a, a, b, b, c, c);
+    }
+    fclose(f);
+    printf("%-16s %d vertices, %d triangles -> %s\n", name, m.vertexCount, m.triangleCount, path.c_str());
+}
+
 int main(int argc, char **argv) {
     SetTraceLogLevel(LOG_WARNING);
     if (argc > 1) gOut = argv[1];
@@ -127,6 +145,12 @@ int main(int argc, char **argv) {
         Texture2D props = makePropsTex();
         dump("props", props, false);
         dump("props_detail", makePropDetail(props), false);
+    }
+    if (wanted("hand")) {
+        HeldHand h = timed([] { return buildHeldHand(); });
+        printf("%-16s generated in %.0f ms\n", "hand", gGenMs);
+        dumpMesh("glove", h.glove); dumpMesh("sleeve", h.sleeve);
+        dump("leather", h.leather, true); dump("knit", h.knit, true);
     }
     sprite("fixtures", makeFixturesTex);
     sprite("scrawl", makeScrawlTex);

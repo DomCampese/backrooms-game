@@ -235,6 +235,41 @@ int main() {
     // relaxes the number instead of reading it.
     CHECK(0.155f + maxRadius * 0.48f < 0.34f);
     printf("Imported reload maximum model-space radius: %.4f m\n",maxRadius);
+    // The gloved hand and the sleeve ride the same hold. The sleeve runs back
+    // past the eye and off the bottom of the screen, so its model-space radius
+    // is half a metre and the proxy above would fail it; what matters is how
+    // far each vertex ends up from the eye. Measured on the rest hold (the
+    // handle bone is the identity there) with either handedness of the basis,
+    // and against the offset's own length, not just its forward component.
+    {
+        float worst=0;
+        for (const Mesh *mesh : { &g.hand.glove, &g.hand.sleeve }) {
+            CHECK(mesh->vertexCount>1000 && mesh->vertexCount<65535);
+            for (int i=0;i<mesh->vertexCount;i++) {
+                Vector3 v={mesh->vertices[3*i],mesh->vertices[3*i+1],mesh->vertices[3*i+2]};
+                for (float sx : {-1.0f,1.0f}) {
+                    Vector3 f=Vector3Normalize({-0.20f*sx,0.06f,1}),u=Vector3Normalize(Vector3CrossProduct({sx,0,0},f)),
+                            r=Vector3CrossProduct(f,u);
+                    Vector3 p={0.077f*sx,-0.072f,0.155f};
+                    p=Vector3Add(p,Vector3Scale(Vector3Add(Vector3Add(Vector3Scale(r,v.x),Vector3Scale(u,v.y)),Vector3Scale(f,v.z)),0.48f));
+                    worst=fmaxf(worst,Vector3Length(p));
+                }
+            }
+        }
+        printf("Held hand and sleeve: farthest vertex %.4f m from the eye\n",worst);
+        CHECK(worst<0.34f);
+    }
+    // The gun trails a turn and comes back: bounded, and settled within a second.
+    {
+        g.aimBlend=0;g.vmLagYaw=g.vmLagPitch=g.vmLagYawV=g.vmLagPitchV=0;g.vmLastYaw=g.yaw;g.vmLastPitch=g.pitch;
+        float peak=0,y0=g.yaw;
+        for (int i=0;i<10;i++){ g.yaw+=0.15f; g.updateViewmodelLag(1.0f/60); peak=fmaxf(peak,fabsf(g.vmLagYaw)); }
+        CHECK(peak>0.01f && peak<=0.0701f && g.vmLagYaw<0);          // trails behind, capped
+        for (int i=0;i<60;i++) g.updateViewmodelLag(1.0f/60);
+        CHECK(fabsf(g.vmLagYaw)<0.002f);
+        g.yaw+=2.0f; g.updateViewmodelLag(1.0f/60); CHECK(fabsf(g.vmLagYaw)<0.002f);   // a teleport is not a swing
+        g.yaw=y0; g.updateViewmodelLag(1.0f/60); g.vmLagYaw=g.vmLagYawV=0;
+    }
     g.ammo=6;g.weapon=WEAPON_REVOLVER;capture(g,"revolver.png");
     {
         float savedPitch=g.pitch;

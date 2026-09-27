@@ -738,19 +738,40 @@ void Game::drawHeldWeapon(const Camera3D &cam) {
     Vector3 up = Vector3Normalize(Vector3CrossProduct(right, fwd));
     float dip = weapon == WEAPON_REVOLVER && reloadT > 0
         ? sinf(clampf(1 - reloadT / 1.8f, 0, 1) * PI) : 0;
-    float kick = weapon == WEAPON_REVOLVER ? recoil : 0;
+    // Recoil. `recoil` jumps to 1 on the shot and decays as exp(-10t), so
+    // its log is the time since the shot; the gun's motion is shaped from that
+    // rather than being the decay itself. A revolver in one hand snaps up in
+    // a couple of hundredths of a second, comes back down past where it
+    // started as the wrist catches it, and settles: the bare exponential had
+    // it leap to full height in one frame and float back like a lever.
+    float kick = 0;
+    if (weapon == WEAPON_REVOLVER && recoil > 0.003f) {
+        float t = -logf(recoil) / 10.0f;
+        kick = (1 - expf(-t / 0.010f)) * expf(-7.0f * t) * cosf(9.0f * t) / 0.75f;
+    }
     float aim = weapon == WEAPON_REVOLVER ? aimBlend * aimBlend * (3 - 2 * aimBlend) : 0;
     // The front blade is at GLB Z/Y (0.23706, 0.07560). Keep its tip on
     // the camera ray, with the eye just clearing the rear frame rib. Aligning
     // the rib top exactly with the blade hides the blade behind this model's solid rear face.
     float tilt = weapon == WEAPON_REVOLVER ? 0.06f - 0.063f * aim + kick * 0.30f - dip * 0.65f : 0.85f;
+    // The gun trails a turn (updateViewmodelLag): it points back along the
+    // way the view came, and its grip slides a little the same way.
+    float lagY = vmLagYaw, lagP = vmLagPitch;
     Vector3 forward = Vector3Normalize(Vector3Add(fwd,
-        Vector3Add(Vector3Scale(right, -0.20f * (1 - aim)), Vector3Scale(up, tilt))));
+        Vector3Add(Vector3Scale(right, -0.20f * (1 - aim) + lagY), Vector3Scale(up, tilt + lagP))));
     Vector3 axisUp = Vector3Normalize(Vector3CrossProduct(right, forward));
     Vector3 axisRight = Vector3Normalize(Vector3CrossProduct(forward, axisUp));
+    // the shot also twists it in the hand, a few degrees about the barrel
+    float roll = kick * 0.07f + lagY * 0.6f;
+    if (roll != 0) {
+        Vector3 r2 = Vector3Add(Vector3Scale(axisRight, cosf(roll)), Vector3Scale(axisUp, sinf(roll)));
+        axisUp = Vector3Add(Vector3Scale(axisUp, cosf(roll)), Vector3Scale(axisRight, -sinf(roll)));
+        axisRight = r2;
+    }
     float sway = sinf(bobPhase * PI) * 0.003f * bobAmt * (1 - aim);
-    Vector3 pos = Vector3Add(cam.position, Vector3Add(Vector3Scale(fwd, 0.155f-kick*0.012f),
-        Vector3Add(Vector3Scale(right, 0.077f*(1-aim)+sway), Vector3Scale(up, -0.072f+0.03605f*aim-dip*0.024f))));
+    Vector3 pos = Vector3Add(cam.position, Vector3Add(Vector3Scale(fwd, 0.155f-fmaxf(kick, 0)*0.012f),
+        Vector3Add(Vector3Scale(right, 0.077f*(1-aim)+sway+lagY*0.03f),
+                   Vector3Scale(up, -0.072f+0.03605f*aim-dip*0.024f+lagP*0.03f))));
     // Farthest vertex is <0.33 m from the eye, even during recoil/reload.
     float scale = weapon == WEAPON_REVOLVER ? 0.48f : 0.64f;
     Matrix m{};
@@ -767,6 +788,27 @@ void Game::drawHeldWeapon(const Camera3D &cam) {
         float refl = 1.0f;
         SetShaderValue(worldShader, locObjRefl, &refl, SHADER_UNIFORM_FLOAT);
         revolver.draw(mats[MAT_PROPS],m);
+        // The gloved hand and the sleeve, in the gun's model space: the hand
+        // rides the handle bone, so it goes with the gun through recoil and
+        // the reload. Same reflection window, so the leather keeps its sheen.
+        {
+            const Transform &hp = revolver.asset.sampledPose[revolver.handle];
+            Matrix handleMat = MatrixMultiply(MatrixMultiply(MatrixScale(hp.scale.x, hp.scale.y, hp.scale.z),
+                                              QuaternionToMatrix(hp.rotation)),
+                                              MatrixTranslate(hp.translation.x, hp.translation.y, hp.translation.z));
+            Matrix handXf = MatrixMultiply(handleMat, MatrixMultiply(revolver.asset.model.transform, m));
+            auto drawWith = [&](const Mesh &mesh, Texture2D albedo, Texture2D detail) {
+                Material mat = mats[MAT_PROPS];
+                MaterialMap maps[MATERIAL_MAP_BRDF + 2]{};
+                std::copy(mat.maps, mat.maps + MATERIAL_MAP_BRDF + 1, maps);
+                mat.maps = maps;
+                maps[MATERIAL_MAP_DIFFUSE].texture = albedo;
+                maps[MATERIAL_MAP_SPECULAR].texture = detail;
+                DrawMesh(mesh, mat, handXf);
+            };
+            drawWith(hand.glove, hand.leather, hand.leatherDetail);
+            drawWith(hand.sleeve, hand.knit, hand.knitDetail);
+        }
         refl = 0.0f;
         SetShaderValue(worldShader, locObjRefl, &refl, SHADER_UNIFORM_FLOAT);
     } else DrawMesh(flareMesh,mats[MAT_PROPS],m);

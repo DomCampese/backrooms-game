@@ -84,6 +84,7 @@ void Game::init() {
     crateMesh = buildCrateMesh();
     crateLidMesh = buildCrateLidMesh();
     revolver.load();
+    hand = buildHeldHand();
     flareMesh = buildFlareMesh();
     texDeck = makeDeckTex();
     deckMesh = buildDeckMesh();
@@ -290,6 +291,7 @@ void Game::shutdown() {
     saveBest();
     UnloadTexture(texParticle);
     revolver.unload();
+    unloadHeldHand(hand);
     UnloadTexture(propDetail);
     UnloadMesh(flareMesh);
     for (Surface &sf : surfaces) if (sf.albedo.id) { UnloadTexture(sf.albedo); UnloadTexture(sf.detail); }
@@ -1421,7 +1423,34 @@ bool Game::canReload() const {
         ammo < MAXAMMO && reloadT <= 0 && drinkT <= 0 && deathT <= 0 && winT <= 0;
 }
 
+// A held gun has mass and the wrist is a spring: turn quickly and it trails
+// the view by a few degrees, then catches up with a little overshoot. Nailed
+// to the camera, it read as a picture stuck to the screen however good the
+// model was. The spring is slightly underdamped (0.7 of critical), sub-stepped
+// so the 0.05 s headless frames stay stable, and the trail is capped so a
+// flick cannot throw the sights off screen; aiming stiffens the wrist.
+// A jump in the view that no hand made (a teleport, a storey change) is
+// skipped rather than swung through.
+void Game::updateViewmodelLag(float dt) {
+    float dy = yaw - vmLastYaw, dp = pitch - vmLastPitch;
+    vmLastYaw = yaw; vmLastPitch = pitch;
+    if (fabsf(dy) > 0.6f || fabsf(dp) > 0.6f) dy = dp = 0;
+    const float CAP = 0.07f;
+    vmLagYaw = clampf(vmLagYaw - dy * 0.35f, -CAP, CAP);
+    vmLagPitch = clampf(vmLagPitch - dp * 0.35f, -CAP, CAP);
+    float k = 160.0f * (1 + 2.0f * aimBlend), c = 2 * sqrtf(k) * 0.7f;
+    int n = (int)ceilf(dt / 0.01f);
+    float h = n > 0 ? dt / n : 0;
+    for (int i = 0; i < n; i++) {
+        vmLagYawV += (-k * vmLagYaw - c * vmLagYawV) * h;
+        vmLagPitchV += (-k * vmLagPitch - c * vmLagPitchV) * h;
+        vmLagYaw += vmLagYawV * h;
+        vmLagPitch += vmLagPitchV * h;
+    }
+}
+
 void Game::updateWeapons(float dt, double now) {
+    updateViewmodelLag(dt);
     // ---- weapons: keys 1/2/4 pick one directly, the wheel cycles, left click
     // uses whichever is in your hands
     if (inKeyPressed(KEY_ONE)) weapon = WEAPON_REVOLVER;

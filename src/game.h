@@ -9,6 +9,7 @@
 #include "audio.h"
 #include "revolver.h"
 #include "textures.h"
+#include "hand.h"
 #include <cstdint>
 #include <unordered_set>
 #include <vector>
@@ -130,6 +131,7 @@ struct Game {
     Texture2D texClark{}, texEntity{}, texEntityGlow{}, texPartygoer{}, texProps{}, texScrawl{}, texFixtures{}, texAO{}, texOcc{}, texDog{},
               texAlmondWrap{}, texDeck{}, texParticle{};
     Revolver revolver;
+    HeldHand hand;   // the gloved hand on the revolver (hand.cpp)
     Mesh flareMesh{};
     Mesh canMesh{};                            // the almond water can, real geometry
     Mesh deckMesh{}, reelMesh{}, deckLampMesh{};   // the tape player, its reels, its record lamp
@@ -267,6 +269,10 @@ struct Game {
     void updateAim(bool held, float dt);
     bool canReload() const;
     float reloadT = 0, gunCd = 0, muzzleT = 0, recoil = 0, wheelCd = 0;
+    // The held weapon's inertia: how far (radians) it trails the view in yaw
+    // and pitch after a turn, and how fast that is closing. Visual only.
+    float vmLagYaw = 0, vmLagPitch = 0, vmLagYawV = 0, vmLagPitchV = 0, vmLastYaw = 0, vmLastPitch = 0;
+    void updateViewmodelLag(float dt);
 
     // run state
     int level = 0;

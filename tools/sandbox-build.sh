@@ -37,7 +37,7 @@ build_mapdump() {
 build_texdump() {
     rm -f texdump
     python3 tools/embed-materials.py
-    c++ "${FLAGS[@]}" tools/texdump.cpp src/textures.cpp src/surfaces.cpp src/util.cpp \
+    c++ "${FLAGS[@]}" tools/texdump.cpp src/textures.cpp src/surfaces.cpp src/hand.cpp src/util.cpp \
         -o texdump "${LINK[@]}"
     echo "built ./texdump (python$PYV)"
 }

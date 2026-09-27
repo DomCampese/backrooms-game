@@ -1,3 +1,57 @@
+# The hand on the revolver, and the gun's weight (September 2026)
+
+The revolver floated in front of the camera. It is held now: `src/hand.cpp`
+builds a gloved right hand and a jacket sleeve once at startup, and
+`drawHeldWeapon` draws them with the handle bone's transform, so they recoil
+and reload with the gun. What will bite:
+
+- **The hand is a signed-distance field, not a model.** Tapered capsules and
+  ellipsoids are joined with a polynomial smooth-min and polygonised by naive
+  surface nets on a 2 mm grid; normals are the field's gradient. Nothing
+  licensed fits this gun's grip, and a hand built from capsules is forgiving
+  in a glove in a way bare skin is not.
+- **16-bit indices cap a raylib mesh at 65535 vertices, and the cap is
+  silent.** At 1.7 mm the glove came to 33k vertices, which looked safe until
+  the cuff moved. At 2 mm it is ~24k and builds in ~0.2 s. The regression
+  asserts both meshes stay under the cap. A finer grid needs splitting into
+  two meshes.
+- **Everything is placed against measured gun geometry**, in the GLB's model
+  space (metres, +z muzzle, +y up, +x the gun's right; the camera sees -x).
+  The measurements are in the header of `hand.cpp`. The walnut panels reach
+  y 0.03 at z -0.066..-0.043: a hand lower than that shows a block of end
+  grain above the web. Re-measure if the model is ever reimported.
+- **Each bone knows its back (`dorsal`)**, computed as "away from what the
+  finger is holding" through the anchor function passed to `finger()`. The
+  seams (where the dorsal dot product crosses 0) and the knuckle creases hang
+  off it.
+- **Relief is in the normals, not the mesh.** Wrinkles and creases tilt the
+  gradient normal by the slope of a height laid out in each bone's frame, so
+  they run across the finger. Keep features at 4.5 mm or longer: vertices are
+  2 mm apart, and the first 3 mm crease aliased into a faint smudge.
+- **Colour took three tries.** Near-black leather read as a hole in the
+  frame. Tan read as bare skin. Mid brown (88,57,36) with dark seams reads as
+  a glove.
+- **Clearance.** The sleeve's model-space radius is half a metre (it runs
+  back past the eye), so the gun's `0.155 + r * 0.48 < 0.34` proxy would fail
+  it. The regression measures each vertex's distance from the eye instead:
+  about 0.20 m.
+- **Cost.** 44k triangles drawn every frame the revolver is out: +2.6% frame
+  on the software rasteriser (best of five on Level 0, 289 -> 296 ms). They
+  are drawn inside the `uObjRefl` window, like the gun.
+- **Grain UV is cylindrical round the grip axis.** A projection plane picked
+  per vertex put square seams all over the grain.
+- **Inertia** (`updateViewmodelLag`) is a sub-stepped spring, 0.7 of
+  critical damping, three times stiffer at full aim. The input is the view's
+  angular velocity, so the trail is frame-rate independent. It is capped at
+  0.07 rad, and a per-frame jump over 0.6 rad (a teleport or storey swap) is
+  ignored rather than swung through.
+- **Recoil is shaped from `recoil`'s own decay.** `recoil` still jumps to 1
+  and decays as exp(-10t), which the regression and captures set directly,
+  so render.cpp recovers t from its log. It then draws a snap (10 ms), an
+  undershoot as the wrist catches, and a settle. `recoil` 0.7-0.8 still lands
+  near the peak, which is what `iron-sights-fire.png` and `muzzle.png` were
+  framed on.
+
 # Surface and asset realism pass (September 2026)
 
 Every world surface was rebuilt in `src/surfaces.cpp`, and the held and loose
@@ -442,6 +496,7 @@ time so the executable remains independent of its working directory.
 | `shaders.cpp` | the world and post-process GLSL, as string literals |
 | `surfaces.cpp` | the world surfaces: colour, height (m) and gloss per level surface, wrapped and at real scale |
 | `textures.cpp` | sprites, decals, fixtures, props atlas (with the CC0 material tiles), can, deck |
+| `hand.cpp` | the gloved hand and sleeve on the revolver: SDF hand, surface nets, leather and knit maps |
 | `revolver.{h,cpp}` | embedded authored revolver, pose interpolation, two material batches |
 | `sfx.cpp` | one-shot sounds synthesized into `Wave` buffers, plus the loaders for embedded recordings |
 | `audio.cpp` | the streaming ambience synth (hum, drone); recorded loops live in `Game::updateLoopAudio` |
