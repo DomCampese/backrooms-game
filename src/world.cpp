@@ -1913,10 +1913,31 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
             return Vector3{ pcx - x * ca - lz * sa, ey + y, pcz - x * sa + lz * ca };
         };
         const Vector3 fn = { sa, 0, -ca };                     // the front's normal
-        auto sbox = [&](float x0, float x1, float y0, float y1, float z0, float z1, Color c) {
+        // No two visible faces here share a plane, and nothing is layered a
+        // hair in front of anything else. The first version stood every painted
+        // face 1.5 mm off a door box's own front, the display 1.5 mm off the
+        // paint and the cans 1.5 mm off the cabinet: fine on a desktop GPU, and
+        // on a phone's depth buffer the dark box fronts flickered through the
+        // keypad, the door and the cans at any range. So the boxes leave out the
+        // faces something else covers (FRONT, and so on, below), the paint is
+        // the front, and the display is cut into the door rather than laid on it.
+        enum { FRONT = 1, BACK = 2, SIDES = 4, TOP = 8, BOTTOM = 16, ALL = 31 };
+        auto sbox = [&](float x0, float x1, float y0, float y1, float z0, float z1, Color c, int faces = ALL) {
             Vector3 a = P(x0, y0, z0), b = P(x1, y1, z1);
-            addSolidBox(fx, std::min(a.x, b.x), y0 + ey, std::min(a.z, b.z),
-                        std::max(a.x, b.x), y1 + ey, std::max(a.z, b.z), c);
+            float wx0 = std::min(a.x, b.x), wx1 = std::max(a.x, b.x), wz0 = std::min(a.z, b.z), wz1 = std::max(a.z, b.z);
+            float wy0 = y0 + ey, wy1 = y1 + ey;
+            const Vector2 u = { 0.375f, 0.75f };               // the plain metal addSolidBox samples
+            auto emit = [&](Vector3 q0, Vector3 q1, Vector3 q2, Vector3 q3, Vector3 n) {
+                float d = n.x * fn.x + n.z * fn.z;
+                int kind = n.y > 0.5f ? TOP : n.y < -0.5f ? BOTTOM : d > 0.5f ? FRONT : d < -0.5f ? BACK : SIDES;
+                if (faces & kind) fx.quad(q0, q1, q2, q3, n, u, u, u, u, c);
+            };
+            emit({wx0,wy0,wz0},{wx1,wy0,wz0},{wx1,wy1,wz0},{wx0,wy1,wz0},{0,0,-1});
+            emit({wx1,wy0,wz1},{wx0,wy0,wz1},{wx0,wy1,wz1},{wx1,wy1,wz1},{0,0,1});
+            emit({wx0,wy0,wz1},{wx0,wy0,wz0},{wx0,wy1,wz0},{wx0,wy1,wz1},{-1,0,0});
+            emit({wx1,wy0,wz0},{wx1,wy0,wz1},{wx1,wy1,wz1},{wx1,wy1,wz0},{1,0,0});
+            emit({wx0,wy1,wz0},{wx1,wy1,wz0},{wx1,wy1,wz1},{wx0,wy1,wz1},{0,1,0});
+            emit({wx0,wy0,wz1},{wx1,wy0,wz1},{wx1,wy0,wz0},{wx0,wy0,wz0},{0,-1,0});
         };
         // a painted face on the plane lz, sampling the door where it covers it
         auto face = [&](float x0, float y0, float x1, float y1, float lz, unsigned char alpha) {
@@ -1924,48 +1945,57 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
                     vendUV(x0, y0), vendUV(x1, y0), vendUV(x1, y1), vendUV(x0, y1),
                     Color{ 255, 255, 255, alpha });
         };
-        const float ZF = -0.362f, ZPAINT = -0.3635f, ZBODY = -0.30f, ZBACK = VEND_DEPTH_BACK;
+        const float ZF = -0.362f, ZBODY = -0.30f, ZBACK = VEND_DEPTH_BACK;
         // the cabinet: painted steel sides in one of the colours they come in
-        static const Color SIDES[4] = { { 52, 54, 60, 254 }, { 118, 30, 28, 254 },
-                                        { 34, 48, 84, 254 }, { 178, 172, 158, 254 } };
-        Color side = SIDES[(h >> 20) & 3];
+        static const Color SIDE_COLS[4] = { { 52, 54, 60, 254 }, { 118, 30, 28, 254 },
+                                            { 34, 48, 84, 254 }, { 178, 172, 158, 254 } };
+        Color side = SIDE_COLS[(h >> 20) & 3];
         const Color door = { 48, 50, 55, 254 }, black = { 18, 18, 20, 254 };
-        sbox(-0.42f, 0.42f, 0.0f, VEND_Y0, -0.33f, ZBACK - 0.02f, black);          // plinth, set back
-        sbox(-VEND_HW, VEND_HW, VEND_Y0, VEND_Y1, ZBODY, ZBACK, side);
-        // the door, around its two openings (see VEND_WIN / VEND_BIN)
+        sbox(-0.42f, 0.42f, 0.0f, VEND_Y0, -0.33f, ZBACK - 0.02f, black, ALL & ~TOP);   // plinth, set back
+        // its front is covered everywhere: by the door, the cans and the flap
+        sbox(-VEND_HW, VEND_HW, VEND_Y0, VEND_Y1, ZBODY, ZBACK, side, ALL & ~FRONT & ~BOTTOM);
+        // the door, around its two openings (see VEND_WIN / VEND_BIN); the
+        // paint is its front, and its back is against the cabinet
         const VendRect &w = VEND_WIN, &bn = VEND_BIN, &hd = VEND_HEADER;
-        sbox(-VEND_HW, w.x0, VEND_Y0, hd.y0, ZF, ZBODY, door);                     // left stile
-        sbox(w.x1, VEND_HW, VEND_Y0, hd.y0, ZF, ZBODY, door);                      // control column
-        sbox(-VEND_HW, VEND_HW, hd.y0, VEND_Y1, ZF, ZBODY, door);                  // header
-        sbox(w.x0, w.x1, bn.y1, w.y0, ZF, ZBODY, door);                            // rail between
-        sbox(w.x0, w.x1, VEND_Y0, bn.y0, ZF, ZBODY, door);                         // kick rail
-        face(-VEND_HW, VEND_Y0, w.x0, hd.y0, ZPAINT, 254);
-        face(w.x1, VEND_Y0, VEND_HW, hd.y0, ZPAINT, 254);
-        face(-VEND_HW, hd.y0, VEND_HW, VEND_Y1, ZPAINT, GLOW);
-        face(w.x0, bn.y1, w.x1, w.y0, ZPAINT, 254);
-        face(w.x0, VEND_Y0, w.x1, bn.y0, ZPAINT, 254);
+        const int DOOR = ALL & ~FRONT & ~BACK;
+        sbox(-VEND_HW, w.x0, VEND_Y0, hd.y0, ZF, ZBODY, door, DOOR);               // left stile
+        sbox(w.x1, VEND_HW, VEND_Y0, hd.y0, ZF, ZBODY, door, DOOR);                // control column
+        sbox(-VEND_HW, VEND_HW, hd.y0, VEND_Y1, ZF, ZBODY, door, DOOR);            // header
+        sbox(w.x0, w.x1, bn.y1, w.y0, ZF, ZBODY, door, DOOR);                      // rail between
+        sbox(w.x0, w.x1, VEND_Y0, bn.y0, ZF, ZBODY, door, DOOR);                   // kick rail
         const VendRect &dp = VEND_DISP;
-        face(dp.x0, dp.y0, dp.x1, dp.y1, ZPAINT - 0.0015f, GLOW);
+        face(-VEND_HW, VEND_Y0, w.x0, hd.y0, ZF, 254);
+        // the control column, in four pieces round the display
+        face(w.x1, VEND_Y0, VEND_HW, dp.y0, ZF, 254);
+        face(w.x1, dp.y1, VEND_HW, hd.y0, ZF, 254);
+        face(w.x1, dp.y0, dp.x0, dp.y1, ZF, 254);
+        face(dp.x1, dp.y0, VEND_HW, dp.y1, ZF, 254);
+        face(dp.x0, dp.y0, dp.x1, dp.y1, ZF, GLOW);
+        face(-VEND_HW, hd.y0, VEND_HW, VEND_Y1, ZF, GLOW);
+        face(w.x0, bn.y1, w.x1, w.y0, ZF, 254);
+        face(w.x0, VEND_Y0, w.x1, bn.y0, ZF, 254);
         // what you touch stands proud of the paint: the coin return lever, the
-        // lock, and the lip of the coin cup
+        // lock, and the lip of the coin cup (backs against the door, left out)
         const Color chrome = { 186, 188, 194, 254 };
-        sbox(0.232f, 0.288f, 1.090f, 1.125f, ZPAINT - 0.012f, ZPAINT, chrome);
-        sbox(0.385f, 0.405f, 0.545f, 0.565f, ZPAINT - 0.016f, ZPAINT, chrome);
-        sbox(0.235f, 0.385f, 0.330f, 0.345f, ZPAINT - 0.022f, ZPAINT, chrome);
+        sbox(0.232f, 0.288f, 1.090f, 1.125f, ZF - 0.012f, ZF, chrome, ALL & ~BACK);
+        sbox(0.385f, 0.405f, 0.545f, 0.565f, ZF - 0.016f, ZF, chrome, ALL & ~BACK);
+        sbox(0.235f, 0.385f, 0.330f, 0.345f, ZF - 0.022f, ZF, chrome, ALL & ~BACK);
         // the push flap, hung 2 cm inside the opening
         face(bn.x0, bn.y0, bn.x1, bn.y1, -0.342f, 254);
         // behind the glass: the lit back of the cabinet with the cans painted
-        // on it, and the six shelves in front of them, each with its price strip
-        const float ZCANS = ZBODY - 0.0015f, ZLIP = -0.345f;   // front is -z
-        face(w.x0, w.y0, w.x1, w.y1, ZCANS, GLOW);
+        // on it (where the cabinet's own front would be), and the six shelves in
+        // front of them. A shelf is its top, its underside and its price strip:
+        // its ends would lie in the stiles' faces and its back in the cans.
+        const float ZLIP = -0.345f;
+        face(w.x0, w.y0, w.x1, w.y1, ZBODY, GLOW);
         for (int r = 0; r < VEND_ROWS; r++) {
             float yr = VEND_ROW0 + r * VEND_ROWP;
-            sbox(w.x0, w.x1, yr - 0.022f, yr + 0.004f, ZLIP, ZCANS, Color{ 58, 60, 64, 254 });
+            sbox(w.x0, w.x1, yr - 0.022f, yr + 0.004f, ZLIP, ZBODY, Color{ 58, 60, 64, 254 }, TOP | BOTTOM);
             float v0 = (VEND_STRIP_PX[1] + r * 12 + VEND_STRIP_PX[3]) / (float)FIX_ATLAS_H;
             float v1 = (VEND_STRIP_PX[1] + r * 12) / (float)FIX_ATLAS_H;
             float u0 = VEND_STRIP_PX[0] / (float)FIX_ATLAS_W, u1 = (VEND_STRIP_PX[0] + VEND_STRIP_PX[2]) / (float)FIX_ATLAS_W;
-            fx.quad(P(w.x0, yr - 0.022f, ZLIP - 0.0015f), P(w.x1, yr - 0.022f, ZLIP - 0.0015f),
-                    P(w.x1, yr + 0.004f, ZLIP - 0.0015f), P(w.x0, yr + 0.004f, ZLIP - 0.0015f), fn,
+            fx.quad(P(w.x0, yr - 0.022f, ZLIP), P(w.x1, yr - 0.022f, ZLIP),
+                    P(w.x1, yr + 0.004f, ZLIP), P(w.x0, yr + 0.004f, ZLIP), fn,
                     { u0, v0 }, { u1, v0 }, { u1, v1 }, { u0, v1 }, Color{ 255, 255, 255, GLOW });
         }
         // and the glass itself, last, so it blends over everything behind it
