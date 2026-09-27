@@ -1,3 +1,10 @@
+# Read first
+
+- docs/readability.md: how code, comments, commit messages and docs are written
+  here. Follow it for everything you touch.
+- docs/migration.md: the core / sim / platform layers and what may depend on
+  what. docs/unreal-handoff.md: the planned move to Unreal Engine 5.
+
 # Vending machine (September 2026)
 
 `PROP_VENDING` (Levels 1 and 4) was one grey box with a flat blue quad on it.
