@@ -2,55 +2,23 @@
 #include "util.h"
 #include <cmath>
 
-// One row per level. The columns are in LevelCfg's declaration order:
-//     wallH   ls   dead  lightMul fogDen gloss   lightCol            amb                     fogCol                  name
+// One row per level, after the rules it extends. Columns in declaration order:
+//     rules           dead   lightMul fogDen gloss  lightCol            amb                     fogCol
+// then vary, faulty, wet, wetFrom where they differ from the defaults.
+//
+// Every ambient is calibrated against the filmic tone curve's toe (roomLight
+// in shaders.cpp); the Red Halls' 0.052 puts that level's mean luma near 12.
+// lightMul rises where the grid is sparse (Level 1) or the panels are far from
+// the floor (the Poolrooms, 7.4 m).
 const LevelCfg LEVELS[NLEVELS] = {
-    // Level 0 — "Threshold". The 2002 photograph and every render made from it
-    // have a drop ceiling crowded with fittings, a few of them out: fluorescent
-    // trays every other ceiling tile, not one lonely panel per 8 m square, which
-    // is what this row used to be and why the level's ceiling read as dark
-    // board with the occasional light in it. A 4 m grid is four times the
-    // fittings; a fifth of them are dead and the rest vary in output, so the
-    // pools of light are uneven the way the lore's "inconsistently placed
-    // fluorescent lighting" asks for. lightMul comes down because a point
-    // under the grid is now summing four near panels instead of one. The
-    // carpet's wet patches are the last column (see uWet in shaders.cpp).
-    // The last column is the storey pitch: Level 0 is floors stacked on floors
-    // (see storeyH in levels.h).
-    { 3.0f,  4.0f, 0.20f, 0.36f, 0.050f, 0.06f, {1.00f,0.95f,0.76f}, {0.045f,0.042f,0.030f}, {0.140f,0.125f,0.070f}, "LEVEL 0 · THRESHOLD",
-      0.42f, 0.16f, 0.0f, 0.60f, 4.32f },
-    // Level 1 — "Habitable Zone": "a large, sprawling warehouse" of concrete
-    // floors and walls under "dim fluorescent lights" that "are prone to
-    // flicker and fail at inconsistent intervals", in "a low-hanging fog with
-    // no discernable source" that "coalesces into condensation, forming
-    // puddles on the floor in inconsistent areas". It used to be lit in cold
-    // blue at a 12 m pitch, which read as a night-time car park rather than a
-    // fluorescent warehouse, and its floor gloss (0.22) put a sheen on every
-    // square metre of slab — puddles everywhere, which is the opposite of
-    // "inconsistent areas". Now: dim, faintly green-white tube battens, three
-    // in ten of them out and a fifth stuttering, grey-green fog for the mist
-    // to be made of, matte concrete, and real puddles on a few percent of the
-    // floor through the same world-space field as Level 0's carpet. The grid
-    // stays 12 m: at 8 m nearly all nine summed fittings fall inside shadow
-    // range and the frame cost 58% more on the software rasteriser.
-    // lightMul is up to carry the sparser fittings.
-    { 4.2f, 12.0f, 0.30f, 1.05f, 0.070f, 0.07f, {0.93f,0.97f,0.86f}, {0.054f,0.057f,0.052f}, {0.070f,0.075f,0.068f}, "LEVEL 1 · HABITABLE ZONE",
+    { LEVEL_RULES[0], 0.20f, 0.36f, 0.050f, 0.06f, {1.00f,0.95f,0.76f}, {0.045f,0.042f,0.030f}, {0.140f,0.125f,0.070f},
+      0.42f, 0.16f, 0.0f, 0.60f },
+    { LEVEL_RULES[1], 0.30f, 1.05f, 0.070f, 0.07f, {0.93f,0.97f,0.86f}, {0.054f,0.057f,0.052f}, {0.070f,0.075f,0.068f},
       0.35f, 0.20f, 0.0f, 0.78f },
-    // Tall vaulted bathing halls: warm diffuse light over pristine ceramic, with
-    // restrained exposure so white grout and underwater steps stay readable.
-    // The panels sit 7.4 m up, so lightMul carries the extra throw.
-    { 7.5f,  8.0f, 0.06f, 1.25f, 0.026f, 0.55f, {1.00f,0.98f,0.89f}, {0.16f,0.18f,0.18f},    {0.16f,0.23f,0.22f},    "THE POOLROOMS" },
-    // The Red Halls' ambient is up from 0.030 with the move to a filmic tone
-    // curve. It is not a brightening: the curve's toe eats small values, and at
-    // the old figure the level fell from "supposed to look almost black" to
-    // nothing readable at all — mean luma 8 out of 255, where it had been 16.
-    // It sits near 12 now rather than the old 16: the rest of the drop is the
-    // fog, which no longer glows at a fixed brightness down an unlit corridor.
-    { 3.0f,  8.0f, 0.45f, 0.80f, 0.095f, 0.10f, {1.00f,0.22f,0.15f}, {0.052f,0.014f,0.011f}, {0.055f,0.010f,0.008f}, "THE RED HALLS" },
-    { 3.0f,  8.0f, 0.10f, 1.05f, 0.055f, 0.06f, {1.00f,0.82f,0.76f}, {0.050f,0.040f,0.036f}, {0.150f,0.100f,0.085f}, "LEVEL FUN =)" },
+    { LEVEL_RULES[2], 0.06f, 1.25f, 0.026f, 0.55f, {1.00f,0.98f,0.89f}, {0.16f,0.18f,0.18f},    {0.16f,0.23f,0.22f} },
+    { LEVEL_RULES[3], 0.45f, 0.80f, 0.095f, 0.10f, {1.00f,0.22f,0.15f}, {0.052f,0.014f,0.011f}, {0.055f,0.010f,0.008f} },
+    { LEVEL_RULES[4], 0.10f, 1.05f, 0.055f, 0.06f, {1.00f,0.82f,0.76f}, {0.050f,0.040f,0.036f}, {0.150f,0.100f,0.085f} },
 };
-// where each level's exit door leads; the Red Halls and the party both dump you back at the start
-const int EXIT_NEXT[NLEVELS] = { 1, 2, 4, 0, 0 };
 // The Poolrooms are kept nearly uniform on purpose: new tile in a still hall.
 const float SURF_MACRO[NLEVELS] = { 0.05f, 0.08f, 0.015f, 0.07f, 0.06f };
 const float CEIL_BOARD[NLEVELS] = { 2.0f / 3.0f, 0.0f, 0.0f, 0.0f, 0.5f };
