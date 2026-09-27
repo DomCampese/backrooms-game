@@ -383,6 +383,31 @@ bool World::linksStorey(int cx, int cz, int rel) {
     return pairFeature(cx, cz, rel > 0 ? qs : qs - 1, f);
 }
 
+// Level 1's lift doors: which north edges carry one (the mesher also asks
+// for walls either side). The vending pass in generate asks too, so that no
+// machine is ever pushed back against a pair of lift doors.
+static bool liftHash(int gi, int gk, unsigned s) { return ih(gi, gk, s ^ 0xE1E7u) % 71 == 0; }
+
+// Where a vending machine stands in its cell and what it covers. Rotated a
+// quarter turn at a time from ChunkData::propRot; with PROP_AGAINST_WALL it is
+// pushed back to stand 8 cm off the face of the wall behind it. The mesher
+// builds it round (px, pz) and collision takes the box, so the two cannot
+// disagree about where it is.
+static constexpr float VEND_DEPTH_BACK = 0.36f, VEND_DEPTH_FRONT = 0.39f;   // body, and door hardware
+static constexpr float VEND_BACK_OFFSET = CELL * 0.5f - WT - 0.08f - VEND_DEPTH_BACK;
+static void vendFootprint(uint8_t rotByte, float cx, float cz, float &px, float &pz,
+                          float &x0, float &z0, float &x1, float &z1) {
+    float yaw = (rotByte & 3) * 1.5708f, ca = cosf(yaw), sa = sinf(yaw);
+    float o = (rotByte & PROP_AGAINST_WALL) ? VEND_BACK_OFFSET : 0.0f;
+    px = cx - o * sa; pz = cz + o * ca;                   // local +z is the back
+    x0 = z0 = 1e9f; x1 = z1 = -1e9f;
+    for (int c = 0; c < 4; c++) {
+        float lx = (c & 1) ? 0.44f : -0.44f, lz = (c & 2) ? VEND_DEPTH_BACK : -VEND_DEPTH_FRONT;
+        float wx = px + lx * ca - lz * sa, wz = pz + lx * sa + lz * ca;
+        x0 = std::min(x0, wx); x1 = std::max(x1, wx); z0 = std::min(z0, wz); z1 = std::max(z1, wz);
+    }
+}
+
 void World::generate(ChunkData &d, int cx, int cz) {
     memset(d.wallN, 0, sizeof(d.wallN));
     memset(d.wallW, 0, sizeof(d.wallW));
@@ -1102,6 +1127,31 @@ void World::generate(ChunkData &d, int cx, int cz) {
                 }
     }
     if (d.manila) stampManila();   // see above: its doors are its own
+    // Vending machines are plugged in, so they stand with their backs to a
+    // wall, facing the room. Turn each to put a solid wall behind it and open
+    // floor in front, starting from the turn it was dealt so the choice stays
+    // a pure function of the chunk; edges owned by the neighbouring chunk are
+    // unknown here and count as open in front, never as a wall behind. This
+    // runs after every pass that opens or closes an edge. A machine with no
+    // wall to stand against keeps its turn and stays in the middle of its cell.
+    for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
+        if (d.prop[i][kk] != PROP_VENDING) continue;
+        int gi = cx * CCELLS + i, gk = cz * CCELLS + kk;
+        // north, east, south, west edges of the cell; -1 where not ours
+        int edge[4] = { d.wallN[i][kk], i + 1 < CCELLS ? d.wallW[i + 1][kk] : -1,
+                        kk + 1 < CCELLS ? d.wallN[i][kk + 1] : -1, d.wallW[i][kk] };
+        bool lift[4] = { level == 1 && liftHash(gi, gk, sseed()), false,
+                         level == 1 && liftHash(gi, gk + 1, sseed()), false };
+        // turn r faces -z, +x, +z, -x (the mesher's local -z is the front)
+        const int FRONT[4] = { 0, 1, 2, 3 }, BACK[4] = { 2, 3, 0, 1 };
+        int r0 = d.propRot[i][kk] & 3;
+        for (int t = 0; t < 4; t++) {
+            int r = (r0 + t) & 3;
+            if (edge[BACK[r]] != WALL_SOLID || lift[BACK[r]] || edge[FRONT[r]] == WALL_SOLID) continue;
+            d.propRot[i][kk] = (uint8_t)(r | PROP_AGAINST_WALL);
+            break;
+        }
+    }
     if (level == 2) {
         // Tiled halls have no door frames. Whatever the connectivity pass and
         // the thinning punched through, open it as a plain gap in the tile.
@@ -1241,6 +1291,10 @@ bool World::pillarAt(int ci, int ck) {
 uint8_t World::propAt(int ci, int ck) {
     int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
     return data(cx, cz).prop[ci - cx * CCELLS][ck - cz * CCELLS];
+}
+uint8_t World::propRotAt(int ci, int ck) {
+    int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
+    return data(cx, cz).propRot[ci - cx * CCELLS][ck - cz * CCELLS];
 }
 bool World::poolAt(int ci, int ck) {
     if (level != 2) return false;
@@ -1657,7 +1711,7 @@ struct PropSite {
 // in this game is generated, and furniture that reads correctly at corridor
 // range is worth far more than furniture that reads correctly close up.
 static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level,
-                    MB &pr, MB &ce, MB &ao) {
+                    MB &pr, MB &ce, MB &ao, MB &fx) {
     const float pcx = site.cx, pcz = site.cz, rot = site.rot, ey = site.floorY;
     uint32_t h = ih(site.gi, site.gk, seed ^ 0xB0B5u);
     float r1 = (h & 0xFF) / 255.0f, r2 = ((h >> 8) & 0xFF) / 255.0f, r3 = ((h >> 16) & 0xFF) / 255.0f;
@@ -1841,15 +1895,84 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
         break;
     }
     case PROP_VENDING: {  // vending machine: still stocked, still humming, takes doubloons
-        blob(0.52f, 0.44f);
-        part(0, 0, 0.44f, 0.36f, ey, ey + 1.85f, Surface::Metal, Color{ 148, 152, 158, 255 });
-        auto ptv2 = [&](float lx, float ly2, float lz) {
-            return Vector3{ pcx + lx * ca - lz * sa, ly2, pcz + lx * sa + lz * ca };
+        // A glass-front drink machine, built at its real size (0.88 m wide,
+        // 1.83 high, 0.72 deep) from a cabinet, a door cut into the pieces
+        // round its two openings, and the painted front in the fixtures atlas
+        // (drawVendingFront, laid out by VEND_* in textures.h). The cans are
+        // painted on the back of the cabinet, 6 cm behind the glass, and the
+        // shelves in front of them are real, so they slide across the cans as
+        // you walk past. Most machines are still lit: the header, the display,
+        // the price strips and the inside of the cabinet take vertex alpha
+        // 240, which the shader lights from behind. One in six has died.
+        blob(0.50f, 0.42f);
+        bool lit = (h >> 24) % 6 != 0;
+        const unsigned char GLOW = lit ? 240 : 254;
+        // In door coordinates x runs to the viewer's right as they face the
+        // front, which is local -x: seen from the front, local +x is on the left.
+        auto P = [&](float x, float y, float lz) {
+            return Vector3{ pcx - x * ca - lz * sa, ey + y, pcz - x * sa + lz * ca };
         };
-        Color panel = { 66, 90, 122, 60 };   // emissive front: soft cold glow
-        pr.quad(ptv2(-0.28f, ey + 0.55f, -0.375f), ptv2(0.28f, ey + 0.55f, -0.375f),
-                ptv2(0.28f, ey + 1.68f, -0.375f), ptv2(-0.28f, ey + 1.68f, -0.375f),
-                { sa, 0, -ca }, {0,1},{1,1},{1,0},{0,0}, panel);
+        const Vector3 fn = { sa, 0, -ca };                     // the front's normal
+        auto sbox = [&](float x0, float x1, float y0, float y1, float z0, float z1, Color c) {
+            Vector3 a = P(x0, y0, z0), b = P(x1, y1, z1);
+            addSolidBox(fx, std::min(a.x, b.x), y0 + ey, std::min(a.z, b.z),
+                        std::max(a.x, b.x), y1 + ey, std::max(a.z, b.z), c);
+        };
+        // a painted face on the plane lz, sampling the door where it covers it
+        auto face = [&](float x0, float y0, float x1, float y1, float lz, unsigned char alpha) {
+            fx.quad(P(x0, y0, lz), P(x1, y0, lz), P(x1, y1, lz), P(x0, y1, lz), fn,
+                    vendUV(x0, y0), vendUV(x1, y0), vendUV(x1, y1), vendUV(x0, y1),
+                    Color{ 255, 255, 255, alpha });
+        };
+        const float ZF = -0.362f, ZPAINT = -0.3635f, ZBODY = -0.30f, ZBACK = VEND_DEPTH_BACK;
+        // the cabinet: painted steel sides in one of the colours they come in
+        static const Color SIDES[4] = { { 52, 54, 60, 254 }, { 118, 30, 28, 254 },
+                                        { 34, 48, 84, 254 }, { 178, 172, 158, 254 } };
+        Color side = SIDES[(h >> 20) & 3];
+        const Color door = { 48, 50, 55, 254 }, black = { 18, 18, 20, 254 };
+        sbox(-0.42f, 0.42f, 0.0f, VEND_Y0, -0.33f, ZBACK - 0.02f, black);          // plinth, set back
+        sbox(-VEND_HW, VEND_HW, VEND_Y0, VEND_Y1, ZBODY, ZBACK, side);
+        // the door, around its two openings (see VEND_WIN / VEND_BIN)
+        const VendRect &w = VEND_WIN, &bn = VEND_BIN, &hd = VEND_HEADER;
+        sbox(-VEND_HW, w.x0, VEND_Y0, hd.y0, ZF, ZBODY, door);                     // left stile
+        sbox(w.x1, VEND_HW, VEND_Y0, hd.y0, ZF, ZBODY, door);                      // control column
+        sbox(-VEND_HW, VEND_HW, hd.y0, VEND_Y1, ZF, ZBODY, door);                  // header
+        sbox(w.x0, w.x1, bn.y1, w.y0, ZF, ZBODY, door);                            // rail between
+        sbox(w.x0, w.x1, VEND_Y0, bn.y0, ZF, ZBODY, door);                         // kick rail
+        face(-VEND_HW, VEND_Y0, w.x0, hd.y0, ZPAINT, 254);
+        face(w.x1, VEND_Y0, VEND_HW, hd.y0, ZPAINT, 254);
+        face(-VEND_HW, hd.y0, VEND_HW, VEND_Y1, ZPAINT, GLOW);
+        face(w.x0, bn.y1, w.x1, w.y0, ZPAINT, 254);
+        face(w.x0, VEND_Y0, w.x1, bn.y0, ZPAINT, 254);
+        const VendRect &dp = VEND_DISP;
+        face(dp.x0, dp.y0, dp.x1, dp.y1, ZPAINT - 0.0015f, GLOW);
+        // what you touch stands proud of the paint: the coin return lever, the
+        // lock, and the lip of the coin cup
+        const Color chrome = { 186, 188, 194, 254 };
+        sbox(0.232f, 0.288f, 1.090f, 1.125f, ZPAINT - 0.012f, ZPAINT, chrome);
+        sbox(0.385f, 0.405f, 0.545f, 0.565f, ZPAINT - 0.016f, ZPAINT, chrome);
+        sbox(0.235f, 0.385f, 0.330f, 0.345f, ZPAINT - 0.022f, ZPAINT, chrome);
+        // the push flap, hung 2 cm inside the opening
+        face(bn.x0, bn.y0, bn.x1, bn.y1, -0.342f, 254);
+        // behind the glass: the lit back of the cabinet with the cans painted
+        // on it, and the six shelves in front of them, each with its price strip
+        const float ZCANS = ZBODY - 0.0015f, ZLIP = -0.345f;   // front is -z
+        face(w.x0, w.y0, w.x1, w.y1, ZCANS, GLOW);
+        for (int r = 0; r < VEND_ROWS; r++) {
+            float yr = VEND_ROW0 + r * VEND_ROWP;
+            sbox(w.x0, w.x1, yr - 0.022f, yr + 0.004f, ZLIP, ZCANS, Color{ 58, 60, 64, 254 });
+            float v0 = (VEND_STRIP_PX[1] + r * 12 + VEND_STRIP_PX[3]) / (float)FIX_ATLAS_H;
+            float v1 = (VEND_STRIP_PX[1] + r * 12) / (float)FIX_ATLAS_H;
+            float u0 = VEND_STRIP_PX[0] / (float)FIX_ATLAS_W, u1 = (VEND_STRIP_PX[0] + VEND_STRIP_PX[2]) / (float)FIX_ATLAS_W;
+            fx.quad(P(w.x0, yr - 0.022f, ZLIP - 0.0015f), P(w.x1, yr - 0.022f, ZLIP - 0.0015f),
+                    P(w.x1, yr + 0.004f, ZLIP - 0.0015f), P(w.x0, yr + 0.004f, ZLIP - 0.0015f), fn,
+                    { u0, v0 }, { u1, v0 }, { u1, v1 }, { u0, v1 }, Color{ 255, 255, 255, GLOW });
+        }
+        // and the glass itself, last, so it blends over everything behind it
+        // (vertex alpha 100: the shader's window-glass path, a sheen at an angle)
+        const Vector2 m = { 0.375f, 0.75f };
+        fx.quad(P(w.x0, w.y0, -0.352f), P(w.x1, w.y0, -0.352f), P(w.x1, w.y1, -0.352f), P(w.x0, w.y1, -0.352f),
+                fn, m, m, m, m, Color{ 7, 8, 9, 100 });
         break;
     }
     case PROP_DESK: {  // office desk: chair shoved back, monitor long dead. someone worked here
@@ -2918,7 +3041,7 @@ void World::ensureMesh(int cx, int cz) {
             if (clW) aoStrip({ gx - WT - 0.006f, cyW + 0.005f, z0 }, { gx - WT - 0.006f, cyW + 0.005f, z1 }, { 0, -AOH, 0 }, { -1, 0, 0 }, AOC);
             if (clN) aoStrip({ gx + WT + 0.006f, cyE + 0.005f, z1 }, { gx + WT + 0.006f, cyE + 0.005f, z0 }, { 0, -AOH, 0 }, { 1, 0, 0 }, AOC);
         }
-        if (level == 1 && nv == WALL_SOLID && ih(gi0, gk0, sseed() ^ 0xE1E7u) % 71 == 0 &&
+        if (level == 1 && nv == WALL_SOLID && liftHash(gi0, gk0, sseed()) &&
             wallNVal(gi0 - 1, gk0) == WALL_SOLID && wallNVal(gi0 + 1, gk0) == WALL_SOLID) {
             // A lift. The article gives Level 1 "staircases, elevators, isolated
             // rooms, and hallways"; the doors are shut and nobody has found the
@@ -3164,9 +3287,13 @@ void World::ensureMesh(int cx, int cz) {
         if (dd.prop[i][kk] != PROP_NONE) {
             PropSite site = { gx + 1.0f, gz + 1.0f,
                               dd.elev[i][kk] * ELEV_UNIT,     // furniture sits on the local floor
-                              dd.propRot[i][kk] * 1.5708f,    // a quarter turn at a time
+                              (dd.propRot[i][kk] & 3) * 1.5708f,   // a quarter turn at a time
                               cx * CCELLS + i, cz * CCELLS + kk };
-            addProp(dd.prop[i][kk], site, sseed(), level, pr, ce, ao);
+            if (dd.prop[i][kk] == PROP_VENDING) {
+                float bx0, bz0, bx1, bz1;
+                vendFootprint(dd.propRot[i][kk], gx + 1.0f, gz + 1.0f, site.cx, site.cz, bx0, bz0, bx1, bz1);
+            }
+            addProp(dd.prop[i][kk], site, sseed(), level, pr, ce, ao, fx);
         }
     }
     // ---- the flights that rise from this storey (stampFeature has the plan).
@@ -3398,7 +3525,12 @@ int World::gatherCellAABBs(int ci, int ck, AABB *out, int cap, int cnt, bool inc
             case PROP_LAMP:        out[cnt++] = { x0 + 0.82f, z0 + 0.82f, x0 + 1.18f, z0 + 1.18f, ey + 1.62f }; break;
             case PROP_NIGHTSTAND:  out[cnt++] = { x0 + 0.66f, z0 + 0.66f, x0 + 1.34f, z0 + 1.34f, ey + 0.60f }; break;
             case PROP_BED:         out[cnt++] = { x0 + 0.30f, z0 + 0.15f, x0 + 1.70f, z0 + 1.85f, ey + 0.46f }; break;
-            case PROP_VENDING:     out[cnt++] = { x0 + 0.50f, z0 + 0.58f, x0 + 1.50f, z0 + 1.42f, ey + 1.85f }; break;
+            case PROP_VENDING: {   // wherever vendFootprint stood it
+                float vx, vz, bx0, bz0, bx1, bz1;
+                vendFootprint(propRotAt(ci, ck), x0 + 1.0f, z0 + 1.0f, vx, vz, bx0, bz0, bx1, bz1);
+                out[cnt++] = { bx0, bz0, bx1, bz1, ey + VEND_Y1 };
+                break;
+            }
             case PROP_PARTY_TABLE: out[cnt++] = { x0 + 0.40f, z0 + 0.40f, x0 + 1.60f, z0 + 1.60f, ey + 0.74f }; break;
             case PROP_DESK:        out[cnt++] = { x0 + 0.30f, z0 + 0.50f, x0 + 1.70f, z0 + 1.50f, ey + 0.74f }; break;
             case PROP_SHELVING:    out[cnt++] = { x0 + 0.36f, z0 + 0.70f, x0 + 1.64f, z0 + 1.30f, ey + 1.80f }; break;

@@ -1,3 +1,40 @@
+# Vending machine (September 2026)
+
+`PROP_VENDING` (Levels 1 and 4) was one grey box with a flat blue quad on it.
+It is now a glass-front drink machine at real size (0.88 x 1.83 x 0.72 m)
+selling almond water. What will bite:
+
+- **The door is painted into the fixtures atlas, which is now 1024 x 512.**
+  The fittings keep the left half at the same pixels (`FIXPX`); `FIXTURES`
+  divides u by 1024. The door is `VEND_PX` and the price strips
+  `VEND_STRIP_PX`, both in the right half. Every rect on the door is in metres
+  in textures.h (`VEND_WIN`, `VEND_BIN`, ...), and both the painter
+  (`drawVendingFront`) and the mesher go through `vendUV`, so move a rect there
+  and the paint moves with the geometry. Widening the atlas moved UV
+  (0.375, 0.75) from pixel (192, 384) to (384, 384), so the plain-metal swatch
+  `addSolidBox` samples moved with it — to the strip between the diffuser and
+  the exit sign. Lose it and every conduit, sprinkler and lift door vanishes.
+- **Door x is mirrored against local x.** Seen from the front (local -z) local
+  +x is on the viewer's left, the same thing that flipped the carton lettering.
+  The mesher's `P(x, y, lz)` takes the door's x and negates it.
+- **Vertex alpha 240 is backlit** (shader: `backlit`, band 0.93-0.955, in the
+  textured path): lit by the room plus 0.62 of its own texel, opaque, and it
+  lifts `gLightLum` so the fog does not swallow it. The header, display, price
+  strips and the cabinet interior use it; one machine in six is dead (254).
+  At 1.15 the white cans on a white back blew out to paper; the back of the
+  cabinet is dark grey for the same reason real ones are.
+- **The cans are painted on the back of the cabinet**, 6 cm behind the glass;
+  the shelf lips are geometry, so they slide across the cans as you move. The
+  first build put that quad 1.5 mm *inside* the cabinet body and the glass
+  showed a dark box: front is -z, so "in front of" is `ZBODY - 0.0015`.
+- **Machines stand with their backs to a wall.** The last pass in
+  `World::generate` turns each one to put a `WALL_SOLID` behind it and open floor
+  in front (skipping lift doors, via `liftHash`), and sets `PROP_AGAINST_WALL`
+  (bit 2 of `propRot`). `vendFootprint` pushes it back to 8 cm off the wall face,
+  and both the mesher and `gatherCellAABBs` call it, so collision follows the
+  machine. Anything that reads `propRot` as a turn must mask it with `& 3`.
+  About three in four find a wall; the rest stand in the middle of their cell.
+
 # Surface and asset realism pass (September 2026)
 
 Every world surface was rebuilt in `src/surfaces.cpp`, and the held and loose
@@ -1585,6 +1622,7 @@ Getting this wrong produces surfaces that are subtly or wildly mislit:
 | `< 0.45` | window glass |
 | `< 0.62` | water surface |
 | `>= 0.62` | textured; `aOut = fragC.a * texel.a` |
+| `0.93..0.955` | backlit print (vending machine, alpha 240): textured, plus its own texel, opaque |
 | `0.965..0.99` | Level 0 noclip wall: textured, torn by the shader; 247 cursed, 250 not |
 | `> 0.998` | additionally gets **world-space relief bump** |
 
