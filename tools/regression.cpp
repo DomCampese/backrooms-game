@@ -291,8 +291,11 @@ int main() {
         }
         CHECK(found);
     }
-    for(const auto &entry:g.world.chunks) for(const auto &mesh:entry.second.meshes)
-        CHECK(mesh.vertexCount<=65535);
+    for(const auto &entry:g.world.chunks) {
+        const ChunkMeshes *baked=g.chunkMeshes.find(g.world,g.world.storey,
+                                                    (int32_t)(entry.first>>32),(int32_t)entry.first);
+        if(baked) for(const auto &mesh:baked->meshes) CHECK(mesh.vertexCount<=65535);
+    }
     // ---- Level 0 lore. Assert the rules, not the pictures: nothing on the
     // level but cartons and fallen ceiling, no windows anywhere, and the
     // Manila Room exactly as the article has it — 8x8 m, a door on each
@@ -487,11 +490,12 @@ int main() {
         // overlays say the wall is, bake again, and the wall mesh must differ.
         g.world.unlockedDoors.clear();           // start from a clean overlay
         cd.wallN[li][lk]=WALL_NONE;
-        g.world.rebuildChunk(cx,cz); g.world.ensureMesh(cx,cz);
-        int openVerts=cd.meshes[MESH_WALLS].vertexCount;
+        auto verts=[&](int slot){ g.chunkMeshes.ensure(g.world,cx,cz);
+            return g.chunkMeshes.find(g.world,g.world.qs,cx,cz)->meshes[slot].vertexCount; };
+        g.world.rebuildChunk(cx,cz);
+        int openVerts=verts(MESH_WALLS);
         g.world.shiftEdge(ci,ck,false);          // the building closes it behind you
-        g.world.ensureMesh(cx,cz);
-        CHECK(cd.meshes[MESH_WALLS].vertexCount > openVerts);   // a wall appeared
+        CHECK(verts(MESH_WALLS) > openVerts);    // a wall appeared
         g.world.shifted.clear();
         // The locked and open branches emit the *same* three wall boxes — the
         // jambs and the header are identical, and what differs is the leaf, its
@@ -499,11 +503,10 @@ int main() {
         // watch the props slot here: asserted against MESH_WALLS this passes
         // whatever the mesher does, which is the useless kind of green.
         cd.wallN[li][lk]=WALL_LOCKED;
-        g.world.rebuildChunk(cx,cz); g.world.ensureMesh(cx,cz);
-        int lockedProps=cd.meshes[MESH_PROPS].vertexCount;
+        g.world.rebuildChunk(cx,cz);
+        int lockedProps=verts(MESH_PROPS);
         g.world.unlockEdge(ci,ck,false);         // and it rebakes both chunks itself
-        g.world.ensureMesh(cx,cz);
-        CHECK(cd.meshes[MESH_PROPS].vertexCount < lockedProps);   // the leaf went
+        CHECK(verts(MESH_PROPS) < lockedProps);  // the leaf went
 
         g.world.unlockedDoors.clear();
         for (int d=-1;d<=2;++d) {                // put the neighbourhood back
@@ -523,11 +526,11 @@ int main() {
         for (int x=-1;x<=1;++x) for (int z=-1;z<=1;++z)
             p.world.chunks[World::key(x,z)]={};
         auto &chunk=p.world.chunks[World::key(0,0)];
-        Mesh &wall=chunk.meshes[MESH_WALLS];
+        Mesh &wall=p.chunkMeshes.slot(0,0,0).meshes[MESH_WALLS];
         wall.vertexCount=6; wall.triangleCount=2;
         wall.vertices=(float *)MemAlloc(18*sizeof(float));
         const float v[]={4,0,0, 4,3,2, 4,3,0, 4,0,0, 4,0,2, 4,3,2};
-        memcpy(wall.vertices,v,sizeof(v)); chunk.built=true;
+        memcpy(wall.vertices,v,sizeof(v));
         p.px=1; p.pz=1; p.eyeY=0.6f; p.fwd={1,0,0};
         p.dogs[0].st=DState::Prowl; p.dogs[0].x=6; p.dogs[0].z=1; p.dogs[0].hp=3;
         p.fireBullet(); p.updateBullets(0.1f);
@@ -887,7 +890,7 @@ int main() {
             // (1) cell for cell: open above below exactly where there is a hole
             // above, and a flight below exactly where the hole can be walked
             for (int uc=0;uc<f.wu;++uc) for (int vc=0;vc<f.lv;++vc) {
-                Vector3 c=w.featureWorld(f,cx,cz,(uc+0.5f)*CELL,0,(vc+0.5f)*CELL);
+                Vector3 c=toRl(w.featureWorld(f,cx,cz,(uc+0.5f)*CELL,0,(vc+0.5f)*CELL));
                 int ci=cellOf(c.x), ck=cellOf(c.z);
                 uint8_t lo,hi;
                 { StoreyScope s(w,p); lo=w.vflagAt(ci,ck); }
@@ -905,7 +908,7 @@ int main() {
             // what is under your feet and what stops you, or the switch is a
             // step, a drop or a wall that was not there a frame ago.
             for (float u=0.2f; u<f.wu*CELL; u+=0.4f) for (float v=0.1f; v<f.lv*CELL; v+=0.2f) {
-                Vector3 pt=w.featureWorld(f,cx,cz,u,0,v);
+                Vector3 pt=toRl(w.featureWorld(f,cx,cz,u,0,v));
                 float gl; { StoreyScope s(w,p); if (!(w.vflagAt(cellOf(pt.x),cellOf(pt.z))&VF_STAIR)) continue;
                             gl=w.groundAt(pt.x,pt.z,H*0.5f+0.3f); }
                 if (fabsf(gl-H*0.5f)>0.35f) continue;
@@ -933,8 +936,8 @@ int main() {
         // (3) climb a straight flight with the real mover, Clark close behind.
         const VertFeat &sf=straight.f;
         float su=sf.wu*CELL*0.5f;
-        Vector3 foot=w.featureWorld(sf,straight.cx,straight.cz,su,0,0.8f);
-        Vector3 up1=w.featureWorld(sf,straight.cx,straight.cz,su,0,1.8f);
+        Vector3 foot=toRl(w.featureWorld(sf,straight.cx,straight.cz,su,0,0.8f));
+        Vector3 up1=toRl(w.featureWorld(sf,straight.cx,straight.cz,su,0,1.8f));
         float dx=up1.x-foot.x, dz=up1.z-foot.z;
         g.px=foot.x; g.pz=foot.z; g.py=0; g.vy=0; g.grounded=true; g.fallFrom=0;
         g.health=1; g.hurtT=0; g.swimming=false; g.squeezing=false;
@@ -968,13 +971,13 @@ int main() {
 
         // (4) over an atrium's railing: a storey's fall, into the hall below
         const VertFeat &af=atrium.f;
-        Vector3 over=w.featureWorld(af,atrium.cx,atrium.cz,af.wu*CELL*0.5f,0,af.lv*CELL*0.5f);
+        Vector3 over=toRl(w.featureWorld(af,atrium.cx,atrium.cz,af.wu*CELL*0.5f,0,af.lv*CELL*0.5f));
         g.changeStorey(1,100);
         CHECK(w.storey==1 && (w.vflagAt(cellOf(over.x),cellOf(over.z))&VF_HOLE));
         // the rail round it stops a body, not a look, and no route crosses it
         {
-            Vector3 edge=w.featureWorld(af,atrium.cx,atrium.cz,af.wu*CELL*0.5f,0,-0.3f);
-            Vector3 in=w.featureWorld(af,atrium.cx,atrium.cz,af.wu*CELL*0.5f,0,0.6f);
+            Vector3 edge=toRl(w.featureWorld(af,atrium.cx,atrium.cz,af.wu*CELL*0.5f,0,-0.3f));
+            Vector3 in=toRl(w.featureWorld(af,atrium.cx,atrium.cz,af.wu*CELL*0.5f,0,0.6f));
             float bx=edge.x,bz=edge.z; w.collideCircle(bx,bz,Game::PR,0.0f);
             CHECK(fabsf(bx-edge.x)+fabsf(bz-edge.z)>0.1f);
             // A normal jump peaks above the knee wall; walking remains blocked.
@@ -1023,34 +1026,34 @@ int main() {
         g.ent.st=EState::Hidden; g.fear=0;
         {
             const VertFeat &wf=well.f;
-            Vector3 at=w.featureWorld(wf,well.cx,well.cz,1.0f,0,0.7f), to=w.featureWorld(wf,well.cx,well.cz,1.0f,0,1.7f);
+            Vector3 at=toRl(w.featureWorld(wf,well.cx,well.cz,1.0f,0,0.7f)), to=toRl(w.featureWorld(wf,well.cx,well.cz,1.0f,0,1.7f));
             g.px=at.x; g.pz=at.z; g.py=0; g.eyeY=1.62f; g.pitch=0.25f; g.yaw=atan2f(to.z-at.z,to.x-at.x);
             capture(g,"storey-stairwell.png");
         }
         {
-            Vector3 at=w.featureWorld(sf,straight.cx,straight.cz,su,0,4.5f);
+            Vector3 at=toRl(w.featureWorld(sf,straight.cx,straight.cz,su,0,4.5f));
             g.px=at.x; g.pz=at.z; g.py=w.groundAt(at.x,at.z,3.0f); g.eyeY=g.py+1.62f; g.pitch=0.05f;
             g.yaw=atan2f(dz,dx);
             capture(g,"storey-stair.png");
         }
         {
             g.changeStorey(1,100);
-            Vector3 at=w.featureWorld(af,atrium.cx,atrium.cz,af.wu*CELL*0.5f,0,-1.0f);
-            Vector3 to=w.featureWorld(af,atrium.cx,atrium.cz,af.wu*CELL*0.5f,0,1.0f);
+            Vector3 at=toRl(w.featureWorld(af,atrium.cx,atrium.cz,af.wu*CELL*0.5f,0,-1.0f));
+            Vector3 to=toRl(w.featureWorld(af,atrium.cx,atrium.cz,af.wu*CELL*0.5f,0,1.0f));
             g.px=at.x; g.pz=at.z; g.py=0; g.eyeY=1.62f; g.pitch=-0.55f; g.yaw=atan2f(to.z-at.z,to.x-at.x);
             capture(g,"storey-atrium.png");
             g.changeStorey(-1,100);
         }
         {   // the same atrium from the floor of the hall, looking up at the balcony
-            Vector3 at=w.featureWorld(af,atrium.cx,atrium.cz,af.wu*CELL*0.5f,0,-1.2f);
-            Vector3 to=w.featureWorld(af,atrium.cx,atrium.cz,af.wu*CELL*0.5f,0,1.0f);
+            Vector3 at=toRl(w.featureWorld(af,atrium.cx,atrium.cz,af.wu*CELL*0.5f,0,-1.2f));
+            Vector3 to=toRl(w.featureWorld(af,atrium.cx,atrium.cz,af.wu*CELL*0.5f,0,1.0f));
             g.px=at.x; g.pz=at.z; g.py=0; g.eyeY=1.62f; g.pitch=0.42f; g.yaw=atan2f(to.z-at.z,to.x-at.x);
             capture(g,"storey-atrium-below.png");
         }
         {   // the head of the straight flight, from the floor it arrives at
             g.changeStorey(1,100);
-            Vector3 at=w.featureWorld(sf,straight.cx,straight.cz,su,0,11.2f);
-            Vector3 to=w.featureWorld(sf,straight.cx,straight.cz,su,0,9.0f);
+            Vector3 at=toRl(w.featureWorld(sf,straight.cx,straight.cz,su,0,11.2f));
+            Vector3 to=toRl(w.featureWorld(sf,straight.cx,straight.cz,su,0,9.0f));
             g.px=at.x; g.pz=at.z; g.py=0; g.eyeY=1.62f; g.pitch=-0.38f; g.yaw=atan2f(to.z-at.z,to.x-at.x);
             capture(g,"storey-stair-top.png");
             g.changeStorey(-1,100);
@@ -1094,7 +1097,7 @@ int main() {
             g.px=cx*CHUNK+12;g.pz=cz*CHUNK+12;g.py=0;g.eyeY=1.62f;
             g.pitch=.85f;g.yaw=.3f;g.ent.st=EState::Hidden;
             for(int i=0;i<80;++i) g.streamChunks();
-            CHECK(w.layer(floors-1).at(World::key(cx,cz)).built);
+            CHECK(g.chunkMeshes.find(w,floors-1,cx,cz));
             char name[40];snprintf(name,sizeof(name),"stacked-court-%d.png",floors);
             capture(g,name);
             for(int st=1;st<floors;++st) g.changeStorey(1,100);

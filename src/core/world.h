@@ -1,35 +1,18 @@
 #pragma once
-// The infinite maze: deterministic chunk generation, mesh baking, collision,
-// line of sight. Chunks stream in around the player and unload behind them.
-#include "raylib.h"
+// The infinite maze: deterministic chunk generation, storeys, collision, line
+// of sight, pathfinding and the light-occlusion grid. Chunks are generated on
+// demand and unloaded behind the player. Standard library only: the raylib
+// mesher is src/world_mesh.cpp.
+#include "vec.h"
 #include <cstdint>
 #include <cmath>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 constexpr float WATER_Y = -0.12f;       // shared surface for rendering and swimming
 constexpr float CELL = 2.0f;           // metres per grid cell
 constexpr int   CCELLS = 16;           // cells per chunk side
-// How rare a phrase on a wall is, and how many there are to find. The rate is
-// per solid wall edge and applies to both orientations, so a corridor of ten
-// cells offers about twenty chances. SCRAWL_PHRASES must match the atlas built
-// by makeScrawlTex (4 columns x 8 rows) — change one and change the other.
-// How often the building's fittings turn up. These are rarities in the same
-// sense the scrawl is, except an outlet is meant to be ordinary: canon names
-// "scattered electrical outlets" and the eye needs something of known size to
-// measure a corridor against, so they are common and everything else is not.
-// All are per solid wall edge, both orientations.
-constexpr uint32_t OUTLET_RATE   = 5;
-constexpr uint32_t OUTLET_BROKEN = 4;    // one outlet in this many has lost its cover
-constexpr uint32_t SWITCH_RATE   = 23;
-constexpr uint32_t GRILLE_RATE   = 27;
-constexpr uint32_t EXITSIGN_RATE = 97;
-constexpr uint32_t SPRINK_RATE   = 11;   // per ceiling cell
-constexpr uint32_t DIFFUSER_RATE = 13;   // per ceiling cell
-constexpr uint32_t CONDUIT_RUN   = 6;    // cells per conduit run, so runs are runs
-
-constexpr uint32_t SCRAWL_RATE = 40;
-constexpr uint32_t SCRAWL_PHRASES = 32;
 constexpr float CHUNK = CELL * CCELLS;
 constexpr float WT = 0.11f;            // wall half-thickness
 // The corridor ring each chunk leaves around its rooms, in cells — one lane on
@@ -76,7 +59,7 @@ enum WallKind : uint8_t {
 
 // Which piece of furniture, if any, stands in a cell. The generator picks these
 // per level (see World::generate); the mesher builds each one in
-// addProp (world.cpp) and gatherCellAABBs gives it a collision box.
+// addProp (world_mesh.cpp) and gatherCellAABBs gives it a collision box.
 enum PropKind : uint8_t {
     PROP_NONE = 0,
     PROP_BOXES,          // 1  a stack of cartons
@@ -108,6 +91,23 @@ enum PropKind : uint8_t {
 // mesher and collision (vendFootprint) read the same answer.
 constexpr uint8_t PROP_AGAINST_WALL = 4;
 
+// The vending machine's body: half its width, its height, and how far it
+// reaches behind and in front of its centre (the door hardware stands proud).
+// The mesher builds it round the point vendFootprint returns and collision
+// takes the box, so the two cannot disagree about where it is.
+constexpr float VEND_HW = 0.44f;
+constexpr float VEND_Y1 = 1.83f;
+constexpr float VEND_DEPTH_BACK = 0.36f, VEND_DEPTH_FRONT = 0.39f;
+// Rotated a quarter turn at a time from ChunkData::propRot; with
+// PROP_AGAINST_WALL pushed back to stand 8 cm off the face of the wall behind
+// it. (cx, cz) is the cell centre; (px, pz) the machine's centre, and the rest
+// its axis-aligned box.
+void vendFootprint(uint8_t rotByte, float cx, float cz, float &px, float &pz,
+                   float &x0, float &z0, float &x1, float &z1);
+// Level 1's lift doors: which north edges carry one. The mesher builds them;
+// the vending pass reads it so no machine stands against a pair of lift doors.
+bool liftHash(int gi, int gk, unsigned s);
+
 
 // The Manila Room (Level 0): "an isolated eight-by-eight-meter room" — 4x4
 // cells — "with thick walls", manila wallpaper, wooden floorboards, one
@@ -117,21 +117,6 @@ constexpr uint8_t PROP_AGAINST_WALL = 4;
 // one, in room cells MANILA_LO..MANILA_HI on both axes.
 constexpr uint32_t MANILA_RATE = 20;
 constexpr int MANILA_LO = 6, MANILA_HI = 9;
-
-// Slots in ChunkData::meshes. Each is baked separately because each needs a
-// different material or a different draw order (see Game::renderScene).
-enum ChunkMesh {
-    MESH_FLOOR = 0,
-    MESH_CEILING,
-    MESH_WALLS,
-    MESH_PROPS,
-    MESH_WATER,
-    MESH_SCRAWL,      // graffiti decals, pressed just off the wall faces
-    MESH_FIXTURES,    // outlets, grilles, diffusers, signs — and the conduit/sprinkler bodies
-    MESH_GLASS,       // window panes
-    MESH_AO,          // baked contact-shadow gradients in every crease
-    MESH_COUNT,
-};
 
 // ChunkData::elev is stored in decimetres so it fits in an int8_t.
 constexpr float ELEV_UNIT = 0.1f;
@@ -200,6 +185,10 @@ constexpr int STOREY_REACH = 6;
 // actor on a flight is well above a 3 m wall-top, so wallH is no longer "tall
 // enough to never step over".
 constexpr float FULL_H = 1.0e4f;
+// A rail: half the thickness of its knee wall, and the height of its cap above
+// what you stand on. The mesher builds it and gatherCellAABBs collides with it.
+constexpr float RAIL_T = 0.075f;
+constexpr float RAIL_H = 0.65f;
 
 // walls: wallN[i][k] = north edge of cell (i,k) at z=k*CELL; wallW = west edge at x=i*CELL
 struct ChunkData {
@@ -229,8 +218,6 @@ struct ChunkData {
     uint8_t prot[CCELLS][CCELLS] = {};
     VertFeat feats[2];
     int nfeat = 0;
-    bool built = false;
-    Mesh meshes[MESH_COUNT] = {};
 };
 struct AABB {
     float minx, minz, maxx, maxz, top;   // top: height you can stand on
@@ -257,16 +244,8 @@ inline bool blocksLight(uint8_t wall) { return wall == WALL_SOLID || wall == WAL
 inline int fdiv(int a, int b) { return (a >= 0) ? a / b : -((-a + b - 1) / b); }
 inline int cellOf(float x) { return (int)floorf(x / CELL); }
 
-struct MB;   // mesh builder, internal to world.cpp
-
-// One almond water can at life size, base on y=0. UVs index makeAlmondWrapTex.
-Mesh buildCanMesh();
-// The tape player, underside on y=0, and the two reels + record lamp that go on
-// it. Separate meshes because the reels turn and the lamp only burns while the
-// tape is running. UVs index makeDeckTex.
-Mesh buildDeckMesh();
-Mesh buildReelMesh();
-Mesh buildDeckLampMesh();
+// A chunk of one storey, for the stale-geometry list.
+struct ChunkRef { int storey, cx, cz; };
 
 struct World {
     unsigned seed = 1337;
@@ -328,13 +307,13 @@ struct World {
     float stairY(float x, float z, bool ramp = false);
     // A feature's local frame: world point -> (u, v) metres, and back.
     void featureLocal(const VertFeat &f, int cx, int cz, float x, float z, float &u, float &v) const;
-    Vector3 featureWorld(const VertFeat &f, int cx, int cz, float u, float y, float v) const;
+    Vec3 featureWorld(const VertFeat &f, int cx, int cz, float u, float y, float v) const;
     // Do any chunks around this one link storey qs to storey qs + rel?
     bool linksStorey(int cx, int cz, int rel);
     // An enclosed stairwell's light: a batten on the end wall over the half
     // landing, in the frame of the storey the stairwell rises from. The shader
     // has one spare point light (uLamp); Game hands it the nearest of these.
-    Vector3 landingLamp(const VertFeat &f, int cx, int cz) const {
+    Vec3 landingLamp(const VertFeat &f, int cx, int cz) const {
         return featureWorld(f, cx, cz, CELL, storeyH * 0.5f + 2.25f, 4 * CELL - WT - 0.07f);
     }
     // Write storey qs's half of a feature into a chunk being generated: its
@@ -351,7 +330,6 @@ struct World {
     // fixed y. A raised deck carries its ceiling up with it; without that it
     // would push its floor through a slab that never moved.
     float ceilY(int ci, int ck);
-    void ensureMesh(int cx, int cz);
     int gatherCellAABBs(int ci, int ck, AABB *out, int cap, int cnt, bool includeProps = true);
     // feetY: obstacles whose top is at or below your feet are walkable, not solid
     void collideCircle(float &px, float &pz, float r, float feetY = 0.0f);
@@ -398,7 +376,7 @@ struct World {
     bool valveAt(int ci, int ck);
     // some exit doors glow red and were never going anywhere good
     bool cursedExit(int ci, int ck);
-    Vector2 findOpenSpot(float x, float z);
+    Vec2 findOpenSpot(float x, float z);
     void unloadFar(int pcx, int pcz, int radius);
     void unloadAll();
     // ---- PAC-03: the place does not stay where you left it.
@@ -431,7 +409,12 @@ struct World {
     void unlockEdge(int ci, int ck, bool west);  // open a locked door for good, and rebake
     // Is there a key lying loose in this cell? One per chunk at most.
     bool keyAt(int ci, int ck);
-    void rebuildChunk(int cx, int cz);           // drop its meshes so streamChunks bakes it again
+    void rebuildChunk(int cx, int cz);           // report its geometry stale (staleChunks)
+    // Chunks whose geometry went stale since a renderer last looked: unloaded
+    // (unloadFar, unloadAll) or rebuilt after a wall changed (rebuildChunk).
+    // Core only appends; the renderer drains it before using any baked chunk
+    // (ChunkMeshCache), so its meshes live exactly as long as the chunk data.
+    std::vector<ChunkRef> staleChunks;
 };
 
 // Point the world's accessors at another storey for the length of a scope.
@@ -445,9 +428,3 @@ struct StoreyScope {
     StoreyScope(const StoreyScope &) = delete;
     StoreyScope &operator=(const StoreyScope &) = delete;
 };
-
-
-Mesh buildFlareMesh();
-// A Level 1 supply crate and its lid, base on y = 0 (see Game::crateAt).
-Mesh buildCrateMesh();
-Mesh buildCrateLidMesh();

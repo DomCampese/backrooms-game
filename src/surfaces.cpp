@@ -21,7 +21,7 @@
 //
 //  * Things are the size they are. Every generator knows how many metres its
 //    tile spans (floors and ceilings map 2 m to one repeat, walls 3 m across and
-//    gWallV down — see world.cpp), so a ceiling board is 600-odd mm, a brick is
+//    tileV down — see WallBuilder in world_mesh.cpp), so a ceiling board is 600-odd mm, a brick is
 //    a brick and a pool tile the same size on the wall as on the floor. The
 //    ones that were not — metre-square ceiling boards, bricks 0.75 m long, pool
 //    tiles 0.25 m on the floor and 0.375 m on the wall — are most of why the
@@ -247,7 +247,7 @@ Surface finishSurface(const Canvas &c, float gain) {
 // has lifted a little, over a vinyl with a fine stipple emboss, above a skirting
 // board. SKIRT is that board's height. It was a 27 cm band of flat brown paint
 // before, which is a dado rail's height rather than a skirting's; a commercial
-// fit-out uses a 100-150 mm board, and the outlets (0.32 m, world.cpp) now sit
+// fit-out uses a 100-150 mm board, and the outlets (0.32 m, world_mesh.cpp) now sit
 // clear above it the way they do in a real room.
 const float SKIRT = 0.12f;
 
@@ -308,7 +308,7 @@ void skirting(Canvas &c, int i, int x, int y, float hgt, float cr, float cg, flo
 //
 // Vertically the paper has a second constraint: on a storeyed level a wall
 // taller than one tile carries on from the tile's 0.75-2.25 m band, repeating
-// it (wallV/voidFace in world.cpp). So everything on the paper repeats every
+// it (wallV/voidFace in world_mesh.cpp). So everything on the paper repeats every
 // 1.5 m (512 px) down the tile — the noise runs on that period, and anything
 // that depends on height (the damp, the dust line under the ceiling, the
 // skirting) stays outside the band.
@@ -373,7 +373,7 @@ Surface makeWallpaperSurface() {
 // fleck is a texture, not a pattern.
 //
 // Clean, as asked: no wear lanes, no stains. The rotten cells bring their own
-// damp tint in geometry (world.cpp), and the wet patches were removed.
+// damp tint in geometry (world_mesh.cpp), and the wet patches were removed.
 Surface makeCarpetSurface() {
     const int N = 1024, LOOPS = N / 2;
     Canvas c(N, N, 2.0f, 2.0f);
@@ -492,7 +492,7 @@ Surface makeCeilingSurface() {
 // ---------------------------------------------------------------- Level 1
 //
 // Poured walls, cast against plywood. Level 1's walls are one tile floor to
-// slab (3 m across, 4.2 m up — gWallV in world.cpp), so this texture knows the
+// slab (3 m across, 4.2 m up — WallBuilder::tileV in world_mesh.cpp), so this texture knows the
 // height of everything it draws. The pour went up in three 1.4 m lifts, each
 // against two 1.5 m form sheets, and the forms leave everything that makes
 // concrete look cast rather than rendered:

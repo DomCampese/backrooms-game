@@ -220,13 +220,13 @@ void Game::init() {
 
     grng = Rng(hash64(world.seed ^ 0xABCDEF));
 
-    Vector2 sp = world.findOpenSpot(15, 15);
+    Vector2 sp = toRl(world.findOpenSpot(15, 15));
     px = sp.x; pz = sp.y;
     if (const char *posEnv = getenv("BACKROOMS_POS")) {   // testing: "x,z,yaw[,pitch]"
         float ex, ez, ey, ep;
         int n = sscanf(posEnv, "%f,%f,%f,%f", &ex, &ez, &ey, &ep);
         if (n >= 3) {
-            Vector2 s2 = world.findOpenSpot(ex, ez);
+            Vector2 s2 = toRl(world.findOpenSpot(ex, ez));
             px = s2.x; pz = s2.y; yaw = ey;
             // Optional pitch, radians, up positive: the only way to photograph a
             // floor or a ceiling close up for a before/after comparison.
@@ -263,7 +263,7 @@ void Game::init() {
     if (const char *stEnv = getenv("BACKROOMS_STOREY")) {
         if (world.storeyH > 0.0f) {
             world.setStorey(atoi(stEnv));
-            Vector2 s2 = world.findOpenSpot(px, pz);
+            Vector2 s2 = toRl(world.findOpenSpot(px, pz));
             px = s2.x; pz = s2.y;
         }
     }
@@ -536,7 +536,7 @@ void Game::beginDescent(double now) {
     world.seed = shotPath ? 1337u : (unsigned)time(nullptr) ^ (unsigned)(now * 977.0);
     grng = Rng(hash64(world.seed ^ 0xABCDEF));
     applyLevel(0);
-    Vector2 sp = world.findOpenSpot(15, 15);
+    Vector2 sp = toRl(world.findOpenSpot(15, 15));
     px = sp.x; pz = sp.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
     yaw = 0.8f; pitch = 0.0f;
     coins = 0; almond = 0; tapes = 0; keys = 0; flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; battery = 1.0f;
@@ -578,7 +578,7 @@ void Game::seedStrangerChalk() {
     Rng r(hash64((uint64_t)world.seed ^ ((uint64_t)level * 0x9E3779B97F4A7C15ULL) ^ 0xC4A15ULL));
     for (int i = 0; i < 2; i++) {
         float a = r.f01() * 6.2831853f, d = 18 + r.f01() * 22;
-        Vector2 spot = world.findOpenSpot(px + cosf(a) * d, pz + sinf(a) * d);
+        Vector2 spot = toRl(world.findOpenSpot(px + cosf(a) * d, pz + sinf(a) * d));
         chalk[level].push_back({{ spot.x, world.groundAt(spot.x, spot.y, 0.0f) + 0.016f, spot.y },
                                 r.f01() * 6.2831853f, false, world.storey });
     }
@@ -1196,7 +1196,7 @@ void Game::updateMovement(float dt) {
             SetSoundVolume(splashIn[0], 0.5f); SetSoundPitch(splashIn[0], 0.5f);
             PlaySound(splashIn[0]);
             applyLevel(1);
-            Vector2 spot = world.findOpenSpot(px, pz);
+            Vector2 spot = toRl(world.findOpenSpot(px, pz));
             px = spot.x; pz = spot.y; velx = velz = 0; py = 0.6f; vy = 0; grounded = false;
             ent.st = EState::Hidden; ent.nextSpawn = GetTime() + 20;
         }
@@ -1376,13 +1376,13 @@ void Game::updateDevKeys(double now) {
             nextBlackout = level == 2 ? BLACKOUT_NEVER : blackoutIn(blackoutEnd, 45, 75);
         }
         if (inKeyPressed(KEY_E)) {   // (re)spawn Clark stalking ~12m ahead
-            Vector2 spot = world.findOpenSpot(px + f2x * 12, pz + f2z * 12);
+            Vector2 spot = toRl(world.findOpenSpot(px + f2x * 12, pz + f2z * 12));
             ent.x = spot.x; ent.z = spot.y;
             ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.hp = 3; ent.stagger = 0;
         }
         if (inKeyPressed(KEY_C)) {   // force chase (spawns him first if hidden)
             if (ent.st == EState::Hidden) {
-                Vector2 spot = world.findOpenSpot(px + f2x * 14, pz + f2z * 14);
+                Vector2 spot = toRl(world.findOpenSpot(px + f2x * 14, pz + f2z * 14));
                 ent.x = spot.x; ent.z = spot.y;
                 ent.hp = 3;
             }
@@ -1395,12 +1395,12 @@ void Game::updateDevKeys(double now) {
         if (world.storeyH > 0.0f && (inKeyPressed(KEY_PAGE_UP) || inKeyPressed(KEY_PAGE_DOWN))) {
             // up or down a storey where you stand, for looking at one
             changeStorey(inKeyPressed(KEY_PAGE_UP) ? 1 : -1, now);
-            Vector2 spot = world.findOpenSpot(px, pz);
+            Vector2 spot = toRl(world.findOpenSpot(px, pz));
             px = spot.x; pz = spot.y; py = 0; vy = 0; grounded = true; fallFrom = 0;
         }
         if (inKeyPressed(KEY_N)) {   // jump to next level (incl. Red Halls)
             applyLevel((level + 1) % NLEVELS);
-            Vector2 spot = world.findOpenSpot(px, pz);
+            Vector2 spot = toRl(world.findOpenSpot(px, pz));
             px = spot.x; pz = spot.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
             ent.st = EState::Hidden; ent.nextSpawn = now + 30;
         }
@@ -1506,11 +1506,11 @@ void Game::updateBullets(float dt) {
                 Vector3 end=Vector3Add(ray.position,Vector3Scale(ray.direction,travel));
                 if (fmaxf(ray.position.x,end.x)<cx*CHUNK-1 || fminf(ray.position.x,end.x)>(cx+1)*CHUNK+1 ||
                     fmaxf(ray.position.z,end.z)<cz*CHUNK-1 || fminf(ray.position.z,end.z)>(cz+1)*CHUNK+1) continue;
-                auto &chunk = entry.second;
-                if (!chunk.built) continue;
+                const ChunkMeshes *chunk = chunkMeshes.find(world, world.storey + rel, cx, cz);
+                if (!chunk) continue;
                 for (int m = MESH_FLOOR; m <= MESH_GLASS; ++m) {
                     if (m == MESH_SCRAWL || m == MESH_WATER) continue;
-                    const Mesh &mesh = chunk.meshes[m];
+                    const Mesh &mesh = chunk->meshes[m];
                     if (!mesh.vertexCount) continue;
                     BoundingBox box=GetMeshBoundingBox(mesh);
                     box.min.y += oy; box.max.y += oy;
@@ -2130,7 +2130,7 @@ void Game::updateEntity(float dt, double now) {
     }
     // ---- entity
     if (shotPath && !benchmark && frame == 300 && ent.st == EState::Hidden) {   // autotest: force a visible spawn
-        Vector2 spot = world.findOpenSpot(px + fwd.x * 8, pz + fwd.z * 8);
+        Vector2 spot = toRl(world.findOpenSpot(px + fwd.x * 8, pz + fwd.z * 8));
         ent.x = spot.x; ent.z = spot.y;
         ent.st = EState::Stalk; ent.gaze = -100; ent.life = 0; ent.unseen = 0; ent.hp = 3; ent.stagger = 0;
     }
@@ -2155,7 +2155,7 @@ void Game::updateEntity(float dt, double now) {
             // enough to matter, and behind something, so the first you know of
             // him is when you turn the corner he is already round.
             auto unseenSpot = [&](float wx, float wz, float &ox, float &oz) {
-                Vector2 s = world.findOpenSpot(wx, wz);
+                Vector2 s = toRl(world.findOpenSpot(wx, wz));
                 float dx = s.x - px, dz = s.y - pz, d = sqrtf(dx * dx + dz * dz);
                 if (d < SPAWN_NEAR_MIN || d > SPAWN_NEAR_MAX) return false;
                 if (world.lineOfSight(px, pz, s.x, s.y)) return false;
@@ -2193,7 +2193,7 @@ void Game::updateEntity(float dt, double now) {
             if (!placed) {   // and the original: out in the fog, coming to find you
                 float a = grng.f01() * TAU;
                 float d = SPAWN_FAR_MIN + grng.f01() * SPAWN_FAR_SPAN;
-                Vector2 spot = world.findOpenSpot(px + cosf(a) * d, pz + sinf(a) * d);
+                Vector2 spot = toRl(world.findOpenSpot(px + cosf(a) * d, pz + sinf(a) * d));
                 sx = spot.x; sz = spot.y;
             }
             ent.x = sx; ent.z = sz;
@@ -2411,7 +2411,7 @@ void Game::updateDogs(float dt, double now) {
         for (auto &d : dogs) {
             if (d.st != DState::Gone) continue;
             float a = grng.f01() * TAU, dist = 17 + grng.f01() * 9;
-            Vector2 spot = world.findOpenSpot(px + cosf(a) * dist, pz + sinf(a) * dist);
+            Vector2 spot = toRl(world.findOpenSpot(px + cosf(a) * dist, pz + sinf(a) * dist));
             d.x = spot.x; d.z = spot.y;
             d.st = DState::Prowl; d.life = 0; d.lost = 0; d.hp = 2;
             d.dispY = world.groundAt(d.x, d.z, py + 1.0f);
@@ -2464,7 +2464,7 @@ void Game::updateDogs(float dt, double now) {
                 float rdx = d.roamX - d.x, rdz = d.roamZ - d.z;
                 if (now > d.nextRoam || rdx * rdx + rdz * rdz < 1.4f * 1.4f) {
                     float a = grng.f01() * TAU, r = 9 + grng.f01() * 11;
-                    Vector2 sp = world.findOpenSpot(d.x + cosf(a) * r, d.z + sinf(a) * r);
+                    Vector2 sp = toRl(world.findOpenSpot(d.x + cosf(a) * r, d.z + sinf(a) * r));
                     d.roamX = sp.x; d.roamZ = sp.y;
                     d.nextRoam = now + 9 + grng.f01() * 9;
                 }
@@ -2566,7 +2566,7 @@ void Game::changeStorey(int dir, double now) {
                 int s1 = used.kind == VK_STAIR ? used.wu - 1 : used.stairU;
                 u = (s0 + s1 + 1) * CELL * 0.5f; v = dir > 0 ? 3.0f : 9.0f;
             }
-            Vector3 at = world.featureWorld(used, ucx, ucz, u, 0, v);
+            Vector3 at = toRl(world.featureWorld(used, ucx, ucz, u, 0, v));
             ent.x = at.x; ent.z = at.z;
             ent.dispY = world.groundAt(ent.x, ent.z, py + 1.0f);
             ent.wpx = ent.x; ent.wpz = ent.z; ent.repathT = 0;
@@ -2619,7 +2619,7 @@ void Game::updateExits(double now) {
                 escapeT = 6.0f; escapeCount++;
                 saveBest();
                 applyLevel(cursed ? 3 : EXIT_NEXT[level]);
-                Vector2 spot = world.findOpenSpot(px, pz);
+                Vector2 spot = toRl(world.findOpenSpot(px, pz));
                 px = spot.x; pz = spot.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
                 ent.st = EState::Hidden; ent.nextSpawn = now + 30;
                 return; // Stop scanning the old coordinates after the transition.
@@ -2636,8 +2636,7 @@ void Game::streamChunks() {
         for (int dx = -r; dx <= r && budget > 0; dx++)
             for (int dz = -r; dz <= r && budget > 0; dz++) {
                 if (std::max(abs(dx), abs(dz)) != r) continue;
-                ChunkData &d = world.data(pcx + dx, pcz + dz);
-                if (!d.built) { world.ensureMesh(pcx + dx, pcz + dz); budget--; }
+                if (chunkMeshes.ensure(world, pcx + dx, pcz + dz)) budget--;
             }
     // The storeys above and below, where you can see them: through the
     // openings in the chunks round you. A feature's own chunk is where the
@@ -2651,13 +2650,12 @@ void Game::streamChunks() {
                     for (int ex = -1; ex <= 1 && budget > 0; ex++)
                         for (int ez = -1; ez <= 1 && budget > 0; ez++) {
                             if (abs(dx + ex) > 2 || abs(dz + ez) > 2) continue;
-                            ChunkData &d = world.data(pcx + dx + ex, pcz + dz + ez);
                             // The shadow grid carries this storey too (bytes 1
                             // and 2), read from whatever is loaded when it is
                             // built — so a chunk arriving here means rebuilding
                             // it, or the light that should fall down this
                             // opening waits until you have walked 12 m.
-                            if (!d.built) { world.ensureMesh(pcx + dx + ex, pcz + dz + ez); budget--; occValid = false; }
+                            if (chunkMeshes.ensure(world, pcx + dx + ex, pcz + dz + ez)) { budget--; occValid = false; }
                             // Follow visible chains through tall courts, one chunk
                             // per layer; normal rooms stop the chain immediately.
                             for(int depth=2;depth<=STOREY_REACH && budget>0;++depth) {
@@ -2666,8 +2664,7 @@ void Game::streamChunks() {
                                 if(!world.pairFeature(pcx+dx+ex,pcz+dz+ez,
                                     world.storey+(rel>0 ? depth-1 : -depth),link)) break;
                                 StoreyScope next(world,world.storey+depth*rel);
-                                auto &dn=world.data(pcx+dx+ex,pcz+dz+ez);
-                                if(!dn.built) { world.ensureMesh(pcx+dx+ex,pcz+dz+ez);--budget; }
+                                if(chunkMeshes.ensure(world,pcx+dx+ex,pcz+dz+ez)) --budget;
                             }
                         }
                 }

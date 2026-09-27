@@ -84,7 +84,7 @@ vec4 chanFor(int rel){
 // levels.cpp. Bounded, because sin() loses the hash at large arguments.
 float storeyOffset(float st){ return fract(st * 0.6180339) * 97.0; }
 
-// Half-width of one ceiling diffuser. MUST match `hp` in world.cpp's panel
+// Half-width of one ceiling diffuser. MUST match `hp` in world_mesh.cpp's panel
 // mesher: the lighting treats the panel as the rectangle it actually draws, so
 // if the quad changes size and this doesn't, the light stops matching the fitting
 // it is supposed to be coming out of.
@@ -136,7 +136,7 @@ int occAtC(ivec2 c, vec4 ch){
     return int(dot(texelFetch(texture2, t, 0), ch) * 255.0 + 0.5);
 }
 int occAt(ivec2 c){ return occAtC(c, gChan); }
-// Pillars occupy 1.16 m inside a 2 m cell (World::ensureMesh / collision).
+// Pillars occupy 1.16 m inside a 2 m cell (bakeChunk / collision).
 // Test that footprint even in the ray's first and last cells. Skipping those
 // cells left a bright square around every pillar, followed by oversized shadows.
 bool pillarBlocks(ivec2 c, vec2 a, vec2 invDir, float dist){
@@ -588,7 +588,7 @@ void main(){
         }
     } else {
         // Level 0's noclip walls (vertex alpha 250, see noclipCol in
-        // world.cpp): the paper tears sideways in thin horizontal bands that
+        // world_mesh.cpp): the paper tears sideways in thin horizontal bands that
         // jump a dozen times a second, most of the time not at all. Grad
         // sampling with the untorn derivatives, or every band edge picks the
         // smallest mip and draws a line.

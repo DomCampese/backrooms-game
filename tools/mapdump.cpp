@@ -1,6 +1,6 @@
 // A measuring instrument for the generator. No window, no GL, no Xvfb: it links
-// the game's own world.cpp and calls generate() directly, so every number below
-// comes from exactly the code the game ships.
+// src/core alone and calls generate() directly, so every number below comes
+// from exactly the code the game ships.
 //
 // This exists because screenshots were actively misleading about the layout.
 // From captures alone the halls looked like they ran for hundreds of metres;
@@ -12,9 +12,9 @@
 //   tools/sandbox-build.sh mapdump     # builds ./mapdump
 //   ./mapdump --level 0 --seed 1337 --cells 129 --plan 0 0 48 32
 //
-#include "../src/world.h"
-#include "../src/util.h"
-#include "../src/levels.h"
+#include "../src/core/world.h"
+#include "../src/core/hash.h"
+#include "../src/core/level_rules.h"
 
 #include <algorithm>
 #include <cmath>
@@ -107,7 +107,7 @@ int main(int argc, char **argv) {
     // The storey pitch does come from the table: it is what turns the stairs
     // and openings on, and a harness that left it at zero would describe a
     // one-floor Level 0 that the game no longer ships.
-    w.storeyH = (a.level >= 0 && a.level < NLEVELS) ? LEVELS[a.level].storeyH : 0.0f;
+    w.storeyH = (a.level >= 0 && a.level < NLEVELS) ? LEVEL_RULES[a.level].storeyH : 0.0f;
     w.setStorey(a.storey);
 
     const int N = a.cells, half = N / 2;
@@ -406,8 +406,8 @@ int main(int argc, char **argv) {
                 // the shaft, facing up or down the first flight.
                 float v = rising ? (f.kind == VK_STAIRWELL ? 0.8f : 0.2f)
                                  : (f.kind == VK_STAIRWELL ? 0.8f : f.lv * CELL - 0.6f);
-                Vector3 at = w.featureWorld(f, cx, cz, u, 0, v);
-                Vector3 ahead = w.featureWorld(f, cx, cz, u, 0, v + (rising || f.kind == VK_STAIRWELL ? 1.0f : -1.0f));
+                Vec3 at = w.featureWorld(f, cx, cz, u, 0, v);
+                Vec3 ahead = w.featureWorld(f, cx, cz, u, 0, v + (rising || f.kind == VK_STAIRWELL ? 1.0f : -1.0f));
                 float yaw = atan2f(ahead.z - at.z, ahead.x - at.x);
                 printf("  %-9s %s  wu %d lv %d dir %d  %s%s  at %.1f,%.1f,%.2f\n", KIND[f.kind],
                        rising ? "up  " : "down", f.wu, f.lv, f.dir,

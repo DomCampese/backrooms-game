@@ -1326,7 +1326,7 @@ Texture2D makeFixturesTex() {
 }
 
 // A carton, in two regions of the props atlas' left strip (the UVs are in
-// addProp, world.cpp): its side, y 2-297, and its top, y 312-507.
+// addProp, world_mesh.cpp): its side, y 2-297, and its top, y 312-507.
 //
 // The old cardboard was one noise field with a band of tape round the middle,
 // mapped whole onto every face, the top included — every box was taped round

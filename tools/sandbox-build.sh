@@ -34,9 +34,8 @@ shopt -u nullglob
 # reads the tail.
 build_mapdump() {
     rm -f mapdump
-    c++ "${FLAGS[@]}" tools/mapdump.cpp src/world.cpp src/util.cpp src/levels.cpp \
-        src/textures.cpp "${CORE[@]}" -o mapdump "${LINK[@]}"
-    echo "built ./mapdump (python$PYV)"
+    c++ -std=c++17 -O2 -Wall -Wno-missing-field-initializers tools/mapdump.cpp "${CORE[@]}" -o mapdump
+    echo "built ./mapdump (core only)"
 }
 # texdump: every texture generator, run without a window, written to PNG with
 # its mean colour — see the top of tools/texdump.cpp.
