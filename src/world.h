@@ -101,6 +101,14 @@ enum PropKind : uint8_t {
     PROP_MANILA_TABLE,
 };
 
+// propRot's bit 2: the prop stands pushed back against the solid wall behind
+// it rather than in the middle of its cell. Only vending machines do — a
+// machine is plugged in, so it lives against a wall with its back to it —
+// and World::generate sets it after every pass that moves a wall, so the
+// mesher and collision (vendFootprint) read the same answer.
+constexpr uint8_t PROP_AGAINST_WALL = 4;
+
+
 // The Manila Room (Level 0): "an isolated eight-by-eight-meter room" — 4x4
 // cells — "with thick walls", manila wallpaper, wooden floorboards, one
 // octagonal table, two chairs and "a wooden entrance door on each wall". It is
@@ -199,7 +207,7 @@ struct ChunkData {
     uint8_t wallW[CCELLS][CCELLS];   // WallKind
     uint8_t pillar[CCELLS][CCELLS];
     uint8_t prop[CCELLS][CCELLS];    // PropKind
-    uint8_t propRot[CCELLS][CCELLS];
+    uint8_t propRot[CCELLS][CCELLS];   // quarter turns in bits 0-1; PROP_AGAINST_WALL in bit 2
     uint8_t pool[CCELLS][CCELLS];
     int8_t elev[CCELLS][CCELLS];   // floor height in ELEV_UNIT steps: -5 sunken lounge, down to -25
                                    // in an L0 atrium's terraced heart; +6 loading dock, +12 upper tier (L1)
@@ -336,6 +344,7 @@ struct World {
     uint8_t wallWVal(int ci, int ck);
     bool pillarAt(int ci, int ck);
     uint8_t propAt(int ci, int ck);
+    uint8_t propRotAt(int ci, int ck);
     bool poolAt(int ci, int ck);
     float floorY(int ci, int ck);
     // The ceiling sits one wall height above *this cell's* floor, not at a

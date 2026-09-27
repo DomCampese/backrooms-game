@@ -730,7 +730,332 @@ Texture2D makeScrawlTex() {
 // a uniform grid, so that its cell and the quad that carries it are the same
 // shape and nothing is stretched. FIXTURES (textures.h) is that table; the
 // pixel rects below are the same rectangles in atlas space.
-static const int FIXPX[FIX_COUNT][4] = {   // x, y, w, h in the 512px atlas
+// ---- the vending machine's door, at its real size: 0.88 x 1.77 m in 250 x
+// 504 px, about 3.5 mm a pixel. It is a glass-front drink merchandiser of the
+// kind every warehouse break room has: a backlit header, the glass over six
+// shelves of spirals, the coin and selection column down the right, and the
+// push flap you reach into at the bottom. What it sells is the one thing the
+// game has to sell, so the spirals hold almond water, in the same brown on
+// cream as the can in your hand. A few slots are empty, and one can has hung
+// up on its spiral, which is what a vending machine is for.
+//
+// Everything here is painted flat and lit by the room; the mesher cuts the
+// door into pieces along the VEND_* rects and gives the header, the display,
+// the price strips and the back of the cabinet (where the cans are painted)
+// vertex alpha 240, which the world shader lights from behind as well.
+static void drawVendingFront(Color *p, int W, int H) {
+    const unsigned char OP = 254;
+    const int X0 = VEND_PX[0], Y0 = VEND_PX[1], PW = VEND_PX[2], PH = VEND_PX[3];
+    auto pxOf = [&](float x) { return X0 + (x + VEND_HW) / (2 * VEND_HW) * PW; };
+    auto pyOf = [&](float y) { return Y0 + (VEND_Y1 - y) / (VEND_Y1 - VEND_Y0) * PH; };
+    const float PPM = PW / (2 * VEND_HW);                       // pixels per metre
+    auto inDoor = [&](int x, int y) { return x >= X0 && x < X0 + PW && y >= Y0 && y < Y0 + PH; };
+    auto put = [&](int x, int y, Color c) { if (inDoor(x, y)) p[y * W + x] = { c.r, c.g, c.b, OP }; };
+    auto mix = [&](int x, int y, Color c, float a) {
+        if (!inDoor(x, y) || a <= 0) return;
+        Color &d = p[y * W + x];
+        a = std::min(a, 1.0f);
+        d = { cl8(d.r + (c.r - d.r) * a), cl8(d.g + (c.g - d.g) * a), cl8(d.b + (c.b - d.b) * a), OP };
+    };
+    auto scale = [](Color c, float k) { return Color{ cl8(c.r * k), cl8(c.g * k), cl8(c.b * k), c.a }; };
+    // a rect in door metres, shaded per pixel: f(x, y, u, v) with u, v 0..1 across it (v down)
+    auto fill = [&](float x0, float y0, float x1, float y1, auto &&f) {
+        float fx0 = pxOf(x0), fx1 = pxOf(x1), fy0 = pyOf(y1), fy1 = pyOf(y0);
+        for (int y = (int)floorf(fy0); y < (int)ceilf(fy1); y++)
+            for (int x = (int)floorf(fx0); x < (int)ceilf(fx1); x++)
+                put(x, y, f(x, y, (x + 0.5f - fx0) / (fx1 - fx0), (y + 0.5f - fy0) / (fy1 - fy0)));
+    };
+    auto text = [&](const char *s, float cx, float y, float h, Color ink, float weight = 0.12f) {
+        // centred on cx (metres), cap top at y (metres)
+        printText(p, W, H, s, pxOf(cx) - printWidth(s, h) * 0.5f, pyOf(y), h, ink, weight);
+    };
+    auto frameRect = [&](float x0, float y0, float x1, float y1, float t, Color c) {   // t in metres, outside the rect
+        fill(x0 - t, y1, x1 + t, y1 + t, [&](int, int, float, float) { return c; });
+        fill(x0 - t, y0 - t, x1 + t, y0, [&](int, int, float, float) { return c; });
+        fill(x0 - t, y0, x0, y1, [&](int, int, float, float) { return c; });
+        fill(x1, y0, x1 + t, y1, [&](int, int, float, float) { return c; });
+    };
+
+    // -- the door: black powder coat, orange-peel texture, the folded edge
+    // catching the light, and dirt that thickens toward the floor
+    const Color coat = { 46, 48, 53, OP };
+    fill(-VEND_HW, VEND_Y0, VEND_HW, VEND_Y1, [&](int x, int y, float u, float v) {
+        float k = 0.94f + 0.08f * fbm2(x * 0.35f, y * 0.35f, 0x7E1u, 2);
+        float y_m = VEND_Y1 - v * (VEND_Y1 - VEND_Y0);
+        k *= 0.84f + 0.16f * sstepT(0.06f, 0.45f, y_m);
+        int ex = std::min(x - X0, X0 + PW - 1 - x), ey = std::min(y - Y0, Y0 + PH - 1 - y);
+        if (std::min(ex, ey) < 2) k *= 1.40f;
+        (void)u;
+        return scale(coat, k);
+    });
+    // rubber gaskets round the two openings
+    const Color gasket = { 16, 16, 18, OP };
+    frameRect(VEND_WIN.x0, VEND_WIN.y0, VEND_WIN.x1, VEND_WIN.y1, 0.010f, gasket);
+    frameRect(VEND_BIN.x0, VEND_BIN.y0, VEND_BIN.x1, VEND_BIN.y1, 0.008f, gasket);
+
+    // -- the header: a sheet of backlit acrylic in a bright bezel
+    {
+        const float x0 = VEND_HEADER.x0 + 0.018f, x1 = VEND_HEADER.x1 - 0.018f;
+        const float y0 = VEND_HEADER.y0 + 0.016f, y1 = VEND_HEADER.y1 - 0.014f;
+        frameRect(x0, y0, x1, y1, 0.005f, Color{ 150, 152, 156, OP });
+        const Color brown = { 94, 60, 38, OP };
+        fill(x0, y0, x1, y1, [&](int, int, float u, float v) {
+            float k = 0.90f + 0.10f * sinf(u * 3.14159f) + 0.04f * (1.0f - v);   // brightest over the tube
+            if (v < 0.10f || v > 0.90f) return brown;
+            if (v < 0.14f || v > 0.86f) return Color{ 196, 156, 86, OP };       // gold hairline, as on the can
+            return scale(Color{ 244, 236, 212, OP }, k);
+        });
+        text("ALMOND WATER", 0.02f, y1 - 0.024f, 15, brown, 0.11f);
+        for (int s = -1; s <= 1; s += 2) {                    // an almond each side of the name
+            float cx = pxOf(s * 0.345f), cy = pyOf((y0 + y1) * 0.5f);
+            for (int y = -8; y <= 8; y++) for (int x = -6; x <= 6; x++) {
+                float t = (y + 8) / 16.0f, hw = 5.2f * sinf(powf(t, 0.72f) * 3.0f);
+                float e = fabsf(x) / (hw + 0.01f);
+                if (e > 1.0f) continue;
+                mix((int)cx + x, (int)cy + y, e > 0.75f ? brown : scale(Color{ 200, 150, 98, OP }, 1.05f - 0.25f * t), 1);
+            }
+        }
+    }
+
+    // -- the back of the cabinet, seen through the glass: white, lit by a tube
+    // down the left and one across the top, six trays of spirals
+    {
+        const VendRect &w = VEND_WIN;
+        fill(w.x0, w.y0, w.x1, w.y1, [&](int x, int y, float u, float v) {
+            // dark grey, as they are, so the cans stand out against it
+            float k = 0.62f + 0.40f * expf(-u * 5.0f) + 0.22f * expf(-v * 6.0f);
+            k *= 0.97f + 0.05f * lat(x, y >> 1, 0x7E2u);
+            return scale(Color{ 92, 96, 100, OP }, k);
+        });
+        const float pitch = (w.x1 - w.x0) / VEND_COLS;
+        for (int r = 0; r < VEND_ROWS; r++) {
+            float yr = VEND_ROW0 + r * VEND_ROWP;
+            // the tray and the shadow the shelf above throws down the back
+            fill(w.x0, yr - 0.035f, w.x1, yr + 0.004f, [&](int x, int y, float, float v) {
+                return scale(Color{ 78, 80, 84, OP }, 0.8f + 0.3f * v + 0.04f * lat(x, y, 0x7E3u));
+            });
+            float top = std::min(yr + VEND_ROWP - 0.035f, w.y1);
+            fill(w.x0, top - 0.045f, w.x1, top, [&](int x, int y, float, float v) {
+                Color &d = p[y * W + x];
+                return scale(d, 0.62f + 0.38f * v);
+            });
+            for (int c = 1; c < VEND_COLS; c++) {                // the dividers between spirals
+                float dx = w.x0 + c * pitch;
+                fill(dx - 0.0025f, yr, dx + 0.0025f, yr + 0.13f, [&](int x, int y, float, float) {
+                    return scale(p[y * W + x], 0.72f);
+                });
+            }
+            for (int c = 0; c < VEND_COLS; c++) {
+                uint32_t e = ih(r, c, 0x7E4u);
+                float cx = w.x0 + (c + 0.5f) * pitch;
+                bool stuck = (r == 3 && c == 1);                  // hung up on the spiral, forever
+                bool empty = !stuck && e % 6 == 0;
+                if (!empty) {
+                    // A can front-on, drawn in its own frame so the stuck one can lean
+                    float ang = stuck ? 0.30f : 0.0f;
+                    float cw = 0.066f * PPM, ch = 0.122f * PPM;
+                    float bx = pxOf(cx), by = pyOf(yr + 0.006f + (stuck ? 0.03f : 0.0f));   // bottom centre
+                    float ca = cosf(ang), sa = sinf(ang);
+                    for (int y = (int)(by - ch - 6); y <= (int)by + 6; y++)
+                        for (int x = (int)(bx - ch); x <= (int)(bx + ch); x++) {
+                            float dx = x + 0.5f - bx, dy = y + 0.5f - by;
+                            float lx = dx * ca + dy * sa, ly = -dx * sa + dy * ca;   // ly: up is negative
+                            float s = lx / (cw * 0.5f), t = -ly / ch;                 // s -1..1 across, t 0..1 up
+                            if (fabsf(s) > 1.0f || t < 0.0f || t > 1.0f) continue;
+                            // round the rims a little
+                            if ((t < 0.03f || t > 0.97f) && fabsf(s) > 0.86f) continue;
+                            Color c;
+                            if (t < 0.07f || t > 0.90f) c = { 196, 199, 206, OP };           // drawn aluminium
+                            else if ((t > 0.17f && t < 0.20f) || (t > 0.80f && t < 0.83f)) c = { 74, 50, 33, OP };
+                            else {
+                                c = { 244, 238, 222, OP };
+                                // the almond, and the name under it as two brown dashes
+                                float ax = s * 0.5f, ay = (t - 0.56f) * 1.5f;
+                                if (ax * ax * 5.0f + ay * ay * 3.2f < 0.06f) c = { 190, 142, 94, OP };
+                                if (fabsf(s) < 0.62f && ((t > 0.27f && t < 0.31f) || (t > 0.34f && t < 0.37f)))
+                                    c = { 104, 74, 50, OP };
+                            }
+                            // a cylinder: dark at the sides, a highlight a third across
+                            float sh = 0.55f + 0.45f * sqrtf(std::max(0.0f, 1.0f - s * s));
+                            sh += 0.35f * expf(-(s + 0.35f) * (s + 0.35f) * 30.0f);
+                            put(x, y, scale(c, sh));
+                        }
+                }
+                // The front turn of the spiral, round whatever it holds (or
+                // held). An empty one shows the turns behind it too, smaller
+                // and dimmer as they go back into the cabinet.
+                for (int turn = empty ? 3 : 0; turn >= 0; turn--) {
+                    float sc = 1.0f - 0.13f * turn, dim = 1.0f - 0.2f * turn;
+                    float rr = 0.047f * PPM * sc, ccx = pxOf(cx), ccy = pyOf(yr + 0.049f * sc + 0.004f * turn);
+                    for (int y = (int)(ccy - rr - 2); y <= (int)(ccy + rr + 2); y++)
+                        for (int x = (int)(ccx - rr - 2); x <= (int)(ccx + rr + 2); x++) {
+                            float dx = x + 0.5f - ccx, dy = y + 0.5f - ccy;
+                            float d = fabsf(sqrtf(dx * dx + dy * dy) - rr);
+                            if (d > 1.3f) continue;
+                            // wire: bright where it faces up into the light, dark underneath
+                            float lit = (0.62f + 0.5f * (-dy / rr)) * dim;
+                            mix(x, y, scale(Color{ 188, 190, 196, OP }, std::max(0.30f, lit)), 1.3f - d);
+                        }
+                }
+            }
+        }
+    }
+
+    // -- the push flap: smoked plastic on a hinge, scuffed where hands go
+    {
+        const VendRect &b = VEND_BIN;
+        fill(b.x0, b.y0, b.x1, b.y1, [&](int x, int y, float, float v) {
+            float k = 0.9f + 0.25f * (1.0f - v) + 0.05f * fbm2(x * 0.2f, y * 0.2f, 0x7E5u, 2);
+            if (v < 0.06f) k = 0.55f;                           // the hinge
+            return scale(Color{ 42, 44, 50, OP }, k);
+        });
+        text("PUSH", (b.x0 + b.x1) * 0.5f, b.y1 - 0.105f, 13, Color{ 84, 86, 94, OP }, 0.10f);
+    }
+
+    // -- the control column: brushed steel, and everything you touch on it
+    {
+        const float cx0 = 0.195f, cx1 = 0.425f, cmid = (cx0 + cx1) * 0.5f;
+        fill(cx0, 0.29f, cx1, 1.665f, [&](int x, int y, float u, float v) {
+            float brush = fbm2(x * 0.08f, y * 1.3f, 0x7E6u, 2);
+            float k = 0.86f + 0.16f * brush;
+            // finger smudges round the keypad and the coin slot
+            float sm = fbm2(x * 0.09f, y * 0.09f, 0x7E7u, 3);
+            if (v > 0.10f && v < 0.36f) k *= 1.0f - 0.10f * sstepT(0.5f, 0.75f, sm);
+            if (u < 0.03f || v < 0.004f) k *= 1.22f;           // top and left edges catch the light
+            if (u > 0.97f || v > 0.996f) k *= 0.62f;
+            return scale(Color{ 166, 168, 170, OP }, k);
+        });
+        text("SELECTION", cmid, 1.648f, 6, Color{ 40, 40, 44, OP });
+        // the display (VEND_DISP): LEDs behind smoked red
+        {
+            const VendRect &d = VEND_DISP;
+            fill(d.x0, d.y0, d.x1, d.y1, [&](int, int, float u, float v) {
+                if (u < 0.05f || u > 0.95f || v < 0.12f || v > 0.88f) return Color{ 18, 18, 20, OP };
+                return Color{ 30, 9, 8, OP };
+            });
+            text("INSERT 3", (d.x0 + d.x1) * 0.5f, d.y1 - 0.024f, 8, Color{ 255, 72, 40, OP }, 0.11f);
+        }
+        // keypad: letters for the shelf, digits for the spiral
+        const char *keys = "ABCDEF123456";
+        for (int k = 0; k < 12; k++) {
+            float kx = 0.245f + (k % 3) * 0.065f, ky = 1.465f - (k / 3) * 0.07f;
+            const float hs = 0.025f;
+            fill(kx - hs - 0.003f, ky - hs - 0.003f, kx + hs + 0.003f, ky + hs + 0.003f,
+                 [&](int, int, float, float) { return Color{ 60, 62, 66, OP }; });
+            fill(kx - hs, ky - hs, kx + hs, ky + hs, [&](int, int, float u, float v) {
+                float s = 0.92f + 0.10f * (1.0f - v);
+                if (u < 0.08f || v < 0.08f) s = 1.18f;
+                if (u > 0.92f || v > 0.92f) s = 0.62f;
+                return scale(Color{ 200, 202, 206, OP }, s);
+            });
+            char lab[2] = { keys[k], 0 };
+            text(lab, kx, ky + 0.013f, 7, Color{ 36, 36, 40, OP });
+        }
+        // the coin mech: a chromed escutcheon with its slot, and the return lever's recess
+        fill(0.325f, 1.065f, 0.405f, 1.175f, [&](int, int, float u, float v) {
+            float s = 1.0f + 0.25f * (1.0f - v) - 0.2f * u;
+            if (u < 0.06f || u > 0.94f || v < 0.05f || v > 0.95f) s *= 0.7f;
+            return scale(Color{ 196, 198, 202, OP }, s);
+        });
+        fill(0.362f, 1.095f, 0.368f, 1.150f, [&](int, int, float, float) { return Color{ 8, 8, 10, OP }; });
+        fill(0.225f, 1.080f, 0.295f, 1.135f, [&](int, int, float u, float v) {
+            float d = (u - 0.5f) * (u - 0.5f) + (v - 0.5f) * (v - 0.5f);
+            return d < 0.2f ? Color{ 22, 22, 24, OP } : Color{ 140, 142, 146, OP };
+        });
+        text("COINS", 0.365f, 1.058f, 4.5f, Color{ 40, 40, 44, OP });
+        // the note acceptor, taped over by someone who knew what it takes
+        fill(0.215f, 0.86f, 0.405f, 1.01f, [&](int, int, float u, float v) {
+            float s = 1.0f + 0.35f * (v < 0.06f ? 1.0f : 0.0f);
+            if (fabsf(v - 0.42f) < 0.035f && u > 0.10f && u < 0.90f) return Color{ 6, 6, 8, OP };
+            if (fabsf(v - 0.55f) < 0.03f && u > 0.18f && u < 0.82f && ((int)(u * 30) & 1))
+                return Color{ 70, 220, 96, OP };                // the little green arrows
+            return scale(Color{ 26, 26, 28, OP }, s);
+        });
+        fill(0.200f, 0.900f, 0.418f, 0.972f, [&](int x, int y, float u, float v) {
+            // masking tape, torn at both ends
+            float tear = 0.02f + 0.03f * lat(0, y, 0x7E8u);
+            if (u < tear || u > 1.0f - tear) return p[y * W + x];
+            float k = 0.94f + 0.06f * lat(x, y, 0x7E9u) - 0.05f * v;
+            return scale(Color{ 222, 205, 158, OP }, k);
+        });
+        text("DOUBLOONS", cmid, 0.962f, 6.5f, Color{ 34, 30, 44, OP }, 0.10f);
+        text("ONLY", cmid, 0.932f, 6.5f, Color{ 34, 30, 44, OP }, 0.10f);
+        // the instructions, and the lock
+        fill(0.212f, 0.64f, 0.408f, 0.82f, [&](int x, int y, float u, float v) {
+            float k = 0.95f + 0.05f * lat(x, y, 0x7EAu) - 0.08f * v * u;
+            return scale(Color{ 230, 228, 218, OP }, k);
+        });
+        text("1 INSERT COINS", cmid, 0.805f, 4.2f, Color{ 40, 40, 44, OP });
+        text("2 MAKE SELECTION", cmid, 0.775f, 4.2f, Color{ 40, 40, 44, OP });
+        text("3 TAKE PRODUCT", cmid, 0.745f, 4.2f, Color{ 40, 40, 44, OP });
+        text("EXACT CHANGE", cmid, 0.705f, 4.2f, Color{ 190, 30, 26, OP });
+        text("ONLY", cmid, 0.680f, 4.2f, Color{ 190, 30, 26, OP });
+        {
+            float lx = pxOf(0.395f), ly = pyOf(0.555f), rr = 0.019f * PPM;
+            for (int y = (int)(ly - rr - 1); y <= (int)(ly + rr + 1); y++)
+                for (int x = (int)(lx - rr - 1); x <= (int)(lx + rr + 1); x++) {
+                    float dx = x + 0.5f - lx, dy = y + 0.5f - ly, d = sqrtf(dx * dx + dy * dy);
+                    if (d > rr) continue;
+                    Color c = scale(Color{ 200, 202, 206, OP }, 1.1f - 0.4f * (dy + dx) / (2 * rr) - 0.2f * (d / rr));
+                    if (fabsf(dx) < 0.8f && fabsf(dy) < rr * 0.55f) c = { 20, 20, 22, OP };   // the keyway
+                    put(x, y, c);
+                }
+        }
+        // coin return cup: a chromed lip round a dark hole
+        text("COIN RETURN", 0.31f, 0.485f, 4.2f, Color{ 40, 40, 44, OP });
+        fill(0.235f, 0.33f, 0.385f, 0.46f, [&](int, int, float u, float v) {
+            if (u < 0.05f || u > 0.95f || v < 0.06f || v > 0.94f) return Color{ 190, 192, 196, OP };
+            return scale(Color{ 20, 20, 22, OP }, 0.6f + 0.8f * v);
+        });
+    }
+
+    // -- the sticker every one of them has, on the kick rail under the flap
+    {
+        const float x0 = -0.34f, x1 = -0.06f, y0 = 0.085f, y1 = 0.195f;
+        fill(x0, y0, x1, y1, [&](int x, int y, float u, float v) {
+            if (u < 0.025f || u > 0.975f || v < 0.06f || v > 0.94f) return Color{ 24, 22, 20, OP };
+            float k = 0.92f + 0.06f * lat(x, y, 0x7EBu) - 0.10f * v;
+            return scale(Color{ 232, 192, 44, OP }, k);
+        });
+        const Color ink = { 22, 20, 18, OP };
+        text("WARNING", (x0 + x1) * 0.5f, 0.182f, 8, ink, 0.12f);
+        text("DO NOT ROCK OR TILT", (x0 + x1) * 0.5f, 0.139f, 4.4f, ink);
+        text("MACHINE MAY FALL", (x0 + x1) * 0.5f, 0.115f, 4.4f, ink);
+    }
+
+    // -- kick marks along the bottom, and grime over the lot
+    Rng kr(0x7ECULL);
+    for (int i = 0; i < 26; i++) {
+        float sx = pxOf(-0.42f + kr.f01() * 0.60f), sy = pyOf(0.07f + kr.f01() * 0.13f);
+        float len = 3 + kr.f01() * 10, ang = (kr.f01() - 0.5f) * 0.6f;
+        for (int t = 0; t < (int)len; t++)
+            mix((int)(sx + cosf(ang) * t), (int)(sy + sinf(ang) * t), Color{ 120, 118, 112, OP }, 0.5f);
+    }
+    for (int y = Y0; y < Y0 + PH; y++) for (int x = X0; x < X0 + PW; x++) {
+        Color &c = p[y * W + x];
+        float g = 1.0f - 0.10f * fbm2(x * 0.05f, y * 0.05f, 0x7EDu, 3);
+        c = { cl8(c.r * g), cl8(c.g * g), cl8(c.b * g), OP };
+    }
+
+    // -- the price strips clipped into each shelf's front lip, top shelf A
+    for (int r = 0; r < VEND_ROWS; r++) {
+        const int sx = VEND_STRIP_PX[0], sy = VEND_STRIP_PX[1] + r * 12, sw = VEND_STRIP_PX[2], sh = VEND_STRIP_PX[3];
+        for (int y = sy; y < sy + sh; y++) for (int x = sx; x < sx + sw; x++)
+            p[y * W + x] = { 44, 46, 50, OP };
+        for (int y = sy; y < sy + sh; y++) { p[y * W + sx] = { 30, 30, 32, OP }; p[y * W + sx + sw - 1] = { 30, 30, 32, OP }; }
+        for (int x = sx; x < sx + sw; x++) p[sy * W + x] = { 150, 152, 156, OP };   // the lip's bright edge
+        for (int c = 0; c < VEND_COLS; c++) {
+            int tcx = sx + (int)((c + 0.5f) * sw / VEND_COLS);
+            for (int y = sy + 2; y < sy + sh - 1; y++) for (int x = tcx - 14; x < tcx + 14; x++)
+                p[y * W + x] = { 234, 232, 224, OP };
+            char lab[3] = { (char)('A' + (VEND_ROWS - 1 - r)), (char)('1' + c), 0 };
+            printText(p, W, H, lab, tcx - 12, sy + 3, 5, Color{ 30, 30, 34, OP }, 0.13f);
+            printText(p, W, H, "3", tcx + 7, sy + 3, 5, Color{ 196, 28, 24, OP }, 0.13f);
+        }
+    }
+}
+
+static const int FIXPX[FIX_COUNT][4] = {   // x, y, w, h in the atlas (the fittings keep its left half)
     {   8,   8,  96, 152 },   // FIX_OUTLET        75 x 118 mm
     { 120,   8,  96, 152 },   // FIX_OUTLET_BROKEN
     { 232,   8,  92, 148 },   // FIX_SWITCH        72 x 115 mm
@@ -741,20 +1066,20 @@ static const int FIXPX[FIX_COUNT][4] = {   // x, y, w, h in the 512px atlas
     { 336,   8, 104, 148 },   // FIX_NOTE          A5, 148 x 210 mm
 };
 const FixtureRect FIXTURES[FIX_COUNT] = {
-    { 8/512.f,     8/512.f, 104/512.f, 160/512.f, 0.0375f, 0.059f  },
-    { 120/512.f,   8/512.f, 216/512.f, 160/512.f, 0.0375f, 0.059f  },
-    { 232/512.f,   8/512.f, 324/512.f, 156/512.f, 0.036f,  0.0575f },
-    { 8/512.f,   168/512.f, 232/512.f, 328/512.f, 0.280f,  0.200f  },
-    { 296/512.f, 176/512.f, 488/512.f, 368/512.f, 0.300f,  0.300f  },
-    { 280/512.f, 400/512.f, 504/512.f, 480/512.f, 0.280f,  0.100f  },
+    { 8/1024.f,     8/512.f, 104/1024.f, 160/512.f, 0.0375f, 0.059f  },
+    { 120/1024.f,   8/512.f, 216/1024.f, 160/512.f, 0.0375f, 0.059f  },
+    { 232/1024.f,   8/512.f, 324/1024.f, 156/512.f, 0.036f,  0.0575f },
+    { 8/1024.f,   168/512.f, 232/1024.f, 328/512.f, 0.280f,  0.200f  },
+    { 296/1024.f, 176/512.f, 488/1024.f, 368/512.f, 0.300f,  0.300f  },
+    { 280/1024.f, 400/512.f, 504/1024.f, 480/512.f, 0.280f,  0.100f  },
     // inset half a texel: these are tiled edge to edge, and bilinear filtering
     // would otherwise pull the neighbouring cell into every seam
-    { 8.5f/512.f, 336.5f/512.f, 135.5f/512.f, 463.5f/512.f, 0.250f, 0.250f },
-    { 336/512.f,   8/512.f, 440/512.f, 156/512.f, 0.074f,  0.105f  },
+    { 8.5f/1024.f, 336.5f/512.f, 135.5f/1024.f, 463.5f/512.f, 0.250f, 0.250f },
+    { 336/1024.f,   8/512.f, 440/1024.f, 156/512.f, 0.074f,  0.105f  },
 };
 
 Texture2D makeFixturesTex() {
-    const int W = 512, H = 512;
+    const int W = FIX_ATLAS_W, H = FIX_ATLAS_H;
     Image img = GenImageColor(W, H, BLANK);
     Color *p = (Color *)img.data;
     auto box = [&](int x0, int y0, int x1, int y1, Color c) {
@@ -986,14 +1311,17 @@ Texture2D makeFixturesTex() {
     // for the same reason. Two atlases agreeing on where "plain metal" lives is
     // what lets the conduit and sprinkler bodies — geometry, not decals — go
     // through the same helper as everything else. Move it and they sample a
-    // transparent cell and vanish without a word.
+    // transparent cell and vanish without a word. The atlas doubled in width
+    // for the vending machine, which moved that UV from pixel (192, 384) to
+    // (384, 384): the strip between the diffuser and the exit sign.
     {
-        int ox = 144, oy = 336;                       // 128 px square, contains (192, 384)
-        for (int y = oy; y < oy + 128; y++) for (int x = ox; x < ox + 128; x++) {
+        const int ox = 300, oy = 371, w = 180, h = 26;   // contains (384, 384), 12 px clear each way
+        for (int y = oy; y < oy + h; y++) for (int x = ox; x < ox + w; x++) {
             float v = 0.88f + 0.24f * fbm2(x * 0.11f, y * 0.11f, 0x5Eu, 3);
             p[y * W + x] = { cl8(150 * v), cl8(150 * v), cl8(146 * v), OP };
         }
     }
+    drawVendingFront(p, W, H);
     return finishTexture(img, false);
 }
 

@@ -689,6 +689,13 @@ void main(){
         // detail alpha (128 = none, 188 = metal); the importer stored metal
         // albedo at 0.35 of its value, hence the 2.6.
         col = texel.rgb * fragC.rgb * roomLight(fragPos, Nb);
+        // Backlit print (vertex alpha 240): a vending machine's header, display,
+        // price strips and the cabinet behind its glass, lit from inside by its
+        // own tubes as well as by the room, so it glows in a blackout. A band on
+        // the alpha rather than a branch: arithmetic only, see lightState.
+        float backlit = step(0.93, fragC.a) * step(fragC.a, 0.955);
+        col += texel.rgb * fragC.rgb * (0.62 * backlit);
+        gLightLum = max(gLightLum, 0.8 * backlit);   // the fog takes its brightness from this
         // Only the held revolver has metal, so only its draw pays for this: a
         // uniform branch, the same for every fragment of a draw — not the
         // divergent kind (inside, it stays arithmetic).
@@ -721,7 +728,7 @@ void main(){
             col *= mix(vec3(1),vec3(0.32,0.77,0.68),1.0-exp(-depth*0.32));
             col += vec3(0.12,0.24,0.19)*caustic*exp(-depth*0.22)*clamp(gLightLum,0.0,1.0);
         }
-        aOut = fragC.a * texel.a;                    // translucent contact shadows + scrawl decals
+        aOut = max(fragC.a * texel.a, backlit);      // translucent contact shadows + scrawl decals
         if (noclip){
             // Reality is thin here, and the torn bands show what is behind
             // it: a flat, over-bright nothing on an ordinary exit, and on a
