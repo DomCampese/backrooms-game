@@ -18,8 +18,8 @@ ifeq ($(UNAME_S),Linux)
   LIBS_RL += -lm -ldl -lpthread
 endif
 
-SRCS := $(wildcard src/*.cpp)
-HDRS := $(wildcard src/*.h)
+SRCS := $(wildcard src/*.cpp src/sim/*.cpp)
+HDRS := $(wildcard src/*.h src/sim/*.h)
 
 src/object_materials.generated.h: tools/embed-materials.py $(wildcard assets/materials/*.jpg)
 	python3 tools/embed-materials.py objects

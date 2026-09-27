@@ -44,7 +44,7 @@ build_texdump() {
 build_game() {
     rm -f backrooms
     python3 tools/embed-materials.py
-    c++ "${FLAGS[@]}" src/*.cpp -o backrooms "${LINK[@]}"
+    c++ "${FLAGS[@]}" src/*.cpp src/sim/*.cpp -o backrooms "${LINK[@]}"
     echo "built ./backrooms (python$PYV)"
 }
 

@@ -40,7 +40,7 @@ rm -f "$OUT/index.html" "$OUT/index.js" "$OUT/index.wasm"
 em++ -std=c++17 -O2 -DPLATFORM_WEB \
     -Wall -Wno-missing-field-initializers \
     -I"$RAYLIB_SRC" \
-    src/*.cpp "$RAYLIB_SRC/libraylib.a" \
+    src/*.cpp src/sim/*.cpp "$RAYLIB_SRC/libraylib.a" \
     -o "$OUT/index.html" \
     --shell-file web/shell.html \
     -sUSE_GLFW=3 \
