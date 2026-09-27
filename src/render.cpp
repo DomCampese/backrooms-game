@@ -102,6 +102,14 @@ void Game::renderScene(double now) {
     cam.fovy = fov;
     cam.projection = CAMERA_PERSPECTIVE;
 
+    // Kept for the post pass: its AO reconstructs positions from depth with
+    // these, and its motion blur reprojects into last frame's camera.
+    sceneView = MatrixLookAt(cam.position, cam.target, cam.up);
+    sceneProj = MatrixPerspective(cam.fovy * DEG2RAD, (double)rt.texture.width / rt.texture.height,
+                                  rlGetCullDistanceNear(), rlGetCullDistanceFar());
+    sceneCamPos = cam.position;
+    sceneTanV = tanf(cam.fovy * DEG2RAD * 0.5f);
+
     float timeF = (float)now;
     Vector3 viewPos = cam.position;
     SetShaderValue(worldShader, locTime, &timeF, SHADER_UNIFORM_FLOAT);
@@ -795,6 +803,38 @@ void Game::renderUI(double now) {
     // ---- post + UI
     float timeF = (float)now;
     double elapsed = now - runStart;
+    float fxOn = depthTex ? 1.0f : 0.0f;
+    Vector2 nf = { (float)rlGetCullDistanceNear(), (float)rlGetCullDistanceFar() };
+    Vector2 tans = { sceneTanV * rt.texture.width / rt.texture.height, sceneTanV };
+    Vector2 aoSize = { (float)aoRT.texture.width, (float)aoRT.texture.height };
+    if (depthTex) {
+        // Half-res obscurance from the scene's depth (AO_FS). Drawn with the
+        // same flipped source as the composite so nothing about orientation
+        // differs between the two targets; AO_FS indexes by gl_FragCoord anyway.
+        Vector2 full = { (float)rt.texture.width, (float)rt.texture.height };
+        BeginTextureMode(aoRT);
+        ClearBackground(WHITE);
+        BeginShaderMode(aoShader);
+        SetShaderValue(aoShader, locANF, &nf, SHADER_UNIFORM_VEC2);
+        SetShaderValue(aoShader, locATan, &tans, SHADER_UNIFORM_VEC2);
+        SetShaderValue(aoShader, locASize, &aoSize, SHADER_UNIFORM_VEC2);
+        SetShaderValue(aoShader, locAFull, &full, SHADER_UNIFORM_VEC2);
+        DrawTexturePro(rt.depth, { 0, 0, full.x, -full.y }, { 0, 0, aoSize.x, aoSize.y }, { 0, 0 }, 0, WHITE);
+        EndShaderMode();
+        EndTextureMode();
+    }
+    // This frame's view space to last frame's clip space. A cut — a level
+    // change, a storey rebasing the eye by a whole pitch, a respawn — is not
+    // motion: reproject onto this frame instead and nothing smears.
+    bool cut = !prevCamValid || Vector3Distance(prevCamPos, sceneCamPos) > 1.0f;
+    Matrix reproj = MatrixMultiply(MatrixMultiply(MatrixInvert(sceneView), cut ? sceneView : prevView),
+                                   cut ? sceneProj : prevProj);
+    // A 1/60 s shutter, whatever the frame rate: at 30 fps half of each
+    // frame's motion, at 144 about two frames' worth.
+    float shutter = clampf((1.0f / 60.0f) / fmaxf(GetFrameTime(), 1e-3f), 0.0f, 2.0f);
+    prevView = sceneView; prevProj = sceneProj; prevCamPos = sceneCamPos; prevCamValid = true;
+    float fogDen = LEVELS[level].fogDen;
+
     BeginDrawing();
     ClearBackground(BLACK);
     SetShaderValue(postShader, locPTime, &timeF, SHADER_UNIFORM_FLOAT);
@@ -803,6 +843,22 @@ void Game::renderUI(double now) {
     SetShaderValue(postShader,locPWater,&submerged,SHADER_UNIFORM_FLOAT);
     SetShaderValue(postShader, locPMigraine, &migraine, SHADER_UNIFORM_FLOAT);
     BeginShaderMode(postShader);
+    SetShaderValue(postShader, locPFx, &fxOn, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(postShader, locPNF, &nf, SHADER_UNIFORM_VEC2);
+    SetShaderValue(postShader, locPTan, &tans, SHADER_UNIFORM_VEC2);
+    SetShaderValue(postShader, locPAOSize, &aoSize, SHADER_UNIFORM_VEC2);
+    SetShaderValue(postShader, locPShutter, &shutter, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(postShader, locPFogDen, &fogDen, SHADER_UNIFORM_FLOAT);
+    SetShaderValueMatrix(postShader, locPReproj, reproj);
+    // Samplers after BeginShaderMode: a shader switch flushes the batch, and
+    // the flush clears the texture slots these claim.
+    if (depthTex) {
+        SetShaderValueTexture(postShader, locPDepth, rt.depth);
+        SetShaderValueTexture(postShader, locPAO, aoRT.texture);
+    } else {   // bound to something real either way; uFx = 0 ignores them
+        SetShaderValueTexture(postShader, locPDepth, rt.texture);
+        SetShaderValueTexture(postShader, locPAO, rt.texture);
+    }
     DrawTextureRec(rt.texture, { 0, 0, (float)rt.texture.width, -(float)rt.texture.height }, { 0, 0 }, WHITE);
     EndShaderMode();
     if (cleanShot && !inMenu) { EndDrawing(); return; }

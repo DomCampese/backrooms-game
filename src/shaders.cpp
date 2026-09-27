@@ -753,13 +753,100 @@ void main(){
 }
 )GLSL";
 
+// Screen-space ambient occlusion, at half resolution, from the scene's depth
+// texture. The world shader's light is a sum of ceiling fittings with 2D
+// shadows: nothing in it darkens the crease where a wall meets the carpet, the
+// underside of a carton or the gap behind a door leaf, and those are most of
+// what makes a photograph of a room read as solid rather than as a model. This
+// is the Scalable Ambient Obscurance estimator (McGuire et al. 2012): a
+// spiral of taps in a world-space disc, each weighted by how far it rises
+// above the surface's own plane.
+//
+// It indexes the depth by gl_FragCoord, not fragTexCoord, so its output lands
+// in the same texel rows as the scene target however the quad was flipped;
+// the composite then reads it at the colour's own uv. R is the obscurance, G
+// and B the linear depth (metres / 64) split across two bytes for the
+// composite's depth-aware blur.
+const char *AO_FS = GLSL_VERSION_HEADER R"GLSL(
+in vec2 fragTexCoord; in vec4 fragColor;
+uniform sampler2D texture0;      // scene depth (non-linear, 0..1)
+uniform vec2 uNF;                // near, far clip
+uniform vec2 uTan;               // tan of the half-FOV: horizontal, vertical
+uniform vec2 uSize;              // this (half-res) target, px
+uniform vec2 uFull;              // the depth texture, px
+out vec4 finalColor;
+float linZ(float d){ float z = d*2.0 - 1.0; return 2.0*uNF.x*uNF.y / (uNF.y + uNF.x - z*(uNF.y - uNF.x)); }
+// Every position is taken at a depth texel's own centre. This target's pixel
+// centres fall exactly on the boundary between two depth texels, and letting
+// the sampler round either way paired a depth from one row with the uv of the
+// other: on a floor seen at a glancing angle the reconstructed normal then
+// tilted in whole rows, and the carpet came out ruled with dark lines.
+vec2 snapUV(vec2 uv){ return (floor(uv * uFull) + 0.5) / uFull; }
+vec3 vpos(vec2 uv){ uv = snapUV(uv); float z = linZ(texture(texture0, uv).r); return vec3((uv*2.0 - 1.0)*uTan*z, -z); }
+void main(){
+    vec2 uv = snapUV(gl_FragCoord.xy / uSize);
+    float d = texture(texture0, uv).r;
+    float z = linZ(d);
+    float ao = 1.0;
+    // Sky/clear and the held viewmodel (inside 0.345 m, where collision
+    // keeps every wall out) take none. Both tests fold into one weight so the
+    // body below runs for every fragment: no early return in a shader ANGLE
+    // compiles (see "Desktop browser shader control flow").
+    float live = step(d, 0.99999) * step(0.345, z);
+    vec3 P = vec3((uv*2.0 - 1.0)*uTan*z, -z);
+    // Normal from depth: of the two neighbours on each axis take the nearer in
+    // depth, or a silhouette edge bends the normal round the corner and rims
+    // every doorway in a dark halo.
+    vec2 px = 1.0 / uFull * 2.0;
+    vec3 pr = vpos(uv + vec2(px.x, 0.0)), pl = vpos(uv - vec2(px.x, 0.0));
+    vec3 pu = vpos(uv + vec2(0.0, px.y)), pd = vpos(uv - vec2(0.0, px.y));
+    vec3 dx = abs(pr.z - P.z) < abs(P.z - pl.z) ? pr - P : P - pl;
+    vec3 dy = abs(pu.z - P.z) < abs(P.z - pd.z) ? pu - P : P - pd;
+    vec3 N = normalize(cross(dx, dy));
+    N *= -sign(dot(N, P) + 1e-6);   // face the eye
+    const float R = 0.45;           // metres: a skirting's reach, not a room's
+    const int NS = 12;
+    vec2 rUV = 0.5 * R / (z * uTan);
+    rUV *= min(1.0, 0.10 / max(rUV.x, rUV.y));   // held up close, cap the disc
+    // 4x4 interleaved rotation; the composite's 4x4 blur is its exact period.
+    const float BAYER[16] = float[16](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0,
+                                      3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
+    ivec2 ip = ivec2(gl_FragCoord.xy) & 3;
+    float phi = BAYER[ip.y * 4 + ip.x] / 16.0 * 6.2831853;
+    float sum = 0.0;
+    for (int i = 0; i < NS; i++) {
+        float a = (float(i) + 0.5) / float(NS);
+        float ang = a * 43.98 + phi;              // seven turns of the spiral
+        vec3 Q = vpos(uv + vec2(cos(ang), sin(ang)) * rUV * a);
+        vec3 v = Q - P;
+        float vv = dot(v, v);
+        float vn = dot(v, N);
+        float f = max(R*R - vv, 0.0);
+        sum += f*f*f * max((vn - 0.012*z) / (vv + 0.004), 0.0);
+    }
+    ao = max(0.0, 1.0 - sum * 5.0 * 0.8 / (R*R*R*R*R*R * float(NS)));
+    ao = mix(1.0, ao, live);
+    float zq = clamp(z / 64.0, 0.0, 1.0) * 255.0;
+    finalColor = vec4(ao, floor(zq) / 255.0, fract(zq), 1.0);
+}
+)GLSL";
+
 const char *POST_FS = GLSL_VERSION_HEADER R"GLSL(
 in vec2 fragTexCoord; in vec4 fragColor;
 uniform sampler2D texture0; uniform vec4 colDiffuse;
 uniform float uTime; uniform float uFear; uniform float uWater;
 uniform float uMigraine;   // Level 0's hum headache, 0..1 (Game::migraine)
+uniform sampler2D uDepthTex;     // scene depth (only meaningful while uFx is 1)
+uniform sampler2D uAOTex;        // AO_FS output, half res, point sampled
+uniform vec2 uAOSize;
+uniform vec2 uNF; uniform vec2 uTan;
+uniform mat4 uReproj;            // this frame's view space -> last frame's clip
+uniform float uShutter;          // blur length: a 1/60 s shutter over this frame's dt
+uniform float uFx;               // 1 = depth texture present, AO and blur on
+uniform float uFogDen;
 out vec4 finalColor;
 float hh(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)))*43758.5453); }
+float linZ(float d){ float z = d*2.0 - 1.0; return 2.0*uNF.x*uNF.y / (uNF.y + uNF.x - z*(uNF.y - uNF.x)); }
 void main(){
     vec2 uv = fragTexCoord;
     if (uWater > 0.0) {
@@ -780,6 +867,47 @@ void main(){
     c.r = texture(texture0, uv + dir*ca).r;
     c.g = texture(texture0, uv).g;
     c.b = texture(texture0, uv - dir*ca).b;
+    float z = linZ(texture(uDepthTex, uv).r);
+    float isWorld = uFx * step(0.345, z);   // not the held viewmodel, not without depth
+    // Camera motion blur. Reproject this pixel's surface into last frame's
+    // camera and smear along the difference, scaled to a 1/60 s shutter: a
+    // turn blurs the way a camcorder's frame does and standing still is sharp.
+    // Taps that land on the viewmodel are refused, or the gun smears into the
+    // corridor behind it. Arithmetic only: no branch on the velocity.
+    vec4 pc = uReproj * vec4((uv*2.0 - 1.0)*uTan*z, -z, 1.0);
+    vec2 prevUV = pc.xy / max(pc.w, 1e-4) * 0.5 + 0.5;
+    vec2 vel = (uv - prevUV) * uShutter * isWorld;
+    float vl = length(vel);
+    vel *= min(1.0, 0.035 / max(vl, 1e-6));
+    // Taps jittered per pixel: evenly spaced, a fast turn draws six sharp
+    // ghosts of every door frame instead of a smear.
+    float jit = hh(uv * vec2(911.0, 577.0) + fract(uTime)) - 0.5;
+    vec3 mb = c; float mw = 1.0;
+    for (int i = 0; i < 6; i++) {
+        vec2 tuv = uv + vel * ((float(i) + 0.5 + jit) / 6.0 - 0.5);
+        float tw = step(0.345, linZ(texture(uDepthTex, tuv).r));
+        mb += texture(texture0, tuv).rgb * tw; mw += tw;
+    }
+    c = mix(c, mb / mw, smoothstep(0.0006, 0.003, length(vel)));
+    // Ambient occlusion: a depth-aware 4x4 box over the half-res estimate,
+    // which is exactly the period of its interleaved rotation. Faded with the
+    // fog (distant creases are already lost in it) and off bright pixels,
+    // because AO stands for missing bounce light and a lit panel or a wall
+    // under a tube is dominated by the direct term.
+    vec2 base = uv * uAOSize - 1.5;
+    float aoS = 0.0, aoW = 0.0;
+    for (int j = 0; j < 4; j++) for (int i = 0; i < 4; i++) {
+        ivec2 t = clamp(ivec2(floor(base + vec2(float(i), float(j)) + 0.5)), ivec2(0), ivec2(uAOSize) - 1);
+        vec3 a = texelFetch(uAOTex, t, 0).rgb;
+        float za = (a.g + a.b / 255.0) * 64.0;
+        float e = (za - z) / (0.03 * z + 0.02);
+        float w = exp(-e * e) + 1e-4;
+        aoS += a.r * w; aoW += w;
+    }
+    float ao = aoS / max(aoW, 1e-5);
+    float lumC = dot(c, vec3(0.299, 0.587, 0.114));
+    float aoAmt = 0.8 * isWorld * exp(-uFogDen * z * 0.8) * (1.0 - smoothstep(0.55, 0.95, lumC));
+    c *= mix(1.0, ao, aoAmt);
     // Threshold each sample before filtering: averaging the room first erased
     // isolated lights while making whole bright walls glow. Twelve fixed taps,
     // down from twenty, keep the glow restrained and the image readable.

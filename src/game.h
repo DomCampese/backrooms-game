@@ -154,7 +154,7 @@ struct Game {
     Surface surfaces[SURF_COUNT]{};
     const Surface &surface(int slot);
     Texture2D neutralDetail{}, propDetail{};
-    Shader worldShader{}, postShader{};
+    Shader worldShader{}, postShader{}, aoShader{};
     int locTime = -1, locBlackout = -1, locViewPos = -1, locFlash = -1, locFlashDir = -1,
         locAmb = -1, locFogCol = -1, locFogDen = -1, locLightCol = -1, locLS = -1, locLY = -1,
         locDead = -1, locLightMul = -1, locFlarePos = -1, locFlareInt = -1, locGloss = -1,
@@ -162,6 +162,9 @@ struct Game {
         locVary = -1, locFaulty = -1, locWet = -1, locWetFrom = -1, locRoomMask = -1, locLamp = -1,
         locStoreyH = -1, locStorey = -1, locLampCol = -1, locMacro = -1, locBoard = -1, locObjRefl = -1, locDrawRel = -1;
     int locPTime = -1, locPFear = -1, locPWater = -1, locPMigraine = -1;
+    int locPDepth = -1, locPAO = -1, locPNF = -1, locPTan = -1, locPReproj = -1, locPShutter = -1,
+        locPFx = -1, locPFogDen = -1, locPAOSize = -1;
+    int locANF = -1, locATan = -1, locASize = -1, locAFull = -1;
     Material mats[MAT_COUNT]{};
     Sound steps[4]{}, sndNoclip{}, splashIn[3]{}, splashOut[3]{}, swimStrokes[4]{}, sndClick{}, sndScare{}, sndWin{},
           sndFlare{}, sndShot{}, sndHit{}, sndKill{}, sndPop{}, sndHeartbeat{}, sndTape{},
@@ -180,6 +183,21 @@ struct Game {
     World world;
     Rng grng{1};
     RenderTexture2D rt{};
+    // The scene target keeps its depth as a texture (loadSceneTargets), which
+    // is what the post pass reads for ambient occlusion and motion blur. If the
+    // driver will not build that framebuffer, rt falls back to raylib's own
+    // (depth in a renderbuffer) and depthTex stays false: no AO, no blur.
+    RenderTexture2D aoRT{};                   // half-res: AO in R, linear depth in GB
+    bool depthTex = false;
+    bool postFx = true;                       // BACKROOMS_POSTFX=0 turns AO and blur off (A/B)
+    void loadSceneTargets();
+    // Camera of the frame before, for the blur's reprojection.
+    Matrix prevView{}, prevProj{};
+    Vector3 prevCamPos{};
+    bool prevCamValid = false;
+    Matrix sceneView{}, sceneProj{};          // this frame's, written by renderScene
+    Vector3 sceneCamPos{};
+    float sceneTanV = 0.5f;
 
     // player
     float px = 0, pz = 0;

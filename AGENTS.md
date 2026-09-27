@@ -1,3 +1,47 @@
+# Depth-based post: ambient occlusion and motion blur (September 2026)
+
+The scene target now keeps its depth as a **texture** (`Game::loadSceneTargets`),
+and the post pass reads it for two things the world shader cannot do:
+
+- **Screen-space ambient occlusion** (`AO_FS`, Scalable Ambient Obscurance):
+  half resolution, 12 spiral taps in a 0.45 m world-space disc, a 4x4
+  interleaved rotation, and a depth-aware 4x4 box in the composite that is
+  exactly that rotation's period. It fills in what the 2D shadow march has
+  no term for: the wall-carpet crease, carton feet, column bases at the pool
+  edge. It fades with the level's fog and off bright pixels (AO stands in for
+  missing bounce light, which a lit panel is not short of).
+- **Camera motion blur**: each pixel's surface is reprojected into last frame's
+  camera and smeared along the difference, scaled to a 1/60 s shutter over the
+  real frame time. A jump of more than 1 m (a storey change, a level, a
+  respawn) is a cut and reprojects onto this frame, so nothing smears.
+
+What will bite:
+
+- **Positions must be taken at a depth texel's centre** (`snapUV`). The half-res
+  pixel centres land exactly on the boundary between two depth rows, and
+  letting the sampler round either way paired one row's depth with the other's
+  uv: the reconstructed normal tilted a whole row at a time and the floor came
+  out ruled with dark horizontal lines, denser toward the camera. They look
+  like depth-buffer precision; they are not (the linear depth is smooth).
+- **The held viewmodel is anything nearer than 0.345 m** — collision keeps
+  every wall further out than that. It takes no AO, has no velocity, and the
+  blur refuses taps that land on it; without that the gun smears into the
+  corridor behind it on every turn.
+- **Samplers after `BeginShaderMode`.** A shader switch flushes the batch and
+  the flush clears the texture slots `SetShaderValueTexture` claimed.
+- **Headless captures are not blurred** because the camera is still, and the
+  shutter term is tiny at the software rasteriser's frame time anyway. To see
+  the blur, fake last frame's camera (rotate `prevView` by a few hundredths of
+  a radian and force the shutter to 1) — that is how it was checked.
+- **A driver that will not build the depth-texture framebuffer** gets raylib's
+  ordinary target back, `depthTex` false and `uFx` 0: the post pass is exactly
+  what it was. `BACKROOMS_POSTFX=0` forces that path for A/B comparisons.
+- Cost on the software rasteriser, best-of-3: about +8% frame on Level 0.
+  Frame means move by about a unit of luma (the AO darkens creases), well
+  inside every `tools/sweep.sh` band.
+- AO_FS keeps the no-early-return rule from "Desktop browser shader control
+  flow": the sky and viewmodel tests are folded into a weight.
+
 # Surface and asset realism pass (September 2026)
 
 Every world surface was rebuilt in `src/surfaces.cpp`, and the held and loose
@@ -831,6 +875,7 @@ Environment variables, all read at startup:
 | `BACKROOMS_MENU=1` | hold on the title screen instead of starting the run |
 | `BACKROOMS_FLASH=1` | start with the flashlight on |
 | `BACKROOMS_MANILA=1` | put a Manila Room in the chunk east of spawn (centre x 48, z 16) |
+| `BACKROOMS_POSTFX=0` | no depth texture: the post pass without ambient occlusion or motion blur |
 
 **`BACKROOMS_NOENT` does not exist.** It appears in scratch scripts written
 during development and is silently ignored — it never suppressed the entity.

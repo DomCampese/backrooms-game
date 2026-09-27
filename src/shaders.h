@@ -5,3 +5,4 @@
 extern const char *WORLD_VS;
 extern const char *WORLD_FS;
 extern const char *POST_FS;
+extern const char *AO_FS;

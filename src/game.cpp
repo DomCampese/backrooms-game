@@ -144,6 +144,23 @@ void Game::init() {
     locPFear = GetShaderLocation(postShader, "uFear");
     locPWater = GetShaderLocation(postShader, "uWater");
     locPMigraine = GetShaderLocation(postShader, "uMigraine");
+    locPDepth = GetShaderLocation(postShader, "uDepthTex");
+    locPAO = GetShaderLocation(postShader, "uAOTex");
+    locPAOSize = GetShaderLocation(postShader, "uAOSize");
+    locPNF = GetShaderLocation(postShader, "uNF");
+    locPTan = GetShaderLocation(postShader, "uTan");
+    locPReproj = GetShaderLocation(postShader, "uReproj");
+    locPShutter = GetShaderLocation(postShader, "uShutter");
+    locPFx = GetShaderLocation(postShader, "uFx");
+    locPFogDen = GetShaderLocation(postShader, "uFogDen");
+    aoShader = LoadShaderFromMemory(NULL, AO_FS);
+    if (aoShader.id == rlGetShaderIdDefault())
+        TraceLog(LOG_ERROR, "AO shader failed to compile - see the SHADER lines above");
+    locANF = GetShaderLocation(aoShader, "uNF");
+    locATan = GetShaderLocation(aoShader, "uTan");
+    locASize = GetShaderLocation(aoShader, "uSize");
+    locAFull = GetShaderLocation(aoShader, "uFull");
+    if (const char *e = getenv("BACKROOMS_POSTFX")) postFx = atoi(e) != 0;
 
     texAO = makeAOStripTex();
     {   // light-occlusion grid: four bytes per cell (this storey, below, above,
@@ -242,8 +259,7 @@ void Game::init() {
     // frame must not open at the desktop's 70 and slide sideways out of the
     // keyhole over a quarter second.
     fov = baseFov();
-    rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
-    SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);   // post CA/bloom sample past the edges: clamp, don't wrap
+    loadSceneTargets();
 
     nextWhisper = runStart + 45 + grng.f01() * 60;
     snprintf(bestPath, sizeof(bestPath), "%s/.backrooms_best", getenv("HOME") ? getenv("HOME") : ".");
@@ -276,6 +292,48 @@ void Game::init() {
 
     inMenu = (shotPath == nullptr) || getenv("BACKROOMS_MENU") != nullptr;   // headless shots skip straight into the run
     if (!shotPath && !inMenu) DisableCursor();
+}
+
+// The scene target with its depth attached as a texture rather than raylib's
+// renderbuffer, so the post pass can read it (AO, motion blur); plus the
+// half-res AO target. A driver that refuses the framebuffer gets raylib's
+// ordinary target back and a post pass with those two switched off.
+void Game::loadSceneTargets() {
+    if (rt.id) UnloadRenderTexture(rt);
+    if (aoRT.id) UnloadRenderTexture(aoRT);
+    rt = {}; aoRT = {};
+    int w = GetScreenWidth(), h = GetScreenHeight();
+    depthTex = false;
+    if (postFx) {
+        RenderTexture2D t{};
+        t.id = rlLoadFramebuffer();
+        if (t.id) {
+            rlEnableFramebuffer(t.id);
+            t.texture.id = rlLoadTexture(NULL, w, h, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, 1);
+            t.texture.width = w; t.texture.height = h;
+            t.texture.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8; t.texture.mipmaps = 1;
+            t.depth.id = rlLoadTextureDepth(w, h, false);
+            t.depth.width = w; t.depth.height = h; t.depth.format = 19; t.depth.mipmaps = 1;
+            rlFramebufferAttach(t.id, t.texture.id, RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
+            rlFramebufferAttach(t.id, t.depth.id, RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_TEXTURE2D, 0);
+            bool ok = t.texture.id && t.depth.id && rlFramebufferComplete(t.id);
+            rlDisableFramebuffer();
+            if (ok) { rt = t; depthTex = true; }
+            else {
+                TraceLog(LOG_WARNING, "scene depth texture unavailable: AO and motion blur off");
+                UnloadRenderTexture(t);
+            }
+        }
+    }
+    if (!depthTex) rt = LoadRenderTexture(w, h);
+    SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);   // post CA/bloom sample past the edges: clamp, don't wrap
+    if (depthTex) {
+        SetTextureWrap(rt.depth, TEXTURE_WRAP_CLAMP);
+        aoRT = LoadRenderTexture((w + 1) / 2, (h + 1) / 2);
+        SetTextureFilter(aoRT.texture, TEXTURE_FILTER_POINT);   // GB is packed depth: never blend it
+        SetTextureWrap(aoRT.texture, TEXTURE_WRAP_CLAMP);
+    }
+    prevCamValid = false;
 }
 
 void Game::shutdown() {
@@ -874,9 +932,7 @@ bool Game::tick() {
     if (benchmark && frame > 60) frameSamples.push_back(GetFrameTime() * 1000.0f);
 
     if (IsWindowResized()) {
-        UnloadRenderTexture(rt);
-        rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
-        SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);   // post CA/bloom sample past the edges: clamp, don't wrap
+        loadSceneTargets();
         // Same reason as the init seed: turn the phone on its side mid-run and
         // the first frame at the new shape should already be framed for it.
         fov = baseFov();
