@@ -117,6 +117,42 @@ and need no runtime downloads. [Sources and licensing](assets/materials/README.m
 Python 3 is required at build time to embed them; no additional Python libraries
 are needed. See [validation](docs/object-realism-pass-two.md).
 
+## Surface realism pass
+
+Every floor, wall and ceiling is generated again from scratch, at its real size
+and with real relief:
+
+- **Relief is modelled, not guessed.** Each surface paints its colour, its
+  height in millimetres and its gloss together, so the printed chevrons on the
+  wallpaper stay flat while the roll seams lift, the ceiling grid stands proud
+  of fissured boards, mortar is raked back behind the brick and pool grout sits
+  below the glaze. The old bump maps were the colour's brightness, which
+  embossed every print and stain.
+- **Real dimensions.** Level 0's ceiling is 2 ft boards on a white T-bar grid,
+  with each light filling a 2x2 bay; the Red Halls are real-size brick (was
+  0.75 m blocks); the Poolrooms' tile is the same 6-inch tile on the walls as on
+  the floor, so the grout lines meet; the skirting is a 12 cm board, not a
+  27 cm band.
+- **No seams, no grid of repeats.** Every texture now wraps exactly (the old
+  ones had a visible seam every 2-3 m), and the shader varies tone in world
+  space so grime no longer repeats in a grid. Ceiling boards are each their own
+  shade, and a few are water-stained, different on every floor.
+- **Materials.** Formed concrete with plywood sheet marks, form-tie holes and
+  rust runs, a damp band at the foot, a power-trowelled slab with burnish swirls,
+  heathered loop-pile carpet, a patterned banquet carpet for LEVEL FUN.
+- **Objects.** Cartons are taped and printed like real shipping cases, with a
+  barcoded label; the almond water can and tape deck are redrawn at 3-4x the
+  resolution with clean printed lettering; outlets are real duplex receptacles;
+  the pack's hounds have an actual dog's anatomy.
+- **The revolver.** Its stainless steel now reflects the room — the ceiling and
+  its tubes along the top strap, the walls in the level's own colour down the
+  flats, the floor underneath — instead of shading as grey plastic, and it has
+  checkered walnut stocks where the source's grip was the same grey as the steel.
+
+Exposure is unchanged: every surface keeps its predecessor's mean brightness.
+`tools/sandbox-build.sh texdump && ./texdump out/` writes every texture to PNG
+with its mean colour.
+
 ## Graphics update
 
 The renderer now uses generated, mipmapped surface-detail maps, recessed fluorescent
@@ -173,7 +209,8 @@ make run
 | `src/world.*` | infinite maze: chunk generation, storeys and the stairs between them, mesh baking, collision, line of sight |
 | `src/levels.*` | per-level look/feel tables (fog, lights, palette) + exit rotation |
 | `src/entity.h` | the hunter's state — Clark, the Smiler or the Partygoer by level (the state machine runs in `Game::updateEntity`) |
-| `src/textures.*` | every surface, synthesized at startup |
+| `src/surfaces.cpp` | the floors, walls and ceilings: colour, height and gloss per surface, generated per level on first visit |
+| `src/textures.*` | sprites, decals, fixtures, props, the can and the tape deck, synthesized at startup |
 | `src/sfx.*` | one-shot sounds (footsteps, gunshot, splash, ...) |
 | `src/audio.*` | streaming ambience synth (hum, drone, room); water and LEVEL FUN music are recordings |
 | `src/shaders.*` | world + post-process GLSL |
@@ -531,7 +568,7 @@ With the F3 debug HUD open, dev hotkeys are live: `B` force blackout,
 - `BACKROOMS_MENU=1` — hold on the title screen (skips the auto-start; visual testing).
 - `BACKROOMS_EXITS=1` — exit doors everywhere (visual testing).
 - `BACKROOMS_MANILA=1` — a Manila Room in the chunk east of spawn, centred at x 48, z 16 (visual testing).
-- `BACKROOMS_POS="x,z,yaw"` — start at a specific spot (visual testing).
+- `BACKROOMS_POS="x,z,yaw[,pitch]"` — start at a specific spot and heading, optionally looking up (+) or down (-) by `pitch` radians (visual testing).
 - `BACKROOMS_LEVEL=n` — start on level n (visual testing).
 - `BACKROOMS_SEED=n` — fix the world seed (repeatable maze).
 - `BACKROOMS_STOREY=n` — start on storey n of Level 0 (0 is the floor you wake on).

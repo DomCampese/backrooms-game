@@ -30,7 +30,11 @@ for run in range(runs):
                            stderr=subprocess.STDOUT, text=True, timeout=180)
         wall = (time.perf_counter()-start)*1000
         (out / (name+".log")).write_text(p.stdout)
-        if p.returncode or re.search(r"SHADER: .*?(failed|error)|ERROR:", p.stdout, re.I):
+        # Case-insensitive for the shader message only. With re.I on the whole
+        # pattern, "ERROR:" matched GLFW's "error: XDG_RUNTIME_DIR is invalid"
+        # (and ALSA's noise), so every run in a sandbox died after one binary.
+        # raylib's own prefix is "ERROR:" in capitals, which is what to catch.
+        if p.returncode or re.search(r"(?i:SHADER: .*?(failed|error))|ERROR:", p.stdout):
             sys.exit(p.stdout)
         if not (out / (name+".png")).is_file():
             sys.exit(f"{name}: screenshot missing; inspect {out}")

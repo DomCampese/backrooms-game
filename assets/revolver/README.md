@@ -41,6 +41,21 @@ revolver-specific preparation recipe.
   metallic/roughness maps are embedded in the GLB; the reusable renderer adapter
   converts those maps to packed slope/gloss textures at load time.
 
+## Walnut stocks
+
+The source's grip panels are the same grey as its stainless steel, so in the hand
+the gun read as one grey object. `tools/revolver-finish.py` (Pillow only) recolours
+just the grip texels of the prepared GLB as checkered walnut, keeping each texel's
+stored shading, and marks the asset (`asset.extras.gripFinish`) so it runs once.
+Grip texels are those the source's own metallic map calls non-metal and its normal
+map places inside a UV island; the screw medallion stays steel. `import-revolver.py`
+runs it after writing a fresh GLB, so a reimport reproduces the committed asset.
+Normals, roughness, metalness, geometry and animation are unchanged.
+
+The steel's look in the game comes from the renderer reflecting the room off
+metal (detail-map alpha carries metalness; see the world shader), not from the
+albedo, which the importer darkens for metal.
+
 The standard GLB can be inspected in glTF-capable tools.
 Runtime uses Raylib's parser, with generic embedded-file packaging so it remains
 independent of its working directory. No Python or Blender runtime is required.

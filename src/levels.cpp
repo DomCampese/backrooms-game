@@ -51,6 +51,9 @@ const LevelCfg LEVELS[NLEVELS] = {
 };
 // where each level's exit door leads; the Red Halls and the party both dump you back at the start
 const int EXIT_NEXT[NLEVELS] = { 1, 2, 4, 0, 0 };
+// The Poolrooms are kept nearly uniform on purpose: new tile in a still hall.
+const float SURF_MACRO[NLEVELS] = { 0.05f, 0.08f, 0.015f, 0.07f, 0.06f };
+const float CEIL_BOARD[NLEVELS] = { 2.0f / 3.0f, 0.0f, 0.0f, 0.0f, 0.5f };
 
 // -------------------------------------------------- CPU-side light estimate
 // mirrors the shader's hash so billboard tinting matches the room lighting.

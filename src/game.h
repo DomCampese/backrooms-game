@@ -8,6 +8,7 @@
 #include "entity.h"
 #include "audio.h"
 #include "revolver.h"
+#include "textures.h"
 #include <cstdint>
 #include <unordered_set>
 #include <vector>
@@ -141,9 +142,17 @@ struct Game {
     std::vector<unsigned char> occBuf;
     int occOriginI = 0, occOriginK = 0;
     bool occValid = false;
-    Texture2D floorTexs[NLEVELS]{}, ceilTexs[NLEVELS]{}, wallTexs[NLEVELS]{};   // per-level surface sets
-    Texture2D floorDetails[NLEVELS]{}, ceilDetails[NLEVELS]{}, wallDetails[NLEVELS]{};
-    std::vector<Texture2D> surfaceDetails; // owns unique maps; levels may share them
+    // World surfaces (surfaces.cpp), each an albedo and its detail map, made
+    // the first time a level that uses one is entered: at the resolution they
+    // are now a level's set takes a few hundred milliseconds to generate, and
+    // only Level 0's is worth paying for before the first frame. Levels share
+    // some (the Red Halls reuse Level 1's slab; the Poolrooms' ceiling is its
+    // floor tile), so they are slots rather than a per-level array.
+    enum SurfSlot { SURF_CARPET, SURF_BOARDS, SURF_PAPER, SURF_SLAB, SURF_SOFFIT, SURF_CONCWALL,
+                    SURF_POOLFLOOR, SURF_POOLWALL, SURF_BRICK, SURF_BANQUET, SURF_PARTYCEIL,
+                    SURF_PARTYWALL, SURF_COUNT };
+    Surface surfaces[SURF_COUNT]{};
+    const Surface &surface(int slot);
     Texture2D neutralDetail{}, propDetail{};
     Shader worldShader{}, postShader{};
     int locTime = -1, locBlackout = -1, locViewPos = -1, locFlash = -1, locFlashDir = -1,
@@ -151,7 +160,7 @@ struct Game {
         locDead = -1, locLightMul = -1, locFlarePos = -1, locFlareInt = -1, locGloss = -1,
         locEntPos = -1, locEntDark = -1, locOccOrigin = -1, locOccN = -1, locEntBlock = -1,
         locVary = -1, locFaulty = -1, locWet = -1, locWetFrom = -1, locRoomMask = -1, locLamp = -1,
-        locStoreyH = -1, locStorey = -1, locLampCol = -1, locDrawRel = -1;
+        locStoreyH = -1, locStorey = -1, locLampCol = -1, locMacro = -1, locBoard = -1, locObjRefl = -1, locDrawRel = -1;
     int locPTime = -1, locPFear = -1, locPWater = -1, locPMigraine = -1;
     Material mats[MAT_COUNT]{};
     Sound steps[4]{}, sndNoclip{}, splashIn[3]{}, splashOut[3]{}, swimStrokes[4]{}, sndClick{}, sndScare{}, sndWin{},

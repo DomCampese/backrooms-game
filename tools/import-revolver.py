@@ -162,3 +162,7 @@ encoded=json.dumps(out,separators=(',',':')).encode();encoded+=b' '*((-len(encod
 glb=struct.pack('<III',0x46546c67,2,28+len(encoded)+len(binary))+struct.pack('<II',len(encoded),0x4e4f534a)+encoded+struct.pack('<II',len(binary),0x004e4942)+binary
 model_dir=dest.parent/'models';model_dir.mkdir(exist_ok=True);(model_dir/'revolver.glb').write_bytes(glb)
 print('Standard GLB:',len(glb),'bytes')
+# The walnut grip is a finishing step on the prepared GLB (Pillow only), kept
+# separate so it can be applied without the source archive; see its docstring.
+import runpy;sys.argv=[sys.argv[0],str(model_dir/'revolver.glb')]
+runpy.run_path(str(Path(__file__).with_name('revolver-finish.py')),run_name='__main__')

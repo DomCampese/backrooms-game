@@ -4,9 +4,14 @@
 #include <cmath>
 #include <algorithm>
 #include <cstring>
+#include <vector>
 
 // ---------------------------------------------------------------- textures
-static Texture2D finishTexture(Image img, bool tiled) {
+static inline float sstepT(float a, float b, float v) {
+    float t = clampf((v - a) / (b - a), 0.0f, 1.0f);
+    return t * t * (3 - 2 * t);
+}
+Texture2D finishTexture(Image img, bool tiled) {
     Texture2D t = LoadTextureFromImage(img);
     UnloadImage(img);
     if (tiled) {
@@ -20,138 +25,6 @@ static Texture2D finishTexture(Image img, bool tiled) {
         SetTextureWrap(t, TEXTURE_WRAP_REPEAT);
     } else SetTextureFilter(t, TEXTURE_FILTER_BILINEAR);
     return t;
-}
-
-// Level 0's wallpaper is the one in the photograph: vertical pinstripe bands,
-// a narrow ornamental scroll strip between them, and pairs of chevrons pointing
-// up the wall — the "90s chevron-styled" paper of the Oshkosh store the 2002
-// picture was taken in. The motif comes from Amini Allight's CC0 Backrooms
-// texture set (assets/materials/README.md), embedded as luminance only and
-// printed here in darker ochre ink over the game's own mono-yellow ground, so
-// the grime, damp, seams and skirting below are unchanged in kind.
-//
-// 1024 px for the 3 m the wall UVs span (addBoxSides maps x/3), and the 256 px
-// motif repeats exactly four times across it — a pattern whose period does
-// not divide the texture puts half a chevron down every seam in the building
-// (see AGENTS.md). The roll seams sit on the motif's own repeat, 0.75 m apart,
-// because that is where a paperhanger would butt two drops together.
-Texture2D makeWallpaperTex() {
-    const int W = 1024, H = 1024, M = 256;
-    Image motif = LoadImageFromMemory(".jpg", object_wallpaper, (int)sizeof(object_wallpaper));
-    ImageFormat(&motif, PIXELFORMAT_UNCOMPRESSED_GRAYSCALE);
-    ImageResize(&motif, M, M);
-    const unsigned char *mp = (const unsigned char *)motif.data;
-    Image img = GenImageColor(W, H, BLANK);
-    Color *p = (Color *)img.data;
-    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
-        float vy = (float)y / H;
-        // the print: light ground, darker ink wherever the motif is dark
-        float ink = 1.0f - mp[(y % M) * M + (x % M)] / 255.0f;
-        float hx = x * 0.5f, hy = y * 0.5f;      // the old 512 px noise scales
-        float grime = fbm2(hx * 0.013f, hy * 0.013f, 7u, 4);
-        float stain = fbm2(hx * 0.006f + 31.0f, hy * 0.006f, 12u, 4);
-        float base = (1.0f - 0.16f * grime) * (1.0f - 0.10f * vy);
-        if (stain > 0.62f) base *= 1.0f - (stain - 0.62f) * 0.8f;
-        // Wallpaper arrives on a roll and gets hung in strips, so there is a seam
-        // every so often — a hairline of shadow with a lifting edge beside it,
-        // and the two strips never quite match in tone. Without them a wall is
-        // one printed sheet a hundred metres long, which is the thing that most
-        // gives away that a corridor is generated rather than decorated.
-        int strip = x / M, sx = x % M;
-        base *= 1.0f + (lat(strip, 0, 15u) - 0.5f) * 0.030f;   // roll-to-roll tone drift
-        // A hairline, not a stripe. Anything stronger than this and the post
-        // pass's chromatic aberration picks the seam up and draws a coloured
-        // line down the wall at every one of them.
-        if (sx < 3) base *= 0.93f;                             // the seam itself
-        else if (sx < 17) base *= 0.985f + 0.015f * ((sx - 3) / 14.0f);
-        // mono-yellow ground, ochre-olive ink; the ink fades where the paper
-        // has yellowed hardest, which is what keeps it from reading as new
-        float r = 232 * base, g = 216 * base, b = 160 * base;
-        float k = ink * (0.50f - 0.18f * grime);
-        r = r * (1 - k) + 128 * base * k; g = g * (1 - k) + 112 * base * k; b = b * (1 - k) + 52 * base * k;
-        // damp creeping up from the skirting, worst in the corners of the roll
-        float damp = fbm2(hx * 0.017f, hy * 0.006f, 16u, 3) * (0.25f + 0.95f * vy * vy);
-        if (damp > 0.42f) {
-            float t = std::min(0.55f, (damp - 0.42f) * 1.7f);
-            r = r * (1 - t) + 96 * t; g = g * (1 - t) + 92 * t; b = b * (1 - t) + 58 * t;
-        }
-        if (y > H - 92) {                            // baseboard
-            float t = fbm2(hx * 0.02f, hy * 0.1f, 99u, 3);
-            r = 92 - 22 * t; g = 74 - 18 * t; b = 42 - 11 * t;
-            if (y < H - 80) { r *= 0.45f; g *= 0.45f; b *= 0.45f; }
-        }
-        p[y * W + x] = { cl8(r), cl8(g), cl8(b), 255 };
-    }
-    UnloadImage(motif);
-    return finishTexture(img, true);
-}
-
-Texture2D makeCarpetTex() {
-    const int W = 512, H = 512;
-    Image img = GenImageColor(W, H, BLANK);
-    Color *p = (Color *)img.data;
-    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
-        float n = lat(x, y, 5u) * 0.16f - 0.08f;
-        // Loop pile, not sand. Real contract carpet is rows of loops laid in one
-        // direction, and the give-away is that it is anisotropic: stretched along
-        // the run, tight across it. The old isotropic noise read as a flat dirty
-        // colour from any distance, which is the one thing carpet never does.
-        float fiber = (fbm2(x * 0.09f, y * 0.42f, 33u, 2) - 0.5f) * 0.17f;
-        float loop = sinf(y * 1.55f + vnoise2(x * 0.30f, y * 0.05f, 34u) * 3.4f);
-        float v = 1.0f + n + fiber + loop * 0.045f;
-        // Clean pile; rotten-floor geometry still supplies its damp tint.
-        p[y * W + x] = { cl8(166 * v), cl8(151 * v), cl8(116 * v), 255 };
-    }
-    return finishTexture(img, true);
-}
-
-Texture2D makeCeilingTex() {
-    const int W = 512, H = 512;
-    Image img = GenImageColor(W, H, BLANK);
-    Color *p = (Color *)img.data;
-    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
-        float v = 1.0f;
-        float sp = lat(x, y, 44u);
-        if (sp > 0.90f) v *= 0.80f;
-        if (sp > 0.985f) v *= 0.55f;
-        // Mineral-fibre board is not a flat surface with speckle on it: it is
-        // covered in wandering worm-track fissures, and it is the fissures your
-        // eye reads as "suspended ceiling" before it reads anything else. A
-        // narrow band of a warped noise field draws them; the pass either side
-        // of the band puts a lip on the near edge, which is what stops them
-        // looking like ink and starts them looking like grooves.
-        // Keep them fine. At a first pass these ran at a fifth of this frequency
-        // and four times this depth, and what came out was not fissured board but
-        // a ceiling covered in dark wandering water-trails.
-        float wob = fbm2(x * 0.14f, y * 0.14f, 61u, 2);
-        float fis = fbm2(x * 0.075f + wob * 0.9f, y * 0.048f - wob * 0.7f, 60u, 3);
-        float band = fabsf(fis - 0.5f);
-        if (band < 0.030f) v *= 0.84f + 0.16f * (band / 0.030f);     // the groove
-        else if (band < 0.055f) v *= 1.0f + 0.03f * (1.0f - band / 0.055f);   // its lit lip
-        // pinholes, punched in a loose scatter the way the real board is
-        uint32_t ph = ih(x >> 2, y >> 2, 62u);
-        if ((ph & 63u) == 0u) {
-            int cxp = (x >> 2 << 2) + 1 + (int)((ph >> 8) & 1u), cyp = (y >> 2 << 2) + 1 + (int)((ph >> 9) & 1u);
-            float dd = (float)((x - cxp) * (x - cxp) + (y - cyp) * (y - cyp));
-            if (dd < 2.2f) v *= 0.52f;
-        }
-        float r = 208 * v, g = 202 * v, b = 179 * v;
-        float stain = fbm2(x * 0.01f, y * 0.01f, 55u, 3);
-        if (stain > 0.64f) {
-            float t = std::min(0.6f, (stain - 0.64f) * 2.2f);
-            r = r * (1 - t) + 172 * t; g = g * (1 - t) + 150 * t; b = b * (1 - t) + 96 * t;
-        }
-        // Tile edges: a shadowed groove where two boards meet, then the chamfer
-        // on each board catching light. A single flat dark line read as a grid
-        // painted on one continuous sheet; the light side is what lifts each
-        // board off its neighbour and makes the grid look laid-in.
-        int bx = x % 256, by = y % 256;
-        int ex = std::min(bx, 255 - bx), ey = std::min(by, 255 - by), ed = std::min(ex, ey);
-        if (ed < 2) { r *= 0.50f; g *= 0.50f; b *= 0.50f; }
-        else if (ed < 7) { float t = (ed - 2) / 5.0f; float m = 0.74f + 0.34f * t; r *= m; g *= m; b *= m; }
-        p[y * W + x] = { cl8(r), cl8(g), cl8(b), 255 };
-    }
-    return finishTexture(img, true);
 }
 
 // A SMILER, as the lore has it: no body you can pin down, just a shape of
@@ -745,6 +618,63 @@ static float scrawlWidth(const char *text, float h) {
     return w;
 }
 
+// Printed lettering: the same glyph splines as the scrawl, drawn with an even
+// pen and no wobble, so they come out as a clean round-stroke sans. raylib's
+// own font is an 8 px bitmap; scaled onto a can label or a carton it is a
+// staircase, and nothing printed in a factory looks like that. `h` is the cap
+// height in pixels, `weight` the stroke half-width as a fraction of it.
+static float printWidth(const char *text, float h) {
+    float w = 0;
+    for (const char *c = text; *c; c++) w += (*c == ' ' ? 0.55f : *c == 'I' || *c == '1' ? 0.40f : 0.78f) * h;
+    return w;
+}
+static void printText(Color *p, int W, int H, const char *text, float x, float y, float h, Color ink,
+                      float weight = 0.075f, float track = 0.0f) {
+    // Rendered into a transparent scratch over the text's own box, then laid
+    // over the destination by coverage: inkDab composites onto transparency
+    // and leaves an opaque atlas untouched.
+    float rad = h * weight;
+    int bx0 = std::max(0, (int)(x - rad) - 2), by0 = std::max(0, (int)(y - rad) - 2);
+    int bx1 = std::min(W - 1, (int)(x + printWidth(text, h) + track * strlen(text) + rad) + 2);
+    int by1 = std::min(H - 1, (int)(y + h + rad) + 2);
+    if (bx1 <= bx0 || by1 <= by0) return;
+    int bw = bx1 - bx0 + 1, bh = by1 - by0 + 1;
+    std::vector<Color> tmp((size_t)bw * bh, BLANK);
+    Color solid = { ink.r, ink.g, ink.b, 255 };
+    for (const char *c = text; *c; c++) {
+        char ch = *c >= 'a' && *c <= 'z' ? (char)(*c - 32) : *c;
+        float adv = (ch == ' ' ? 0.55f : ch == 'I' || ch == '1' ? 0.40f : 0.78f) * h + track;
+        const Glyph *g = nullptr;
+        for (const Glyph &cand : GLYPHS) if (cand.ch == ch) { g = &cand; break; }
+        if (g) {
+            float ox = x + (ch == 'I' || ch == '1' ? -0.12f * h : 0.0f);
+            for (int si = 0; si < 3 && g->stroke[si]; si++) {
+                const char *sp = g->stroke[si];
+                int n = std::min(16, (int)(strlen(sp) / 2));
+                float cxs[16], cys[16];
+                for (int k = 0; k < n; k++) {
+                    cxs[k] = ox + (sp[k * 2] - '0') / 9.0f * h * 0.62f - bx0;
+                    cys[k] = y + (sp[k * 2 + 1] - '0') / 9.0f * h - by0;
+                }
+                int steps = 8 + n * 14;
+                for (int st = 0; st <= steps; st++) {
+                    float px, py;
+                    splineAt(cxs, cys, n, (float)st / steps, px, py);
+                    inkDab(tmp.data(), bw, bh, px, py, rad, solid, 1.0f, 0, 0, bw - 1, bh - 1);
+                }
+            }
+        }
+        x += adv;
+    }
+    float op = ink.a / 255.0f;
+    for (int yy = 0; yy < bh; yy++) for (int xx = 0; xx < bw; xx++) {
+        float a = tmp[(size_t)yy * bw + xx].a / 255.0f * op;
+        if (a <= 0) continue;
+        Color &d = p[(by0 + yy) * W + bx0 + xx];
+        d.r = cl8(d.r + (ink.r - d.r) * a); d.g = cl8(d.g + (ink.g - d.g) * a); d.b = cl8(d.b + (ink.b - d.b) * a);
+    }
+}
+
 // wall scrawl atlas: 32 phrases in 32 different hands, 4 x 8 cells of 256x128
 Texture2D makeScrawlTex() {
     const int W = 1024, H = 1024, CW = W / 4, CH = H / 8;
@@ -870,15 +800,40 @@ Texture2D makeFixturesTex() {
         box(x0, y0, x1, y0 + 3, lipHi); box(x0, y0, x0 + 3, y1, lipHi);
         box(x0, y1 - 3, x1, y1, lipLo); box(x1 - 3, y0, x1, y1, lipLo);
         if (variant == 0) {
+            // A duplex receptacle at its real proportions (the plate is 1.28 px
+            // a millimetre): each face a disc with flats top and bottom, two
+            // blade slots — the neutral the longer — over a D-shaped ground.
+            // The old one drew 17 mm slots and a ground that was a third slot
+            // lying on its side, which is no socket anywhere.
+            auto cover = [&](float d) { return clampf(0.5f - d, 0.0f, 1.0f); };
+            auto blend = [&](int x, int y, Color c, float a) {
+                if (a <= 0) return;
+                Color &d = p[y * W + x];
+                d.r = cl8(d.r + (c.r - d.r) * a); d.g = cl8(d.g + (c.g - d.g) * a); d.b = cl8(d.b + (c.b - d.b) * a);
+            };
+            const Color face = { 232, 226, 206, OP }, rim = { 176, 168, 148, OP };
             for (int k = 0; k < 2; k++) {
-                int cy = y0 + 38 + k * 76;
-                box(x0 + 14, cy - 26, x1 - 14, cy + 26, { 213, 206, 186, OP });   // moulded recess
-                frame(x0 + 14, cy - 26, x1 - 14, cy + 26, 2, { 182, 174, 154, OP });
-                box(x0 + 30, cy - 19, x0 + 37, cy + 2, slot);                     // neutral
-                box(x1 - 37, cy - 19, x1 - 30, cy + 2, slot);                     // live
-                box(x0 + 43, cy + 9, x1 - 43, cy + 17, slot);                     // ground
+                float cx = x0 + r[2] * 0.5f, cy = y0 + 40.0f + k * 72.0f;
+                for (int y = (int)cy - 26; y <= (int)cy + 26; y++) for (int x = (int)cx - 26; x <= (int)cx + 26; x++) {
+                    float dx = x + 0.5f - cx, dy = y + 0.5f - cy;
+                    // the face: a 44 mm disc cut flat top and bottom at 34 mm
+                    float disc = std::max(sqrtf(dx * dx + dy * dy) - 23.0f, fabsf(dy) - 18.0f);
+                    blend(x, y, rim, cover(disc - 1.5f));
+                    blend(x, y, face, cover(disc + 1.0f));
+                    float hot = std::max(fabsf(dx - 7.5f) - 1.3f, fabsf(dy + 5.0f) - 4.3f);    // the live blade
+                    float neu = std::max(fabsf(dx + 7.5f) - 1.3f, fabsf(dy + 5.0f) - 5.4f);    // the neutral, longer
+                    float gy = dy - 9.0f;                                                      // the ground: a D
+                    float gnd = gy < 0 ? sqrtf(dx * dx + gy * gy) - 3.4f : std::max(fabsf(dx) - 3.4f, gy - 3.0f);
+                    blend(x, y, slot, cover(std::min(std::min(hot, neu), gnd)));
+                }
             }
-            box(x0 + 43, y0 + 71, x1 - 43, y0 + 79, { 146, 140, 124, OP });       // centre screw
+            // the centre screw holding the plate on, slot turned at random
+            float scx = x0 + r[2] * 0.5f, scy = y0 + 76.0f;
+            for (int y = (int)scy - 6; y <= (int)scy + 6; y++) for (int x = (int)scx - 6; x <= (int)scx + 6; x++) {
+                float dx = x + 0.5f - scx, dy = y + 0.5f - scy;
+                blend(x, y, { 150, 146, 132, OP }, cover(sqrtf(dx * dx + dy * dy) - 4.6f));
+                blend(x, y, { 92, 88, 78, OP }, cover(fabsf(dx * 0.34f + dy * 0.94f) - 0.7f) * cover(sqrtf(dx * dx + dy * dy) - 4.0f));
+            }
         } else {
             // Half the cover is gone. What is left is the hole, the yoke still
             // screwed to the box, and two wire ends nobody made safe.
@@ -907,8 +862,18 @@ Texture2D makeFixturesTex() {
         box(rx0, ry0, rx1, ry1, { 236, 230, 212, OP });
         box(rx0, ry0, rx1, ry0 + (ry1 - ry0) / 2, { 212, 205, 187, OP });   // the pressed half, in shadow
         frame(rx0, ry0, rx1, ry1, 2, { 174, 167, 148, OP });
-        box(x0 + 40, y0 + 12, x1 - 40, y0 + 20, { 146, 140, 124, OP });     // screws
-        box(x0 + 40, y1 - 20, x1 - 40, y1 - 12, { 146, 140, 124, OP });
+        for (int k = 0; k < 2; k++) {                                        // screws, slots at random
+            float scx = (x0 + x1) * 0.5f + 0.5f, scy = k ? y1 - 15.5f : y0 + 16.5f;
+            float sa = k ? 0.3f : 1.2f;
+            for (int y = (int)scy - 6; y <= (int)scy + 6; y++) for (int x = (int)scx - 6; x <= (int)scx + 6; x++) {
+                float dx = x + 0.5f - scx, dy = y + 0.5f - scy, d = sqrtf(dx * dx + dy * dy);
+                float a = clampf(4.9f - d, 0.0f, 1.0f);
+                float sl = clampf(1.2f - fabsf(dx * sinf(sa) - dy * cosf(sa)), 0.0f, 1.0f) * clampf(4.2f - d, 0.0f, 1.0f);
+                Color c = { cl8(150 - 58 * sl), cl8(146 - 58 * sl), cl8(132 - 54 * sl), OP };
+                Color &q = p[y * W + x];
+                q.r = cl8(q.r + (c.r - q.r) * a); q.g = cl8(q.g + (c.g - q.g) * a); q.b = cl8(q.b + (c.b - q.b) * a);
+            }
+        }
         grime(x0, y0, x1, y1, 0xB3u, 0.32f);
     }
 
@@ -1032,6 +997,130 @@ Texture2D makeFixturesTex() {
     return finishTexture(img, false);
 }
 
+// A carton, in two regions of the props atlas' left strip (the UVs are in
+// addProp, world.cpp): its side, y 2-297, and its top, y 312-507.
+//
+// The old cardboard was one noise field with a band of tape round the middle,
+// mapped whole onto every face, the top included — every box was taped round
+// its waist, which is not how anyone has ever packed one. A regular slotted
+// carton is taped along the seam where its top flaps meet, and the tape laps
+// over the edge and a hand's width down each end. Its sides carry the flutes
+// of the corrugation showing through the liner, the printed handling marks, the
+// box-maker's certificate stamp, and floor dirt along the bottom. The top has
+// the flap seam, the tape, and the shipping label with its barcode. These
+// cartons are the only cover on Clark's level, so they are looked at hard.
+static void drawCarton(Color *p, int W) {
+    const Color ink = { 42, 36, 30, 215 };
+    auto kraft = [&](int x, int y, float flutePitch, bool vertical) {
+        float n = (fbm2(x * 0.05f, y * 0.05f, 61u, 3) - 0.47f) * 0.16f;
+        float fib = (lat(x, y, 611u) - 0.5f) * 0.05f + (fbm2(x * 0.6f, y * 0.12f, 614u, 1) - 0.5f) * 0.05f;
+        float u = vertical ? (float)x : (float)y;
+        float flute = 0.022f * sinf(u * TAU / flutePitch);   // the corrugation showing through
+        float v = 1.0f + n + fib + flute;
+        return Color{ cl8(166 * v), cl8(128 * v), cl8(84 * v), 255 };
+    };
+    auto tape = [&](int x, int y, float edge) {
+        float wr = fbm2(x * 0.08f, y * 0.35f, 615u, 2);           // wrinkles, lengthwise
+        float v = 0.93f + 0.14f * wr;
+        v *= 1.0f - 0.18f * sstepT(2.0f, 0.0f, edge);             // its edges lift and darken
+        return Color{ cl8(200 * v), cl8(162 * v), cl8(104 * v), 255 };
+    };
+    // ---- the side, 236 x 296 from (10, 2); the top of the face is at the top
+    const int SX = 10, SY = 2, SW = 236, SH = 296;
+    for (int y = 0; y < SH; y++) for (int x = 0; x < SW; x++) {
+        Color c = kraft(SX + x, SY + y, 2.7f, true);
+        float v = 1.0f;
+        float ex = (float)std::min(x, SW - 1 - x);
+        if (ex < 7) v *= 0.80f + 0.20f * ex / 7.0f;                // scored and scuffed corners
+        float low = (float)(SH - 1 - y);
+        if (low < 40) v *= 0.84f + 0.16f * (low / 40.0f);         // floor dirt along the bottom
+        if (low < 40 && fbm2(x * 0.15f, y * 0.4f, 616u, 2) > 0.62f) v *= 0.82f;
+        c.r = cl8(c.r * v); c.g = cl8(c.g * v); c.b = cl8(c.b * v);
+        // the seam tape lapping over the top edge and under the bottom one,
+        // finished with the dispenser's zigzag
+        float cx = fabsf(x - SW * 0.5f);
+        float zig = 3.0f * fabsf(fmodf(x * 0.5f, 2.0f) - 1.0f);
+        if (cx < 16 && (y < 30 - zig || low < 26 - zig)) c = tape(SX + x, SY + y, 16 - cx);
+        p[(SY + y) * W + SX + x] = c;
+    }
+    // "this way up": two arrows over a bar, top left, the way ISO 780 draws them
+    for (int k = 0; k < 2; k++) {
+        float ax = SX + 26 + k * 20, top = SY + 46;
+        for (int y = 0; y < 34; y++) for (int x = -9; x <= 9; x++) {
+            float fy = (float)y, fx = (float)x;
+            bool head = fy < 12 && fabsf(fx) < fy * 0.75f + 0.5f;
+            bool shaft = fy >= 11 && fabsf(fx) < 2.6f;
+            if (!head && !shaft) continue;
+            Color &d = p[(int)(top + y) * W + (int)(ax + x)];
+            float a = ink.a / 255.0f;
+            d.r = cl8(d.r + (ink.r - d.r) * a); d.g = cl8(d.g + (ink.g - d.g) * a); d.b = cl8(d.b + (ink.b - d.b) * a);
+        }
+    }
+    for (int y = 0; y < 4; y++) for (int x = -10; x < 50; x++) {
+        Color &d = p[(SY + 84 + y) * W + SX + 26 + x];
+        float a = ink.a / 255.0f;
+        d.r = cl8(d.r + (ink.r - d.r) * a); d.g = cl8(d.g + (ink.g - d.g) * a); d.b = cl8(d.b + (ink.b - d.b) * a);
+    }
+    // what was in it, flexo-printed a little unevenly: the building's supplies
+    printText(p, W, 512, "ALMOND WATER", SX + 26, SY + 128, 17, ink, 0.09f, 0.5f);
+    printText(p, W, 512, "24 X 330ML", SX + 56, SY + 156, 11, ink, 0.09f, 0.5f);
+    printText(p, W, 512, "THIS SIDE UP", SX + 82, SY + 60, 9, ink, 0.09f, 0.2f);
+    // the box maker's certificate: a ring of small print, bottom right
+    {
+        float cx = SX + 196, cy = SY + 222;
+        for (int y = -22; y <= 22; y++) for (int x = -22; x <= 22; x++) {
+            float d = sqrtf((float)(x * x + y * y));
+            float cov = sstepT(1.2f, 0.0f, fabsf(d - 19.0f)) + sstepT(0.9f, 0.0f, fabsf(d - 15.0f))
+                      + (fabsf((float)y) < 1.0f && d < 14.0f ? 0.8f : 0.0f);
+            // the ring's small print, suggested: broken dashes between the rings
+            if (d > 15.8f && d < 18.2f && ((int)((atan2f((float)y, (float)x) + 3.2f) * 9.0f) & 1)) cov += 0.6f;
+            cov = std::min(cov, 1.0f) * 0.75f;
+            if (cov <= 0) continue;
+            Color &q = p[(int)(cy + y) * W + (int)(cx + x)];
+            q.r = cl8(q.r + (ink.r - q.r) * cov); q.g = cl8(q.g + (ink.g - q.g) * cov); q.b = cl8(q.b + (ink.b - q.b) * cov);
+        }
+    }
+    // addPropBox maps u across each side face mirrored as seen from outside the
+    // box, which nothing printed on cardboard ever showed until now: the
+    // lettering came out backwards on every face. Flip the whole side region
+    // (the tape and edges are symmetric) rather than the mesher's UVs, which
+    // every other prop shares.
+    for (int y = SY; y < SY + SH; y++) std::reverse(p + y * W + SX, p + y * W + SX + SW);
+    // ---- the top, 236 x 196 from (10, 312): two flaps meeting across the middle
+    const int TX = 10, TY = 312, TW = 236, TH = 196;
+    for (int y = 0; y < TH; y++) for (int x = 0; x < TW; x++) {
+        Color c = kraft(TX + x, TY + y, 2.7f, false);
+        float v = 1.0f;
+        float e = (float)std::min(std::min(x, TW - 1 - x), std::min(y, TH - 1 - y));
+        if (e < 6) v *= 0.84f + 0.16f * e / 6.0f;
+        float seam = fabsf(y - TH * 0.5f);
+        if (seam < 1.2f) v *= 0.45f;                              // the gap between the flaps
+        c.r = cl8(c.r * v); c.g = cl8(c.g * v); c.b = cl8(c.b * v);
+        if (seam < 17) c = tape(TX + x, TY + y, 17 - seam);
+        p[(TY + y) * W + TX + x] = c;
+    }
+    // the shipping label: white, a barcode, an address nobody will ever read
+    {
+        const int LX = 150, LY = 332, LW = 86, LH = 60;             // crateBody() samples exactly this rect
+        for (int y = 0; y < LH; y++) for (int x = 0; x < LW; x++) {
+            float v = 0.95f + 0.05f * lat(LX + x, LY + y, 617u);
+            if (x < 2 || y < 2 || x > LW - 3 || y > LH - 3) v *= 0.90f;
+            p[(LY + y) * W + LX + x] = { cl8(236 * v), cl8(232 * v), cl8(220 * v), 255 };
+        }
+        const Color bar = { 30, 30, 32, 240 };
+        int x = LX + 8;
+        for (int k = 0; x < LX + LW - 10; k++) {
+            int bw = 1 + (int)(ih(k, 0, 618u) % 3), gap = 1 + (int)(ih(k, 1, 618u) % 2);
+            for (int y = LY + 36; y < LY + 52; y++) for (int q = 0; q < bw; q++) p[y * W + x + q] = { bar.r, bar.g, bar.b, 255 };
+            x += bw + gap;
+        }
+        printText(p, W, 512, "SHIP TO:", LX + 6, LY + 6, 6, bar, 0.10f);
+        printText(p, W, 512, "LEVEL 0", LX + 6, LY + 15, 6, bar, 0.10f);
+        printText(p, W, 512, "RM 421", LX + 6, LY + 24, 6, bar, 0.10f);
+        printText(p, W, 512, "1 OF 1", LX + 52, LY + 6, 5, bar, 0.10f);
+    }
+}
+
 // prop atlas: left half cardboard, right-top cabinet front (drawers), right-bottom plain metal
 Texture2D makePropsTex() {
     const int W = 1024, H = 512;
@@ -1056,17 +1145,8 @@ Texture2D makePropsTex() {
                 if (xx<7 || xx>504 || yy<7 || yy>248) v*=0.70f;
                 r=232*v;g=228*v;b=215*v;
             }
-        } else if (x < 256) {                               // cardboard
-            float n = (fbm2(x * 0.03f, y * 0.03f, 61u, 3) - 0.5f) * 0.18f;
-            float v = 1.0f + n + (lat(x,y,611u)-0.5f)*0.055f;
-            if (x%64 < 2) v*=0.91f; // compressed fold fibres
-            if (x < 18 || x > 238 || y < 18 || y > 494) v *= 0.80f;   // box edges
-            r = 166 * v; g = 128 * v; b = 84 * v;
-            if (y > 238 && y < 274) {                // packing tape
-                float tv = 1.0f + (lat(x, y, 62u) - 0.5f) * 0.1f;
-                r = 196 * tv; g = 188 * tv; b = 160 * tv;
-            }
-            if (x > 60 && x < 150 && y > 330 && y < 392) { r = 205; g = 198; b = 178; } // label
+        } else if (x < 256) {                               // cardboard: drawn below
+            r = 166; g = 128; b = 84;
         } else {                                     // office metal
             float brush = (fbm2(x * 0.9f, y * 0.02f, 73u, 2) - 0.5f) * 0.10f;
             float v = 1.0f + brush;
@@ -1094,8 +1174,7 @@ Texture2D makePropsTex() {
         }
         p[y * W + x] = { cl8(r), cl8(g), cl8(b), 255 };
     }
-    for (int x=72;x<136;++x) if ((ih(x/2,0,613u)&3)!=0)
-        for (int y=352;y<377;++y) p[y*W+x]={72,65,52,255};
+    drawCarton(p, W);
     // Scanned CC0 tiles replace only neutral material regions. Labels and
     // cabinet fronts retain their authored layout; existing prop tints survive.
     auto stamp = [&](const unsigned char *bytes,int size,int x0,int y0,int w,int h,float contrast) {
@@ -1114,272 +1193,6 @@ Texture2D makePropsTex() {
     stamp(object_wood,sizeof(object_wood),512,0,512,256,0.75f);
     stamp(object_fabric,sizeof(object_fabric),512,256,512,256,0.90f);
     stamp(object_metal,sizeof(object_metal),256,256,256,256,0.55f);
-    return finishTexture(img, true);
-}
-
-// Level 1: bare concrete
-Texture2D makeConcreteWallTex() {
-    const int W = 512, H = 512;
-    Image img = GenImageColor(W, H, BLANK);
-    Color *p = (Color *)img.data;
-    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
-        float vy = (float)y / H;
-        float v = 1.0f + (fbm2(x * 0.02f, y * 0.02f, 81u, 4) - 0.5f) * 0.28f;
-        float drip = fbm2(x * 0.06f, y * 0.006f, 82u, 3);
-        if (drip > 0.60f) v *= 1.0f - (drip - 0.60f) * 0.9f;          // water streaks
-        // Hairline cracks, as a level set of a noise field. Sparser and lighter
-        // than they were: a level set closes on itself, so at the old width and
-        // depth the wall came out ruled with dark loops that read as a contour map
-        // rather than as cracking. Thin enough and they read as hairlines again.
-        float crack = fbm2(x * 0.015f, y * 0.015f, 83u, 4);
-        if (fabsf(crack - 0.5f) < 0.0026f) v *= 0.66f;
-        // exposed aggregate — the stones in the mix, lighter and harder-edged
-        // than the paste around them. Poured concrete without them is plaster.
-        float agg = lat(x >> 1, y >> 1, 89u);
-        if (agg > 0.965f) v *= 1.16f; else if (agg > 0.93f) v *= 1.07f;
-        else if (agg < 0.035f) v *= 0.86f;                             // blowholes
-        // Form-tie holes on the shutter grid, rust bleeding down from each.
-        // The grid pitch has to divide the texture width or the pattern breaks at
-        // the wrap and every tile boundary gets a row of half-holes; 128 does,
-        // and staggering alternate rows keeps it from reading as a checkerboard.
-        int hrow = y / 128;
-        int hx = (x + 64 + (hrow & 1) * 64) % 128, hy = y % 128;
-        float hd = sqrtf((float)((hx - 64) * (hx - 64) + (hy - 64) * (hy - 64)));
-        float r = 149 * v, g = 147 * v, b = 141 * v;
-        if (hd < 6.0f) { float t = 1.0f - hd / 6.0f; float m = 1.0f - 0.55f * t * t; r *= m; g *= m; b *= m; }
-        else if (hd < 22.0f && hy > 64) {                              // the rust streak below it
-            float t = (1.0f - (hd - 6.0f) / 16.0f) * 0.30f;
-            r = r * (1 - t) + 120 * t; g = g * (1 - t) + 82 * t; b = b * (1 - t) + 52 * t;
-        }
-        float fall = 1.0f - 0.14f * vy;                                // darker toward the floor
-        r *= fall; g *= fall; b *= fall;
-        // Level 1's walls are one tile floor to ceiling (gWallV in world.cpp),
-        // so v is height: the texture's bottom edge is the floor and its top
-        // the 4.2 m slab. Two things live at a height. The pour joints, where
-        // one lift of concrete was cast on the last: a hairline with a slight
-        // lip, at 1.4 and 2.8 m. And the damp: "bland, discolored walls", the
-        // lore has it, and discolour is what standing water in a fog does to
-        // the foot of a wall — a darker, greener band to about a metre, with
-        // an uneven tide line and the odd run of wet climbing above it.
-        float hgt = (1.0f - vy) * 4.2f;                                // metres above the floor
-        for (float jy : { 1.4f, 2.8f }) {
-            float d = fabsf(hgt - jy - (fbm2(x * 0.02f, jy, 90u, 2) - 0.5f) * 0.03f);
-            if (d < 0.008f) { r *= 0.72f; g *= 0.72f; b *= 0.72f; }
-            else if (d < 0.02f && hgt > jy) { r *= 1.05f; g *= 1.05f; b *= 1.05f; }
-        }
-        float tide = 0.95f + (fbm2(x * 0.012f, 3.0f, 91u, 3) - 0.5f) * 0.45f
-                   + fbm2(x * 0.09f, 7.0f, 92u, 2) * 0.10f;
-        float climb = fbm2(x * 0.05f, hgt * 0.8f, 93u, 3);               // wet wicking up in runs
-        if (climb > 0.62f) tide += (climb - 0.62f) * 1.6f;
-        if (hgt < tide) {
-            float depth = clampf((tide - hgt) / 0.35f, 0.0f, 1.0f);
-            float k = 0.86f - 0.20f * depth;
-            r *= k * 0.94f; g *= k; b *= k * 0.92f;
-            float mould = fbm2(x * 0.03f, hgt * 3.0f, 94u, 3);           // blooms in the wettest part
-            if (mould > 0.60f && hgt < tide - 0.1f) { float t = (mould - 0.60f) * 1.5f; r *= 1 - t * 0.5f; g *= 1 - t * 0.4f; b *= 1 - t * 0.5f; }
-        } else if (hgt < tide + 0.03f) {                                 // the tide line itself, salts left behind
-            r *= 1.10f; g *= 1.10f; b *= 1.08f;
-        }
-        p[y * W + x] = { cl8(r), cl8(g), cl8(b), 255 };
-    }
-    return finishTexture(img, true);
-}
-
-Texture2D makeConcreteFloorTex() {
-    const int W = 512, H = 512;
-    Image img = GenImageColor(W, H, BLANK);
-    Color *p = (Color *)img.data;
-    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
-        float v = 1.0f + (lat(x, y, 84u) - 0.5f) * 0.10f + (fbm2(x * 0.03f, y * 0.03f, 85u, 3) - 0.5f) * 0.2f;
-        // power-float sweeps: long shallow arcs the trowel left behind, plus the
-        // aggregate showing through where the slab has been walked bare
-        float sweep = vnoise2(x * 0.004f + y * 0.0015f, y * 0.012f, 78u);
-        v *= 1.0f + (sweep - 0.5f) * 0.10f;
-        float agg = lat(x >> 1, y >> 1, 79u);
-        if (agg > 0.972f) v *= 1.13f; else if (agg < 0.028f) v *= 0.88f;
-        float r = 93 * v, g = 91 * v, b = 87 * v;
-        p[y * W + x] = { cl8(r), cl8(g), cl8(b), 255 };
-    }
-    return finishTexture(img, true);
-}
-
-Texture2D makeConcreteCeilTex() {
-    const int W = 512, H = 512;
-    Image img = GenImageColor(W, H, BLANK);
-    Color *p = (Color *)img.data;
-    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
-        float v = 1.0f + (fbm2(x * 0.025f, y * 0.025f, 87u, 3) - 0.5f) * 0.22f;
-        float form = fbm2(x * 0.004f, y * 0.09f, 88u, 2);              // formwork seams
-        if (form > 0.62f) v *= 0.82f;
-        p[y * W + x] = { cl8(76 * v), cl8(76 * v), cl8(73 * v), 255 };
-    }
-    return finishTexture(img, true);
-}
-
-// Red Halls: oppressive dark red brick
-Texture2D makeRedBrickTex() {
-    const int W = 512, H = 512;
-    Image img = GenImageColor(W, H, BLANK);
-    Color *p = (Color *)img.data;
-    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
-        // 12 courses to the texture, as a float: at a flat `y / 42` the twelfth
-        // course is only 8 pixels tall before the texture wraps, so a wall shows a
-        // squashed line of half-bricks at every vertical repeat. It was always
-        // there — giving each brick its own tone off its course index is what made
-        // it visible, because the mismatch stopped being a mismatch of nothing.
-        const float CH = 512.0f / 12.0f;
-        int row = (int)(y / CH);
-        int by = (int)(y - row * CH);
-        int bx = (x + (row % 2) * 64) % 128;
-        // Every brick fired differently, so no two are the same colour. One noise
-        // field for the whole wall gave a single sheet of red with lines ruled on
-        // it; keying the tone off the brick's own index is what breaks the wall
-        // back up into bricks.
-        int bi = (x + (row % 2) * 64) / 128;
-        float bh = lat(bi, row, 99u);
-        float v = 1.0f + (fbm2(x * 0.04f, y * 0.04f, 96u, 3) - 0.5f) * 0.35f + (bh - 0.5f) * 0.30f;
-        float r = 140 * v, g = 36 * v, b = 29 * v;
-        if (bh > 0.93f) { r *= 0.72f; g *= 0.80f; b *= 0.88f; }        // the odd blue-burnt header
-        // Mortar is raked back behind the brick face, so the joint is not a flat
-        // dark stripe: it is a shadow at the top of the course and a lit ledge at
-        // the bottom. That one gradient is what gives a brick wall its depth.
-        int em = std::min(std::min(by, (int)CH - 1 - by), std::min(bx, 127 - bx));
-        if (em < 4) {
-            float mv = 1.0f + (lat(x, y, 100u) - 0.5f) * 0.22f;
-            mv *= (by < 4) ? 0.68f : (by > (int)CH - 5 ? 1.22f : 0.95f);   // shadow above, ledge below
-            r = 40 * mv; g = 13 * mv; b = 11 * mv;
-        } else if (em < 8) {                                           // the brick's own arris
-            float t = (em - 4) / 4.0f;
-            float m = (by < (int)CH / 2 ? 1.10f : 0.90f);
-            float mm = 1.0f + (m - 1.0f) * (1.0f - t);
-            r *= mm; g *= mm; b *= mm;
-        }
-        float rot = fbm2(x * 0.008f, y * 0.008f, 97u, 4);
-        if (rot > 0.60f) { float t = (rot - 0.60f) * 1.8f; r *= 1 - t * 0.7f; g *= 1 - t * 0.5f; b *= 1 - t * 0.5f; }
-        // efflorescence: salt bloomed out of the wet brick in pale patches
-        float eff = fbm2(x * 0.012f + 7.0f, y * 0.012f, 101u, 3);
-        if (eff > 0.68f) { float t = std::min(0.40f, (eff - 0.68f) * 1.5f);
-                           r = r * (1 - t) + 150 * t; g = g * (1 - t) + 138 * t; b = b * (1 - t) + 128 * t; }
-        p[y * W + x] = { cl8(r), cl8(g), cl8(b), 255 };
-    }
-    return finishTexture(img, true);
-}
-
-// Poolrooms: white ceramic tile
-Texture2D makeTileTex() {
-    const int W = 512, H = 512;
-    Image img = GenImageColor(W, H, BLANK);
-    Color *p = (Color *)img.data;
-    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
-        int gx = x % 64, gy = y % 64;
-        int tx = x / 64, ty = y / 64;
-        float r, g, b;
-        int ex = std::min(gx, 63 - gx), ey = std::min(gy, 63 - gy), ed = std::min(ex, ey);
-        if (ed < 2) { // fine, clean grout; no mildew or chipped ceramic
-            float gv = 1.0f + (lat(x,y,90u)-0.5f)*0.025f;
-            r=183*gv; g=189*gv; b=185*gv;
-        } else {
-            float tv=1.0f+(lat(tx,ty,91u)-0.5f)*0.018f;
-            float bevel=clampf((ed-2)/3.0f,0,1);
-            tv *= 0.97f+0.03f*bevel;
-            r=226*tv; g=229*tv; b=222*tv;
-        }
-        p[y * W + x] = { cl8(r), cl8(g), cl8(b), 255 };
-    }
-    return finishTexture(img, true);
-}
-
-// LEVEL FUN =): children's-party wallpaper — bunting up top, confetti,
-// crayon smiley faces, and the same grime as everywhere else down here
-Texture2D makePartyWallTex() {
-    const int W = 512, H = 512;
-    Image img = GenImageColor(W, H, BLANK);
-    Color *p = (Color *)img.data;
-    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
-        float vy = (float)y / H;
-        float grime = fbm2(x * 0.013f, y * 0.013f, 207u, 4);
-        float stain = fbm2(x * 0.006f + 17.0f, y * 0.006f, 212u, 4);
-        float base = (0.985f + 0.015f * sinf(x * 0.9f)) * (1.0f - 0.14f * grime) * (1.0f - 0.08f * vy);
-        if (stain > 0.64f) base *= 1.0f - (stain - 0.64f) * 0.8f;
-        float r = 240 * base, g = 223 * base, b = 190 * base;
-        // confetti print, gone dingy
-        uint32_t ch = ih(x >> 3, y >> 3, 209u);
-        if (ch % 11 == 0) {
-            int lx = x & 7, ly2 = y & 7;
-            if ((lx - 4) * (lx - 4) + (ly2 - 4) * (ly2 - 4) < 7) {
-                Color c = PARTY[(ch >> 6) % 5];
-                r = c.r * base; g = c.g * base; b = c.b * base;
-            }
-        }
-        // crayon smileys, one per 128px cell or so, mid-wall
-        if (y > 96 && y < H - 96) {
-            uint32_t sh2 = ih(x >> 7, y >> 7, 214u);
-            if (sh2 % 3 == 0) {
-                float cx2 = (float)((x >> 7) << 7) + 40 + (sh2 % 48), cy2 = (float)(((y >> 7) << 7) + 44 + ((sh2 >> 8) % 40));
-                float dx2 = x - cx2, dy2 = y - cy2, d = sqrtf(dx2 * dx2 + dy2 * dy2);
-                bool ring = fabsf(d - 14.0f) < 1.7f;
-                bool eye = (fabsf(dx2 + 5) < 1.6f || fabsf(dx2 - 5) < 1.6f) && fabsf(dy2 + 4) < 1.8f;
-                bool smile = fabsf(d - 8.0f) < 1.6f && dy2 > 3.0f;
-                if (ring || eye || smile) { r = 168 * base; g = 62 * base; b = 54 * base; }
-            }
-        }
-        if (y >= 10 && y < 62) {   // bunting strung along the top of the wall
-            if (y < 14) { r = 70; g = 58; b = 48; }   // the string
-            else {
-                int seg = x / 64;
-                float lx = (float)(x % 64), halfw = 24.0f * (1.0f - (y - 14) / 48.0f);
-                if (fabsf(lx - 32) < halfw) {
-                    Color c = PARTY[seg % 5];
-                    float pv = base * (0.92f + 0.08f * sinf(x * 0.7f));
-                    r = c.r * pv; g = c.g * pv; b = c.b * pv;
-                }
-            }
-        }
-        if (y > H - 46) {   // baseboard
-            float t = fbm2(x * 0.02f, y * 0.1f, 216u, 3);
-            r = 92 - 22 * t; g = 74 - 18 * t; b = 42 - 11 * t;
-            if (y < H - 40) { r *= 0.45f; g *= 0.45f; b *= 0.45f; }
-        }
-        p[y * W + x] = { cl8(r), cl8(g), cl8(b), 255 };
-    }
-    return finishTexture(img, true);
-}
-
-// LEVEL FUN =): the same sad carpet, but someone spilled confetti into it forever
-Texture2D makePartyCarpetTex() {
-    // deep banquet-hall red, worn dark in the walked lanes, confetti ground in
-    const int W = 512, H = 512;
-    Image img = GenImageColor(W, H, BLANK);
-    Color *p = (Color *)img.data;
-    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
-        float n = lat(x, y, 205u) * 0.16f - 0.08f;
-        float fiber = (fbm2(x * 0.18f, y * 0.18f, 233u, 2) - 0.5f) * 0.14f;
-        float v = 1.0f + n + fiber;
-        float r = 156 * v, g = 34 * v, b = 42 * v;
-        uint32_t fh = ih(x >> 2, y >> 2, 231u);
-        if (fh % 24 == 0) {   // trodden-in confetti, brighter than the carpet
-            Color c = PARTY[(fh >> 7) % 5];
-            float cv = v * 0.9f;
-            r = c.r * cv; g = c.g * cv; b = c.b * cv;
-        }
-        p[y * W + x] = { cl8(r), cl8(g), cl8(b), 255 };
-    }
-    return finishTexture(img, true);
-}
-
-// LEVEL FUN =): the ceiling has gone dark, so the light panels read like a
-// party hall's — hot rectangles floating in near-black
-Texture2D makePartyCeilTex() {
-    const int W = 512, H = 512;
-    Image img = GenImageColor(W, H, BLANK);
-    Color *p = (Color *)img.data;
-    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
-        float v = 1.0f + (fbm2(x * 0.03f, y * 0.03f, 244u, 3) - 0.5f) * 0.5f;
-        float r = 20 * v, g = 18 * v, b = 22 * v;   // near-black with a faint cool tint
-        int bx = x % 128, by = y % 128;             // suggestion of big tiles
-        if (bx < 3 || bx > 124 || by < 3 || by > 124) { r *= 1.8f; g *= 1.8f; b *= 1.9f; }
-        p[y * W + x] = { cl8(r), cl8(g), cl8(b), 255 };
-    }
     return finishTexture(img, true);
 }
 
@@ -1405,248 +1218,410 @@ Texture2D makeAOStripTex() {
 
 // The pack, seen side-on: a low, long-backed quadruped with too much leg and a
 // head that hangs. Drawn wide rather than tall — it reads as an animal from the
-// silhouette alone, which is all you get before it reaches you.
-// The pack, four frames of a run. A quadruped moves its legs in diagonal pairs
-// — front-left with back-right — so that is how they are offset; moving all four
-// together would read as a rocking horse.
+// silhouette alone, which is all you get before it reaches you — four frames
+// of a run.
+//
+// Built from an actual dog's skeleton rather than a box on four sticks, because
+// the silhouette is the whole read and a box on sticks reads as a table: a deep
+// chest and a tucked waist, the neck dropping from the withers to a head
+// carried low, a muzzle, ears laid back, front legs with a wrist, and hind legs
+// with the backward-angled hock that says "dog" before anything else does.
+// Legs move in diagonal pairs (front-left with back-right), off the same
+// legPose as every other gait in the game, the far pair a shade darker so the
+// animal has two sides. The coat is ragged at the edge and thin enough over the
+// flank that the ribs show.
 Texture2D makeDogTex() {
     const int FW = 192, H = 128, W = FW * DOG_FRAMES;
     Image img = GenImageColor(W, H, BLANK);
     Color *p = (Color *)img.data;
-    int fx = 0;
-    auto put = [&](int x, int y, Color c) { x += fx; if (x >= 0 && x < W && y >= 0 && y < H) p[y * W + x] = c; };
-    auto vspan = [&](int x, int y0, int y1, Color c) { for (int y = y0; y <= y1; y++) put(x, y, c); };
-    Color hide  = { 44, 28, 26, 255 };
-    Color hide2 = { 62, 38, 32, 255 };
+    const float GROUND = 116.0f;
+    struct Seg { float ax, ay, bx, by, ra, rb; int part; };   // part: 0 body, 1 near leg, 2 far leg
+    auto segDist = [](const Seg &s, float x, float y) {
+        float vx = s.bx - s.ax, vy = s.by - s.ay, wx = x - s.ax, wy = y - s.ay;
+        float t = clampf((wx * vx + wy * vy) / (vx * vx + vy * vy + 1e-6f), 0.0f, 1.0f);
+        float dx = wx - vx * t, dy = wy - vy * t;
+        return sqrtf(dx * dx + dy * dy) - (s.ra + (s.rb - s.ra) * t);
+    };
     for (int f = 0; f < DOG_FRAMES; f++) {
-    fx = f * FW;
-    float phd = (float)f / DOG_FRAMES;
-    float ax, al2, bx, bl2;
-    legPose(phd, ax, al2);            // front-left and back-right move together...
-    legPose(phd + 0.5f, bx, bl2);     // ...against front-right and back-left
-    const float legSw[4]   = { ax * 0.030f, bx * 0.030f, bx * 0.030f, ax * 0.030f };
-    const float legLift[4] = { al2 * 7.0f,  bl2 * 7.0f,  bl2 * 7.0f,  al2 * 7.0f  };
-    float gather = cosf(phd * TAU) * 1.6f;        // the back bunches as it gathers
-    for (int x = 22; x < 170; x++) {
-        float u = (x - 22) / 148.0f;
-        float mange = vnoise2(x * 0.22f, 3.1f, 921u);
-        Color c = (mange > 0.56f) ? hide2 : hide;
-        // body: deepest over the shoulders, tucked at the waist, rump lifted
-        float top = 46.0f + gather + 5.0f * sinf(u * 3.14159f) - 4.0f * expf(-powf((u - 0.22f) * 5.0f, 2.0f));
-        float bot = 78.0f - 4.0f * expf(-powf((u - 0.55f) * 6.0f, 2.0f));
-        if (u > 0.06f && u < 0.94f) vspan(x, (int)top, (int)bot, c);
-        // neck and hanging head, forward of the shoulders
-        if (u < 0.20f) {
-            float t = u / 0.20f;
-            vspan(x, (int)(52 + 16 * t), (int)(70 + 14 * t), c);
+        float phd = (float)f / DOG_FRAMES;
+        float ax, al, bx, bl;
+        legPose(phd, ax, al);             // front-left and back-right move together...
+        legPose(phd + 0.5f, bx, bl);      // ...against front-right and back-left
+        float gather = cosf(phd * TAU) * 1.6f;          // the back bunches as it gathers
+        std::vector<Seg> segs;
+        // the body, head to tail: withers, chest, waist, loin, croup
+        segs.push_back({ 50, 60 + gather, 76, 62 + gather, 15, 13, 0 });   // shoulders and chest
+        segs.push_back({ 76, 62 + gather, 112, 60 + gather, 12, 8.5f, 0 });   // ribs to the tucked waist
+        segs.push_back({ 112, 60 + gather, 146, 58 + gather * 0.6f, 8.5f, 12, 0 });   // loin to haunch
+        segs.push_back({ 60, 68 + gather, 90, 70 + gather, 10, 6, 0 });   // the brisket, deep
+        segs.push_back({ 48, 54 + gather, 32, 70, 8.5f, 7, 0 });          // the neck, dropping
+        segs.push_back({ 32, 71, 25, 75, 8, 7, 0 });                      // the skull
+        segs.push_back({ 25, 76, 10, 85, 5.2f, 3.6f, 0 });                // the muzzle, pointing down
+        segs.push_back({ 34, 64, 43, 58, 3.0f, 1.0f, 0 });                // an ear, laid back
+        segs.push_back({ 152, 56 + gather * 0.6f, 166, 70, 3.2f, 2.4f, 0 });   // tail, low
+        segs.push_back({ 166, 70, 174, 88, 2.4f, 1.4f, 0 });
+        // Legs. `sw` +1 is the paw reaching forward (toward the head, -x),
+        // `lift` 0 planted to 1 at the top of the swing.
+        auto frontLeg = [&](float sx, float sw, float lift, int part) {
+            float px = sx - sw * 13.0f + lift * 4.0f, py = GROUND - lift * 11.0f;
+            float ex = sx + 2.0f - sw * 5.0f, ey = 88.0f + gather * 0.5f - lift * 4.0f;   // elbow
+            float wx = px + 1.5f + lift * 5.0f, wy = py - 9.0f + lift * 2.0f;             // wrist
+            segs.push_back({ sx, 70 + gather, ex, ey, 6.0f, 3.6f, part });
+            segs.push_back({ ex, ey, wx, wy, 3.2f, 2.6f, part });
+            segs.push_back({ wx, wy, px - 3.0f, py - 1.5f, 2.6f, 2.8f, part });           // the paw
+        };
+        auto hindLeg = [&](float hx, float sw, float lift, int part) {
+            float px = hx + 2.0f - sw * 14.0f, py = GROUND - lift * 9.0f;
+            float kx = hx - 9.0f - sw * 6.0f, ky = 84.0f - lift * 4.0f;                  // stifle
+            float jx = px + 7.0f + lift * 3.0f, jy = 99.0f - lift * 7.0f;                // hock, behind the paw
+            segs.push_back({ hx, 62 + gather * 0.6f, kx, ky, 9.0f, 4.5f, part });        // the thigh
+            segs.push_back({ kx, ky, jx, jy, 3.6f, 2.8f, part });
+            segs.push_back({ jx, jy, px, py - 1.5f, 2.6f, 2.4f, part });
+            segs.push_back({ px, py - 1.5f, px - 4.0f, py - 1.0f, 2.6f, 2.6f, part });
+        };
+        frontLeg(60, bx, bl, 2);   // far front-right, with back-left
+        hindLeg(142, ax, al, 2);   // far back-left
+        frontLeg(54, ax, al, 1);   // near front-left
+        hindLeg(148, bx, bl, 1);   // near back-right
+        for (int y = 0; y < H; y++) for (int x = 0; x < FW; x++) {
+            float px = x + 0.5f, py = y + 0.5f;
+            float best = 1e9f; int part = 0;
+            for (const Seg &sg : segs) {
+                float d = segDist(sg, px, py);
+                // near legs over everything, the body over the far legs
+                float bias = sg.part == 1 ? -0.8f : sg.part == 2 ? 0.8f : 0.0f;
+                if (d + bias < best + (part == 1 ? -0.8f : part == 2 ? 0.8f : 0.0f)) { best = d; part = sg.part; }
+                else if (d < best && sg.part == part) best = d;
+            }
+            // ragged coat: the edge wanders, most along the back and belly
+            float rag = (vnoise2(x * 0.45f, y * 0.45f + f * 7.0f, 931u) - 0.5f) * (part == 0 ? 2.6f : 1.0f);
+            float a = clampf(0.5f - (best + rag), 0.0f, 1.0f);
+            if (a <= 0) continue;
+            float v = 1.0f;
+            float mange = vnoise2(x * 0.22f, y * 0.22f, 921u);
+            if (mange > 0.58f) v *= 1.30f;                              // bald, paler patches
+            if (part == 0 && x > 64 && x < 108 && y > 50 && y < 74) {   // ribs under a thin coat
+                float rib = sinf((x + (y - 62) * 0.35f) * 0.62f);
+                v *= 1.0f + 0.16f * sstepT(0.55f, 0.95f, rib);
+            }
+            v *= 1.0f + 0.22f * sstepT(62.0f, 46.0f, (float)y) * (part == 0 ? 1.0f : 0.0f);   // light along the spine
+            if (part == 2) v *= 0.72f;                                  // the far legs, in the body's shadow
+            p[y * W + f * FW + x] = { cl8(46 * v), cl8(29 * v), cl8(26 * v), cl8(255 * a) };
         }
-        // four legs, thin and a little too long
-        for (int L = 0; L < 4; L++) {
-            float lu = 0.16f + L * 0.22f + legSw[L];
-            if (fabsf(u - lu) < 0.022f) vspan(x, (int)bot - 2, 116 - (int)legLift[L], (L & 1) ? hide : hide2);
-        }
-        // tail, low and straight
-        if (u > 0.90f) vspan(x, (int)(58 + (u - 0.90f) * 120.0f), (int)(64 + (u - 0.90f) * 130.0f), hide);
-    }
-    // the muzzle, and the two pale eyes that find you before you find them
-    for (int x = 12; x < 30; x++) vspan(x, 66, 78, hide);
-    for (int e = 0; e < 2; e++)
-        for (int dx = 0; dx < 4; dx++) for (int dy = 0; dy < 3; dy++)
-            put(26 + dx + e * 7, 60 + dy, Color{ 226, 216, 176, 255 });
+        // the two pale eyes that find you before you find them
+        for (int e = 0; e < 2; e++)
+            for (int dy = 0; dy < 2; dy++) for (int dx = 0; dx < 3; dx++)
+                p[(72 + dy - e) * W + f * FW + 21 + dx + e * 6] = { 226, 216, 176, 255 };
     }
     return finishTexture(img, false);
 }
 
-// The almond water can, unwrapped for a real cylinder: one atlas holding the
-// label as a flat strip (top half, u wraps once around the can) plus the lid and
-// the base as squares below it. Nothing here is shaded — unlike the billboard
-// sheet this replaces, the geometry is real, so the world shader lights it.
+// The almond water can, unwrapped for a real cylinder: the label as a strip
+// round the barrel (top two thirds; u wraps once round), then the lid and the
+// base as squares below it. Nothing is shaded in — the geometry is real and
+// the world shader lights it — except what printing and pressing put there.
+//
+// 576 px square, three times what it was: the can is held up to the camera to
+// drink, where the old 192 px label came out soft and its raylib bitmap
+// wordmark came out a staircase. The layout is the old one scaled by three, so
+// buildCanMesh's UVs (fractions of the atlas) did not have to move.
 Texture2D makeAlmondWrapTex() {
-    const int W = 192, H = 192;
-    const int SIDE_H = 128;                       // rows 0..127 wrap round the barrel
+    const int K = 3, W = 192 * K, H = 192 * K;
+    const int SIDE_H = 128 * K;                   // rows 0..SIDE_H-1 wrap round the barrel
     Image img = GenImageColor(W, H, BLANK);
     Color *p = (Color *)img.data;
-    auto put = [&](int x, int y, Color c) { if (x >= 0 && x < W && y >= 0 && y < H) p[y * W + x] = c; };
-
-    const Color alu   = { 214, 217, 224, 255 };
-    const Color aluDk = { 165, 168, 176, 255 };
-    const Color cream = { 248, 244, 232, 255 };
+    auto put = [&](int x, int y, Color c) { x = ((x % W) + W) % W; if (y >= 0 && y < H) p[y * W + x] = c; };
+    auto blendAt = [&](int x, int y, Color c, float a) {
+        x = ((x % W) + W) % W;
+        if (y < 0 || y >= H || a <= 0) return;
+        Color &d = p[y * W + x];
+        d.r = cl8(d.r + (c.r - d.r) * a); d.g = cl8(d.g + (c.g - d.g) * a); d.b = cl8(d.b + (c.b - d.b) * a);
+    };
+    const Color cream = { 246, 241, 226, 255 };
     const Color ink   = {  74,  50,  33, 255 };
     const Color inkSoft = { 104, 74, 50, 255 };
-    const Color nut   = { 198, 156, 108, 255 };
-    const Color nutHi = { 224, 192, 152, 255 };
-
-    // ---- the label, as horizontal bands down the can
-    // Brown on cream, not cream on brown. A dark band over half the barrel makes
-    // the whole can read as a black blob at any distance — which is how the
-    // first pass of this looked in the world.
-    for (int y = 0; y < SIDE_H; y++) {
+    // Drawn aluminium: fine lines round the can from the ironing die, and the
+    // soft bands a curved mirror picks up from any room, so the metal reads as
+    // metal even before the light moves across it.
+    auto alu = [&](int x, int y, float k) {
+        float band = 0.5f + 0.5f * sinf(y * 0.11f + 0.8f) * sinf(y * 0.037f);
+        float line = (fbm2(x * 0.004f, y * 0.9f, 4471u, 2) - 0.47f) * 0.10f;
+        float v = k * (0.84f + 0.22f * band + line);
+        return Color{ cl8(214 * v), cl8(217 * v), cl8(224 * v), 255 };
+    };
+    // ---- the label, as bands down the can. Brown on cream, not cream on brown:
+    // a dark band over half the barrel reads as a black blob at any distance.
+    for (int y = 0; y < SIDE_H; y++) for (int x = 0; x < W; x++) {
+        int yy = y / K;
         Color c;
-        if      (y < 13)  c = alu;                // shoulder
-        else if (y < 26)  c = cream;
-        else if (y < 30)  c = ink;                // pinstripe closing the field
-        else if (y < 99)  c = cream;              // the label field
-        else if (y < 103) c = ink;
-        else if (y < 114) c = cream;
-        else              c = alu;                // base roll
-        for (int x = 0; x < W; x++) put(x, y, c);
+        if      (yy < 13)  c = alu(x, y, 1.0f);             // the shoulder, necked in
+        else if (yy < 26)  c = cream;
+        else if (yy < 30)  c = ink;                         // a rule closing the field
+        else if (yy < 99)  c = cream;
+        else if (yy < 103) c = ink;
+        else if (yy < 114) c = cream;
+        else               c = alu(x, y, 0.94f);             // the base roll
+        put(x, y, c);
     }
-    // the artwork twice round, so something readable is facing you from most angles
+    // gold hairlines inside the brown rules: printers love them
+    for (int x = 0; x < W; x++) { put(x, 31 * K, { 190, 150, 82, 255 }); put(x, 98 * K, { 190, 150, 82, 255 }); }
+    // The artwork twice round, so something readable faces you from most angles.
     for (int rep = 0; rep < 2; rep++) {
-        int cx = 48 + rep * 96;
-        for (int y = -15; y <= 15; y++) {         // the almond
-            float t = (y + 15) / 30.0f;
-            float hw = 10.0f * sinf(powf(t, 0.72f) * 3.14159f * 0.94f);
-            for (int x = -(int)hw; x <= (int)hw; x++) {
-                float e = fabsf(x / (hw + 0.001f));
-                put(cx + x, 52 + y, (e > 0.80f || t < 0.06f) ? ink : (x < -1 ? nutHi : nut));
+        int cx = (48 + rep * 96) * K, cy = 52 * K;
+        // the almond: a pointed oval with its ridged skin, lit from the upper left
+        for (int y = -46; y <= 46; y++) {
+            float t = (y + 46) / 92.0f;
+            float hw = 30.0f * sinf(powf(t, 0.72f) * 3.14159f * 0.94f);
+            for (int x = -(int)hw - 2; x <= (int)hw + 2; x++) {
+                float e = fabsf(x) / (hw + 0.001f);
+                float edge = sstepT(1.0f, 0.86f, e) * sstepT(0.0f, 0.04f, t) * sstepT(1.0f, 0.97f, t);
+                float shade = 0.80f + 0.30f * (1.0f - e * e) - 0.18f * (x / (hw + 1.0f)) - 0.10f * t;
+                float ridge = 0.94f + 0.06f * sinf(x * 0.9f + sinf(y * 0.21f) * 2.0f);
+                float v = shade * ridge;
+                Color nut = { cl8(196 * v), cl8(150 * v), cl8(100 * v), 255 };
+                if (e > 1.06f) continue;
+                blendAt(cx + x, cy + y, ink, 1.0f);                    // outline first
+                blendAt(cx + x, cy + y, nut, edge);
             }
         }
-        for (int y = -10; y <= 12; y++) put(cx, 52 + y, inkSoft);   // seam
+        for (int y = -30; y <= 36; y++) blendAt(cx + (int)(y * 0.05f), cy + y, inkSoft, 0.55f);   // the seam
+        // a leaf behind it, a flat green, the way a label draws one
+        for (int y = -18; y <= 18; y++) for (int x = 0; x <= 44; x++) {
+            float u = x / 44.0f, lw = 14.0f * sinf(u * 3.14159f);
+            float dy = y - (u - 0.5f) * -10.0f;
+            if (fabsf(dy) > lw || u < 0.03f) continue;
+            int px = cx + 22 + x, py = cy - 30 + y;
+            Color &d = p[py * W + ((px % W) + W) % W];
+            if (d.r > 200) blendAt(px, py, fabsf(dy) < 1.2f ? Color{ 70, 96, 52, 255 } : Color{ 98, 130, 70, 255 }, 0.95f);
+        }
+        const char *l1 = "ALMOND", *l2 = "WATER";
+        printText(p, W, H, l1, cx - printWidth(l1, 27) * 0.5f, 208, 27, ink, 0.085f, 2.0f);
+        printText(p, W, H, l2, cx - printWidth(l2, 27) * 0.5f, 244, 27, ink, 0.085f, 2.0f);
+        const char *l3 = "330 ML";
+        printText(p, W, H, l3, cx - printWidth(l3, 11) * 0.5f, 281, 11, inkSoft, 0.09f, 1.0f);
     }
-    const char *l1 = "ALMOND", *l2 = "WATER";
-    for (int rep = 0; rep < 2; rep++) {
-        int cx = 48 + rep * 96;
-        ImageDrawText(&img, l1, cx - MeasureText(l1, 11) / 2, 72, 11, ink);
-        ImageDrawText(&img, l2, cx - MeasureText(l2, 11) / 2, 85, 11, ink);
+    // The back panel between the two, where every can keeps its small print...
+    {
+        int cx = 96 * K;
+        const char *lines[] = { "PURIFIED WATER", "WITH ALMOND", "DRINK CHILLED", "DO NOT BOIL" };
+        for (int k = 0; k < 4; k++)
+            printText(p, W, H, lines[k], cx - printWidth(lines[k], 9) * 0.5f, 118 + k * 16, 9, inkSoft, 0.10f, 0.5f);
     }
-
-    // ---- lid (x 0..63) and base (x 64..127), both on rows 128..191
+    // ...and at the seam, a barcode laddered round the barrel.
+    for (int k = 0, y = 120; y < 200; k++) {
+        int bh = 1 + (int)(ih(k, 7, 0x0CA7u) % 3), gap = 1 + (int)(ih(k, 8, 0x0CA7u) % 2);
+        for (int q = 0; q < bh; q++) for (int x = -20; x <= 20; x++) put(x, y + q, { 30, 26, 24, 255 });
+        y += bh + gap;
+    }
+    // ---- lid (x 0..191) and base (x 192..383), on rows 384..575
     for (int q = 0; q < 2; q++) {
-        int ox = q * 64;
-        for (int y = 0; y < 64; y++)
-            for (int x = 0; x < 64; x++) {
-                float dx = (x - 31.5f) / 30.0f, dy = (y - 31.5f) / 30.0f;
-                float r = sqrtf(dx * dx + dy * dy);
-                if (r > 1.0f) continue;                       // outside the disc
-                Color c = alu;
-                if (r > 0.93f) c = aluDk;                     // the chime round the rim
-                else if (r > 0.86f) c = Color{ 205, 208, 214, 255 };
-                else if (q == 0) {                            // lid: countersink + tab + mouth
-                    if (r > 0.70f && r < 0.76f) c = aluDk;
-                    if (dy < -0.30f && fabsf(dx) < 0.20f && r < 0.66f)
-                        c = Color{ 96, 99, 105, 255 };        // the mouth, a teardrop up top
-                    if (fabsf(dy - 0.06f) < 0.09f && fabsf(dx) < 0.42f)
-                        c = Color{ 158, 161, 168, 255 };      // tab lying across the lid
-                    if (fabsf(dy - 0.06f) < 0.04f && fabsf(dx) < 0.30f) c = aluDk;
-                } else {                                      // base: a recessed dome
-                    if (r < 0.72f) c = Color{ 160, 163, 170, 255 };
-                    if (r < 0.62f) c = Color{ 178, 181, 188, 255 };
+        int ox = q * 64 * K, oy = SIDE_H;
+        for (int y = 0; y < 64 * K; y++) for (int x = 0; x < 64 * K; x++) {
+            float dx = (x - 95.5f) / 90.0f, dy = (y - 95.5f) / 90.0f;
+            float r = sqrtf(dx * dx + dy * dy);
+            if (r > 1.0f) continue;
+            // turned rings from the press, round the centre
+            float ring = 0.96f + 0.05f * sinf(r * 190.0f) * sinf(r * 23.0f);
+            float v = ring;
+            Color c;
+            if (r > 0.93f) v *= 0.80f;                       // the chime round the rim
+            else if (r > 0.86f) v *= 0.96f;
+            if (q == 0) {                                    // lid: countersink, score, tab, rivet
+                if (r > 0.70f && r < 0.76f) v *= 0.80f;
+                float mx = dx, my = dy + 0.44f;              // the mouth: a teardrop, scored, up top
+                float mouth = sqrtf(mx * mx * 2.2f + my * my * 3.5f);
+                if (mouth < 0.50f && dy < -0.12f) v *= 0.86f;
+                if (fabsf(mouth - 0.50f) < 0.018f && dy < -0.10f) v *= 0.62f;   // the score line
+                float tab = sqrtf(dx * dx * 3.6f + (dy - 0.10f) * (dy - 0.10f) * 5.0f);
+                if (tab < 0.58f) {                           // the ring-pull lying across it
+                    v = 0.78f + 0.12f * (1 - tab / 0.58f);
+                    float hole = sqrtf(dx * dx * 3.6f + (dy - 0.26f) * (dy - 0.26f) * 9.0f);
+                    if (hole < 0.26f) v = 0.40f;              // its finger hole
+                    if (fabsf(tab - 0.56f) < 0.03f) v *= 0.85f;
                 }
-                put(ox + x, 128 + y, c);
+                if (dx * dx + (dy + 0.02f) * (dy + 0.02f) < 0.006f) v = 0.66f;   // the rivet
+            } else {                                         // base: a recessed dome
+                if (r < 0.72f) v *= 0.76f;
+                if (r < 0.62f) v *= 1.10f;
+                if (fabsf(r - 0.30f) < 0.01f) v *= 0.85f;
             }
+            c = { cl8(210 * v), cl8(213 * v), cl8(220 * v), 255 };
+            put(ox + x, oy + y, c);
+        }
     }
-
+    // a date code inkjetted on the base, the one thing on it that is not metal
+    printText(p, W, H, "2002 14:07", 64 * K + 58, SIDE_H + 118, 8, { 40, 40, 44, 220 }, 0.10f, 0.5f);
     // ---- wear, so it doesn't read as showroom stock
     for (int y = 0; y < H; y++)
         for (int x = 0; x < W; x++) {
             Color &c = p[y * W + x];
             if (c.a == 0) continue;
-            float g = vnoise2(x * 0.05f, y * 0.05f, 4471u);
-            float stain = clampf((g - 0.58f) * 2.1f, 0.0f, 1.0f) * 0.17f;
-            float grime = (vnoise2(x * 0.5f, y * 0.5f, 9137u) - 0.5f) * 0.05f;
+            float g = vnoise2(x * 0.05f / K, y * 0.05f / K, 4471u);
+            float stain = clampf((g - 0.58f) * 2.1f, 0.0f, 1.0f) * 0.15f;
+            float grime = (vnoise2(x * 0.5f / K, y * 0.5f / K, 9137u) - 0.5f) * 0.04f;
             float k = 1.0f - stain + grime;
             c.r = cl8(c.r * k); c.g = cl8(c.g * k * 0.998f); c.b = cl8(c.b * k * 0.984f);
         }
-    return finishTexture(img, false);
+    Texture2D t = LoadTextureFromImage(img);
+    UnloadImage(img);
+    GenTextureMipmaps(&t);
+    SetTextureFilter(t, TEXTURE_FILTER_TRILINEAR);     // held up close and seen far off on a floor
+    return t;
 }
 
-// The tape player, unwrapped. Four 64px tiles in a 128px atlas, because the
-// thing is a box and a box only needs four different faces:
-//   (0,0) top     — the cassette bay, seen from above, and the label above it
+// The tape player, unwrapped. Four tiles in one atlas, because the thing is a
+// box and a box only needs four different faces:
+//   (0,0) top     — the cassette bay's frame, and the label above it
 //   (1,0) body    — moulded plastic for the sides, back and underside
-//   (0,1) front   — speaker grille and the transport buttons
+//   (0,1) front   — speaker grille and the transport keys
 //   (1,1) reel    — one hub with tape wound on it, for the two spinning discs
+// 512 px, four times what it was: it is carried in the hand, a foot from the
+// eye, where a 64 px face is a smear. The layout is the old one at 4x, so
+// buildDeckMesh's UVs did not move.
 Texture2D makeDeckTex() {
-    const int W = 128, H = 128, T = 64;
+    const int K = 4, W = 128 * K, H = 128 * K, T = 64 * K;
     Image img = GenImageColor(W, H, BLANK);
     Color *p = (Color *)img.data;
     auto put = [&](int x, int y, Color c) { if (x >= 0 && x < W && y >= 0 && y < H) p[y * W + x] = c; };
-
+    auto blendAt = [&](int x, int y, Color c, float a) {
+        if (x < 0 || x >= W || y < 0 || y >= H || a <= 0) return;
+        Color &d = p[y * W + x];
+        a = std::min(a, 1.0f);
+        d.r = cl8(d.r + (c.r - d.r) * a); d.g = cl8(d.g + (c.g - d.g) * a); d.b = cl8(d.b + (c.b - d.b) * a);
+    };
+    // a rounded rectangle's coverage at a pixel, antialiased over one pixel
+    auto rrect = [](float x, float y, float x0, float y0, float x1, float y1, float rad) {
+        float cx = std::max(x0 + rad - x, std::max(0.0f, x - (x1 - rad)));
+        float cy = std::max(y0 + rad - y, std::max(0.0f, y - (y1 - rad)));
+        float d = sqrtf(cx * cx + cy * cy) - rad;
+        return clampf(0.5f - d, 0.0f, 1.0f);
+    };
     const Color shell   = { 108, 110, 114, 255 };   // grey moulded plastic
-    const Color shellDk = {  78,  80,  85, 255 };
-    const Color shellHi = { 138, 140, 145, 255 };
-    const Color bay     = {  26,  25,  29, 255 };   // inside the cassette door
-    const Color trim    = {  52,  52,  58, 255 };
-    const Color tape    = {  58,  42,  34, 255 };   // wound oxide
-    const Color tapeHi  = {  82,  60,  48, 255 };
-    const Color hub     = { 176, 172, 168, 255 };   // light plastic: the slots have to read against it
-    const Color label   = { 206, 198, 178, 255 };
-
-    Rng r(0xDEC4ULL);
-    // ---- (0,0) and (1,0) both start as plastic, with a moulding grain and wear
+    const Color shellDk = {  70,  72,  77, 255 };
+    const Color shellHi = { 146, 148, 153, 255 };
+    const Color bay     = {  24,  23,  27, 255 };   // inside the cassette door
+    const Color trim    = {  48,  48,  54, 255 };
+    const Color tape    = {  56,  40,  32, 255 };   // wound oxide
+    const Color tapeHi  = {  86,  62,  50, 255 };
+    const Color hub     = { 178, 174, 170, 255 };   // light plastic: the slots have to read against it
+    const Color printC  = { 206, 208, 212, 255 };   // the silk-screened legends
+    // ---- (0,0), (1,0), (0,1): plastic with the fine spark-erosion texture every
+    // piece of consumer electronics was moulded with, rubbed shiny at the edges
     for (int ty = 0; ty < 2; ty++) for (int tx = 0; tx < 2; tx++) {
         if (ty == 1 && tx == 1) continue;             // the reel tile is drawn from scratch
         int ox = tx * T, oy = ty * T;
         for (int y = 0; y < T; y++) for (int x = 0; x < T; x++) {
-            float g = vnoise2(x * 0.55f + ox, y * 0.55f + oy, 7u);
+            float g = vnoise2((x + ox) * 0.45f, (y + oy) * 0.45f, 7u) * 0.6f + lat(x + ox, y + oy, 8u) * 0.4f;
             float e = fminf(fminf((float)x, (float)y), fminf(T - 1.0f - x, T - 1.0f - y));
-            float wear = clampf(1.0f - e / 5.0f, 0, 1) * 0.35f;   // the edges have been rubbed shiny
-            Color c = shell;
-            c.r = cl8(c.r * (0.90f + g * 0.16f) + wear * 40);
-            c.g = cl8(c.g * (0.90f + g * 0.16f) + wear * 40);
-            c.b = cl8(c.b * (0.90f + g * 0.16f) + wear * 42);
-            put(ox + x, oy + y, c);
+            float wear = clampf(1.0f - e / 18.0f, 0, 1) * 0.30f;
+            float scratch = fbm2((x + ox) * 0.02f, (y + oy) * 0.9f, 9u, 2) > 0.72f ? 10.0f : 0.0f;
+            float k = 0.92f + g * 0.12f;
+            put(ox + x, oy + y, { cl8(shell.r * k + wear * 40 + scratch), cl8(shell.g * k + wear * 40 + scratch),
+                                  cl8(shell.b * k + wear * 42 + scratch), 255 });
         }
     }
-    // ---- (0,0) top: the bay window, and a strip of label above it
-    for (int y = 19; y < 45; y++) for (int x = 12; x < 52; x++) {
-        bool edge = (y < 21 || y > 42 || x < 14 || x > 49);
-        put(x, y, edge ? trim : bay);
+    // ---- (0,0) top: the bay's frame, a paper label above it, four screws
+    for (int y = 76; y < 180; y++) for (int x = 48; x < 208; x++) {
+        float cov = rrect(x + 0.5f, y + 0.5f, 48, 76, 208, 180, 8);
+        blendAt(x, y, trim, cov);
+        float in = rrect(x + 0.5f, y + 0.5f, 56, 84, 200, 172, 5);
+        blendAt(x, y, bay, in);
     }
-    for (int y = 4; y < 16; y++) for (int x = 6; x < 58; x++) {
-        float g = vnoise2(x * 0.9f, y * 0.9f, 11u);
-        put(x, y, { cl8(label.r * (0.86f + g * 0.2f)), cl8(label.g * (0.86f + g * 0.2f)),
-                    cl8(label.b * (0.86f + g * 0.2f)), 255 });
+    for (int y = 16; y < 64; y++) for (int x = 24; x < 232; x++) {
+        float g = vnoise2(x * 0.22f, y * 0.22f, 11u);
+        float k = 0.88f + g * 0.14f - (y > 58 ? 0.06f : 0.0f);
+        put(x, y, { cl8(212 * k), cl8(204 * k), cl8(182 * k), 255 });
     }
-    ImageDrawText(&img, "FIELD REC", 9, 5, 10, { 62, 58, 54, 255 });
-
-    // ---- (0,1) front: speaker grille on the left, transport buttons on the right
+    for (int x = 24; x < 232; x++) put(x, 30, { 170, 60, 50, 255 });     // the label's red rule
+    printText(p, W, H, "FIELD REC", 34, 36, 17, { 58, 54, 50, 255 }, 0.09f, 1.0f);
+    printText(p, W, H, "CR-40", 186, 42, 10, { 90, 84, 78, 255 }, 0.09f, 0.5f);
+    for (int sx = 0; sx < 2; sx++) for (int sy = 0; sy < 2; sy++) {   // a Phillips head in each corner
+        float cx = sx ? 240.5f : 15.5f, cy = sy ? 240.5f : 15.5f;
+        for (int y = -6; y <= 6; y++) for (int x = -6; x <= 6; x++) {
+            float d = sqrtf((float)(x * x + y * y));
+            float cov = clampf(5.5f - d, 0.0f, 1.0f);
+            blendAt((int)cx + x, (int)cy + y, (x + y < 0) ? Color{ 150, 152, 156, 255 } : Color{ 104, 106, 110, 255 }, cov);
+            if (d < 4.2f && (abs(x) < 1 || abs(y) < 1)) blendAt((int)cx + x, (int)cy + y, shellDk, 0.9f);
+        }
+    }
+    // ---- (0,1) front: speaker grille on the left, transport keys on the right
     {
         const int oy = T;
-        for (int gy = 0; gy < 9; gy++) for (int gx = 0; gx < 9; gx++) {
-            int cx = 8 + gx * 3, cy = oy + 18 + gy * 3;
-            put(cx, cy, shellDk); put(cx + 1, cy, { 60, 62, 66, 255 });
-        }
-        for (int b = 0; b < 3; b++) {                 // play, stop, and the one that never worked
-            int bx = 38, by = oy + 14 + b * 13;
-            for (int y = 0; y < 9; y++) for (int x = 0; x < 18; x++) {
-                bool lip = (y == 0 || x == 0);
-                put(bx + x, by + y, lip ? shellHi : (y > 6 ? shellDk : shell));
+        for (int x = 0; x < T; x++) for (int y = 8; y < 14; y++)       // the case seam
+            blendAt(x, oy + y, y < 11 ? shellDk : shellHi, 0.8f);
+        // the grille: a recessed panel drilled in a hex pattern
+        for (int y = 64; y < 184; y++) for (int x = 24; x < 144; x++)
+            blendAt(x, oy + y, shellDk, rrect(x + 0.5f, y + 0.5f, 24, 64, 144, 184, 10) * 0.55f);
+        for (int row = 0; row < 11; row++) for (int col = 0; col < 12; col++) {
+            float cx = 34 + col * 9.4f + (row & 1) * 4.7f, cy = 74 + row * 9.8f;
+            if (cx > 136) continue;
+            for (int y = -4; y <= 4; y++) for (int x = -4; x <= 4; x++) {
+                float d = sqrtf((x + 0.5f + cx - (int)cx - 0.5f) * (x + 0.5f + cx - (int)cx - 0.5f) + y * y);
+                blendAt((int)cx + x, oy + (int)cy + y, { 14, 14, 16, 255 }, clampf(3.2f - d, 0.0f, 1.0f));
+                if (y == -3 && fabsf((float)x) < 2) blendAt((int)cx + x, oy + (int)cy + y, shellHi, 0.35f);
             }
         }
-        for (int x = 0; x < T; x++) { put(x, oy + 2, shellDk); put(x, oy + 3, shellHi); }  // seam
+        // play, stop, record: piano keys with their symbols silk-screened on
+        for (int k = 0; k < 3; k++) {
+            int bx = 152, by = oy + 56 + k * 52;
+            for (int y = 0; y < 36; y++) for (int x = 0; x < 72; x++) {
+                float cov = rrect(x + 0.5f, y + 0.5f, 0, 0, 72, 36, 5);
+                Color c = y < 4 ? shellHi : y > 29 ? shellDk : Color{ 96, 98, 103, 255 };
+                blendAt(bx + x, by + y, c, cov);
+            }
+            float cx = bx + 36.0f, cy = by + 17.0f;
+            for (int y = -9; y <= 9; y++) for (int x = -9; x <= 9; x++) {
+                float fx = x + 0.5f, fy = y + 0.5f, cov = 0;
+                if (k == 0) cov = clampf(fminf(fminf(fx + 6.0f, 7.0f - fx * 0.95f - fabsf(fy) * 1.7f), 7.0f - fabsf(fy)), 0, 1);
+                else if (k == 1) cov = clampf(fminf(6.5f - fabsf(fx), 6.5f - fabsf(fy)), 0, 1);
+                else cov = clampf(6.5f - sqrtf(fx * fx + fy * fy), 0, 1);
+                blendAt((int)cx + x, (int)cy + y, k == 2 ? Color{ 190, 44, 38, 255 } : printC, cov);
+            }
+        }
+        printText(p, W, H, "MIC", 64, oy + 200, 10, printC, 0.09f, 1.0f);
+        for (int y = -4; y <= 4; y++) for (int x = -4; x <= 4; x++)      // the mic's pinhole
+            blendAt(50 + x, oy + 205 + y, { 12, 12, 14, 255 }, clampf(3.0f - sqrtf((float)(x * x + y * y)), 0, 1));
     }
-
-    // ---- (1,1) reel: tape wound on a hub, with the spoke slots cut in it
+    // ---- (1,1) reel: tape wound on a hub, with the drive teeth and slots cut in it
     {
         const int ox = T, oy = T;
         for (int y = 0; y < T; y++) for (int x = 0; x < T; x++) {
-            float dx = (x - 31.5f) / 30.0f, dy = (y - 31.5f) / 30.0f;
+            float dx = (x - 127.5f) / 120.0f, dy = (y - 127.5f) / 120.0f;
             float rad = sqrtf(dx * dx + dy * dy), ang = atan2f(dy, dx);
             Color c;
             if (rad > 1.0f) c = bay;                             // outside the flange: the dark bay
             else if (rad > 0.42f) {                              // wound tape, in fine rings
-                float ring = sinf(rad * 130.0f) * 0.5f + 0.5f;
+                float ring = sinf(rad * 520.0f) * 0.25f + sinf(rad * 61.0f) * 0.25f + 0.5f;
+                float sheen = 0.5f + 0.5f * cosf(ang * 2.0f);    // the pack catches light across one axis
+                ring = ring * 0.7f + sheen * 0.3f;
                 c = { cl8(tape.r + ring * (tapeHi.r - tape.r)), cl8(tape.g + ring * (tapeHi.g - tape.g)),
                       cl8(tape.b + ring * (tapeHi.b - tape.b)), 255 };
+                if (rad > 0.985f) c = { 40, 30, 26, 255 };      // the pack's edge
             } else {
-                // the hub: three slots cut through it, which is the only thing
-                // that says whether the reel is turning
+                // The hub: three slots cut through it, which is the only thing
+                // that says whether the reel is turning, and six drive teeth
+                // round its bore.
                 float sl = fmodf(ang + TAU, 2.0943951f);
-                c = (rad > 0.10f && rad < 0.34f && sl < 0.72f) ? Color{ 20, 19, 22, 255 } : hub;
+                bool slot = rad > 0.14f && rad < 0.34f && sl < 0.62f;
+                float tooth = fmodf(ang + TAU, 1.0471976f);
+                bool bore = rad < 0.11f && !(rad > 0.075f && tooth < 0.30f);
+                c = (slot || bore) ? Color{ 20, 19, 22, 255 } : hub;
+                if (!slot && !bore && rad > 0.38f) c = { 150, 146, 142, 255 };   // the hub's rim
             }
             put(ox + x, oy + y, c);
         }
     }
-
     Texture2D t = LoadTextureFromImage(img);
     UnloadImage(img);
-    SetTextureFilter(t, TEXTURE_FILTER_BILINEAR);
+    GenTextureMipmaps(&t);
+    SetTextureFilter(t, TEXTURE_FILTER_TRILINEAR);     // in the hand, and on the floor across a room
     return t;
 }
 
-Texture2D makeSurfaceDetail(Texture2D albedo, bool ceramic, float strength) {
+// Relief guessed from luminance, for the props atlas only: its regions are
+// scanned material photographs whose shading already carries their relief.
+// The world surfaces author a real height field instead (surfaces.cpp).
+static Texture2D makeSurfaceDetail(Texture2D albedo, bool ceramic, float strength) {
     Image source = LoadImageFromTexture(albedo);
     Color *pixels = LoadImageColors(source);
     const int w = source.width, h = source.height;

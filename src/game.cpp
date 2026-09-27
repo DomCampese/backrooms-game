@@ -89,33 +89,12 @@ void Game::init() {
     deckMesh = buildDeckMesh();
     reelMesh = buildReelMesh();
     deckLampMesh = buildDeckLampMesh();
-    // per-level surface sets: [floor, ceiling, walls]
-    floorTexs[0] = makeCarpetTex(); floorTexs[1] = makeConcreteFloorTex();
-    floorTexs[2] = makeTileTex();   floorTexs[4] = makePartyCarpetTex();
-    ceilTexs[0] = makeCeilingTex(); ceilTexs[1] = makeConcreteCeilTex(); ceilTexs[2] = floorTexs[2];
-    wallTexs[0] = makeWallpaperTex(); wallTexs[1] = makeConcreteWallTex();
-    wallTexs[2] = floorTexs[2];       wallTexs[3] = makeRedBrickTex();
-    wallTexs[4] = makePartyWallTex();
-    floorTexs[3] = floorTexs[1];   // red halls reuse the concrete floor/ceiling in red light
-    ceilTexs[3] = ceilTexs[1];
-    ceilTexs[4] = makePartyCeilTex();   // the party hall's ceiling has gone dark
-
-    // Reused albedos share detail maps too (pool tile serves three surfaces).
-    std::unordered_map<unsigned, Texture2D> details;
-    auto surface = [&](Texture2D tex, bool tile, float strength) {
-        auto it = details.find(tex.id);
-        if (it != details.end()) return it->second;
-        Texture2D map = makeSurfaceDetail(tex, tile, strength);
-        details[tex.id] = map;
-        surfaceDetails.push_back(map);
-        return map;
-    };
-    for (int lv = 0; lv < NLEVELS; ++lv) {
-        floorDetails[lv] = surface(floorTexs[lv], lv == 2, lv == 2 ? 1.0f : 1.3f);
-        ceilDetails[lv] = surface(ceilTexs[lv], lv == 2, 0.45f);
-        wallDetails[lv] = surface(wallTexs[lv], lv == 2, lv == 3 ? 1.4f : 0.9f);
-    }
-    Image neutral = GenImageColor(1, 1, {128, 128, 255, 255});
+    // Alpha 250, not 255: the shader takes a detail alpha above 0.99 to mean
+    // "a tiled world surface" and lays its world-space variation (uMacro,
+    // uBoard) over only those. Object maps are 128; this neutral one serves the
+    // decals, fixtures and held objects, and must stay out of that test while
+    // still reading as level-relative gloss (anything over 0.75).
+    Image neutral = GenImageColor(1, 1, {128, 128, 255, 250});
     neutralDetail = LoadTextureFromImage(neutral);
     UnloadImage(neutral);
 
@@ -155,6 +134,9 @@ void Game::init() {
     locStorey = GetShaderLocation(worldShader, "uStorey");
     locDrawRel = GetShaderLocation(worldShader, "uDrawRel");
     locLampCol = GetShaderLocation(worldShader, "uLampCol");
+    locMacro = GetShaderLocation(worldShader, "uMacro");
+    locBoard = GetShaderLocation(worldShader, "uBoard");
+    locObjRefl = GetShaderLocation(worldShader, "uObjRefl");
     postShader = LoadShaderFromMemory(NULL, POST_FS);
     if (postShader.id == rlGetShaderIdDefault())
         TraceLog(LOG_ERROR, "post shader failed to compile - see the SHADER lines above");
@@ -240,11 +222,15 @@ void Game::init() {
 
     Vector2 sp = world.findOpenSpot(15, 15);
     px = sp.x; pz = sp.y;
-    if (const char *posEnv = getenv("BACKROOMS_POS")) {   // testing: "x,z,yaw"
-        float ex, ez, ey;
-        if (sscanf(posEnv, "%f,%f,%f", &ex, &ez, &ey) == 3) {
+    if (const char *posEnv = getenv("BACKROOMS_POS")) {   // testing: "x,z,yaw[,pitch]"
+        float ex, ez, ey, ep;
+        int n = sscanf(posEnv, "%f,%f,%f,%f", &ex, &ez, &ey, &ep);
+        if (n >= 3) {
             Vector2 s2 = world.findOpenSpot(ex, ez);
             px = s2.x; pz = s2.y; yaw = ey;
+            // Optional pitch, radians, up positive: the only way to photograph a
+            // floor or a ceiling close up for a before/after comparison.
+            if (n == 4) pitch = ep;
         }
     }
 
@@ -306,7 +292,7 @@ void Game::shutdown() {
     revolver.unload();
     UnloadTexture(propDetail);
     UnloadMesh(flareMesh);
-    for (Texture2D map : surfaceDetails) UnloadTexture(map);
+    for (Surface &sf : surfaces) if (sf.albedo.id) { UnloadTexture(sf.albedo); UnloadTexture(sf.detail); }
     UnloadTexture(neutralDetail);
     UnloadMusicStream(musUnderwater); UnloadMusicStream(musParty);
     CloseAudioDevice();
@@ -523,6 +509,26 @@ void Game::startRun(double now) {
     nextFlareRegen = now + 75;
 }
 
+const Surface &Game::surface(int slot) {
+    Surface &sf = surfaces[slot];
+    if (sf.albedo.id) return sf;
+    switch (slot) {
+        case SURF_CARPET:    sf = makeCarpetSurface(); break;
+        case SURF_BOARDS:    sf = makeCeilingSurface(); break;
+        case SURF_PAPER:     sf = makeWallpaperSurface(); break;
+        case SURF_SLAB:      sf = makeConcreteFloorSurface(); break;
+        case SURF_SOFFIT:    sf = makeConcreteCeilSurface(); break;
+        case SURF_CONCWALL:  sf = makeConcreteWallSurface(); break;
+        case SURF_POOLFLOOR: sf = makeTileSurface(false); break;
+        case SURF_POOLWALL:  sf = makeTileSurface(true); break;
+        case SURF_BRICK:     sf = makeRedBrickSurface(); break;
+        case SURF_BANQUET:   sf = makePartyCarpetSurface(); break;
+        case SURF_PARTYCEIL: sf = makePartyCeilSurface(); break;
+        case SURF_PARTYWALL: sf = makePartyWallSurface(); break;
+    }
+    return sf;
+}
+
 // A fresh descent: a new maze from the top, you at the start of it, gear and
 // per-run tallies reset. Shared by the title screen and by escaping for good —
 // the difference between those two is only what each does afterwards.
@@ -612,12 +618,21 @@ void Game::applyLevel(int lv) {
         float st0 = 0.0f;
         SetShaderValue(worldShader, locStorey, &st0, SHADER_UNIFORM_FLOAT);
     }
-    mats[MAT_FLOOR].maps[MATERIAL_MAP_DIFFUSE].texture = floorTexs[lv];
-    mats[MAT_CEILING].maps[MATERIAL_MAP_DIFFUSE].texture = ceilTexs[lv];
-    mats[MAT_WALLS].maps[MATERIAL_MAP_DIFFUSE].texture = wallTexs[lv];
-    mats[MAT_FLOOR].maps[MATERIAL_MAP_SPECULAR].texture = floorDetails[lv];
-    mats[MAT_CEILING].maps[MATERIAL_MAP_SPECULAR].texture = ceilDetails[lv];
-    mats[MAT_WALLS].maps[MATERIAL_MAP_SPECULAR].texture = wallDetails[lv];
+    {   // [floor, ceiling, walls] for each level
+        static const int SETS[NLEVELS][3] = {
+            { SURF_CARPET, SURF_BOARDS, SURF_PAPER },
+            { SURF_SLAB, SURF_SOFFIT, SURF_CONCWALL },
+            { SURF_POOLFLOOR, SURF_POOLFLOOR, SURF_POOLWALL },   // floor tile on the ceiling: both map 2 m
+            { SURF_SLAB, SURF_SOFFIT, SURF_BRICK },              // Level 1's slab, in red light
+            { SURF_BANQUET, SURF_PARTYCEIL, SURF_PARTYWALL },
+        };
+        const int mat[3] = { MAT_FLOOR, MAT_CEILING, MAT_WALLS };
+        for (int k = 0; k < 3; k++) {
+            const Surface &sf = surface(SETS[lv][k]);
+            mats[mat[k]].maps[MATERIAL_MAP_DIFFUSE].texture = sf.albedo;
+            mats[mat[k]].maps[MATERIAL_MAP_SPECULAR].texture = sf.detail;
+        }
+    }
     float ly = c.wallH - 0.12f;
     SetShaderValue(worldShader, locAmb, &c.amb, SHADER_UNIFORM_VEC3);
     SetShaderValue(worldShader, locFogCol, &c.fogCol, SHADER_UNIFORM_VEC3);
@@ -632,6 +647,8 @@ void Game::applyLevel(int lv) {
     SetShaderValue(worldShader, locFaulty, &c.faulty, SHADER_UNIFORM_FLOAT);
     SetShaderValue(worldShader, locWet, &c.wet, SHADER_UNIFORM_FLOAT);
     SetShaderValue(worldShader, locWetFrom, &c.wetFrom, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(worldShader, locMacro, &SURF_MACRO[lv], SHADER_UNIFORM_FLOAT);
+    SetShaderValue(worldShader, locBoard, &CEIL_BOARD[lv], SHADER_UNIFORM_FLOAT);
     synth.tHum = lv == 0 ? 1.0f : lv == 4 ? 0.5f : lv == 2 ? 0.035f : 0.15f;
     synth.tDrone = lv == 1 ? 1.0f : 0.0f;
     nextBlackout = lv == 2 ? BLACKOUT_NEVER : blackoutIn(GetTime(), 30, 60);   // no blackouts in the poolrooms
