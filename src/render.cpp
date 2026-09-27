@@ -762,7 +762,13 @@ void Game::drawHeldWeapon(const Camera3D &cam) {
     SetShaderValue(worldShader, locGloss, &gloss, SHADER_UNIFORM_FLOAT);
     if (weapon == WEAPON_REVOLVER) {
         revolver.pose(reloadT,gunCd,ammo);
+        // Its steel reflects the room (uObjRefl in the world shader); nothing
+        // else drawn has metal in its detail map, so nothing else pays for it.
+        float refl = 1.0f;
+        SetShaderValue(worldShader, locObjRefl, &refl, SHADER_UNIFORM_FLOAT);
         revolver.draw(mats[MAT_PROPS],m);
+        refl = 0.0f;
+        SetShaderValue(worldShader, locObjRefl, &refl, SHADER_UNIFORM_FLOAT);
     } else DrawMesh(flareMesh,mats[MAT_PROPS],m);
     SetShaderValue(worldShader, locGloss, &LEVELS[level].gloss, SHADER_UNIFORM_FLOAT);
     if (weapon == WEAPON_REVOLVER) {

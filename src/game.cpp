@@ -136,6 +136,7 @@ void Game::init() {
     locLampCol = GetShaderLocation(worldShader, "uLampCol");
     locMacro = GetShaderLocation(worldShader, "uMacro");
     locBoard = GetShaderLocation(worldShader, "uBoard");
+    locObjRefl = GetShaderLocation(worldShader, "uObjRefl");
     postShader = LoadShaderFromMemory(NULL, POST_FS);
     if (postShader.id == rlGetShaderIdDefault())
         TraceLog(LOG_ERROR, "post shader failed to compile - see the SHADER lines above");

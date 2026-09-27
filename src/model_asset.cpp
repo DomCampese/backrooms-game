@@ -90,8 +90,12 @@ Texture2D detailMap(Material material) {
     for(int i=0;i<width*height;++i) {
         float z=fmaxf(nc[i].b/127.5f-1,.25f);
         auto byte=[](float v){return (unsigned char)std::clamp(v,0.0f,255.0f);};
+        // Alpha flags an object map (below 0.75: absolute gloss in B) and now
+        // also carries metalness: 128 is a dielectric, 188 fully metal. The
+        // shader reflects the room off metal (see the world shader's object
+        // reflection); without it the stainless revolver shaded as grey plastic.
         nc[i]={byte(128-127*(nc[i].r/127.5f-1)/z),byte(128-127*(nc[i].g/127.5f-1)/z),
-               byte((1-rc[i].g/255.0f)*(.18f+.72f*rc[i].b/255.0f)*255),128};
+               byte((1-rc[i].g/255.0f)*(.18f+.72f*rc[i].b/255.0f)*255),byte(128+60*rc[i].b/255.0f)};
     }
     Image packed{nc,width,height,1,PIXELFORMAT_UNCOMPRESSED_R8G8B8A8};
     Texture2D result=LoadTextureFromImage(packed);GenTextureMipmaps(&result);SetTextureFilter(result,result.mipmaps>1?TEXTURE_FILTER_TRILINEAR:TEXTURE_FILTER_BILINEAR);

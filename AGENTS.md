@@ -69,6 +69,23 @@ objects were redrawn. What changed, and what will bite:
 - The can (576 px) and deck (512 px) are their old layouts at 3x and 4x, so
   the mesh UVs did not change; both are mipmapped now. The dog sheet keeps its
   frame size and ground line; only the silhouette changed.
+- **The revolver reflects the room.** `detailMap` (model_asset.cpp) writes
+  metalness into detail alpha (128 dielectric .. 188 metal); the world shader
+  adds a reflection of an approximate room for object maps only — floor and
+  walls in the level's fog colour, ceiling and a hot band of tubes overhead in
+  the light's, scaled by the fragment's own `gLightLum` — weighted by Fresnel
+  against the metal's colour (albedo x 2.6, undoing the importer's 0.35), and
+  cuts metal's diffuse to a fifth. Roughness sharpens the band but never dims a
+  metal's reflection; weighting it by gloss the first time left the gun grey.
+  It runs only while `uObjRefl` is 1, which render.cpp sets around the
+  revolver's draw alone: evaluated for every fragment it cost 2.2% of frame for
+  the few hundred pixels of gun. The branch is on a uniform; inside it stays
+  arithmetic, because this is the model desktop ANGLE drew black shards on.
+- **Walnut stocks** are baked into the prepared GLB by
+  `tools/revolver-finish.py`, idempotent via `asset.extras.gripFinish`, and run
+  by `import-revolver.py`. The grip mask is "non-metal in the metallic map and
+  inside a UV island in the normal map" — the background is non-metal too, and
+  tinting it would bleed brown into the steel's mip edges.
 - `RED` (and every named colour) is a raylib macro: `const Vector3 RED = {...}`
   fails with "too many initializers" pointing into raylib.h.
 
@@ -354,8 +371,9 @@ entries, and the 2002 photograph (CREDITS.md). What changed, and what will bite:
 
 ## Previous graphics implementation notes (September 2026)
 
-- Object detail maps use alpha 128 to identify an absolute gloss value in B;
-  world maps and neutral maps use alpha 255 and retain level-relative gloss.
+- Object detail maps use alpha 128 to identify an absolute gloss value in B
+  (now 128-188, which also carries metalness: see the surface realism pass);
+  world maps use alpha 255 and the neutral map 250, both level-relative gloss.
   This lets cloth remain matte and metal reflect in carpeted levels. Vertex
   alpha 254 still disables normal relief independently of material gloss.
 - The revolver is the user-authorized CC0 model in assets/revolver. See its
@@ -370,7 +388,9 @@ entries, and the 2002 photograph (CREDITS.md). What changed, and what will bite:
 - make and sandbox-build.sh run tools/embed-materials.py. Do not commit generated
   headers; commit converted assets and the reproducible import script.
 - Authored metallic albedo needs diffuse attenuation in this renderer; importing
-  the silver albedo unchanged made the gun look like white paint.
+  the silver albedo unchanged made the gun look like white paint. (The shader
+  now also reflects the room off metal and keeps a fifth of its diffuse — see
+  the surface realism pass; attenuation alone left it grey plastic.)
 - Regression captures must stream all 25 visible chunks after relocating. The
   previous three render-only frames left missing black rooms in some screenshots.
 - Can caps must map their triangle fan center to the atlas disc center. Mapping

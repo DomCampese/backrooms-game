@@ -144,6 +144,10 @@ and with real relief:
   barcoded label; the almond water can and tape deck are redrawn at 3-4x the
   resolution with clean printed lettering; outlets are real duplex receptacles;
   the pack's hounds have an actual dog's anatomy.
+- **The revolver.** Its stainless steel now reflects the room — the ceiling and
+  its tubes along the top strap, the walls in the level's own colour down the
+  flats, the floor underneath — instead of shading as grey plastic, and it has
+  checkered walnut stocks where the source's grip was the same grey as the steel.
 
 Exposure is unchanged: every surface keeps its predecessor's mean brightness.
 `tools/sandbox-build.sh texdump && ./texdump out/` writes every texture to PNG

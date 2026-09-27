@@ -57,6 +57,7 @@ uniform vec4 uLamp;              // xyz: the one spare point light — the Manil
 uniform vec3 uLampCol;           // ...and its colour: filament warm, or fluorescent
 uniform float uMacro;            // world-space tone wander on tiled surfaces (SURF_MACRO)
 uniform float uBoard;            // suspended-ceiling board pitch, metres; 0 = none (CEIL_BOARD)
+uniform float uObjRefl;          // 1 while the held revolver draws: reflect the room off metal
 uniform sampler2D texture1; // packed material slopes / gloss mask
 float gGloss;
 uniform sampler2D texture2;      // occupancy grid (material normal-map slot)
@@ -673,7 +674,43 @@ void main(){
             gGloss = max(gGloss, 0.62*wet);
             Nb = normalize(mix(Nb, normalize(fragN), wet));
         }
+        // The revolver reflects the room. Metal is almost nothing but
+        // reflection: stainless steel is the ceiling along its top strap, the
+        // walls down its flats and the floor underneath, and shaded by diffuse
+        // light alone (which is all it had) it read as grey plastic. There is
+        // no environment map, so the room is approximated from what this
+        // fragment already knows: how lit it is (gLightLum, set by roomLight)
+        // and the colour of the tubes and of the level — a dark floor below the
+        // horizon, walls at it, the lit ceiling above, and the fittings as a hot
+        // band overhead that sharpens with gloss. Roughness blurs a metal's
+        // reflection but does not dim it, so metal reflects at full weight and
+        // keeps a fifth of its diffuse; the walnut gets 4% at normal incidence,
+        // rising with gloss at a grazing angle. Object maps carry metalness in
+        // detail alpha (128 = none, 188 = metal); the importer stored metal
+        // albedo at 0.35 of its value, hence the 2.6.
         col = texel.rgb * fragC.rgb * roomLight(fragPos, Nb);
+        // Only the held revolver has metal, so only its draw pays for this: a
+        // uniform branch, the same for every fragment of a draw — not the
+        // divergent kind (inside, it stays arithmetic).
+        if (uObjRefl > 0.5){
+            float isObj = step(detail.a, 0.75);
+            float metal = clamp((detail.a - 0.502) / 0.235, 0.0, 1.0) * isObj;
+            col *= 1.0 - 0.8 * metal;
+            vec3 Vo = normalize(uViewPos - fragPos);
+            vec3 Ro = reflect(-Vo, Nb);
+            float room = max(gLightLum, 0.04);
+            // floor and walls in the level's own colour (its fog is its air, and
+            // its air is the colour of its walls: mustard, concrete, tile, red),
+            // the ceiling and its tubes in the light's
+            vec3 walls = uFogCol / max(dot(uFogCol, vec3(0.30, 0.59, 0.11)), 1e-3);
+            vec3 below = mix(walls * 0.22, walls * 0.95, smoothstep(-0.6, 0.05, Ro.y));
+            vec3 env = room * (mix(below, uLightCol * 1.15, smoothstep(0.05, 0.7, Ro.y))
+                     + uLightCol * pow(max(Ro.y, 0.0), mix(3.0, 26.0, gGloss)) * (0.6 + 1.6 * gGloss));
+            vec3 F0 = mix(vec3(0.04), min(texel.rgb * fragC.rgb * 2.6, vec3(0.95)), metal);
+            float fr = pow(1.0 - clamp(dot(Nb, Vo), 0.0, 1.0), 5.0);
+            vec3 F = F0 + (1.0 - F0) * fr * gGloss;
+            col += env * F * mix(0.25 + 0.75 * gGloss, 1.0, metal) * isObj;
+        }
         // Underwater tile catches moving ribbons of refracted light. Pool
         // floors are the only glossy world surfaces this far below the deck.
         if (uGloss > 0.5 && fragPos.y < -0.13) {

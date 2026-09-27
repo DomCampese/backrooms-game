@@ -87,6 +87,7 @@ is the other half of why Level 0 has storeys.
 
 - **Revolver Game Asset** by **loafbrr_1 / TheLoafbrr**, CC0 1.0.
   [Original source](https://opengameart.org/content/revolver-game-asset).
+  The grip panels are recoloured as walnut by `tools/revolver-finish.py`.
   [Local provenance and modifications](assets/revolver/README.md).
 - **Poly Haven**: wood_table_001, metal_plate and denim_fabric, CC0 1.0.
   [Individual source links and conversion details](assets/materials/README.md).
