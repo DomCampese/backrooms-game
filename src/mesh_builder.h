@@ -6,16 +6,13 @@
 #include <functional>
 #include <vector>
 
-// mesh builder: accumulate textured quads, bake to a raylib Mesh
 struct MB {
     std::vector<float> v, uv, n;
     std::vector<unsigned char> c;
     std::vector<unsigned short> idx;
     // Optional colour field over the floor plan, multiplied into every vertex
-    // this builder emits (alpha untouched, so the shader's alpha coding is
-    // unaffected). Per vertex rather than per quad, so a tint that changes
-    // across a room grades smoothly instead of stepping cell by cell — which
-    // is what the Red Rooms' bleed on Level 0 needs.
+    // this builder emits (alpha untouched, so the shader's alpha coding holds). Per
+    // vertex, so a tint grades across a room instead of stepping per cell.
     std::function<Color(float, float)> tint;
     void quad(Vector3 a, Vector3 b, Vector3 cc, Vector3 d, Vector3 nn,
               Vector2 ta, Vector2 tb, Vector2 tc, Vector2 td, Color col) {

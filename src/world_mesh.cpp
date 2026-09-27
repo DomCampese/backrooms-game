@@ -8,23 +8,21 @@
 #include <cmath>
 
 // Door trim: an architrave 24 mm proud of the wall face, and the threshold
-// strip under the opening. Both sample the props atlas's plain metal at
-// (0.375, 0.75), which is where addSolidBox looks.
+// strip. Both sample the plain metal at (0.375, 0.75), as addSolidBox does.
 static const float TRIM_T = 0.024f;
 static const Color TRIM_COL = { 176, 170, 152, 254 };   // painted trim, no relief bump
 static const Color SILL_COL = { 138, 136, 130, 254 };   // dulled metal threshold
-// A locked door's leaf and its lock plate. Alpha 254: textured and opaque, but
-// below the shader's relief threshold, because a flat painted slab with the
-// world-space bump on it comes out looking like pebbledash (see AGENTS.md).
+// A locked door's leaf and lock plate. Alpha 254: opaque, but below the
+// shader's relief threshold, or the flat slab takes the world-space bump.
 static const Color LEAF_COL = { 150, 128, 96, 254 };
 static const Color LOCK_COL = { 206, 194, 140, 254 };
 
 // Baked contact-shadow tint. The AO strip texture carries the falloff in its
-// alpha channel, so wall creases and furniture shadows all share this one colour.
+// alpha, so every crease and furniture shadow shares this colour.
 static const Color AO_TINT = { 10, 9, 9, 255 };
 
-// A rounded contact shadow shared by props and pillars. Only the footprint
-// is solid; the skirt samples the AO gradient down to zero at its outer edge.
+// A rounded contact shadow for props and pillars: a solid footprint and a skirt
+// that samples the AO gradient down to zero at its outer edge.
 static void addContactShadow(MB &ao, float pcx, float pcz, float ey, float rot,
                              float hx2, float hz2) {
     float ca = cosf(rot), sa = sinf(rot);
@@ -34,11 +32,10 @@ static void addContactShadow(MB &ao, float pcx, float pcz, float ey, float rot,
     auto P = [&](float lx, float lz) {
         return Vector3{ pcx + lx * ca - lz * sa, ey + 0.006f, pcz + lx * sa + lz * ca };
     };
-    // core, right under the piece: darkest end of the gradient
+    // the footprint: the darkest end of the gradient
     ao.quad(P(-hx2,-hz2), P(hx2,-hz2), P(hx2,hz2), P(-hx2,hz2), up,
             {0,0},{1,0},{1,0},{0,0}, AO_TINT);
-    // four skirts fading outward. Each inner edge runs so the quad
-    // stays wound the same way round as the core.
+    // four skirts fading outward, each wound the same way round as the core
     const float sd[4][6] = {
         {  hx2,-hz2, -hx2,-hz2,  0,  -S },
         {  hx2, hz2,  hx2,-hz2,  S,   0 },
@@ -49,7 +46,7 @@ static void addContactShadow(MB &ao, float pcx, float pcz, float ey, float rot,
         ao.quad(P(e[0], e[1]), P(e[2], e[3]),
                 P(e[2] + e[4], e[3] + e[5]), P(e[0] + e[4], e[1] + e[5]), up,
                 {0,0},{1,0},{1,1},{0,1}, AO_TINT);
-    // and the corners, so the skirt closes instead of leaving notches
+    // and the corners, so the skirt closes without notches
     const float cn[4][4] = {
         {  hx2,  hz2,  1,  1 }, { -hx2,  hz2, -1,  1 },
         { -hx2, -hz2, -1, -1 }, {  hx2, -hz2,  1, -1 },
@@ -66,24 +63,22 @@ static void addContactShadow(MB &ao, float pcx, float pcz, float ey, float rot,
     }
 }
 
-// The wall builder: a mesh builder that also knows how its paper maps onto
-// height. tileV is how many metres of wall one texture tile spans vertically:
-// 3 where the texture is a repeating pattern, Level 1's wall height because its
-// concrete carries a damp band and pour joints at real heights (a 3 m repeat
-// draws a second tide line under the 4.2 m slab). tallPaper, on a storeyed
-// level, continues a wall that climbs past one tile from the tile's clean
-// middle, a whole number of pattern repeats down, so no second baseboard runs
-// round a stair shaft at 3 m; everywhere else a tall wall repeats its tile.
+// A mesh builder that also knows how wall paper maps onto height. tileV:
+// metres of wall one texture tile spans; 3 for a repeating pattern, Level 1's
+// wall height because its concrete carries a damp band and pour joints at real
+// heights (a 3 m repeat draws a second tide line under its 4.2 m slab).
+// tallPaper (storeyed levels): a wall past one tile continues from the tile's
+// clean middle a whole number of repeats down, so no second baseboard runs round
+// a stair shaft at 3 m. Elsewhere a tall wall repeats its tile.
 struct WallBuilder : MB {
     float tileV = 3.0f;
     bool tallPaper = false;
 };
 // The wallpaper's V at a height, for tallPaper.
 static float wallV(float y, float tileV) { return y <= tileV + 1e-4f ? 1 - y / tileV : 1 - (y - tileV * 0.5f) / tileV; }
-// A face over a void — an upper storey's wall seen from the shaft below it —
-// stands on no floor, so it must show no baseboard at all. It takes the
-// tile's clean middle, 0.75 m to 2.25 m, repeating by whole chevrons, which
-// means splitting the face wherever that band wraps.
+// A face over a void (an upper storey's wall seen from the shaft below) stands
+// on no floor, so it shows no baseboard: it takes the tile's clean band, 0.75 m
+// to 2.25 m, repeating by whole chevrons, split wherever that band wraps.
 static void voidFace(WallBuilder &mb, Vector3 a0, Vector3 a1, Vector3 n, float ua, float ub, float y0, float y1, Color w) {
     auto T = [](float y) { return 0.75f + fmodf(y + 0.57f + 150.0f, 1.5f); };
     float y = y0;
@@ -95,11 +90,10 @@ static void voidFace(WallBuilder &mb, Vector3 a0, Vector3 a1, Vector3 n, float u
         y = yb;
     }
 }
-// skip bits: 1 = -z face, 2 = +z face, 4 = -x face, 8 = +x face. Wall runs overlap
-// their neighbours by WT so corners close, which buries the end caps inside the
-// next box — and an end cap meeting the neighbour's front face at exactly the same
-// depth z-fights into a vertical seam. Skipping buried caps removes the seam.
-// voidFaces: which of the four faces look into a hole (same bits as skip).
+// skip bits: 1 = -z face, 2 = +z face, 4 = -x face, 8 = +x face. Wall runs
+// overlap their neighbours by WT so corners close, which buries the end caps in
+// the next box; skip a buried cap or it z-fights into a vertical seam.
+// voidFaces: which faces look into a hole (same bits).
 static void addBoxSides(WallBuilder &mb, float x0, float y0, float z0, float x1, float y1, float z1,
                         bool bottomFace = false, int skip = 0, Color w = WHITE, int voidFaces = 0) {
     if (mb.tallPaper && voidFaces) {
@@ -143,12 +137,10 @@ static void addBoxSides(WallBuilder &mb, float x0, float y0, float z0, float x1,
         mb.quad({x0,y0,z0},{x1,y0,z0},{x1,y0,z1},{x0,y0,z1},{0,-1,0},{x0/3,z0/3},{x1/3,z0/3},{x1/3,z1/3},{x0/3,z1/3},w);
 }
 
-// ---- rails. A guard round an opening, or up the open side of a flight, built
-// the way everything else here is: a knee wall papered like the partitions,
-// under a stained timber cap. The top runs from top0 to top1 along the edge,
-// so the same builder does the level rail round a hole and the balustrade that
-// climbs with a stair's nosing line. `bottom` closes the underside, which is
-// only ever seen looking up through the opening it guards.
+// ---- rails: a papered knee wall under a timber cap. The top runs from top0 to
+// top1 along the edge, so the same builder does the level rail round a hole and
+// the balustrade that climbs a flight's nosing line. `bottom` closes the
+// underside, seen only from below the opening.
 static const Color RAIL_CAP = { 104, 80, 46, 254 };
 static void addRailRun(WallBuilder &wa, MB &pr, float ax, float az, float bx, float bz,
                        float base, float top0, float top1, bool bottom, int voidSide = 0) {
@@ -163,9 +155,8 @@ static void addRailRun(WallBuilder &wa, MB &pr, float ax, float az, float bx, fl
     float w0 = top0 - cap, w1 = top1 - cap;   // the paper stops under the cap
     for (int sg = -1; sg <= 1; sg += 2) {
         float sd = sg * RAIL_T;
-        // The face over a hole is the top of the bulkhead below it, not a
-        // wall standing on a floor: no baseboard, and the paper picks up
-        // where the bulkhead's left off (see the soffit in bakeChunk).
+        // The face over a hole tops the bulkhead below it: no baseboard, and the
+        // paper continues from the bulkhead's (the soffit in bakeChunk).
         auto Vs = [&](float y) { return sg == voidSide ? 1.0f - (y + 2.0f) / wa.tileV : V(y); };
         wa.quad(P(0, sd, base), P(len, sd, base), P(len, sd, w1), P(0, sd, w0), { nx * sg, 0, nz * sg },
                 { U(0), Vs(base) }, { U(len), Vs(base) }, { U(len), Vs(w1) }, { U(0), Vs(w0) }, WHITE);
@@ -194,12 +185,10 @@ static void addRailRun(WallBuilder &wa, MB &pr, float ax, float az, float bx, fl
     }
 }
 
-// ---- stairs. One step of a flight: a solid block from the floor to its tread,
-// so the flight is a stair and not a ramp of paper-thin treads, with carpet on
-// the tread and up the riser — Level 0's carpet goes wherever the floor goes —
-// and an aluminium nosing on the edge you would catch your heel on. Built in
-// the feature's local frame (u across, v along, y up) through `to`, which is
-// one of four rotations, so the normals come through unmirrored.
+// ---- stairs. One step: a solid block from the floor to its tread, carpeted on
+// tread and riser, with an aluminium nosing. Built in the feature's local frame
+// (u across, v along, y up) through `to`, a rotation, so normals stay
+// unmirrored.
 static const Color NOSING_COL = { 168, 160, 138, 254 };
 template <class ToWorld>
 static void addStep(MB &fl, MB &pr, ToWorld to, float u0, float u1, float va, float vb, float y0, float y1,
@@ -233,38 +222,31 @@ static void addStep(MB &fl, MB &pr, ToWorld to, float u0, float u1, float va, fl
     }
 }
 
-// Where a piece of furniture goes, and the handful of numbers that make each
-// one of a kind slightly different from the next.
+// Where a piece of furniture goes, and the numbers that vary each piece.
 struct PropSite {
     float cx, cz;    // cell centre, in world metres
-    float floorY;    // the floor under this cell — furniture stands on it
+    float floorY;    // the floor under this cell, which the furniture stands on
     float rot;       // yaw, from ChunkData::propRot
     int gi, gk;      // global cell coordinates: the seed for this piece's variations
 };
 
-// Build one piece of furniture into a chunk's meshes. Most of a prop is boxes
-// in the props mesh; the collapsed-tile prop also cuts a hole in the ceiling
-// mesh, and every piece lays a contact shadow into the AO mesh.
-//
-// Each piece is deliberately a handful of boxes rather than a model: everything
-// in this game is generated, and furniture that reads correctly at corridor
-// range is worth far more than furniture that reads correctly close up.
+// Build one piece of furniture: boxes in the props mesh, a contact shadow in
+// the AO mesh, and for the fallen tile a hole in the ceiling mesh. Heights must
+// match gatherCellAABBs and Game::bottleShelfY.
 static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level,
                     MB &pr, MB &ce, MB &ao, MB &fx) {
     const float pcx = site.cx, pcz = site.cz, rot = site.rot, ey = site.floorY;
     uint32_t h = ih(site.gi, site.gk, seed ^ 0xB0B5u);
     float r1 = (h & 0xFF) / 255.0f, r2 = ((h >> 8) & 0xFF) / 255.0f, r3 = ((h >> 16) & 0xFF) / 255.0f;
-    // UV regions of the prop atlas
-    // cardboard: a carton's side, then its top (flap seam, tape, shipping
-    // label) — two regions, because a box taped round its middle on every face
-    // is not how anyone packs one. makePropsTex draws them.
+    // UV regions of the props atlas (makePropsTex). Cardboard has two: a carton's
+    // side, and its top with the flap seam, tape and label.
     const float CU0=0.01f, CV0=0.004f, CU1=0.24f, CV1=0.58f;
     const float KU0=0.01f, KV0=0.61f, KU1=0.24f, KV1=0.99f;
     const float FU0=0.26f, FV0=0.02f, FU1=0.49f, FV1=0.48f;       // cabinet front
     const float MU0=0.26f, MV0=0.52f, MU1=0.49f, MV1=0.98f;       // plain metal
     enum class Surface { Metal, Wood, Fabric, Cardboard };
     float ca = cosf(rot), sa = sinf(rot);
-    // rotated sub-box placed relative to the prop centre
+    // a sub-box placed relative to the prop centre, turned with it
     auto part = [&](float ox, float oz, float hx2, float hz2, float y0, float y1,
                     Surface surface, Color tint) {
         float u0=MU0,v0=MV0,u1=MU1,v1=MV1;
@@ -292,8 +274,7 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
         addContactShadow(ao, pcx, pcz, ey, rot, hx, hz);
     };
     switch (kind) {
-    case PROP_BOXES: {   // box stack — on LEVEL FUN they're wrapped like presents,
-                // and the packing tape reads as ribbon
+    case PROP_BOXES: {   // cartons; on Level 4 wrapped like presents
         blob(0.40f, 0.40f);
         float bh = 0.55f + r1 * 0.2f, bhx = 0.34f + r2 * 0.08f;
         auto wrap = [&](int rot2) {
@@ -332,8 +313,7 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
         break;
     }
     case PROP_FALLEN_TILE: {   // collapsed ceiling: dark hole above, tile leaning below, debris
-        // 2.994 is just under a 3 m ceiling. Only Level 0 generates this prop,
-        // and Level 0 is the 3 m one — see LEVELS in levels.cpp.
+        // 2.994: just under Level 0's 3 m ceiling, the only level with this prop.
         Color hole = { 12, 11, 9, 51 };
         ce.quad({pcx-0.85f,2.994f,pcz-0.85f},{pcx-0.85f,2.994f,pcz+0.85f},
                 {pcx+0.85f,2.994f,pcz+0.85f},{pcx+0.85f,2.994f,pcz-0.85f},{0,-1,0},
@@ -355,7 +335,7 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
                 {0.3f,0.3f},{0.45f,0.3f},{0.45f,0.45f},{0.3f,0.45f}, deb);
         break;
     }
-    case PROP_COUCH: {   // couch: mustard upholstery gone grey, facing nothing in particular
+    case PROP_COUCH: {   // couch
         blob(0.74f, 0.48f);
         Color uph = { 172, 152, 96, 255 };
         part(0, 0.10f, 0.78f, 0.42f, ey + 0.16f, ey + 0.44f, Surface::Fabric, uph);   // seat
@@ -363,14 +343,14 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
         part(-0.64f, 0.06f, 0.14f, 0.46f, ey, ey + 0.62f, Surface::Fabric, uph);      // arms
         part( 0.64f, 0.06f, 0.14f, 0.46f, ey, ey + 0.62f, Surface::Fabric, uph);
         part(0, 0.10f, 0.74f, 0.38f, ey, ey + 0.16f, Surface::Fabric, Color{ 120, 106, 70, 255 });
-        // Three separate seat cushions and piping, inside the same collision box.
+        // seat cushions and piping, inside the same collision box
         for (int i=-1;i<=1;++i) {
             part(i*0.41f,0.12f,0.196f,0.34f,ey+0.44f,ey+0.49f,Surface::Fabric,uph);
             part(i*0.41f,0.454f,0.192f,0.006f,ey+0.452f,ey+0.461f,Surface::Fabric,{213,191,131,255});
         }
         break;
     }
-    case PROP_ARMOIRE:     // armoire: a wardrobe looming where no bedroom is
+    case PROP_ARMOIRE:     // armoire
         blob(0.54f, 0.46f);
         part(0, 0, 0.44f, 0.36f, ey, ey + 1.78f, Surface::Wood, Color{ 118, 82, 58, 255 });
         part(0, 0, 0.48f, 0.40f, ey + 1.78f, ey + 1.90f, Surface::Wood, Color{ 92, 63, 44, 255 });  // cornice
@@ -378,18 +358,18 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
         for (int i=-1;i<=1;i+=2)
             part(i*0.218f,0.362f,0.193f,0.003f,ey+0.15f,ey+1.67f,Surface::Wood,{155,113,79,255});
         break;
-    case PROP_LAMP:     // floor lamp, shade askew, never lit
+    case PROP_LAMP:     // floor lamp
         blob(0.22f, 0.22f);
         part(0, 0, 0.14f, 0.14f, ey, ey + 0.05f, Surface::Metal, Color{ 66, 62, 60, 255 });
         part(0, 0, 0.025f, 0.025f, ey, ey + 1.34f, Surface::Metal, Color{ 66, 62, 60, 255 });
         roundPart(0.05f,0,0.17f,0.10f,ey+1.30f,ey+1.60f,{214,190,142,254});
         break;
-    case PROP_NIGHTSTAND:     // nightstand, nowhere near a bed. usually.
+    case PROP_NIGHTSTAND:     // nightstand
         blob(0.36f, 0.36f);
         part(0, 0, 0.26f, 0.26f, ey, ey + 0.55f, Surface::Wood, Color{ 126, 90, 62, 255 });
         part(0, 0, 0.30f, 0.30f, ey + 0.55f, ey + 0.60f, Surface::Wood, Color{ 104, 74, 50, 255 });
         break;
-    case PROP_BED: {   // bed: bare stained mattress, headboard against nothing
+    case PROP_BED: {   // bed: frame, mattress, headboard
         blob(0.60f, 1.02f);
         Color wd = { 110, 78, 54, 255 };
         part(0, 0, 0.52f, 0.92f, ey + 0.12f, ey + 0.26f, Surface::Wood, wd);          // frame
@@ -397,7 +377,7 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
         part(0, -0.97f, 0.52f, 0.05f, ey, ey + 0.95f, Surface::Wood, wd);             // headboard
         break;
     }
-    case PROP_PARTY_TABLE: {  // party table: paper cloth, a cake nobody cut, cups nobody drank
+    case PROP_PARTY_TABLE: {  // party table: cloth, cake, cups
         blob(0.52f, 0.52f);
         float ty = 0.74f;
         uint32_t th = ih(site.gi, site.gk, seed ^ 0xCAFEu);
@@ -419,8 +399,7 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
                      ey + ty, ey + ty + 0.09f, Surface::Metal, PARTY[(ch >> 5) % 5]);
             }
         }
-        {   // ...and the candle is still lit. nobody lit it. two crossed
-            // emissive fins make a little flame that survives blackouts
+        {   // the candle flame: two crossed emissive fins that survive blackouts
             auto fpt = [&](float lx, float ly2, float lz) {
                 return Vector3{ pcx + lx * ca - lz * sa, ly2, pcz + lx * sa + lz * ca };
             };
@@ -433,33 +412,26 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
         }
         break;
     }
-    case PROP_VENDING: {  // vending machine: still stocked, still humming, takes doubloons
-        // A glass-front drink machine, built at its real size (0.88 m wide,
-        // 1.83 high, 0.72 deep) from a cabinet, a door cut into the pieces
-        // round its two openings, and the painted front in the fixtures atlas
-        // (drawVendingFront, laid out by VEND_* in textures.h). The cans are
-        // painted on the back of the cabinet, 6 cm behind the glass, and the
-        // shelves in front of them are real, so they slide across the cans as
-        // you walk past. Most machines are still lit: the header, the display,
-        // the price strips and the inside of the cabinet take vertex alpha
-        // 240, which the shader lights from behind. One in six has died.
+    case PROP_VENDING: {  // vending machine
+        // A glass-front drink machine at real size (0.88 x 1.83 x 0.72 m): a cabinet,
+        // a door cut round its two openings, and the painted front in the fixtures
+        // atlas (drawVendingFront, laid out by VEND_* in textures.h). The cans are
+        // painted on the back of the cabinet 6 cm behind the glass, behind real
+        // shelves. Lit machines use vertex alpha 240 (backlit) for the header, display,
+        // price strips and cabinet interior; one in six is dead (254).
         blob(0.50f, 0.42f);
         bool lit = (h >> 24) % 6 != 0;
         const unsigned char GLOW = lit ? 240 : 254;
-        // In door coordinates x runs to the viewer's right as they face the
-        // front, which is local -x: seen from the front, local +x is on the left.
+        // Door x runs to the viewer's right facing the front, which is local -x:
+        // seen from the front, local +x is on the left.
         auto P = [&](float x, float y, float lz) {
             return Vector3{ pcx - x * ca - lz * sa, ey + y, pcz - x * sa + lz * ca };
         };
         const Vector3 fn = { sa, 0, -ca };                     // the front's normal
-        // No two visible faces here share a plane, and nothing is layered a
-        // hair in front of anything else. The first version stood every painted
-        // face 1.5 mm off a door box's own front, the display 1.5 mm off the
-        // paint and the cans 1.5 mm off the cabinet: fine on a desktop GPU, and
-        // on a phone's depth buffer the dark box fronts flickered through the
-        // keypad, the door and the cans at any range. So the boxes leave out the
-        // faces something else covers (FRONT, and so on, below), the paint is
-        // the front, and the display is cut into the door rather than laid on it.
+        // No two visible faces share a plane and nothing is layered a hair over
+        // anything else, or a mobile GPU's depth buffer flickers the box fronts
+        // through the paint and cans. Boxes leave out every face something else covers;
+        // the paint is the door's front, and the display is cut into the door.
         enum { FRONT = 1, BACK = 2, SIDES = 4, TOP = 8, BOTTOM = 16, ALL = 31 };
         auto sbox = [&](float x0, float x1, float y0, float y1, float z0, float z1, Color c, int faces = ALL) {
             Vector3 a = P(x0, y0, z0), b = P(x1, y1, z1);
@@ -485,16 +457,16 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
                     Color{ 255, 255, 255, alpha });
         };
         const float ZF = -0.362f, ZBODY = -0.30f, ZBACK = VEND_DEPTH_BACK;
-        // the cabinet: painted steel sides in one of the colours they come in
+        // the cabinet: painted steel sides in one of four colours
         static const Color SIDE_COLS[4] = { { 52, 54, 60, 254 }, { 118, 30, 28, 254 },
                                             { 34, 48, 84, 254 }, { 178, 172, 158, 254 } };
         Color side = SIDE_COLS[(h >> 20) & 3];
         const Color door = { 48, 50, 55, 254 }, black = { 18, 18, 20, 254 };
         sbox(-0.42f, 0.42f, 0.0f, VEND_Y0, -0.33f, ZBACK - 0.02f, black, ALL & ~TOP);   // plinth, set back
-        // its front is covered everywhere: by the door, the cans and the flap
+        // its front is covered by the door, the cans and the flap
         sbox(-VEND_HW, VEND_HW, VEND_Y0, VEND_Y1, ZBODY, ZBACK, side, ALL & ~FRONT & ~BOTTOM);
-        // the door, around its two openings (see VEND_WIN / VEND_BIN); the
-        // paint is its front, and its back is against the cabinet
+        // the door, round its two openings (VEND_WIN, VEND_BIN): the paint is its
+        // front, and its back is against the cabinet
         const VendRect &w = VEND_WIN, &bn = VEND_BIN, &hd = VEND_HEADER;
         const int DOOR = ALL & ~FRONT & ~BACK;
         sbox(-VEND_HW, w.x0, VEND_Y0, hd.y0, ZF, ZBODY, door, DOOR);               // left stile
@@ -513,18 +485,17 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
         face(-VEND_HW, hd.y0, VEND_HW, VEND_Y1, ZF, GLOW);
         face(w.x0, bn.y1, w.x1, w.y0, ZF, 254);
         face(w.x0, VEND_Y0, w.x1, bn.y0, ZF, 254);
-        // what you touch stands proud of the paint: the coin return lever, the
-        // lock, and the lip of the coin cup (backs against the door, left out)
+        // proud of the paint: the coin return lever, the lock, and the lip of the coin
+        // cup (backs against the door, left out)
         const Color chrome = { 186, 188, 194, 254 };
         sbox(0.232f, 0.288f, 1.090f, 1.125f, ZF - 0.012f, ZF, chrome, ALL & ~BACK);
         sbox(0.385f, 0.405f, 0.545f, 0.565f, ZF - 0.016f, ZF, chrome, ALL & ~BACK);
         sbox(0.235f, 0.385f, 0.330f, 0.345f, ZF - 0.022f, ZF, chrome, ALL & ~BACK);
-        // the push flap, hung 2 cm inside the opening
+        // the push flap, 2 cm inside the opening
         face(bn.x0, bn.y0, bn.x1, bn.y1, -0.342f, 254);
-        // behind the glass: the lit back of the cabinet with the cans painted
-        // on it (where the cabinet's own front would be), and the six shelves in
-        // front of them. A shelf is its top, its underside and its price strip:
-        // its ends would lie in the stiles' faces and its back in the cans.
+        // behind the glass: the lit cabinet back with the cans painted on it (where
+        // the cabinet front would be), and six shelves. A shelf is its top, underside
+        // and price strip; its ends would lie in the stiles and its back in the cans.
         const float ZLIP = -0.345f;
         face(w.x0, w.y0, w.x1, w.y1, ZBODY, GLOW);
         for (int r = 0; r < VEND_ROWS; r++) {
@@ -537,14 +508,14 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
                     P(w.x1, yr + 0.004f, ZLIP), P(w.x0, yr + 0.004f, ZLIP), fn,
                     { u0, v0 }, { u1, v0 }, { u1, v1 }, { u0, v1 }, Color{ 255, 255, 255, GLOW });
         }
-        // and the glass itself, last, so it blends over everything behind it
-        // (vertex alpha 100: the shader's window-glass path, a sheen at an angle)
+        // the glass last, so it blends over everything behind it (alpha 100: the
+        // shader's window-glass path)
         const Vector2 m = { 0.375f, 0.75f };
         fx.quad(P(w.x0, w.y0, -0.352f), P(w.x1, w.y0, -0.352f), P(w.x1, w.y1, -0.352f), P(w.x0, w.y1, -0.352f),
                 fn, m, m, m, m, Color{ 7, 8, 9, 100 });
         break;
     }
-    case PROP_DESK: {  // office desk: chair shoved back, monitor long dead. someone worked here
+    case PROP_DESK: {  // office desk and chair
         blob(0.72f, 0.52f);
         Color wd = { 104, 80, 56, 255 };
         part(0, -0.12f, 0.62f, 0.34f, ey + 0.70f, ey + 0.74f, Surface::Wood, wd);      // desktop
@@ -558,21 +529,21 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
         part(0.02f + r1 * 0.1f, 0.44f, 0.035f, 0.035f, ey, ey + 0.40f, Surface::Metal, Color{ 72, 72, 76, 255 });        // post
         break;
     }
-    case PROP_SHELVING: {  // steel shelving, half-emptied in a hurry
+    case PROP_SHELVING: {  // steel shelving
         blob(0.68f, 0.32f);
         Color mt = { 132, 136, 142, 255 };
         for (int s2 = 0; s2 <= 3; s2++)
             part(0, 0, 0.60f, 0.24f, ey + 0.08f + s2 * 0.55f, ey + 0.12f + s2 * 0.55f, Surface::Metal, mt);
-        // corner posts, not full-depth panels — side-on you see *through* the rack
+        // corner posts, not panels, so the rack is see-through from the side
         for (int ux = -1; ux <= 1; ux += 2) for (int uz = -1; uz <= 1; uz += 2)
             part(ux * 0.575f, uz * 0.215f, 0.03f, 0.03f, ey, ey + 1.80f, Surface::Metal, mt);
-        part(-0.25f, 0.0f, 0.16f, 0.16f, ey + 0.12f, ey + 0.44f, Surface::Cardboard, Color{ 168, 138, 100, 255 });  // what's left
+        part(-0.25f, 0.0f, 0.16f, 0.16f, ey + 0.12f, ey + 0.44f, Surface::Cardboard, Color{ 168, 138, 100, 255 });  // stock
         part( 0.30f, 0.02f, 0.14f, 0.14f, ey + 0.67f, ey + 0.94f, Surface::Cardboard, Color{ 150, 122, 88, 255 });
         if (r2 > 0.4f)
             part(-0.06f, -0.02f, 0.12f, 0.12f, ey + 1.22f, ey + 1.44f, Surface::Cardboard, Color{ 174, 146, 106, 255 });
         break;
     }
-    case PROP_COOLER: {  // water cooler. the water is not almond
+    case PROP_COOLER: {  // water cooler
         blob(0.30f, 0.30f);
         part(0, 0, 0.19f, 0.19f, ey, ey + 0.94f, Surface::Metal, Color{ 204, 206, 210, 255 });   // body
         roundPart(0,0,0.10f,0.125f,ey+0.94f,ey+1.24f,{150,186,214,254});
@@ -581,7 +552,7 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
         part(0, 0.205f, 0.05f, 0.02f, ey + 0.58f, ey + 0.66f, Surface::Metal, Color{ 88, 90, 94, 255 });  // tap
         break;
     }
-    case PROP_PLANT: {  // potted plant. still green. nobody waters it
+    case PROP_PLANT: {  // potted plant
         blob(0.26f, 0.26f);
         part(0, 0, 0.17f, 0.17f, ey, ey + 0.09f, Surface::Metal, Color{ 120, 70, 48, 255 });    // saucer
         roundPart(0,0,0.105f,0.145f,ey+0.02f,ey+0.30f,{146,88,58,254});
@@ -602,13 +573,10 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
     }
 }
 
-// Spalled concrete with the rebar showing — "exposed rebar" is in the first
-// line of Level 1's description, and a warehouse of poured concrete gets it
-// wherever water has got at the steel and the cover has blown off. A ragged
-// cavity pressed just off the face (two fans, the deeper one darker), and the
-// bars themselves as real geometry standing proud of it: two verticals and a
-// tie or two across, rust-coloured. The face is axis-aligned, so `u` (the
-// horizontal tangent) is always x or z and the bars stay boxes.
+// Spalled concrete with the rebar showing (Level 1): a ragged cavity just off
+// the face (two fans, the deeper one darker), two vertical bars and one or two
+// ties as real boxes. The face is axis-aligned, so `u` is x or z and the bars
+// stay boxes.
 static void addSpall(MB &fx, MB &pr, Vector3 c, Vector3 n, Vector3 u, float rw, float rh, uint32_t h) {
     Rng r(((uint64_t)h << 1) ^ 0x5BA11ULL);
     const Vector2 uv = { 0.375f, 0.75f };                // the fixtures atlas's plain metal, darkened
@@ -647,15 +615,11 @@ static void addSpall(MB &fx, MB &pr, Vector3 c, Vector3 n, Vector3 u, float rw, 
     }
 }
 
-// ---- a Level 1 exit. The article lists Level 1's ways out as doors, and the
-// first of them is "doors with unique symbols at the end of corridors with
-// fluorescent lights". So an exit here is a steel door — frame, a heavy leaf
-// pinned open against the wall, the glow of wherever it goes in the opening —
-// with a symbol painted over it that no other door has (strokes between
-// points on a 3x3 lattice, chosen by the edge's hash, so every one differs),
-// and a caged bulkhead lamp above that. Cursed ones get their symbol in red.
-// `ax` is 0 for a wall running along x at z = w0, 1 for one along z at x = w0;
-// `a0` is the cell's low corner along the wall and `base` the floor under it.
+// ---- a Level 1 exit: a steel frame, a leaf pinned open against the wall, and
+// over it a symbol no other door has (strokes between points on a 3x3 lattice,
+// from the edge hash) and a caged bulkhead lamp. Cursed exits paint the symbol
+// red. `ax` is 0 for a wall along x at z = w0, 1 for one along z at x = w0; `a0`
+// is the cell's low corner along the wall and `base` the floor under it.
 static void addSymbolDoor(MB &pr, MB &fx, int ax, float a0, float w0, float base, bool cursed, uint32_t h,
                           bool leafRoom) {
     auto P = [&](float a, float y, float n) {             // wall-local -> world
@@ -700,10 +664,10 @@ static void addSymbolDoor(MB &pr, MB &fx, int ax, float a0, float w0, float base
             if (flip) fx.quad(B, A, D, C, nn, uv, uv, uv, uv, paint);
             else      fx.quad(A, B, C, D, nn, uv, uv, uv, uv, paint);
         }
-        // a dot where the stroke started: whoever painted it began there
+        // a dot where the stroke starts
         float pa = cA + ((pts[0] % 3) - 1) * sc, py = cY + ((pts[0] / 3) - 1) * sc;
         box(fx, pa - 0.04f, py - 0.04f, nf - 0.001f, pa + 0.04f, py + 0.04f, nf + 0.001f, paint);
-        // the caged bulkhead over it all: a warm glass lens (raw emissive) in a wire cage
+        // the caged bulkhead: a warm lens (raw emissive) in a wire cage
         float lf = sd * (WT + 0.07f);
         box(pr, cA - 0.13f, base + 3.18f, sd * WT, cA + 0.13f, base + 3.36f, lf, dark);
         box(pr, cA - 0.09f, base + 3.20f, lf - sd * 0.03f, cA + 0.09f, base + 3.34f, lf + sd * 0.012f,
@@ -714,12 +678,10 @@ static void addSymbolDoor(MB &pr, MB &fx, int ax, float a0, float w0, float base
     }
 }
 
-// ---- the Manila Room, built. Everything here follows the wiki entry and the
-// renders made from it: wooden floorboards, walls papered the colour of a
-// manila folder, "one octagonal table and two chairs", cupboards under the
-// table, "a wooden entrance door on each wall", and — from the Level 0 article
-// — "a table illuminated by a lone chandelier". rx/rz is the room's centre
-// (a cell corner), cy its ceiling. Floor is 0: generate() keeps it flat.
+// ---- the Manila Room: floorboards, manila paper, an octagonal table with a
+// cupboard, two chairs, notes, a chandelier, and an open wooden door in each
+// wall. rx/rz is the room's centre (a cell corner), cy its ceiling; the floor is
+// 0 (generate keeps it flat).
 static void addManilaRoom(MB &pr, MB &fx, MB &ao, float rx, float rz, float cy, uint32_t h) {
     const float R = 4.0f, IN = R - WT;       // half-size of the room, and of its inside
     const float WU0 = 0.51f, WV0 = 0.02f, WU1 = 0.99f, WV1 = 0.48f;   // props atlas: wood
@@ -728,10 +690,9 @@ static void addManilaRoom(MB &pr, MB &fx, MB &ao, float rx, float rz, float cy, 
     };
     Rng r(((uint64_t)h << 1) ^ 0x3A11AULL);
 
-    // Floorboards: 145 mm strips running east-west, broken at random lengths
-    // and staggered row to row, over a dark underlay that shows as the gaps.
-    // Alpha 255, so the props detail map gives the grain its relief, and the
-    // wood's own gloss mask gives the varnish a sheen off the chandelier.
+    // Floorboards: 145 mm strips east-west, random lengths, staggered, over a dark
+    // underlay that shows as the gaps. Alpha 255 so the wood takes its relief and
+    // gloss.
     {
         const Vector3 up = { 0, 1, 0 };
         const Vector2 u = { 0.375f, 0.75f };
@@ -758,10 +719,9 @@ static void addManilaRoom(MB &pr, MB &fx, MB &ao, float rx, float rz, float cy, 
         }
     }
 
-    // Manila paper on the four inside faces, as 500 mm tiles pressed 1.5 mm
-    // off the plaster, from the top of the skirting to the ceiling and round
-    // each doorway. Tiles are anchored to the world grid so the lattice runs
-    // unbroken across the cuts.
+    // Manila paper on the four inside faces: 500 mm tiles 1.5 mm off the plaster,
+    // from the skirting to the ceiling and round each doorway, anchored to the world
+    // grid so the lattice runs unbroken across the cuts.
     const FixtureRect &M = FIXTURES[FIX_MANILA];
     auto tileRect = [&](int axis, float fixed, float nsgn, float a0, float a1, float y0, float y1) {
         const float T = 0.5f;
@@ -788,9 +748,9 @@ static void addManilaRoom(MB &pr, MB &fx, MB &ao, float rx, float rz, float cy, 
                 }
             }
     };
-    // Door openings, in room-local cells: north wall's doorway is in cell 7,
-    // south's in 8, west's in 8, east's in 7 (see stampManila in generate).
-    // Cell c's opening runs from its west/north edge + 0.35 to + 1.65.
+    // Door openings in room-local cells: north in cell 7, south 8, west 8, east 7
+    // (stampManila in generate). Cell c's opening runs from its edge + 0.35 to
+    // + 1.65.
     auto face = [&](int axis, float fixed, float nsgn, int doorCell) {
         float a0 = (axis == 0 ? rx : rz) - IN, a1 = (axis == 0 ? rx : rz) + IN;
         float o0 = (axis == 0 ? rx : rz) - R + (doorCell - MANILA_LO) * CELL + 0.35f, o1 = o0 + 1.30f;
@@ -798,10 +758,8 @@ static void addManilaRoom(MB &pr, MB &fx, MB &ao, float rx, float rz, float cy, 
         tileRect(axis, fixed, nsgn, a0, o0 - 0.06f, y0, cy);    // left of the frame
         tileRect(axis, fixed, nsgn, o1 + 0.06f, a1, y0, cy);    // right of it
         tileRect(axis, fixed, nsgn, o0 - 0.06f, o1 + 0.06f, yo + 0.06f, cy);   // over the head
-        // The door itself, opened flat back against the wall beside its frame:
-        // a wooden leaf, two panels, and a brass knob. It is what the lore
-        // means by "a wooden entrance door on each wall", and it is open
-        // because this is the one place down here you are meant to walk into.
+        // The door, open flat against the wall beside its frame: a leaf, two panels
+        // and a brass knob.
         float lc = o1 + 0.08f + 0.64f;                       // leaf centre along the wall
         float off = fixed + nsgn * 0.03f;                    // standing just off the face
         Color leaf = { 118, 78, 50, 255 }, panel = { 98, 64, 40, 255 };
@@ -825,8 +783,7 @@ static void addManilaRoom(MB &pr, MB &fx, MB &ao, float rx, float rz, float cy, 
     face(1, rx - IN + D, +1, 8);    // west
     face(1, rx + IN - D, -1, 7);    // east
 
-    // The octagonal table, with its cupboard under the top (the lore keeps
-    // "food, water, and more documents" in there), on a plinth.
+    // The octagonal table on a plinth, with its cupboard under the top.
     auto octo = [&](float r0, float y0, float y1, Color t, bool top) {
         const float rr = r0 / cosf(TAU / 16);            // r0 is flat-to-centre
         for (int i = 0; i < 8; i++) {
@@ -853,8 +810,7 @@ static void addManilaRoom(MB &pr, MB &fx, MB &ao, float rx, float rz, float cy, 
     }
     addContactShadow(ao, rx, rz, 0.0f, 0.0f, 0.52f, 0.52f);
 
-    // Two chairs, one either side, pulled up to it as if two people had sat
-    // down to talk — the only place in Level 0 anyone ever can.
+    // Two chairs, one either side.
     for (int sgn = -1; sgn <= 1; sgn += 2) {
         float chx = rx + sgn * 1.02f, chz = rz;
         Color cw = { 112, 74, 46, 255 };
@@ -868,8 +824,7 @@ static void addManilaRoom(MB &pr, MB &fx, MB &ao, float rx, float rz, float cy, 
         addContactShadow(ao, chx, chz, 0.0f, 0.0f, 0.22f, 0.22f);
     }
 
-    // The notes. "Notes have been left on the table containing information
-    // about the Backrooms and guides to no-clipping." E reads them (Game).
+    // The notes on the table; Game reads them on E.
     const FixtureRect &N = FIXTURES[FIX_NOTE];
     for (int i = 0; i < 4; i++) {
         float a = r.f01() * TAU, d = 0.12f + r.f01() * 0.30f, rot = r.f01() * TAU;
@@ -880,9 +835,9 @@ static void addManilaRoom(MB &pr, MB &fx, MB &ao, float rx, float rz, float cy, 
                 { N.u0, N.v0 }, { N.u0, N.v1 }, { N.u1, N.v1 }, { N.u1, N.v0 }, Color{ 255, 255, 255, 254 });
     }
 
-    // The chandelier: a chain from the ceiling, a brass hub, six arms and six
-    // warm bulbs. The bulbs are raw emissive (alpha 60); the light they throw
-    // is the shader's uLamp, which Game points at this room while you are near.
+    // The chandelier: chain, brass hub, six arms, six bulbs. The bulbs are raw
+    // emissive (alpha 60); the light they throw is the shader's uLamp, which Game
+    // points here while the room is near.
     {
         Color brass = { 186, 146, 72, 254 };
         float hy = cy - 0.78f;
@@ -913,20 +868,12 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
     wa.tileV = w.level == 1 ? w.wallH : 3.0f;
     wa.tallPaper = w.storeyH > 0.0f;
     Color wcol = WHITE;
-    // The ceiling takes its relief (alpha 255) again. It hangs level with the
-    // light fittings, so every panel lights it edge-on, and a bump under raking
-    // light swings the terminator far harder than the same bump lit head-on:
-    // when relief was a world-space noise field, that turned the whole ceiling
-    // into dark mould-like blotches roughly a tile across, and it was opted out
-    // at 254. Relief is authored per surface now (surfaces.cpp) and a ceiling's
-    // has no lumps in it — fine fissures, pinholes, the T-bar standing a
-    // millimetre proud with a rolled edge, a formwork fin — which under raking
-    // light is exactly what a real ceiling shows. If blotches come back, look
-    // for a low-frequency term in a ceiling's height field before you look here.
+    // The ceiling takes relief (alpha 255). It is lit edge-on by every fitting, so
+    // any low-frequency lump in a ceiling's authored height field shows as blotches;
+    // look there first if they appear.
     Color ccol = { 255, 255, 255, 255 };
-    // ---- baked ambient occlusion: gradient decals hugging every crease where
-    // geometry meets. The strip texture fades alpha from the crease (v=0)
-    // outward (v=1), so walls sit *in* the room instead of on top of it.
+    // ---- baked ambient occlusion: gradient strips along every crease. The strip
+    // texture fades alpha from the crease (v = 0) outward (v = 1).
     auto aoStrip = [&](Vector3 e0, Vector3 e1, Vector3 off, Vector3 nn, float v0) {
         ao.quad(e0, e1, { e1.x + off.x, e1.y + off.y, e1.z + off.z },
                 { e0.x + off.x, e0.y + off.y, e0.z + off.z }, nn,
@@ -935,12 +882,8 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
     const float AOW = 0.55f;   // reach across the floor / ceiling
     const float AOH = 0.48f;   // creep up / down the wall face
     const float AOC = 0.30f;   // ceiling creases start partway down the gradient (softer)
-    // ---- the Red Rooms, bleeding through. On Level 0 a cursed noclip wall
-    // leads to the red places, and the lore's warning signs are that the
-    // colour shifts toward red and the paper starts peeling to crimson as you
-    // get near one. So collect the cursed exits in this chunk and its eight
-    // neighbours (an exit's pull reaches ~10 m, less than a chunk) and tint
-    // every wall and floor cell by how close it stands to the nearest.
+    // ---- the Red Rooms bleed (Level 0): walls and floors tint toward crimson
+    // within 11 m of a cursed exit. Exits in this chunk and its eight neighbours.
     struct RedSrc { float x, z; };
     RedSrc reds[16]; int nred = 0;
     if (w.level == 0) {
@@ -963,12 +906,11 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
         }
         return best * best * (3 - 2 * best);
     };
-    // Multiplied into the texture, so it can only take colour away: the
-    // yellow ground loses green and blue and goes to rust, then to the dull
-    // crimson the Red Rooms are papered in. Alpha stays 255 so the relief does.
+    // Multiplied into the texture, so it only takes colour away. Alpha stays 255,
+    // so the relief does too.
     auto redTint = [&](float x, float z) {
         float t = redAt(x, z);
-        // rust at the edge of the pull, crimson and dim at its heart
+        // rust at the edge, dim crimson at the heart
         float t2 = t * t;
         return Color{ (unsigned char)(255 - 30 * t - 60 * t2), (unsigned char)(255 - 150 * t - 72 * t2),
                       (unsigned char)(255 - 110 * t - 90 * t2), 255 };
@@ -981,8 +923,8 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             float gx = wx + i*CELL, gz = wz + kk*CELL, fy = w.floorY(ci,ck);
             fl.quad({gx,fy,gz},{gx+CELL,fy,gz},{gx+CELL,fy,gz+CELL},{gx,fy,gz+CELL},{0,1,0},
                     {gx/2,gz/2},{(gx+CELL)/2,gz/2},{(gx+CELL)/2,(gz+CELL)/2},{gx/2,(gz+CELL)/2},wcol);
-            // Emit only the high side of a riser. Cross-chunk lookups avoid
-            // false walls at seams; physics reads these same terrace heights.
+            // Emit only the high side of a riser. Neighbour heights come from the world,
+            // across chunk seams, so seams grow no false walls.
             auto skirt = [&](float x0,float z0,float x1,float z1,float low,Vector3 n) {
                 if (low >= fy) return;
                 fl.quad({x0,fy,z0},{x1,fy,z1},{x1,low,z1},{x0,low,z0},n,
@@ -997,13 +939,11 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
                 wt.quad({gx,WATER_Y,gz},{gx+CELL,WATER_Y,gz},{gx+CELL,WATER_Y,gz+CELL},{gx,WATER_Y,gz+CELL},{0,1,0},
                         {0,0},{1,0},{1,1},{0,1},water);
         }
-        // Elliptical vaults spanning the openings in the central partitions.
-        // The lowest point is 4.6 m above the deck: all collision lives in the
-        // full-height piers already represented by the wall grid.
+        // Elliptical vaults over the openings in the central partitions, lowest point
+        // 4.6 m up. Collision is the full-height piers already in the wall grid.
         for (int axis=0; axis<2; ++axis) for (int start : {3,11}) {
-            // Only where the partition is actually there with this opening in
-            // it: grand halls have no partition, and an arch left hanging over
-            // open water reads as a bug, not a ruin.
+            // Only where the partition is there with this opening in it: grand halls have
+            // no partition, and an arch there would hang over open water.
             auto wallAt = [&](int t) { return axis ? d.wallW[8][t] : d.wallN[t][8]; };
             if (wallAt(start - 1) != WALL_SOLID || wallAt(start + 3) != WALL_SOLID) continue;
             auto pos = [&](float t,float y,float depth) -> Vector3 {
@@ -1025,7 +965,7 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             }
         }
     } else {
-        // per-cell floor: sunken lounges (L0) and loading docks (L1) change height, with real steps
+        // per-cell floor: sunken lounges (L0) and loading docks (L1) step, with real risers
         auto stepEdge = [&](float bx0, float bz0, float bx1, float bz1, float hi, float lo, float nx, float nz) {
             fl.quad({bx0,hi,bz0},{bx1,hi,bz1},{bx1,lo,bz1},{bx0,lo,bz0},{nx,0,nz},
                     {(bx0+bz0)/2,0},{(bx1+bz1)/2,0},{(bx1+bz1)/2,(hi-lo)/2},{(bx0+bz0)/2,(hi-lo)/2},wcol);
@@ -1044,24 +984,12 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             float fy = d.elev[i][kk] * ELEV_UNIT;
             // the Manila Room lays its own floorboards (addManilaRoom)
             if (d.manila && i >= MANILA_LO && i <= MANILA_HI && kk >= MANILA_LO && kk <= MANILA_HI) continue;
-            // A hole has no floor, and a flight builds its own treads and
-            // landings (buildFlights, below).
+            // A hole has no floor, and a flight builds its own treads (the flights, below).
             if (d.vflag[i][kk] & (VF_HOLE | VF_STAIR)) continue;
             if (w.level == 0 && w.softAt(cx * CCELLS + i, cz * CCELLS + kk)) {
-                // A rotten patch, and the one thing on Level 0 that will drop you
-                // a floor. It used to be two flat decal quads: a black rectangle
-                // with a blacker rectangle inside it, which you can certainly see
-                // but which reads as a hole already there, or as a rug — not as a
-                // floor that is about to stop being one.
-                //
-                // So it is geometry. The cell is built as a shallow bowl and the
-                // dip catches the ceiling light along its far rim the way a real
-                // sag does; the darkening is damp carpet over a backing that has
-                // gone, not a painted-on square. It still reads across a room.
-                //
-                // SOFT_DEPTH and the falloff live in World::softDip, because
-                // groundAt walks the player down the same bowl and the two must
-                // not drift.
+                // A rotten patch: the cell is built as a shallow bowl, darkening toward the
+                // middle. SOFT_DEPTH and the falloff are World::softDip, which groundAt also
+                // walks, so the dip drawn is the dip stood in.
                 const int SOFTSUB = 24;
                 auto dipAt = [&](float u, float v) { return w.softDip(gx + u * CELL, gz + v * CELL); };
                 for (int a = 0; a < SOFTSUB; a++) for (int b = 0; b < SOFTSUB; b++) {
@@ -1071,21 +999,15 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
                     float z0 = gz + v0 * CELL, z1 = gz + v1 * CELL;
                     float y00 = fy - dipAt(u0, v0), y10 = fy - dipAt(u1, v0);
                     float y11 = fy - dipAt(u1, v1), y01 = fy - dipAt(u0, v1);
-                    // The bowl has to shade as a bowl, so take the normal from the
-                    // height field's own slope across this patch rather than
-                    // leaving every quad pointing at (0,1,0).
+                    // The normal comes from the height field's slope, so the bowl shades as a bowl.
                     float dydx = ((y10 + y11) - (y00 + y01)) / (2 * (x1 - x0));
                     float dydz = ((y01 + y11) - (y00 + y10)) / (2 * (z1 - z0));
                     float nl = sqrtf(dydx * dydx + 1 + dydz * dydz);
                     Vector3 n = { -dydx / nl, 1 / nl, -dydz / nl };
-                    // Damp and dark toward the middle, where the backing has gone.
-                    // MB::quad carries one colour and one normal per quad, so both
-                    // the tint ramp and the bowl's shading are banded at the
-                    // subdivision. 8 across two metres came out as a visible
-                    // chequerboard — worse than the flat decal it replaced — and
-                    // 12 still quilted. 24 puts the step at 8 cm, under the noise
-                    // in the carpet, at 576 quads on a patch that occurs once per
-                    // 2660 m2.
+                    // Darker toward the middle. MB::quad carries one colour and one normal per
+                    // quad, so the shading is banded at the subdivision: 8 across showed a
+                    // chequerboard and 12 still quilted; 24 puts the step at 8 cm, under the carpet
+                    // noise.
                     float md = 1.0f - dipAt((u0 + u1) * 0.5f, (v0 + v1) * 0.5f) / SOFT_DEPTH;
                     float k2 = 0.34f + 0.66f * md * md;
                     Color sc = { (unsigned char)(wcol.r * k2), (unsigned char)(wcol.g * k2),
@@ -1097,13 +1019,11 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             fl.quad({gx,fy,gz},{gx+CELL,fy,gz},{gx+CELL,fy,gz+CELL},{gx,fy,gz+CELL},{0,1,0},
                     {gx/2,gz/2},{(gx+CELL)/2,gz/2},{(gx+CELL)/2,(gz+CELL)/2},{gx/2,(gz+CELL)/2},wcol);
             if (d.elev[i][kk] == 0) continue;
-            // true cross-chunk heights, so terraces spanning a chunk border don't
-            // grow phantom risers (the old lookup assumed 0 beyond the edge)
+            // heights across chunk seams, so terraces over a seam grow no phantom risers
             auto hgt = [&](int a, int b) { return w.floorY(cx * CCELLS + a, cz * CCELLS + b); };
             float hN = hgt(i, kk - 1), hS = hgt(i, kk + 1), hW = hgt(i - 1, kk), hE = hgt(i + 1, kk);
-            // each shared riser is drawn once: by this cell when the neighbour is
-            // flat ground (elev 0 cells skip out above), otherwise by the lower
-            // cell of the pair — terraced atria would double-draw it otherwise
+            // each shared riser is drawn once: by this cell when the neighbour is flat
+            // (elev 0 cells stop above), otherwise by the lower cell of the pair
             if (hN < fy && hN == 0.0f) stepEdge(gx, gz, gx + CELL, gz, fy, hN, 0, -1);
             else if (hN > fy) stepEdge(gx, gz, gx + CELL, gz, hN, fy, 0, 1);
             if (hS < fy && hS == 0.0f) stepEdge(gx, gz + CELL, gx + CELL, gz + CELL, fy, hS, 0, 1);
@@ -1113,10 +1033,8 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             if (hE < fy && hE == 0.0f) stepEdge(gx + CELL, gz, gx + CELL, gz + CELL, fy, hE, 1, 0);
             else if (hE > fy) stepEdge(gx + CELL, gz, gx + CELL, gz + CELL, hE, fy, -1, 0);
             if (w.level == 1) {
-                // Safety edging along every drop off a loading dock: yellow and
-                // black, 100 mm wide, 250 mm to a stripe, painted just in from
-                // the lip. A warehouse marks its edges; and in the fog, with the
-                // floor the colour of the risers, it is the only thing that does.
+                // Safety edging along every drop off a loading dock: yellow and black, 100 mm
+                // wide, 250 mm stripes, just in from the lip.
                 auto edging = [&](float ex0, float ez0, float ex1, float ez1, float inx, float inz) {
                     const Vector2 uv = { 0.375f, 0.75f };
                     float len = sqrtf((ex1 - ex0) * (ex1 - ex0) + (ez1 - ez0) * (ez1 - ez0));
@@ -1139,24 +1057,16 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             }
         }
     }
-    // Per-cell ceiling at this cell's own floor plus a wall height, in place of
-    // one flat slab per chunk at a fixed y. The slab is what stopped the world
-    // going upward: a raised deck pushed its floor through it and its walls
-    // started below it. UVs stay world-space, so the tile grid runs across the
-    // cell seams exactly as it did when this was one quad.
-    //
-    // Emitted by greedy meshing rather than one quad per cell. Elevation touches
-    // about 5% of cells, so a naive per-cell ceiling replaces one quad per chunk
-    // with 256 identical coplanar ones and costs 4% of the frame on the software
-    // rasteriser for nothing; merging equal-height runs gives a flat chunk its
-    // single quad back and only pays where the ceiling actually steps.
+    // Per-cell ceiling height, greedy-meshed: a flat chunk is one quad. A quad per
+    // cell cost 4% of the frame on the software rasteriser for 5% of cells that
+    // step. UVs are world-space, so the tile grid runs across merged quads.
     {
         float cyc[CCELLS][CCELLS];
         for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++)
             cyc[i][kk] = w.ceilY(cx * CCELLS + i, cz * CCELLS + kk);
         bool done[CCELLS][CCELLS] = {};
-        // A cell open to the storey above has no ceiling here: the ceiling you
-        // see from it is the next storey's, drawn by that storey's chunk.
+        // A cell open to the storey above has no ceiling here; the storey above's
+        // chunk draws what you see.
         for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++)
             if (d.vflag[i][kk] & VF_OPENUP) done[i][kk] = true;
         for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
@@ -1177,11 +1087,9 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             ce.quad({x0,cy,z0},{x0,cy,z1},{x1,cy,z1},{x1,cy,z0},{0,-1,0},
                     {x0/2,z0/2},{x0/2,z1/2},{x1/2,z1/2},{x1/2,z0/2},ccol);
         }
-        // Where the neighbour's ceiling is higher, close the slot with a soffit.
-        // Leave it out and you look straight along the gap and out of the
-        // building. Only the *lower* cell of a pair draws it, so a shared edge
-        // is drawn exactly once — including across a chunk seam, where both
-        // sides read the same global heights.
+        // Where the neighbour's ceiling is higher, close the slot with a soffit, or
+        // you see out of the building. Only the lower cell of a pair draws it, so a
+        // shared edge is drawn once, across chunk seams too.
         for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
             float gx = wx + i * CELL, gz = wz + kk * CELL;
             int gi = cx * CCELLS + i, gk = cz * CCELLS + kk;
@@ -1190,16 +1098,13 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             auto soffit = [&](float ax, float az, float bx2, float bz2, float hi, int ni, int nk, uint8_t edge) {
                 if (hi <= cy + 1e-4f) return;
                 if (w.storeyH > 0.0f && (w.vflagAt(ni, nk) & VF_OPENUP)) {
-                    // The edge of an opening into the storey above: the ceiling
-                    // stops and a bulkhead runs up past the metre of dark void
-                    // over the tiles to the floor above. Papered like the walls,
-                    // because that is what it is. A wall or a door head on the
-                    // same line already climbs that high and hides it.
+                    // The edge of an opening into the storey above: a papered bulkhead up past
+                    // the void over the tiles to the floor above. A wall or door head on the same
+                    // line already covers it.
                     if (blocksEdge(edge) && edge != WALL_RAIL) return;
                     if (edge == WALL_DOOR || edge == WALL_EXIT) return;
                     float along0 = (ax == bx2) ? az : ax, along1 = (ax == bx2) ? bz2 : bx2;
-                    // From the tile's middle rather than its foot, so no
-                    // baseboard runs round the underside of the floor above.
+                    // From the tile's middle, so no baseboard runs under the floor above.
                     auto fv = [&](float y) { return 1 - (y - 2.25f) / wa.tileV; };
                     wa.quad({ax,cy,az},{bx2,cy,bz2},{bx2,hi,bz2},{ax,hi,az},
                             {(bz2-az)/CELL,0,(ax-bx2)/CELL},
@@ -1216,7 +1121,7 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             soffit(gx + CELL, gz, gx + CELL, gz + CELL, w.ceilY(gi + 1, gk), gi + 1, gk, w.wallWVal(gi + 1, gk));
         }
     }
-    // light panels on the global grid (emissive: alpha=0); spacing varies per level
+    // light fittings on the level's grid (emissive: alpha 0)
     Color panel = {255,255,255,0};
     float ls = LEVEL_RULES[w.level].ls;   // the same grid the shader lights from (uLS)
     int g0x = (int)floorf(wx / ls), g1x = (int)floorf((wx + CHUNK) / ls);
@@ -1225,40 +1130,29 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
         for (int gz = g0z; gz <= g1z; gz++) {
             float lx = gx * ls + ls * 0.5f, lz = gz * ls + ls * 0.5f, hp = 0.62f;
             if (lx < wx || lx >= wx + CHUNK || lz < wz || lz >= wz + CHUNK) continue;
-            // No tubes in the Manila Room: it is lit by its chandelier, and the
-            // shader masks these same panels dark through uRoomMask.
+            // No tubes in the Manila Room; the shader masks the same panels (uRoomMask).
             if (d.manila) {
                 float mx = wx + (MANILA_HI + 1 - 2) * CELL, mz = wz + (MANILA_HI + 1 - 2) * CELL;
                 if (fabsf(lx - mx) < 4.0f && fabsf(lz - mz) < 4.0f) continue;
             }
-            // No fitting where there is no ceiling to hang it in: a panel whose
-            // tray would overhang an opening into the storey above is left out,
-            // and buildOccupancy tells the shader the same (bit 3), so no light
-            // comes out of the air where a panel is not.
+            // No fitting whose tray would overhang an opening into the storey above;
+            // buildOccupancy tells the shader the same (bit 3).
             if (w.storeyH > 0.0f) {
                 int pci2 = (int)floorf(lx / CELL + 0.5f), pck2 = (int)floorf(lz / CELL + 0.5f);   // the corner it is centred on
                 if ((w.vflagAt(pci2, pck2) | w.vflagAt(pci2 - 1, pck2) | w.vflagAt(pci2, pck2 - 1) | w.vflagAt(pci2 - 1, pck2 - 1))
                     & VF_OPENUP) continue;
             }
-            // The fitting hangs in the ceiling, so it goes wherever the ceiling
-            // of the cell it is centred in went. The tray is 1.38 m across and a
-            // cell is 2 m, so it can overhang a neighbour at another height;
-            // that neighbour's soffit is what it meets, which is what a real
-            // bulkhead beside a light does.
+            // The fitting hangs in the ceiling of the cell it is centred in. The 1.38 m
+            // tray can overhang a neighbour at another height; that neighbour's soffit is
+            // what it meets.
             float wallTop = w.ceilY((int)floorf(lx / CELL), (int)floorf(lz / CELL));
             float yq = wallTop - 0.12f;
-            // Recessed diffuser inside a real metal tray. The luminous plane
-            // now matches uLY instead of floating 10 cm above its own light.
+            // A recessed diffuser in a metal tray; the luminous plane is on uLY.
             Color rim = w.level == 2 ? Color{230,232,223,254} : Color{156,153,140,254};
             const float outer = 0.69f, lip = 0.035f;
             if (w.level == 1) {
-                // Level 1's fittings are warehouse battens, not office trays:
-                // two bare tubes under a steel reflector, hung off the slab on
-                // two rods. The tubes sit on the light plane (uLY), so the
-                // light still comes from where the glow is; the shader shades
-                // the fitting as its usual square, which at this pitch nobody
-                // can tell apart. Every other one is turned a quarter, so the
-                // grid does not read as rows of identical strips.
+                // Level 1: battens, two bare tubes under a steel reflector on two rods, with
+                // the tubes on the light plane (uLY). Alternate fittings turn a quarter.
                 bool alongX = (ih((int)floorf(lx / ls), (int)floorf(lz / ls), w.sseed() ^ 0xBA77u) & 1) != 0;
                 auto box = [&](float a0, float y0, float b0, float a1, float y1, float b1, Color c) {
                     if (alongX) addSolidBox(pr, lx + a0, y0, lz + b0, lx + a1, y1, lz + b1, c);
@@ -1279,8 +1173,7 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
                     if (alongX) { a = {lx-0.78f,yt,lz+c0}; b = {lx-0.78f,yt,lz+c1}; c = {lx+0.78f,yt,lz+c1}; d2 = {lx+0.78f,yt,lz+c0}; }
                     else        { a = {lx+c0,yt,lz-0.78f}; b = {lx+c0,yt,lz+0.78f}; c = {lx+c1,yt,lz+0.78f}; d2 = {lx+c1,yt,lz-0.78f}; }
                     ce.quad(a, b, c, d2, {0,-1,0}, {0,0},{0,1},{1,1},{1,0}, panel);
-                    // and their sides, so a tube seen edge-on down a long hall
-                    // is still a line of light and not nothing
+                    // and the tubes' sides, so one seen edge-on is still a line of light
                     if (alongX) ce.quad({lx-0.78f,yt,lz+c0},{lx+0.78f,yt,lz+c0},{lx+0.78f,yt+0.03f,lz+c0},{lx-0.78f,yt+0.03f,lz+c0},
                                         {0,0,-1},{0,0},{1,0},{1,1},{0,1}, panel);
                     else        ce.quad({lx+c0,yt,lz+0.78f},{lx+c0,yt,lz-0.78f},{lx+c0,yt+0.03f,lz-0.78f},{lx+c0,yt+0.03f,lz+0.78f},
@@ -1289,12 +1182,8 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
                 continue;
             }
             if (w.level == 0) {
-                // Level 0's fittings are lay-in troffers, dropped into the tile
-                // grid the way they are in the photograph: the diffuser sits
-                // flush with the ceiling behind a hairline frame, not in a
-                // box hanging under it. The light plane (uLY) stays 12 cm
-                // down, which nobody can see and every light calculation in
-                // both shader and CPU mirror already agrees on.
+                // Level 0: lay-in troffers flush with the tiles behind a hairline frame. The
+                // light plane (uLY) stays 12 cm down; the shader and the CPU mirror use it.
                 float yf = wallTop - 0.010f;
                 Color frame = { 186, 182, 166, 254 };
                 addSolidBox(pr, lx-outer, yf-0.008f, lz-outer, lx-hp, wallTop, lz+outer, frame);
@@ -1313,11 +1202,10 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
                     {0,0},{0,1},{1,1},{1,0},panel);
         }
     ChunkData &dd = d;
-    // A rail on one cell edge. Its top follows whatever you would be standing
-    // on beside it, whichever side is higher: level round an opening, and up
-    // the nosing line beside a flight. Between two holes there is nothing to
-    // stand on here — the flight that needs guarding is the storey below's,
-    // and so is the balustrade you see — and the edge is collision only.
+    // A rail on one cell edge. Its top follows what you stand on beside it,
+    // whichever side is higher: level round an opening, up the nosing beside a
+    // flight. Between two holes nothing is drawn (the storey below draws that
+    // flight's balustrade); the edge is collision only.
     auto railEdge = [&](int a, int b, bool west) {
         float ex0 = a * CELL, ez0 = b * CELL;
         float ex1 = west ? ex0 : ex0 + CELL, ez1 = west ? ez0 + CELL : ez0;
@@ -1330,8 +1218,8 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             uint8_t f = w.vflagAt(ca, cb);
             if (f & VF_HOLE) {
                 hole = true;
-                // which face of the run looks into it (addRailRun's normal is
-                // +z for a north edge and -x for a west one)
+                // which face of the run looks into it (addRailRun's normal is +z for a north
+                // edge and -x for a west one)
                 bool own = ca == a && cb == b;
                 voidSide = west ? (own ? -1 : 1) : (own ? 1 : -1);
                 return -1e9f;
@@ -1351,42 +1239,30 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
     for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
         float gx = wx + i * CELL, gz = wz + kk * CELL;
         int gi0 = cx * CCELLS + i, gk0 = cz * CCELLS + kk;
-        // A wall stands between two cells that may be at different heights. Base
-        // it on the lower floor and take it to the higher ceiling: base it on
-        // its own cell's floor instead and a step leaves a gap under the wall on
-        // the low side and a slot over it on the high side, both of which you
-        // see straight through. Everything fixed to the wall — sill, door head,
-        // architrave — is measured off that same base, so a doorway in a step
-        // has its head where a real one would.
+        // A wall between two cells of different heights runs from the lower floor to
+        // the higher ceiling, or a step leaves a gap under it on one side and a slot over
+        // it on the other. Everything fixed to it (sill, door head, architrave) is
+        // measured off that base.
         float fyc = w.floorY(gi0, gk0), cyc = w.ceilY(gi0, gk0);
         float nb = std::min(w.floorY(gi0, gk0 - 1), w.floorY(gi0, gk0));
         float nt = std::max(w.ceilY(gi0, gk0 - 1), w.ceilY(gi0, gk0));
         float wb = std::min(w.floorY(gi0 - 1, gk0), w.floorY(gi0, gk0));
         float wt2 = std::max(w.ceilY(gi0 - 1, gk0), w.ceilY(gi0, gk0));
-        // Through the accessors, not out of the array. Every overlay that
-        // changes what a wall IS lands in wallNVal/wallWVal — `shifted` for the
-        // doorways the building closes behind you, `unlockedDoors` for a door
-        // you have turned a key in — and reading the raw array here meant the
-        // geometry was the one system that never saw them. Both ways round:
-        // an unlocked door went on drawing its leaf while collision let you
-        // walk through it, and a shifted doorway kept its opening on screen
-        // while collision had already sealed it. AGENTS.md said the mesher came
-        // through here; it did not, until now.
+        // Through the accessors, never the raw arrays: the overlays (shifted walls,
+        // unlocked doors) land there, and collision reads them too. Read raw, an
+        // unlocked door keeps its leaf and a shifted doorway stays open on screen.
         uint8_t nv = w.wallNVal(gi0, gk0);
-        // Storeys: which side of this cell's two edges has a floor to put a
-        // skirting board, a crease and an outlet against, and which has a
-        // ceiling to crease into. A hole has no floor, a flight buries the foot
-        // of its walls, and an opening has no ceiling — trim or a shadow strip
-        // drawn at floor level beside a hole hangs in the air over it.
+        // Which sides of this cell's edges have a floor (for skirting, creases,
+        // outlets) and a ceiling (for creases). A hole has no floor, a flight buries the
+        // foot of its walls, an opening has no ceiling; trim drawn there hangs in air.
         auto hasFloor = [&](int a, int b) { return w.storeyH <= 0.0f || !(w.vflagAt(a, b) & (VF_HOLE | VF_STAIR)); };
         auto hasCeil  = [&](int a, int b) { return w.storeyH <= 0.0f || !(w.vflagAt(a, b) & VF_OPENUP); };
         const bool flN = hasFloor(gi0, gk0), flS = hasFloor(gi0, gk0 - 1), flW = hasFloor(gi0 - 1, gk0);
         const bool clN = hasCeil(gi0, gk0),  clS = hasCeil(gi0, gk0 - 1),  clW = hasCeil(gi0 - 1, gk0);
-        // A neighbour's end cap is buried in the next wall along, but not in a
-        // rail, which is thinner than the wall it meets.
+        // A neighbour's end cap is buried in the next wall along, but not in a thinner rail.
         auto buries = [](uint8_t v) { return blocksEdge(v) && v != WALL_RAIL; };
         if (nv == WALL_RAIL) railEdge(gi0, gk0, false);
-        // Faces that look into a hole in this storey's floor (see voidFace).
+        // Faces that look into a hole in this storey's floor (voidFace).
         auto holeAt = [&](int a, int b) { return w.storeyH > 0.0f && (w.vflagAt(a, b) & VF_HOLE); };
         if (nv == WALL_SOLID) {
             int sk = (buries(w.wallNVal(gi0 - 1, gk0)) ? 4 : 0) | (buries(w.wallNVal(gi0 + 1, gk0)) ? 8 : 0);
@@ -1401,15 +1277,14 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             wa.quad({gx-WT,nb+1.0f,gz-WT},{gx+CELL+WT,nb+1.0f,gz-WT},{gx+CELL+WT,nb+1.0f,gz+WT},{gx-WT,nb+1.0f,gz+WT},
                     {0,1,0},{0,0},{1,0},{1,0.1f},{0,0.1f}, WHITE);   // sill top
             if (w.level == 2) {
-                // Level 37's windows look out into a light void: an emissive
-                // pale pane (alpha 70 -> raw emissive), one per face.
+                // Level 2 windows: an emissive pale pane (alpha 70) on each face.
                 Color sky = { 226, 241, 246, 70 };
                 wa.quad({gx+0.45f,nb+1.0f,gz-0.02f},{gx+1.55f,nb+1.0f,gz-0.02f},{gx+1.55f,nb+2.1f,gz-0.02f},{gx+0.45f,nb+2.1f,gz-0.02f},
                         {0,0,-1},{0,1},{1,1},{1,0},{0,0}, sky);
                 wa.quad({gx+1.55f,nb+1.0f,gz+0.02f},{gx+0.45f,nb+1.0f,gz+0.02f},{gx+0.45f,nb+2.1f,gz+0.02f},{gx+1.55f,nb+2.1f,gz+0.02f},
                         {0,0,1},{0,1},{1,1},{1,0},{0,0}, sky);
             } else {
-            // real glass now: translucent pane (alpha 100 -> glass branch), see the room beyond
+            // glass: a translucent pane (alpha 100, the shader's glass path)
             Color glass = { 20, 26, 32, 100 };
             gl.quad({gx+0.45f,nb+1.0f,gz},{gx+1.55f,nb+1.0f,gz},{gx+1.55f,nb+2.1f,gz},{gx+0.45f,nb+2.1f,gz},
                     {0,0,-1},{0,1},{1,1},{1,0},{0,0}, glass);
@@ -1419,7 +1294,7 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             addBoxSides(wa, gx - WT, nb, gz - WT, gx + 0.35f, nt, gz + WT);
             addBoxSides(wa, gx + 1.65f, nb, gz - WT, gx + CELL + WT, nt, gz + WT);
             addBoxSides(wa, gx + 0.35f, nb + 2.3f, gz - WT, gx + 1.65f, nt, gz + WT, true);
-            // cursed exits glow red — they don't lead deeper, they lead to the Red Halls
+            // cursed exits glow red
             bool crs = w.cursedExit(cx * CCELLS + i, cz * CCELLS + kk);
             Color glow = crs ? Color{ 255, 60, 40, 70 } : Color{ 255, 248, 225, 70 };
             wa.quad({gx+0.35f,nb,gz},{gx+1.65f,nb,gz},{gx+1.65f,nb+2.3f,gz},{gx+0.35f,nb+2.3f,gz},{0,0,-1},
@@ -1431,15 +1306,10 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
                               w.wallNVal(gi0 + 1, gk0) == WALL_SOLID);
         }
         else if (nv == WALL_DOOR) {   // doorway on x-running wall
-            // Two doorways in neighbouring cells leave 0.35 m of jamb each side
-            // of the line between them: a 0.7 m sliver of plasterboard between
-            // two 1.3 m holes, which is the thing that reads as unfinished
-            // geometry rather than as a building. World::generate spaces
-            // doorways out where the floorplan allows it, but a room reached
-            // only through its own door cannot have that door moved — so where
-            // two must stay adjacent, take the sliver out and let them be one
-            // wide opening. The header still crosses it, so the wall above is
-            // unbroken and the opening reads as deliberate.
+            // Adjacent doorways would leave a 0.7 m pier between them. generate moves
+            // doors apart where it can; where two must stay adjacent, drop the jamb between
+            // them and let the header run across, one wide opening. gatherCellAABBs drops
+            // the matching jamb boxes.
             bool mW = w.wallNVal(gi0 - 1, gk0) == WALL_DOOR;
             bool mE = w.wallNVal(gi0 + 1, gk0) == WALL_DOOR;
             if (mW) addBoxSides(wa, gx - WT, nb + 2.3f, gz - WT, gx + 0.35f, nt, gz + WT, true);
@@ -1447,11 +1317,8 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             if (mE) addBoxSides(wa, gx + 1.65f, nb + 2.3f, gz - WT, gx + CELL + WT, nt, gz + WT, true);
             else    addBoxSides(wa, gx + 1.65f, nb, gz - WT, gx + CELL + WT, nt, gz + WT);
             addBoxSides(wa, gx + 0.35f, nb + 2.3f, gz - WT, gx + 1.65f, nt, gz + WT, true);
-            // The architrave is what makes it read as a door rather than a hole:
-            // it stands proud of both faces, so you can see it is a way through
-            // from either side and at a glancing angle. A merged side has no
-            // jamb to trim, so its post goes and the head runs on to meet the
-            // neighbour's.
+            // The architrave stands proud of both faces. A merged side has no jamb, so its
+            // post goes and the head runs on to meet the neighbour's.
             float tx0 = mW ? gx - WT : gx + 0.29f, tx1 = mE ? gx + CELL + WT : gx + 1.71f;
             for (int sgn = -1; sgn <= 1; sgn += 2) {
                 float zf = (sgn < 0) ? gz - WT - TRIM_T : gz + WT;
@@ -1459,7 +1326,7 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
                 if (!mE) addSolidBox(pr, gx + 1.65f, nb, zf, gx + 1.71f, nb + 2.36f, zf + TRIM_T, TRIM_COL);
                 addSolidBox(pr, tx0, nb + 2.30f, zf, tx1, nb + 2.36f, zf + TRIM_T, TRIM_COL);
             }
-            // and a threshold strip underfoot, worn by whoever came through
+            // and a threshold strip
             float fy0 = w.floorY(cx * CCELLS + i, cz * CCELLS + kk);
             addSolidBox(pr, mW ? gx : gx + 0.35f, fy0, gz - 0.07f,
                         mE ? gx + CELL : gx + 1.65f, fy0 + 0.013f, gz + 0.07f, SILL_COL);
@@ -1469,16 +1336,14 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             addBoxSides(wa, gx + 1.65f, nb, gz - WT, gx + CELL + WT, nt, gz + WT);
             addBoxSides(wa, gx + 0.35f, nb + 2.3f, gz - WT, gx + 1.65f, nt, gz + WT, true);
             float fy0 = w.floorY(cx * CCELLS + i, cz * CCELLS + kk);
-            // The leaf fills the opening. It is what tells you at a glance that
-            // this one is different from the hundred empty frames behind you,
-            // so it is a slab you can see from both sides, not a decal.
+            // The leaf fills the opening: a slab, visible from both sides.
             addSolidBox(pr, gx + 0.36f, fy0, gz - 0.025f, gx + 1.64f, nb + 2.28f, gz + 0.025f, LEAF_COL);
             for (int sgn = -1; sgn <= 1; sgn += 2) {   // architrave, as on an open one
                 float zf = (sgn < 0) ? gz - WT - TRIM_T : gz + WT;
                 addSolidBox(pr, gx + 0.29f, nb, zf, gx + 0.35f, nb + 2.36f, zf + TRIM_T, TRIM_COL);
                 addSolidBox(pr, gx + 1.65f, nb, zf, gx + 1.71f, nb + 2.36f, zf + TRIM_T, TRIM_COL);
                 addSolidBox(pr, gx + 0.29f, nb + 2.30f, zf, gx + 1.71f, nb + 2.36f, zf + TRIM_T, TRIM_COL);
-                // handle and escutcheon, at 1.02 m on the latch side
+                // handle and escutcheon, 1.02 m up on the latch side
                 addSolidBox(pr, gx + 1.34f, fy0 + 0.97f, zf - 0.02f,
                             gx + 1.50f, fy0 + 1.07f, zf + TRIM_T, LOCK_COL);
             }
@@ -1524,7 +1389,7 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
                               w.wallWVal(gi0, gk0 + 1) == WALL_SOLID);
         }
         else if (wv == WALL_DOOR) {   // doorway on z-running wall
-            // Merged the same way its x-running twin above is — see there.
+            // Merged as on the x-running wall above.
             bool mN = w.wallWVal(gi0, gk0 - 1) == WALL_DOOR;
             bool mS = w.wallWVal(gi0, gk0 + 1) == WALL_DOOR;
             if (mN) addBoxSides(wa, gx - WT, wb + 2.3f, gz - WT, gx + WT, wt2, gz + 0.35f, true);
@@ -1559,8 +1424,8 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             }
         }
         if (w.level == 0 || w.level == 4) {
-            // Thin timber trim catches grazing light. Keep the extrusion within
-            // the collision clearance; no separate obstacle or draw call.
+            // Level 0 and 4 skirting: thin timber within the collision clearance, no
+            // separate obstacle.
             Color trim = w.level == 0 ? Color{91, 71, 39, 254} : Color{67, 41, 34, 254};
             if (nv == WALL_SOLID) {
                 float tS = w.floorY(gi0, gk0 - 1), tN = w.floorY(gi0, gk0);
@@ -1573,20 +1438,18 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
                 if (flN) addSolidBox(pr, gx+WT, tE, gz, gx+WT+0.025f, tE + 0.13f, gz+CELL, trim);
             }
         }
-        // baked AO around this cell's walls: floor strip, ceiling strip, and a
-        // wall-face strip on both sides (solid walls and windows; doorways stay clean)
-        // A noclip wall has to be indistinguishable from its neighbours by
-        // everything except the glitch, so it gets their creases too.
-        // A rail is not a wall to crease against: it has its own contact shadow.
+        // Baked AO along this cell's walls: floor and ceiling strips and a strip up
+        // and down each face. Solid walls, windows, locked doors and exits (a noclip
+        // wall must match its neighbours); not doorways or rails (a rail has its own
+        // contact shadow).
         bool nvWall = (blocksEdge(nv) && nv != WALL_RAIL);
         bool wvWall = (blocksEdge(wv) && wv != WALL_RAIL);
         if (nvWall) {
             float fyS = w.floorY(gi0, gk0 - 1) + 0.005f, fyN = w.floorY(gi0, gk0) + 0.005f;
-            // Ceiling creases follow each side's own ceiling. Pinned to a fixed
-            // wallH they detach the moment the floor moves, and a crease hanging
-            // in clear air under a ceiling reads as a smear, not a shadow.
+            // Ceiling creases follow each side's own ceiling, or they hang in the air
+            // under a raised one.
             float cyS = w.ceilY(gi0, gk0 - 1) - 0.005f, cyN = w.ceilY(gi0, gk0) - 0.005f;
-            // span exactly one cell — neighbours butt up seamlessly, no double-blend overlap
+            // exactly one cell long, so neighbours butt without a double blend
             float x0 = gx, x1 = gx + CELL;
             if (flS) aoStrip({ x0, fyS, gz - WT }, { x1, fyS, gz - WT }, { 0, 0, -AOW }, { 0, 1, 0 }, 0);          // floor, -z side
             if (flN) aoStrip({ x0, fyN, gz + WT }, { x1, fyN, gz + WT }, { 0, 0, AOW }, { 0, 1, 0 }, 0);           // floor, +z side
@@ -1612,9 +1475,7 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
         }
         if (w.level == 1 && nv == WALL_SOLID && liftHash(gi0, gk0, w.sseed()) &&
             w.wallNVal(gi0 - 1, gk0) == WALL_SOLID && w.wallNVal(gi0 + 1, gk0) == WALL_SOLID) {
-            // A lift. The article gives Level 1 "staircases, elevators, isolated
-            // rooms, and hallways"; the doors are shut and nobody has found the
-            // car, but the call button is lit, which is worse than if it were not.
+            // A lift (Level 1): shut doors, a floor indicator and a lit call button.
             float sgn = (ih(gi0, gk0, w.sseed() ^ 0xE1E8u) & 1) ? 1.0f : -1.0f;
             float zf = gz + sgn * WT;
             auto zb = [&](float x0, float y0, float x1, float y1, float d0, float d1, Color c) {
@@ -1643,24 +1504,16 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
                          { sgn, 0, 0 }, { 0, 0, 1 }, 0.30f, 0.34f, sw2);
             }
         }
-        // ---- the building's fittings. Decals pressed off the wall and ceiling
-        // faces, plus real (if tiny) geometry for the conduit and sprinklers.
-        //
-        // All of it is alpha 254: textured and opaque, but below the relief
-        // threshold. A faceplate is flat moulded plastic — giving it the
-        // world-space relief bump would ripple it like the wall behind it.
-        //
-        // These sit in their own mesh rather than in the props mesh, which is
-        // already the biggest one in a chunk and is indexed with 16-bit indices
-        // that nothing checks for overflow.
+        // ---- the building's fittings: decals just off the wall and ceiling faces, and
+        // small boxes for conduit and sprinklers. Alpha 254 (no relief). Their own mesh,
+        // because the props mesh is the largest and uses 16-bit indices with no overflow
+        // check.
         {
             uint32_t gi = cx * CCELLS + i, gk = cz * CCELLS + kk;
             const Color FIXC = { 255, 255, 255, 254 };
-            // A decal on an x-running (north) wall, and on a z-running (west)
-            // one. `plus` picks which of the two faces it hangs on; the UVs
-            // mirror with it, so signage reads the right way round from the
-            // room that can actually see it. Size comes from FIXTURES, which is
-            // also what drew the cell — see textures.h.
+            // A decal on an x-running (north) or z-running (west) wall. `plus` picks the
+            // face; the UVs mirror with it so signage reads the right way round. Size comes
+            // from FIXTURES, which also draws the atlas cell.
             auto decalN = [&](float xc, float yc, float zf, bool plus, int id) {
                 const FixtureRect &f = FIXTURES[id];
                 float x0 = xc - f.halfW, x1 = xc + f.halfW, y0 = yc - f.halfH, y1 = yc + f.halfH;
@@ -1677,18 +1530,13 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
                 else      fx.quad({xf,y0,z0},{xf,y0,z1},{xf,y1,z1},{xf,y1,z0},{-1,0,0},
                                   {f.u0,f.v1},{f.u1,f.v1},{f.u1,f.v0},{f.u0,f.v0}, FIXC);
             };
-            // Which fitting this wall edge carries, if any. Checked in order of
-            // rarity, so a wall that qualifies for two gets the rarer one — an
-            // exit sign beats a grille beats a switch beats an outlet, rather
-            // than a pile of fittings on the one unlucky wall. The heights are
-            // the ones a building actually uses: outlets at the skirting, a
-            // switch at the handle, a return grille up near the ceiling.
+            // Which fitting this wall edge carries, rarest first (exit sign, grille,
+            // switch, outlet), at the heights a building uses.
             auto pick = [&](uint32_t h, float &yc, int &id) {
                 if (w.level != 2 && h % EXITSIGN_RATE == 0) { yc = 2.44f; id = FIX_SIGN;   return true; }
                 if (w.level != 2 && h % GRILLE_RATE == 0)   { yc = 2.10f; id = FIX_GRILLE; return true; }
                 if (w.level != 2 && h % SWITCH_RATE == 0)   { yc = 1.22f; id = FIX_SWITCH; return true; }
-                // A pool hall does not have mains sockets at ankle height, and
-                // Level 2 is the one level meant to read as still maintained.
+                // No outlets on Level 2.
                 if (w.level != 2 && h % OUTLET_RATE == 0) {
                     yc = 0.32f;
                     id = ((h >> 11) % OUTLET_BROKEN == 0) ? FIX_OUTLET_BROKEN : FIX_OUTLET;
@@ -1714,14 +1562,12 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
                     decalW(gz + 0.45f + ((h >> 7) & 7) * 0.155f, yc, xf, plus, id);
                 }
             }
-            // Ceiling: a supply diffuser lies flat in the tile grid, while a
-            // sprinkler hangs below it on a dropper — flat-on-the-ceiling is
-            // exactly wrong for a sprinkler, which you almost always see from
-            // underneath and off to one side.
+            // Ceiling: a diffuser lies flat in the tile grid; a sprinkler hangs below it
+            // on a dropper.
             uint32_t hc = ih(gi, gk, w.sseed() ^ 0x71E3u);
             float ccx = gx + CELL * 0.5f, ccz = gz + CELL * 0.5f;
             if (!clN) {
-                // no ceiling here to put a diffuser or a sprinkler in
+                // no ceiling here
             } else if (w.level != 2 && hc % DIFFUSER_RATE == 0) {
                 const FixtureRect &f = FIXTURES[FIX_DIFFUSER];
                 float yq = cyc - 0.008f;
@@ -1734,18 +1580,13 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
                 addSolidBox(fx, ccx-0.033f, cyc-0.085f, ccz-0.033f, ccx+0.033f, cyc-0.070f, ccz+0.033f, BRASS);
                 addSolidBox(fx, ccx-0.045f, cyc-0.100f, ccz-0.045f, ccx+0.045f, cyc-0.090f, ccz+0.045f, BRASS);
             }
-            // Conduit runs along the top of a wall. Keyed on a bucket of cells
-            // rather than a single one, so it comes out as a run of six with a
-            // beginning and an end instead of a dotted line of stubs.
-            // Conduit stands on a wall *face*, not inside the wall. The first
-            // version ran it about the wall centreline, ±28 mm on a wall whose
-            // half-thickness is 110, so every run in the building was sealed
-            // inside the plasterboard and nothing was ever drawn. The run hash
-            // picks the face as well as the run, so a run does not change sides
-            // halfway along.
+            // Conduit along the top of a wall, keyed on a bucket of CONDUIT_RUN cells so it
+            // comes out as runs. It stands on a wall face, off the centreline by WT: inside
+            // the wall it is never seen. The run hash picks the face too, so a run does not
+            // change sides.
             const Color STEEL = { 138, 136, 130, 254 };
             const float CDY = 0.052f;          // how far it stands off the wall
-            // Conduit runs under a ceiling; a wall climbing an opening has none.
+            // Conduit needs a ceiling on both sides; a wall climbing an opening has none.
             if (nv == WALL_SOLID && clN && clS) {
                 float cy = nt - 0.155f;
                 uint32_t hr = ih(gi / CONDUIT_RUN, gk, w.sseed() ^ 0x71C5u);
@@ -1763,24 +1604,15 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
                 }
             }
         }
-        // wall scrawl: rarely, a solid wall carries a phrase left by an earlier
-        // wanderer. one of thirty-two, from the 4x8 scrawl atlas, drawn as a
-        // decal pressed just off the wall face (level 2 is pristine tile — no
-        // scrawl).
-        //
-        // SCRAWL_RATE is a rarity, not a decoration: at the old one-in-seven
-        // every corridor had writing on it and the same eight phrases came back
-        // within sight of each other, which reads as wallpaper. One in forty,
-        // across thirty-two phrases, means seeing one is an event and seeing the
-        // same one twice means something.
+        // Wall scrawl: rarely, a solid wall carries one of SCRAWL_PHRASES phrases from
+        // the 4x8 scrawl atlas, just off the face. Not on Level 2.
         if (w.level != 2) {
             uint32_t gi = cx * CCELLS + i, gk = cz * CCELLS + kk;
             auto uvOf = [](int ph, float &u0, float &v0, float &u1, float &v1) {
                 u0 = (ph & 3) * 0.25f; v0 = (ph >> 2) * 0.125f; u1 = u0 + 0.25f; v1 = v0 + 0.125f;
             };
-            // Nobody writes on a wall straight, and no two people picked up the
-            // same pen. A small rotation and a tint per instance, so the same
-            // atlas cell twice does not read as the same decal twice.
+            // A small rotation and a tint per instance, so the same atlas cell twice does
+            // not look like the same decal.
             auto tintOf = [](uint32_t hs) {
                 static const Color T[4] = { { 255, 255, 255, 255 }, { 236, 228, 214, 255 },
                                             { 216, 210, 212, 255 }, { 248, 234, 208, 255 } };
@@ -1841,7 +1673,7 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
                 addSpall(fx, pr, c, n, u, 0.24f, 0.30f + ((sh >> 12) & 7) * 0.03f, sh);
             }
             addContactShadow(ao, gx + 1.0f, gz + 1.0f, fyc, 0.0f, 0.58f, 0.58f);
-            // AO up the pillar's feet and a ceiling crease around its head
+            // AO up the pillar's foot and a ceiling crease round its head
             float pfy = fyc + 0.005f;
             float px0 = gx + 0.42f, px1 = gx + 1.58f, pz0 = gz + 0.42f, pz1 = gz + 1.58f, cy = cyc - 0.005f;
             aoStrip({ px0, pfy, pz0 - 0.006f }, { px1, pfy, pz0 - 0.006f }, { 0, AOH, 0 }, { 0, 0, -1 }, 0);
@@ -1865,41 +1697,38 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
             addProp(dd.prop[i][kk], site, w.sseed(), w.level, pr, ce, ao, fx);
         }
     }
-    // ---- the flights that rise from this storey (stampFeature has the plan).
-    // Steps belong to the storey they stand on; the storey above draws only
-    // its hole, its rails and the floor you arrive on.
+    // ---- the flights rising from this storey (stampFeature has the plan). Steps
+    // belong to the storey they stand on; the storey above draws its hole, rails and
+    // arrival floor.
     for (int q = 0; q < d.nfeat; q++) {
         const VertFeat &f = d.feats[q];
         if (f.lo != w.qs) continue;
         auto to = [&](float u, float y, float v) { return toRl(w.featureWorld(f, cx, cz, u, y, v)); };
         const float R = w.storeyH / 24.0f;
         if (f.kind == VK_STAIRWELL) {
-            // Lane A: 12 risers from the foot of the stair (plain floor, drawn
-            // with the rest) to the half landing.
+            // Lane A: 12 risers from the foot (plain floor, drawn with the rest) to the
+            // half landing.
             const float G = 4.0f / 12.0f;
             Vector3 a, b, c, e;
             for (int i = 0; i < 12; i++)
                 addStep(fl, pr, to, 0, CELL, 2 + i * G, 2 + (i + 1) * G, 0, (i + 1) * R, true, false);
-            // The half landing, right across the shaft at the far end.
+            // The half landing, across the shaft at the far end.
             a = to(0, 12 * R, 6); b = to(2 * CELL, 12 * R, 6); c = to(2 * CELL, 12 * R, 8); e = to(0, 12 * R, 8);
             fl.quad(a, b, c, e, { 0, 1, 0 }, { a.x / 2, a.z / 2 }, { b.x / 2, b.z / 2 }, { c.x / 2, c.z / 2 },
                     { e.x / 2, e.z / 2 }, WHITE);
-            // Lane B: 12 more, climbing back toward the door above. Its top
-            // landing is the upper storey's floor, drawn by that storey.
+            // Lane B: 12 more, back toward the door above. Its top landing is the upper
+            // storey's floor, drawn by that storey.
             for (int j = 0; j < 12; j++)
                 addStep(fl, pr, to, CELL, 2 * CELL, 6 - (j + 1) * G, 6 - j * G, 0, 12 * R + (j + 1) * R, false, false);
-            // The landing light: a batten on the end wall, 2.25 m over the half
-            // landing, where it lights both flights. Its steel body is here;
-            // its tube is drawn by the renderer, because it goes out in a
-            // blackout and a chunk mesh cannot. It is the shaft's only light:
-            // the tray grid has no fitting over an opening.
+            // The landing light's steel body. Its tube is drawn by the renderer, because
+            // it goes out in a blackout and a chunk mesh cannot.
             Vector3 lamp = toRl(w.landingLamp(f, cx, cz));
             Vector3 lo2 = to(CELL - 0.55f, lamp.y - 0.06f, 8 - WT - 0.13f), hi2 = to(CELL + 0.55f, lamp.y + 0.06f, 8 - WT);
             addSolidBox(pr, std::min(lo2.x, hi2.x), lamp.y - 0.06f, std::min(lo2.z, hi2.z),
                         std::max(lo2.x, hi2.x), lamp.y + 0.06f, std::max(lo2.z, hi2.z), Color{ 150, 150, 142, 254 });
         } else if (f.kind == VK_STAIR || f.stairU >= 0) {
-            // A straight flight: 24 risers over rows 1..4, between its wall and
-            // its balustrade (both of which cover the steps' ends).
+            // A straight flight: 24 risers over rows 1..4, between its wall and its
+            // balustrade, which cover the steps' ends.
             int s0 = f.kind == VK_STAIR ? 0 : f.stairU, s1 = f.kind == VK_STAIR ? f.wu - 1 : f.stairU;
             const float G = 8.0f / 24.0f;
             for (int i = 0; i < 24; i++)
@@ -1911,19 +1740,14 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
         addManilaRoom(pr, fx, ao, mx, mz, w.ceilY(cellOf(mx), cellOf(mz)), ih(cx, cz, w.sseed() ^ 0x3A11u));
     }
     if (w.level == 3 || w.level == 1) {
-        // Service pipework — the Red Halls' plumbing, and Level 1's: a warehouse
-        // with "a consistent supply of water and electricity" has to carry both
-        // somewhere, and the ceiling is where it does. Runs are decided per *row* rather than per cell, so a
-        // pipe follows a whole corridor the way a real service run does instead of
-        // appearing in patches. Consecutive cells emit abutting segments, so the
-        // run reads as one continuous pipe.
+        // Service pipework under the ceiling (Levels 1 and 3). Runs are chosen per row,
+        // so a pipe follows a whole corridor; consecutive cells emit abutting
+        // segments.
         for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
             float gx = wx + i * CELL, gz = wz + kk * CELL;
             int gi = cx * CCELLS + i, gk = cz * CCELLS + kk;
-            // pipes hug the walls they run beside
-            // Through the accessors, like the wall geometry above: a pipe hugs
-            // a wall, so an edge the building has closed behind you should grow
-            // one on the rebake rather than stay bare.
+            // Pipes hug solid walls, read through the accessors so a shifted wall grows
+            // one on the rebake.
             if (w.wallNVal(gi, gk) == WALL_SOLID) {
                 uint32_t rh = ih(gk, 7717, w.sseed() ^ 0x9191u);
                 if (rh % 4 == 0) {
@@ -1954,7 +1778,7 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
                                     Color{ 96, 74, 56, 255 });
                 }
             }
-            // valve station: a standpipe floor to ceiling, wheel drawn by the renderer
+            // valve station: a standpipe floor to ceiling; the renderer draws the wheel
             if (w.valveAt(gi, gk)) {
                 float vx = gx + 1.0f, vz = gz + 1.0f, fy = dd.elev[i][kk] * ELEV_UNIT;
                 addSolidBox(pr, vx - 0.085f, fy, vz - 0.085f, vx + 0.085f, w.ceilY(gi, gk), vz + 0.085f,

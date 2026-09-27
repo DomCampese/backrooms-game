@@ -15,51 +15,36 @@ constexpr float CELL = 2.0f;           // metres per grid cell
 constexpr int   CCELLS = 16;           // cells per chunk side
 constexpr float CHUNK = CELL * CCELLS;
 constexpr float WT = 0.11f;            // wall half-thickness
-// The corridor ring each chunk leaves around its rooms, in cells — one lane on
-// its low sides, two on its high ones. Every seam pairs one chunk's high ring
-// with the next one's low ring, so every corridor in the world comes out
-// HALL_LO + HALL_HI cells wide: 3, or 6 m, against the 4 m a symmetric one-lane
-// ring gave (and the 2 m it fell to wherever a segment crossed a seam).
-//
-// Asymmetric because the symmetric alternative doubles both sides at once. Two
-// lanes each way is 8 m and eats 44% of the floor, which took `hidden at 20 m`
-// from 98.4% to 93.4% — enclosure and sightlines are the same number, see
-// AGENTS.md, so a hall that wide is paid for in Clark having nowhere to be
-// unseen. The room patch is what is left: CCELLS - HALL_LO - HALL_HI square.
+// The corridor ring each chunk leaves round its rooms, in cells: one lane on its
+// low sides, two on its high ones, so every seam corridor is HALL_LO + HALL_HI
+// cells (6 m) wide. Not two lanes each way: 8 m halls take 44% of the floor and
+// cut `hidden at 20 m` from 98.4% to 93.4% (enclosure and sightlines are one
+// number, AGENTS.md). The room patch is the rest, CCELLS - HALL_LO - HALL_HI
+// square.
 constexpr int HALL_LO = 1;
 constexpr int HALL_HI = 2;
 
-// What sits on one edge of a cell. Only WALL_SOLID and WALL_WINDOW are
-// floor-to-ceiling blockers; a doorway is a hole you (and light) walk through.
+// What sits on one edge of a cell. blocksEdge and blocksLight say what each
+// stops.
 enum WallKind : uint8_t {
     WALL_NONE   = 0,   // open floor, nothing on the edge
     WALL_SOLID  = 1,
     WALL_EXIT   = 2,   // a doorway out of this level
     WALL_WINDOW = 3,   // glass, with nothing behind it
-    // A doorway between two spaces: a 1.3 m opening under a 2.3 m header, with
-    // a frame and a threshold. The generator used to leave these edges simply
-    // absent, which is indistinguishable from open floor — one marked doorway
-    // turned up in 33,282 edges on Level 0, and that one was an exit. Passable,
-    // so blocksEdge() says no; but its jambs are solid, so gatherCellAABBs
-    // gives them boxes and you have to go through the opening.
+    // A doorway: a 1.3 m opening under a 2.3 m header, with a frame and a
+    // threshold. Passable, but its jambs are solid (gatherCellAABBs).
     WALL_DOOR   = 4,
-    // The same opening with a leaf in it, shut and locked. It blocks a body and
-    // it blocks light — it is a door, not a doorway — so blocksEdge says yes and
-    // so does blocksLight. World::unlockEdge turns one into a WALL_DOOR for
-    // good, through the same overlay the shifted walls use, which is what makes
-    // every system agree the moment it opens.
+    // A doorway with a shut, locked leaf. Blocks bodies and light until
+    // World::unlockEdge turns it into a WALL_DOOR through the wall overlay.
     WALL_LOCKED = 5,
-    // A guard at the edge of a drop: the knee wall round a stair opening or an
-    // atrium, and the balustrade up the open side of a flight. It stops a body
-    // at any height (you cannot step off a landing into the storey below) but
-    // it is waist high, so it stops neither light nor sight. blocksEdge says
-    // yes, blocksLight says no — the opposite of a locked door.
+    // A guard at the edge of a drop: round a stair opening or an atrium, and up
+    // the open side of a flight. Stops a body at any height, but not light or
+    // sight.
     WALL_RAIL   = 6,
 };
 
-// Which piece of furniture, if any, stands in a cell. The generator picks these
-// per level (see World::generate); the mesher builds each one in
-// addProp (world_mesh.cpp) and gatherCellAABBs gives it a collision box.
+// What stands in a cell. The generator picks these per level; addProp
+// (world_mesh.cpp) builds each and gatherCellAABBs gives it a collision box.
 enum PropKind : uint8_t {
     PROP_NONE = 0,
     PROP_BOXES,          // 1  a stack of cartons
@@ -68,98 +53,74 @@ enum PropKind : uint8_t {
     PROP_FALLEN_TILE,    // 4  collapsed ceiling, tile leaning below the hole
     PROP_COUCH,          // 5
     PROP_ARMOIRE,        // 6
-    PROP_LAMP,           // 7  floor lamp, never lit
+    PROP_LAMP,           // 7  floor lamp
     PROP_NIGHTSTAND,     // 8
     PROP_BED,            // 9
-    PROP_VENDING,        // 10 vending machine — takes doubloons
-    PROP_PARTY_TABLE,    // 11 the cake nobody cut
+    PROP_VENDING,        // 10 vending machine, takes doubloons
+    PROP_PARTY_TABLE,    // 11 party table with a cake
     PROP_DESK,           // 12 office desk + chair
     PROP_SHELVING,       // 13 steel shelving
     PROP_COOLER,         // 14 water cooler
     PROP_PLANT,          // 15 potted plant
-    // 16 the Manila Room's octagonal table, two chairs and the cupboard under
-    // it. Anchored on room cell (7,7) but built centred on that cell's far
-    // corner, which is the middle of the room — the lore has the table
-    // "perfectly centered". See World::generate and addManilaRoom.
+    // 16: the Manila Room's table, chairs and cupboard. Anchored on room cell
+    // (7,7) and built centred on that cell's far corner, the middle of the room.
     PROP_MANILA_TABLE,
 };
 
-// propRot's bit 2: the prop stands pushed back against the solid wall behind
-// it rather than in the middle of its cell. Only vending machines do — a
-// machine is plugged in, so it lives against a wall with its back to it —
-// and World::generate sets it after every pass that moves a wall, so the
-// mesher and collision (vendFootprint) read the same answer.
+// propRot bit 2: the prop stands pushed back against the solid wall behind it.
+// Only vending machines. World::generate sets it after every pass that changes
+// an edge, so the mesher and collision (vendFootprint) agree.
 constexpr uint8_t PROP_AGAINST_WALL = 4;
 
-// The vending machine's body: half its width, its height, and how far it
-// reaches behind and in front of its centre (the door hardware stands proud).
-// The mesher builds it round the point vendFootprint returns and collision
-// takes the box, so the two cannot disagree about where it is.
+// The vending machine's body: half-width, height, and reach behind and in
+// front of its centre (the door hardware stands proud). The mesher builds it
+// round vendFootprint's centre and collision takes its box.
 constexpr float VEND_HW = 0.44f;
 constexpr float VEND_Y1 = 1.83f;
 constexpr float VEND_DEPTH_BACK = 0.36f, VEND_DEPTH_FRONT = 0.39f;
-// Rotated a quarter turn at a time from ChunkData::propRot; with
-// PROP_AGAINST_WALL pushed back to stand 8 cm off the face of the wall behind
-// it. (cx, cz) is the cell centre; (px, pz) the machine's centre, and the rest
-// its axis-aligned box.
+// Rotated a quarter turn at a time from propRot; with PROP_AGAINST_WALL,
+// pushed back to 8 cm off the wall face behind it. (cx, cz) is the cell centre;
+// out: the machine's centre (px, pz) and its axis-aligned box.
 void vendFootprint(uint8_t rotByte, float cx, float cz, float &px, float &pz,
                    float &x0, float &z0, float &x1, float &z1);
 // Level 1's lift doors: which north edges carry one. The mesher builds them;
-// the vending pass reads it so no machine stands against a pair of lift doors.
+// the vending pass keeps machines from backing onto them.
 bool liftHash(int gi, int gk, unsigned s);
 
 
-// The Manila Room (Level 0): "an isolated eight-by-eight-meter room" — 4x4
-// cells — "with thick walls", manila wallpaper, wooden floorboards, one
-// octagonal table, two chairs and "a wooden entrance door on each wall". It is
-// found by "walking an almighty distance in any direction", so it is rare and
-// never in the chunks around where you wake. One chunk in MANILA_RATE carries
-// one, in room cells MANILA_LO..MANILA_HI on both axes.
+// The Manila Room (Level 0): 8 x 8 m (room cells MANILA_LO..MANILA_HI on both
+// axes), thick walls, a door in each side. One chunk in MANILA_RATE, never in
+// the chunks round spawn.
 constexpr uint32_t MANILA_RATE = 20;
 constexpr int MANILA_LO = 6, MANILA_HI = 9;
 
 // ChunkData::elev is stored in decimetres so it fits in an int8_t.
 constexpr float ELEV_UNIT = 0.1f;
-// The tallest rise a body can walk up, and the tallest drop it can walk down
-// without leaving the floor. Anything taller is terrain you have to go around:
-// gatherCellAABBs puts a full-height blocker on the riser, and the mover falls
-// off it the other way instead of gliding down. Without this the 2.5 m terraces
-// of a Level 0 atrium and the Level 1 loading docks were walkable vertical
-// faces — you strolled up them like ramps.
+// The tallest rise or drop a body walks without leaving the floor. Taller is
+// terrain: gatherCellAABBs blocks the riser, canStep refuses it, and the mover
+// falls off it instead of gliding down.
 constexpr float MAX_STEP = 0.45f;
 constexpr int   MAX_STEP_UNITS = (int)(MAX_STEP / ELEV_UNIT);   // 4 decimetres, in elev units
 constexpr float SOFT_DEPTH = 0.085f;   // how far a rotten patch has sagged at its middle, metres
 
-// ---- storeys.
-//
-// The Threshold article has wanderers stumbling "through mile after mile of
-// randomly segmented rooms, hallways, and stairs", and the photograph it all
-// began with is of a building's *second floor*. For most of this game's life
-// the maze was one floorplan extruded to a ceiling height — every system in the
-// engine (collision, the pathfinder, line of sight, the shader's shadow march)
-// is built on there being exactly one floor under any point. So the vertical is
-// added without taking that away: a level with a storey pitch is a *stack* of
-// floorplans, each one a whole maze of its own, joined by stairs and openings.
-//
-// The storey you are standing on is always the one at y = 0. Everything that
-// reasons in two dimensions keeps doing so, on that storey, in local
-// coordinates; the storeys above and below are drawn offset by one pitch, and
-// crossing the middle of a flight re-bases the player — and everything else
-// with a position — by one storey (Game::changeStorey). A floating origin, with
-// the float being a whole floor.
+// ---- storeys. A level with a storey pitch is a stack of floorplans, each a
+// whole maze, joined by stairs and openings. The storey you are on is always at
+// y = 0, so everything that reasons in 2D (collision, pathfinding, line of
+// sight, the shader's shadow march) works unchanged on it; other storeys are
+// drawn a pitch away, and crossing the middle of a flight rebases everything
+// with a position by one storey (Game::changeStorey).
 //
 // Vertical features are pure functions of (chunk, pair of storeys), never of
-// either storey's generated contents, so the storey below and the storey above
-// build the same stairwell without ever seeing each other — the same trick
-// that lets neighbouring chunks meet at a seam. See World::featuresFor.
+// generated contents, so both storeys stamp the same stairwell without seeing
+// each other. See World::pairFeature.
 enum VertKind : uint8_t {
     VK_NONE = 0,
     VK_STAIRWELL,   // an enclosed dogleg: two flights and a half landing in a 4 x 8 m shaft
     VK_STAIR,       // one straight flight in a room, under an opening in the ceiling
     VK_ATRIUM,      // a double-height hall: the floor above is cut away and railed round
 };
-// One vertical feature. Local frame: u runs across the rise, v along it, both
-// in metres from the footprint's corner; `dir` turns that frame onto the grid.
+// One vertical feature. Local frame: u across the rise, v along it, metres
+// from the footprint's corner; `dir` turns that frame onto the grid.
 struct VertFeat {
     uint8_t kind = VK_NONE;
     uint8_t dir = 0;          // 0 rises toward +z, 1 toward -z, 2 toward +x, 3 toward -x
@@ -169,7 +130,7 @@ struct VertFeat {
     int8_t wallSide = 0;      // VK_STAIR: -1 wall on the u=0 side, +1 on the far side, 0 rails both
     int lo = 0;               // the storey whose floor it rises from; it opens into lo + 1
 };
-// What a cell is, vertically. Set by the generator on the storey it belongs to.
+// What a cell is vertically. Set by the generator on the storey it belongs to.
 enum VertFlag : uint8_t {
     VF_STAIR    = 1,    // this storey's floor here is a flight or a landing (World::stairY)
     VF_OPENUP   = 2,    // no ceiling: the space runs on up into the storey above
@@ -178,15 +139,14 @@ enum VertFlag : uint8_t {
     VF_KEEP     = 16,   // a feature or its margin: nothing else is placed here
     VF_NOWALK   = 32,   // not part of this storey's 2D floor graph (connectivity, flood fills)
 };
-// Deepest a groundAt will look through holes for something to stand on.
+// How many storeys groundAt looks down through holes, and how far streaming reaches.
 constexpr int STOREY_REACH = 6;
-// Height an AABB reports for something that stops a body at any height: walls,
-// jambs, pillars, rails. Walls around an opening run up a whole storey, and an
-// actor on a flight is well above a 3 m wall-top, so wallH is no longer "tall
-// enough to never step over".
+// The top an AABB reports for something that stops a body at any height
+// (walls, jambs, pillars, flight guards): a body on a flight stands above a
+// 3 m wall top.
 constexpr float FULL_H = 1.0e4f;
 // A rail: half the thickness of its knee wall, and the height of its cap above
-// what you stand on. The mesher builds it and gatherCellAABBs collides with it.
+// what you stand on. The mesher builds it; gatherCellAABBs collides with it.
 constexpr float RAIL_T = 0.075f;
 constexpr float RAIL_H = 0.65f;
 
@@ -199,20 +159,15 @@ struct ChunkData {
     uint8_t propRot[CCELLS][CCELLS];   // quarter turns in bits 0-1; PROP_AGAINST_WALL in bit 2
     uint8_t pool[CCELLS][CCELLS];
     int8_t elev[CCELLS][CCELLS];   // floor height in ELEV_UNIT steps: -5 sunken lounge, down to -25
-                                   // in an L0 atrium's terraced heart; +6 loading dock, +12 upper tier (L1)
-    // At most one locked door per chunk, and the cell its key lies in. Both are
-    // -1 when the chunk has neither. They are stored rather than hashed because
-    // the two have to agree about something no hash knows: the key must be on
-    // the side of the door you can already reach, and only the flood inside
-    // generate() can say which side that is.
+                                   // in an L0 atrium; +6 loading dock, +12 upper tier (L1)
     int8_t lockI = -1, lockK = -1;   // cell owning the locked edge, chunk-local
     uint8_t lockWest = 0;            // 0: its north edge, 1: its west edge
     int8_t keyI = -1, keyK = -1;     // where the key for it lies, chunk-local
     bool manila = false;             // this chunk holds the Manila Room (Level 0)
-    // Storeys: what each cell is vertically (VertFlag), which of `feats` it
-    // belongs to, and which of its two edges (bit 0 north, bit 1 west) belong
-    // to a stairwell and must not be touched by the passes that punch, move,
-    // lock or noclip doorways after the stamp.
+    // Storeys: each cell's VertFlag bits, which of `feats` it belongs to, and
+    // which of its two edges (bit 0 north, bit 1 west) a feature owns. Later passes
+    // that punch, move, lock or noclip doorways must skip protected edges, or the
+    // storeys disagree about a stairwell wall.
     uint8_t vflag[CCELLS][CCELLS] = {};
     int8_t vfeat[CCELLS][CCELLS] = {};
     uint8_t prot[CCELLS][CCELLS] = {};
@@ -224,21 +179,17 @@ struct AABB {
     bool seeThrough = false;             // a rail: stops a body, not a look
 };
 
-// Scratch capacity for "everything solid in the 3x3 cells around a point" —
-// three walls and a prop per cell would be 36, so 48 leaves headroom.
+// Scratch capacity for everything solid in the 3x3 cells round a point. Boxes
+// past the cap are dropped silently; mapdump reports the worst count.
 constexpr int MAX_NEARBY_AABBS = 48;
 
-// A wall or a window stops you getting through a cell edge; a doorway does not.
-// Collision, pathfinding, line of sight and the mesher all share this test.
-// Light is the exception and does NOT use it — buildOccupancy checks for
-// WALL_SOLID on its own, because glass blocks a body but not a fluorescent.
+// Can a body cross this edge? Collision, pathfinding, line of sight and the
+// mesher share this test. Light uses blocksLight.
 inline bool blocksEdge(uint8_t wall) {
     return wall == WALL_SOLID || wall == WALL_WINDOW || wall == WALL_LOCKED || wall == WALL_RAIL;
 }
-// What stops a fluorescent, which is not the same list: glass and a doorway
-// both let light through a body cannot pass, and a shut door does the reverse.
-// buildOccupancy used to test WALL_SOLID inline; it goes through here now so
-// the locked doors cast the shadow the leaf in them obviously should.
+// Does this edge stop light? Glass and doorways pass light; a locked door
+// does not.
 inline bool blocksLight(uint8_t wall) { return wall == WALL_SOLID || wall == WALL_LOCKED; }
 
 inline int fdiv(int a, int b) { return (a >= 0) ? a / b : -((-a + b - 1) / b); }
@@ -249,28 +200,20 @@ struct ChunkRef { int storey, cx, cz; };
 
 struct World {
     unsigned seed = 1337;
-    int level = 0;           // 0 = Level 0, 1 = Level 1 (garage), 2 = Poolrooms, 3 = Red Halls, 4 = LEVEL FUN
-    // Which visit to this level, this descent — 0 the first time you arrive.
-    // Mixed into the chunk seed so coming back gives you a genuinely different
-    // maze rather than the one you already stripped. The chunk seed was
-    // seed + level*K alone, so Level 0 regenerated identically every time you
-    // returned to it and the exit loop 0 -> 1 -> 2 -> 4 -> 0 put every pickup
-    // back where it was. At visit 0 the mix is a no-op, so a fresh descent at a
-    // given seed still produces exactly the maze it always did.
+    int level = 0;           // 0 = Level 0, 1 = Level 1, 2 = Poolrooms, 3 = Red Halls, 4 = LEVEL FUN
+    // Which visit to this level, this descent (0 on arrival). Mixed into the
+    // chunk seed so a revisit is a different maze; at 0 the mix is a no-op, so a
+    // fresh descent reproduces the same maze.
     unsigned visit = 0;
     float wallH = 3.0f;
     bool exitTest = false;   // BACKROOMS_EXITS env: exits everywhere, for visual testing
     bool manilaTest = false; // BACKROOMS_MANILA env: a Manila Room in the chunk east of spawn
-    // ---- storeys (see the note above VertKind). storeyH is the floor-to-floor
-    // pitch, 0 on a level that is one floorplan. `storey` is the one you are
-    // on, and `chunks` always holds its chunks, so every caller that iterates
-    // the chunks it can see keeps seeing the floor it is standing on. Every
-    // other storey's chunks live in `layers`.
+    // Storeys. storeyH is the floor-to-floor pitch (0: one floorplan). `chunks`
+    // holds the chunks of `storey`, the one you are on; other storeys' chunks live
+    // in `layers`.
     //
-    // `qs` is the storey the accessors below actually read. It is `storey`
-    // except inside a StoreyScope — meshing the floor below, asking what is
-    // under a hole — and it is what data(), generate() and the mesher consult,
-    // so no accessor needed a new parameter and none can forget one.
+    // `qs` is the storey the accessors read. It equals `storey` except inside a
+    // StoreyScope, and data(), generate() and the mesher all consult it.
     float storeyH = 0.0f;
     int storey = 0;
     int qs = 0;
@@ -283,27 +226,22 @@ struct World {
     void generate(ChunkData &d, int cx, int cz);
     // The chunk map for storey s (the live one for the storey you are on).
     std::unordered_map<uint64_t, ChunkData> &layer(int s) { return s == storey ? chunks : layers[s]; }
-    // Move the player's storey. The chunk maps swap rather than rebuild: the
-    // floor you just climbed to was already generated and meshed to be drawn
-    // through the stairwell, and its meshes are in its own local frame.
+    // Move to storey s. The chunk maps swap rather than regenerate; baked chunks
+    // are keyed by storey, so their meshes stay valid.
     void setStorey(int s);
-    // The seed for storey qs. Storey 0 gets the bare seed, so a fresh descent
-    // at a given seed still opens on exactly the maze it always did; every
-    // other storey is its own building.
+    // The seed for storey qs. Storey 0 uses the bare seed, so captures away from
+    // a feature match a one-storey world.
     unsigned sseed() const {
         return qs == 0 ? seed : seed ^ (uint32_t)((uint32_t)qs * 0x9E3779B1u + 0x7F4A7C15u);
     }
-    // Features touching storey s in chunk (cx,cz): the ones rising from it and
-    // the ones arriving at it. A pure function of the seed, the level, the visit
-    // and the coordinates — never of anything generated — so both storeys agree.
+    // Features touching storey s in chunk (cx,cz): the one rising from it and the
+    // one arriving at it. Pure functions of seed, level, visit and coordinates.
     int featuresFor(int cx, int cz, int s, VertFeat *out, int cap);
     bool pairFeature(int cx, int cz, int p, VertFeat &out);   // the one feature joining p and p + 1, if any
     bool manilaChunk(int cx, int cz, int s);                  // does storey s hold a Manila Room here
     uint8_t vflagAt(int ci, int ck);                           // VertFlag bits of a cell on storey qs
     // The walking surface of a flight or landing at (x,z), in storey qs's frame,
-    // or NAN where the cell has no stair. Stepped, not a ramp: the tread you see
-    // is the tread you stand on. `ramp` gives the nosing line instead — what a
-    // handrail follows.
+    // or NAN off a stair. Stepped; `ramp` gives the nosing line.
     float stairY(float x, float z, bool ramp = false);
     // A feature's local frame: world point -> (u, v) metres, and back.
     void featureLocal(const VertFeat &f, int cx, int cz, float x, float z, float &u, float &v) const;
@@ -311,13 +249,13 @@ struct World {
     // Do any chunks around this one link storey qs to storey qs + rel?
     bool linksStorey(int cx, int cz, int rel);
     // An enclosed stairwell's light: a batten on the end wall over the half
-    // landing, in the frame of the storey the stairwell rises from. The shader
-    // has one spare point light (uLamp); Game hands it the nearest of these.
+    // landing, in the frame of the storey it rises from. The renderer gives the
+    // nearest one the shader's spare point light (uLamp).
     Vec3 landingLamp(const VertFeat &f, int cx, int cz) const {
         return featureWorld(f, cx, cz, CELL, storeyH * 0.5f + 2.25f, 4 * CELL - WT - 0.07f);
     }
     // Write storey qs's half of a feature into a chunk being generated: its
-    // cleared margin, its cell flags, its walls, rails and doors.
+    // margin, cell flags, walls, rails and doors.
     void stampFeature(ChunkData &d, const VertFeat &f, int cx, int cz);
     uint8_t wallNVal(int ci, int ck);
     uint8_t wallWVal(int ci, int ck);
@@ -326,9 +264,8 @@ struct World {
     uint8_t propRotAt(int ci, int ck);
     bool poolAt(int ci, int ck);
     float floorY(int ci, int ck);
-    // The ceiling sits one wall height above *this cell's* floor, not at a
-    // fixed y. A raised deck carries its ceiling up with it; without that it
-    // would push its floor through a slab that never moved.
+    // The ceiling height of a cell: its floor (if raised) plus wallH, or the
+    // storey pitch where the cell is open to the storey above.
     float ceilY(int ci, int ck);
     int gatherCellAABBs(int ci, int ck, AABB *out, int cap, int cnt, bool includeProps = true);
     // feetY: obstacles whose top is at or below your feet are walkable, not solid
@@ -336,72 +273,48 @@ struct World {
     // floor height here, counting prop tops at or below your feet (so you can stand on furniture)
     float groundAt(float x, float z, float feetY);
     bool lineOfSight(float ax, float az, float bx, float bz);
-    // Snapshot the local floorplan into a grid the shader marches for light
-    // occlusion: bit0 = solid wall on this cell's north edge, bit1 = on its west
-    // edge, bit2 = a pillar fills the cell. Only opaque blockers go in —
-    // doorways, window glass, rails and furniture all let light through.
-    // bit3 = the ceiling panel centred on this cell's min corner is not there
-    // (it would hang in an opening), bit4 = this cell has no ceiling, so the
-    // tubes of the storey above light it too, bit5 = a hole in this storey's
-    // floor touches that corner, so the panel there shines down through it.
-    // bit6 = one of bits 3-5 is set within reach of the fittings the shader
-    // sums for a point in this cell; where it is clear the shader skips the
-    // per-fitting lookups, so it must never be clear where one would matter.
-    // Four bytes a cell: the storey you are on, the one below, the one above,
-    // and a spare — the shader picks the byte by which storey the fragment is on.
-    // `out` holds 2n rows: after the n of cells, n of fitting masks (which of
-    // the nine fittings the shader sums in each light block exist, per storey).
+    // The light-occlusion grid the shader marches, n x n cells from (originI,
+    // originK), four bytes a cell: your storey, the one below, the one above, spare.
+    // bit 0: opaque wall on the north edge; bit 1: on the west edge; bit 2: pillar;
+    // bit 3: no fitting at this cell's min corner (it would hang in an opening);
+    // bit 4: no ceiling here, so the storey above's tubes light it; bit 5: a hole
+    // touches that corner, so the fitting there lights the storey below; bit 6: one
+    // of bits 3-5 is set within reach of the fittings the shader sums here. Bit 6
+    // must never be clear where a missing fitting matters. `out` has 2n rows: n of
+    // cells, then n of fitting masks (buildOccupancy).
     void buildOccupancy(int originI, int originK, int n, unsigned char *out);
-    // can the hunter walk from cell (ci,ck) into the adjacent cell (ni,nk)?
-    // Furniture and pillars are solid; only a doorway opens a walled edge.
+    // Can a body walk from cell (ci,ck) into the adjacent (ni,nk)? Furniture and
+    // pillars fill their cell; only a doorway opens a walled edge.
     bool canStep(int ci, int ck, int ni, int nk);
-    // BFS the cell grid from (si,sk) toward (ti,tk); fills the next cell to move
-    // to in (outI,outK). false if no route within budget (fall back to a beeline).
+    // BFS from (si,sk) toward (ti,tk) within 16 cells; the first cell to move to.
+    // False if there is no route (fall back to a beeline).
     bool pathStep(int si, int sk, int ti, int tk, int &outI, int &outK);
     // Level 0 only: is this cell inside the Manila Room?
     bool manilaAt(int ci, int ck);
-    // The centre (world metres) of the Manila Room in this point's chunk or
-    // one of its eight neighbours, if there is one. Rooms are at least a chunk
-    // apart, so there is never more than one in reach of the player.
+    // The centre (world metres) of a loaded Manila Room in this point's chunk or
+    // its eight neighbours. Rooms are at least a chunk apart.
     bool manilaNear(float x, float z, float &rx, float &rz);
-    // Level 0 only: a rare patch of carpet that has stopped being a floor
+    // Level 0: a rare rotten floor patch
     bool softAt(int ci, int ck);
-    // How far the rotten patch in this cell has sunk at a continuous point in
-    // it, as a positive depth below the cell's floor. The floor mesher shapes
-    // the bowl out of this and groundAt walks the player down into it, so the
-    // dip you see and the dip you stand in cannot drift apart.
+    // How far the rotten patch has sunk at (x,z), metres. The mesher and groundAt
+    // both use it, so the dip drawn is the dip walked.
     float softDip(float x, float z);
-    // Red Halls only: a standpipe with a shut-off wheel on it. The mesher builds
-    // the pipe, the game logic runs the puzzle, so both ask this.
+    // Red Halls only: a standpipe with a shut-off wheel. The mesher builds it;
+    // the game runs the valve puzzle.
     bool valveAt(int ci, int ck);
-    // some exit doors glow red and were never going anywhere good
+    // Exits that lead to the Red Halls instead of onward.
     bool cursedExit(int ci, int ck);
     Vec2 findOpenSpot(float x, float z);
     void unloadFar(int pcx, int pcz, int radius);
     void unloadAll();
-    // ---- PAC-03: the place does not stay where you left it.
-    //
-    // The Backrooms is canonically non-Euclidean and this was a fixed grid that
-    // was perfectly, deterministically consistent — the one thing the world
-    // model actively worked against. `shifted` is an overlay of edges that have
-    // become walls since you last looked at them: a doorway you walked through
-    // is a blank wall when you turn round.
-    //
-    // It lands in wallNVal/wallWVal deliberately. Occupancy (and therefore the
-    // lighting), the pathfinder, collision and the mesher all read the walls
-    // through those two functions, so putting it anywhere else would have Clark
-    // and the shadows disagreeing with the geometry. Game::shiftAWall is what
-    // decides when, and only ever picks an edge you cannot currently see.
+    // Edges that have become walls behind the player (Game::shiftAWall picks
+    // edges out of sight). Read in wallNVal/wallWVal, like unlockedDoors, so every
+    // system sees them.
     std::unordered_set<uint64_t> shifted;
-    // Doors the player has unlocked, in the same edge-key space. Read in
-    // wallNVal/wallWVal for exactly the reason `shifted` is: collision, the
-    // pathfinder, line of sight, the light's occupancy grid and the mesher all
-    // come through those two, and a door that has opened for the player but not
-    // for Clark is worse than one that never opened.
+    // Doors the player has unlocked, in the same edge-key space.
     std::unordered_set<uint64_t> unlockedDoors;
-    // Storey-aware: a doorway walled off, or a door unlocked, on one floor is
-    // not the same edge as the one directly over it. Storey 0 keys exactly as
-    // it always did.
+    // Edges are per storey: the edge directly above is a different edge. Storey
+    // 0 keys as a one-storey world did.
     uint64_t edgeKey(int ci, int ck, bool west) const {
         return ((key(ci, ck) << 1) | (west ? 1ull : 0ull)) ^ ((uint64_t)(uint32_t)qs * 0xD6E8FEB86659FD93ULL);
     }
@@ -410,17 +323,15 @@ struct World {
     // Is there a key lying loose in this cell? One per chunk at most.
     bool keyAt(int ci, int ck);
     void rebuildChunk(int cx, int cz);           // report its geometry stale (staleChunks)
-    // Chunks whose geometry went stale since a renderer last looked: unloaded
-    // (unloadFar, unloadAll) or rebuilt after a wall changed (rebuildChunk).
-    // Core only appends; the renderer drains it before using any baked chunk
-    // (ChunkMeshCache), so its meshes live exactly as long as the chunk data.
+    // Chunks whose geometry went stale: unloaded (unloadFar, unloadAll) or
+    // rebuilt after a wall changed (rebuildChunk). Core only appends; a renderer
+    // drains it before using any baked chunk (ChunkMeshCache), so baked meshes live
+    // exactly as long as their chunk data.
     std::vector<ChunkRef> staleChunks;
 };
 
-// Point the world's accessors at another storey for the length of a scope.
-// Everything World reads goes through data(), and data() reads qs, so this is
-// the one switch — meshing the floor below, looking down a hole for a floor,
-// building the shadow grid of the storey above.
+// Point the accessors at another storey for a scope (meshing the storey
+// below, looking down a hole, building the grid of the storey above).
 struct StoreyScope {
     World &w; int prev;
     StoreyScope(World &world, int s) : w(world), prev(world.qs) { w.qs = s; }

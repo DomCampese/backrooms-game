@@ -2,7 +2,6 @@
 #include <algorithm>
 #include <cmath>
 
-// rotated prop box: 4 sides + top, one UV region for sides, another for the top
 void addPropBox(MB &mb, float cx, float cz, float yaw, float hx, float hz, float y0, float y1,
                 float u0, float v0, float u1, float v1,
                 float tu0, float tv0, float tu1, float tv1, Color tint, float bevel) {
@@ -44,8 +43,6 @@ void addPropBox(MB &mb, float cx, float cz, float yaw, float hx, float hz, float
             {tu0,tv0},{tu1,tv0},{tu1,tv1},{tu0,tv1}, tint);
 }
 
-// A plain axis-aligned solid in a flat colour. Samples the props atlas' blank
-// metal corner, so the tint is the whole look — pipework, collars, standpipes.
 void addSolidBox(MB &mb, float x0, float y0, float z0, float x1, float y1, float z1, Color t) {
     const Vector2 u = { 0.375f, 0.75f };
     mb.quad({x0,y0,z0},{x1,y0,z0},{x1,y1,z0},{x0,y1,z0},{0,0,-1},u,u,u,u,t);

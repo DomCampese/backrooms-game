@@ -6,15 +6,9 @@
 #include <cstdint>
 #include <unordered_map>
 
-// How rare a phrase on a wall is, and how many there are to find. The rate is
-// per solid wall edge and applies to both orientations, so a corridor of ten
-// cells offers about twenty chances. SCRAWL_PHRASES must match the atlas built
-// by makeScrawlTex (4 columns x 8 rows) — change one and change the other.
-// How often the building's fittings turn up. These are rarities in the same
-// sense the scrawl is, except an outlet is meant to be ordinary: canon names
-// "scattered electrical outlets" and the eye needs something of known size to
-// measure a corridor against, so they are common and everything else is not.
-// All are per solid wall edge, both orientations.
+// How often the fittings turn up: one in N solid wall edges (both
+// orientations) unless marked otherwise. Outlets are common on purpose, a thing
+// of known size to judge a corridor by.
 constexpr uint32_t OUTLET_RATE   = 5;
 constexpr uint32_t OUTLET_BROKEN = 4;    // one outlet in this many has lost its cover
 constexpr uint32_t SWITCH_RATE   = 23;
@@ -24,6 +18,9 @@ constexpr uint32_t SPRINK_RATE   = 11;   // per ceiling cell
 constexpr uint32_t DIFFUSER_RATE = 13;   // per ceiling cell
 constexpr uint32_t CONDUIT_RUN   = 6;    // cells per conduit run, so runs are runs
 
+// Wall scrawl: one in SCRAWL_RATE solid wall edges carries a phrase.
+// SCRAWL_PHRASES must match makeScrawlTex's atlas (4 columns x 8 rows), or
+// walls show half of one phrase and half of another.
 constexpr uint32_t SCRAWL_RATE = 40;
 constexpr uint32_t SCRAWL_PHRASES = 32;
 
@@ -36,7 +33,7 @@ enum ChunkMesh {
     MESH_PROPS,
     MESH_WATER,
     MESH_SCRAWL,      // graffiti decals, pressed just off the wall faces
-    MESH_FIXTURES,    // outlets, grilles, diffusers, signs — and the conduit/sprinkler bodies
+    MESH_FIXTURES,    // outlets, grilles, diffusers, signs, conduit and sprinklers
     MESH_GLASS,       // window panes
     MESH_AO,          // baked contact-shadow gradients in every crease
     MESH_COUNT,
