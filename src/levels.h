@@ -40,6 +40,14 @@ constexpr int NLEVELS = 5;
 extern const LevelCfg LEVELS[NLEVELS];
 // where each level's exit door leads; the Red Halls and the party both dump you back at the start
 extern const int EXIT_NEXT[NLEVELS];
+// World-space variation the shader lays over the tiled surfaces (uMacro, uBoard
+// in shaders.cpp). SURF_MACRO is how far the tone wanders, +/- as a fraction:
+// a texture repeats every 2-3 m and its grime repeats with it, and a real floor
+// does not. CEIL_BOARD is the pitch of a suspended ceiling's boards, metres,
+// for per-board tone and water stains (0 = not a board ceiling). It must be the
+// pitch surfaces.cpp draws the grid at, or the stains straddle the T-bars.
+extern const float SURF_MACRO[NLEVELS];
+extern const float CEIL_BOARD[NLEVELS];
 
 // CPU-side estimate of the shader's room lighting, for tinting billboards.
 // entX/entZ/entDark reproduce the hunter's pool of dead light (0 = no effect).

@@ -55,6 +55,8 @@ uniform vec4 uRoomMask;          // x0,z0,x1,z1: ceiling panels centred in here 
 uniform vec4 uLamp;              // xyz: the one spare point light — the Manila Room's chandelier, or
                                  // the nearest stairwell's landing batten — w: its output (0 = none near)
 uniform vec3 uLampCol;           // ...and its colour: filament warm, or fluorescent
+uniform float uMacro;            // world-space tone wander on tiled surfaces (SURF_MACRO)
+uniform float uBoard;            // suspended-ceiling board pitch, metres; 0 = none (CEIL_BOARD)
 uniform sampler2D texture1; // packed material slopes / gloss mask
 float gGloss;
 uniform sampler2D texture2;      // occupancy grid (material normal-map slot)
@@ -608,6 +610,48 @@ void main(){
         vec4 texel = noclip ? textureGrad(texture0, uvT, duvdx, duvdy) : texture(texture0, fragUV);
         vec4 detail = texture(texture1, fragUV);
         gGloss = detail.a < 0.75 ? detail.b : uGloss * detail.b;
+        // World-space variation over the tiled surfaces. Only world maps carry
+        // a detail alpha above 0.99 (objects are 128, the neutral map 250), and
+        // only opaque textured geometry (vertex alpha 254-255) is a building
+        // surface rather than a decal fading out.
+        // A texture repeats every 2-3 m and every stain and patch of grime in
+        // it repeats too, in a grid, which is the single strongest tell that a
+        // floor is generated. One octave of world-space value noise, a couple of
+        // metres across, makes the tone wander instead; a second octave cost
+        // more frame than it was worth (tools/bench.sh). Arithmetic only: see
+        // lightState.
+        vec3 Ng = normalize(fragN);
+        float world = step(0.99, fragC.a) * step(0.99, detail.a);
+        vec2 mp = mix(vec2(fragPos.x + fragPos.z, fragPos.y), fragPos.xz, step(0.7, abs(Ng.y)));
+        float wander = vnoise(mp*0.45 + 11.3);
+        texel.rgb *= 1.0 + (wander - 0.5) * 2.0 * uMacro * world;
+        // A suspended ceiling is a few hundred boards that have been replaced
+        // one at a time over years: each its own shade, some yellowed, and the
+        // odd one water-stained — a tan blot with the dark tide ring round it
+        // that every office ceiling has somewhere. Per board in world space,
+        // hashed with the storey, so no two floors share a stain and none
+        // repeats. The T-bar (within 16 mm of a grid line) is left alone.
+        if (uBoard > 0.0){
+            vec2 bq = fragPos.xz / uBoard;
+            vec2 bc = floor(bq), bf = fract(bq);
+            float hb = lhash(bc + vec2(storeyOffset(uStorey + float(gRel)) * 3.7, 17.0));
+            float edge = min(min(bf.x, 1.0 - bf.x), min(bf.y, 1.0 - bf.y)) * uBoard;
+            float onBoard = smoothstep(0.016, 0.024, edge) * step(Ng.y, -0.7) * world;
+            vec3 age = mix(vec3(1.0), vec3(1.015, 0.995, 0.93), fract(hb * 7.13));
+            vec3 board = age * (1.0 + (hb - 0.5) * 0.07);
+            vec2 sc = (bf - vec2(0.3 + 0.4 * fract(hb * 5.3), 0.3 + 0.4 * fract(hb * 9.1))) * uBoard;
+            // an irregular blot, dried back in stages: each leak left its own
+            // tide line inside the last, the outer one darkest
+            float blot = length(sc * vec2(1.0, 1.25)) + vnoise(fragPos.xz * 8.0) * 0.085
+                       - (0.07 + 0.12 * fract(hb * 13.3));
+            float inside = 1.0 - smoothstep(-0.004, 0.004, blot);
+            float ring = exp(-blot * blot * 12000.0) + 0.45 * exp(-(blot + 0.032) * (blot + 0.032) * 16000.0);
+            float stained = step(fract(hb * 31.7), 0.05);
+            vec3 stain = mix(vec3(1.0), vec3(0.93, 0.88, 0.76), inside * 0.8)
+                       * mix(vec3(1.0), vec3(0.74, 0.65, 0.52), min(ring, 1.0) * 0.7);
+            board *= mix(vec3(1.0), stain, stained);
+            texel.rgb *= mix(vec3(1.0), board, onBoard);
+        }
         vec3 Nb = normalize(fragN);
         // Detail is tied to material UVs and mipmaps, so it stays attached to
         // the surface and filters away at distance instead of crawling. Alpha

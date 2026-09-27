@@ -32,6 +32,15 @@ build_mapdump() {
         src/textures.cpp -o mapdump "${LINK[@]}"
     echo "built ./mapdump (python$PYV)"
 }
+# texdump: every texture generator, run without a window, written to PNG with
+# its mean colour — see the top of tools/texdump.cpp.
+build_texdump() {
+    rm -f texdump
+    python3 tools/embed-materials.py
+    c++ "${FLAGS[@]}" tools/texdump.cpp src/textures.cpp src/surfaces.cpp src/util.cpp \
+        -o texdump "${LINK[@]}"
+    echo "built ./texdump (python$PYV)"
+}
 build_game() {
     rm -f backrooms
     python3 tools/embed-materials.py
@@ -42,6 +51,7 @@ build_game() {
 case "${1:-game}" in
     game)    build_game ;;
     mapdump) build_mapdump ;;
-    all)     build_game; build_mapdump ;;
-    *)       echo "usage: $(basename "$0") [game|mapdump|all]"; exit 2 ;;
+    texdump) build_texdump ;;
+    all)     build_game; build_mapdump; build_texdump ;;
+    *)       echo "usage: $(basename "$0") [game|mapdump|texdump|all]"; exit 2 ;;
 esac

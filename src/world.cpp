@@ -1662,7 +1662,11 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
     uint32_t h = ih(site.gi, site.gk, seed ^ 0xB0B5u);
     float r1 = (h & 0xFF) / 255.0f, r2 = ((h >> 8) & 0xFF) / 255.0f, r3 = ((h >> 16) & 0xFF) / 255.0f;
     // UV regions of the prop atlas
-    const float CU0=0.01f, CV0=0.02f, CU1=0.24f, CV1=0.98f;       // cardboard
+    // cardboard: a carton's side, then its top (flap seam, tape, shipping
+    // label) — two regions, because a box taped round its middle on every face
+    // is not how anyone packs one. makePropsTex draws them.
+    const float CU0=0.01f, CV0=0.004f, CU1=0.24f, CV1=0.58f;
+    const float KU0=0.01f, KV0=0.61f, KU1=0.24f, KV1=0.99f;
     const float FU0=0.26f, FV0=0.02f, FU1=0.49f, FV1=0.48f;       // cabinet front
     const float MU0=0.26f, MV0=0.52f, MU1=0.49f, MV1=0.98f;       // plain metal
     enum class Surface { Metal, Wood, Fabric, Cardboard };
@@ -1673,9 +1677,10 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
         float u0=MU0,v0=MV0,u1=MU1,v1=MV1;
         if (surface==Surface::Wood) {u0=0.51f;v0=0.02f;u1=0.99f;v1=0.48f;}
         if (surface==Surface::Fabric) {u0=0.51f;v0=0.52f;u1=0.99f;v1=0.98f;}
-        if (surface==Surface::Cardboard) {u0=CU0;v0=CV0;u1=CU1;v1=CV1;}
+        float tu0=u0,tv0=v0,tu1=u1,tv1=v1;
+        if (surface==Surface::Cardboard) {u0=CU0;v0=CV0;u1=CU1;v1=CV1;tu0=KU0;tv0=KV0;tu1=KU1;tv1=KV1;}
         addPropBox(pr, pcx+ox*ca-oz*sa, pcz+ox*sa+oz*ca, rot, hx2,hz2,y0,y1,
-                   u0,v0,u1,v1,u0,v0,u1,v1,tint,
+                   u0,v0,u1,v1,tu0,tv0,tu1,tv1,tint,
                    surface==Surface::Fabric ? 0.016f : surface==Surface::Wood ? 0.006f : 0.0f);
     };
     auto roundPart = [&](float ox,float oz,float r0,float r1,float y0,float y1,Color tint) {
@@ -1704,14 +1709,14 @@ static void addProp(uint8_t kind, const PropSite &site, unsigned seed, int level
             return Color{ cl8(c.r * 0.9f + 46), cl8(c.g * 0.9f + 46), cl8(c.b * 0.9f + 46), 255 };
         };
         addPropBox(pr, pcx + (r3 - 0.5f) * 0.5f, pcz + (r1 - 0.5f) * 0.5f, rot + r2,
-                   bhx, bhx, ey, ey + bh, CU0, CV0, CU1, CV1, CU0, CV0, CU1, CV1, wrap(5));
+                   bhx, bhx, ey, ey + bh, CU0, CV0, CU1, CV1, KU0, KV0, KU1, KV1, wrap(5));
         if (r2 > 0.35f)   // second box on top, skewed
             addPropBox(pr, pcx + (r3 - 0.5f) * 0.5f + 0.06f, pcz + (r1 - 0.5f) * 0.5f - 0.05f,
                        rot + r2 + 0.5f, bhx * 0.8f, bhx * 0.8f, ey + bh, ey + bh + 0.5f,
-                       CU0, CV0, CU1, CV1, CU0, CV0, CU1, CV1, wrap(9));
+                       CU0, CV0, CU1, CV1, KU0, KV0, KU1, KV1, wrap(9));
         if (r1 > 0.6f)    // third box beside
             addPropBox(pr, pcx + 0.62f, pcz + 0.3f, rot + r3 * 2, 0.27f, 0.27f, ey, ey + 0.5f,
-                       CU0, CV0, CU1, CV1, CU0, CV0, CU1, CV1, wrap(13));
+                       CU0, CV0, CU1, CV1, KU0, KV0, KU1, KV1, wrap(13));
         break;
     }
     case PROP_CABINET:     // filing cabinet
@@ -2216,13 +2221,17 @@ void World::ensureMesh(int cx, int cz) {
     gWallV = level == 1 ? wallH : 3.0f;
     gTallPaper = storeyH > 0.0f;
     Color wcol = WHITE;
-    // The ceiling gets no world-space relief (alpha 254, not 255). It hangs level
-    // with the light fittings, so every panel lights it edge-on — and a bump under
-    // raking light swings the terminator far harder than the same bump lit
-    // head-on. At 255 the relief field turned the whole ceiling into dark
-    // mould-like blotches roughly a tile across. Its own texture carries the
-    // fissures and speckle it needs.
-    Color ccol = { 255, 255, 255, 254 };
+    // The ceiling takes its relief (alpha 255) again. It hangs level with the
+    // light fittings, so every panel lights it edge-on, and a bump under raking
+    // light swings the terminator far harder than the same bump lit head-on:
+    // when relief was a world-space noise field, that turned the whole ceiling
+    // into dark mould-like blotches roughly a tile across, and it was opted out
+    // at 254. Relief is authored per surface now (surfaces.cpp) and a ceiling's
+    // has no lumps in it — fine fissures, pinholes, the T-bar standing a
+    // millimetre proud with a rolled edge, a formwork fin — which under raking
+    // light is exactly what a real ceiling shows. If blotches come back, look
+    // for a low-frequency term in a ceiling's height field before you look here.
+    Color ccol = { 255, 255, 255, 255 };
     // ---- baked ambient occlusion: gradient decals hugging every crease where
     // geometry meets. The strip texture fades alpha from the crease (v=0)
     // outward (v=1), so walls sit *in* the room instead of on top of it.
@@ -3932,7 +3941,8 @@ Mesh buildFlareMesh() {
 // shipping label, all alpha 255 so the wood takes its grain relief.
 static void crateBody(MB &mb) {
     const float WU0 = 0.51f, WV0 = 0.02f, WU1 = 0.99f, WV1 = 0.48f;
-    const float CU0 = 0.02f, CV0 = 0.30f, CU1 = 0.22f, CV1 = 0.50f;          // cardboard, for the label
+    // the shipping label on a carton's top in the props atlas (makePropsTex)
+    const float CU0 = 150 / 1024.0f, CV0 = 332 / 512.0f, CU1 = 236 / 1024.0f, CV1 = 392 / 512.0f;
     const float H = 0.56f, R = 0.35f;
     Color plank = { 255, 226, 180, 255 }, batten = { 176, 138, 96, 255 };
     // the box as horizontal planks, each a little different in tone

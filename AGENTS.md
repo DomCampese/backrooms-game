@@ -1,3 +1,77 @@
+# Surface and asset realism pass (September 2026)
+
+Every world surface was rebuilt in `src/surfaces.cpp`, and the held and loose
+objects were redrawn. What changed, and what will bite:
+
+- **Relief is authored in metres, never derived from paint.** Each generator
+  paints colour, height (metres, + toward the viewer) and a gloss mask on the
+  same pixels; `finishSurface` turns height into slopes per metre, which is
+  what `detailNormal()` takes. The old maps were luminance run through a
+  gradient, so the printed chevrons were embossed, every stain was a dent and
+  grout was recessed only because it was darker. `makeSurfaceDetail` (luminance)
+  survives for the props atlas only, whose scanned regions carry their relief.
+- **Every term must wrap at the tile edge.** `fbm2` is not periodic, and the old
+  generators sampled it straight across 0..W: Level 1's tide line jumped every
+  3 m along every wall, and the slab showed its 2 m repeat as lines across the
+  floor. Use `Canvas::nz` (whole lattice cells per tile) and `wrapd` for
+  anything scattered. `./texdump out/` writes each surface and a `_wrap` copy
+  shifted half a tile, so a seam is in the middle of the picture.
+- **Things are their real size.** Floors/ceilings map 2 m to a repeat, walls
+  3 m across and `gWallV` down. Level 0's boards are 2/3 m (three to a repeat),
+  so a grid line runs through every light centre (2 + 4k m) and the tray's
+  0.69 m half-width lands on the next one: a troffer fills a 2x2 bay. Brick is
+  13 x 40 to a 3 m wall (231 x 75 mm on centre). Pool tile is 1/6 m on floors
+  *and* walls — two textures (12 and 18 tiles), so the grout lines meet at the
+  foot of the wall. `CEIL_BOARD` (levels.cpp) must equal the pitch the board
+  generator draws, or the shader's stains straddle the T-bars.
+- **Means are held.** Each generator ends in `matchLuma(old mean)`, because the
+  ambients, light multipliers and `tools/sweep.sh` bands were tuned against the
+  old surfaces. The brick is matched on its *red channel*: at equal luma
+  the new brick (grey mortar) came out a tenth darker under the Red Halls'
+  near-pure red light, whose green the tone curve's toe swallows whole — even a
+  luma weighted by that light was wrong. Measure a region of the capture, not
+  the frame mean, which hid it. `./texdump` prints every mean.
+- **Level 0's paper repeats every 1.5 m down the tile** (noise period 512 px):
+  tall walls reuse the 0.75-2.25 m band (`wallV`/`voidFace`). Anything that
+  depends on height — damp, the dust line, the skirting — stays outside it.
+  The skirting is 12 cm now (was a 27 cm band), stands 14 mm proud with a
+  bullnose; outlets at 0.32 m sit clear above it.
+- **Ceilings take relief again (vertex alpha 255).** They were opted out at
+  254 because the old world-space noise blotched them under the edge-on panel
+  light; authored ceiling height has no low-frequency term, and raking light on
+  real fissures is the look. If blotches return, look for a lumpy term in a
+  ceiling's height field first.
+- **World-space variation** (`uMacro` = `SURF_MACRO`, `uBoard` = `CEIL_BOARD`)
+  applies where the detail alpha is above 0.99 — world maps are 255, object maps
+  128, and the 1x1 neutral map is **250** for exactly this test. Set it back to
+  255 and every decal, fixture and held object picks up floor mottling. The
+  board term tones each ceiling board, yellows some, and water-stains about one
+  in twenty, hashed per board and storey. Arithmetic only (see lightState).
+  Cost, best-of-3 on the software rasteriser: +3.4% frame on Level 0 (board
+  term included), about +4% on the Poolrooms. Each `vnoise` is four sin
+  hashes; a second octave of each term cost another 3% and was taken out.
+- **Surfaces are generated on first entry to a level** (`Game::surface`), not at
+  startup: at the new resolutions a level's set costs 0.2-0.7 s natively and
+  only Level 0's is paid before the first frame. Levels share slots (the Red
+  Halls reuse Level 1's slab; the pool ceiling is its floor tile).
+- **Lettering** (`printText` in textures.cpp) is the scrawl glyph splines with
+  an even pen: raylib's font is an 8 px bitmap and came out a staircase on the
+  can. It renders to a scratch buffer and composites by coverage, because
+  `inkDab` only draws onto transparency and silently skips opaque pixels.
+- **Carton UVs are two regions now**: side (v 0.004-0.58) and top (v 0.61-0.99)
+  of the props atlas' left strip. The old single region put a band of tape
+  round the middle of every face. The Level 1 crate's label samples the
+  carton-top shipping label's exact rect (`crateBody`); move one, move both.
+  `addPropBox` maps side faces *mirrored* as seen from outside, so anything
+  lettered on a side region is drawn and then flipped in the atlas. The first
+  capture had "ALMOND WATER" backwards on every carton; blank cardboard had
+  hidden this for as long as the prop existed. Tops map the right way round.
+- The can (576 px) and deck (512 px) are their old layouts at 3x and 4x, so
+  the mesh UVs did not change; both are mipmapped now. The dog sheet keeps its
+  frame size and ground line; only the silhouette changed.
+- `RED` (and every named colour) is a raylib macro: `const Vector3 RED = {...}`
+  fails with "too many initializers" pointing into raylib.h.
+
 # Room routes and taller courts (September 2026)
 
 - Level 0 exits are visible, two-sided glowing doors again. Do not replace them
@@ -346,7 +420,8 @@ time so the executable remains independent of its working directory.
 | `world.{h,cpp}` | infinite maze: chunk generation, mesh baking, collision, line of sight. `WallKind` / `PropKind` / `ChunkMesh` name the codes stored per cell |
 | `levels.{h,cpp}` | per-level look/feel table; CPU mirror of the shader's lighting |
 | `shaders.cpp` | the world and post-process GLSL, as string literals |
-| `textures.cpp` | procedural surfaces and composed CC0 material tiles |
+| `surfaces.cpp` | the world surfaces: colour, height (m) and gloss per level surface, wrapped and at real scale |
+| `textures.cpp` | sprites, decals, fixtures, props atlas (with the CC0 material tiles), can, deck |
 | `revolver.{h,cpp}` | embedded authored revolver, pose interpolation, two material batches |
 | `sfx.cpp` | one-shot sounds synthesized into `Wave` buffers, plus the loaders for embedded recordings |
 | `audio.cpp` | the streaming ambience synth (hum, drone); recorded loops live in `Game::updateLoopAudio` |
@@ -731,7 +806,7 @@ Environment variables, all read at startup:
 | `BACKROOMS_SEED=n` | fix the world seed — repeatable maze |
 | `BACKROOMS_NOBLACKOUT=1` | never schedule a blackout (on by default under `BACKROOMS_SHOT`; pass `0` to shoot one) |
 | `BACKROOMS_LEVEL=n` | start on level n (0–4) |
-| `BACKROOMS_POS="x,z,yaw"` | start at a specific spot and heading, in world metres/radians |
+| `BACKROOMS_POS="x,z,yaw[,pitch]"` | start at a specific spot and heading, in world metres/radians; the optional pitch (up +) is how you photograph a floor or ceiling close up |
 | `BACKROOMS_EXITS=1` | exit doors everywhere, for visual testing |
 | `BACKROOMS_MENU=1` | hold on the title screen instead of starting the run |
 | `BACKROOMS_FLASH=1` | start with the flashlight on |
@@ -1390,7 +1465,10 @@ and breaks at the wrap, putting a row of half-features down every seam in the
 world. The brick had shipped that way for a while and nobody saw it, because
 until each brick got its own tone there was nothing at the seam to mismatch.
 
-**`tools/bench.sh` aborts on any line containing "error:", including ALSA's.**
+**`tools/bench.sh` used to abort on any line containing "error:", including ALSA's.**
+(Fixed in the surface realism pass: the case-insensitive match is now scoped to
+the `SHADER:` message, and `ERROR:` must be raylib's capitalised prefix. The
+history below is why the filter is shaped that way.)
 It merges the child's stderr into stdout and greps that for
 `SHADER: .*(failed|error)|ERROR:` case-insensitively, so the sandbox's usual
 `snd_func_card_id returned error` spam — and GLFW's `error: XDG_RUNTIME_DIR is
