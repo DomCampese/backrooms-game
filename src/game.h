@@ -6,9 +6,11 @@
 #include "world.h"
 #include "levels.h"
 #include "entity.h"
-#include "audio.h"
+#include "game_audio.h"
 #include "revolver.h"
 #include "textures.h"
+#include "sim/input_frame.h"
+#include "sim/audio_events.h"
 #include <cstdint>
 #include <unordered_set>
 #include <vector>
@@ -163,20 +165,15 @@ struct Game {
         locStoreyH = -1, locStorey = -1, locLampCol = -1, locMacro = -1, locBoard = -1, locObjRefl = -1, locDrawRel = -1;
     int locPTime = -1, locPFear = -1, locPWater = -1, locPMigraine = -1;
     Material mats[MAT_COUNT]{};
-    Sound steps[4]{}, sndNoclip{}, splashIn[3]{}, splashOut[3]{}, swimStrokes[4]{}, sndClick{}, sndScare{}, sndWin{},
-          sndFlare{}, sndShot{}, sndHit{}, sndKill{}, sndPop{}, sndHeartbeat{}, sndTape{},
-          sndValve{}, sndHowl{}, sndGulp{}, sndVoice{}, sndGroan{};
-    static constexpr int NBARKS = 3;
-    Sound sndBarks[NBARKS]{};                   // the pack, panned to whichever one spoke
-    Sound entSteps[4]{};                        // the thing's own footfalls, panned + attenuated
-    // The same two sets again, as heard through geometry. Picked on
-    // lineOfSight at the moment of playback — see AUD-02. Knowing a thing is
-    // near is worth much less than knowing where it is, and a game that plays
-    // the open-corridor sample through two walls is telling you the second
-    // thing when it only knows the first.
-    Sound sndBarksThrough[NBARKS]{};
-    Sound entStepsThrough[4]{};
-    AudioSynth synth;
+    GameAudio audio;
+    // Sound the rules asked for this tick, played in order by playAudio().
+    std::vector<AudioEvent> audioEvents;
+    AmbienceMix ambience;                     // what the synth is told to chase
+    AudioEvent &audioEvent(AudioEvent::Kind kind);
+    AudioEvent &play(Sfx sfx, int variant = 0);
+    void stopVoice();
+    void playAudio();
+    LoopCue loopCue();
     World world;
     Rng grng{1};
     RenderTexture2D rt{};
@@ -197,10 +194,6 @@ struct Game {
     // Surface float: the view rides slow overlapping swells and rolls with them,
     // fading out as you go under. Visual only; buoyancy physics are unchanged.
     float floatT = 0, floatRoll = 0;
-    // Looped recordings: the muffled water while your head is under, and LEVEL
-    // FUN's music. Both stream and loop; volumes are eased.
-    Music musUnderwater{}, musParty{};
-    float underwaterVol = 0, partyVol = 0, loopT = 0;
     static constexpr float W_TAP = 0.3f;      // double-tap window for W-to-run
     float wTapT = 0; bool wSprint = false;
     float health = 1.0f, hurtT = 0, sinceHurt = 0;   // hurtT: immunity left after a hit
@@ -216,7 +209,6 @@ struct Game {
     float f2x = 1, f2z = 0, r2x = 0, r2z = 1;
     bool sprinting = false, sprintExhausted = false;
     float bobAmt = 0, eyeY = 1.62f;
-    bool captureClick = false;                // this click grabbed the mouse; don't also fire
     float leanCur = 0, landDip = 0;           // camera feel: strafe lean + landing dip
     float strafeInput = 0;                    // -1..1, set by movement, read by render lean
     float entPrevX = 0, entPrevZ = 0;         // last frame's position, to derive his velocity
@@ -308,7 +300,7 @@ struct Game {
     std::unordered_set<uint64_t> cratesOpened;   // this epoch's, by cell
     bool crateWasDark = false;
     bool crateAt(int a, int b);
-    void updateCrates(float dt, double now);
+    void updateCrates(double now);
     void openCrate(int a, int b);
     void updateManila(float dt, double now);
     void markWayOut();                        // chalk the way from the Manila Room to the nearest noclip wall
@@ -409,10 +401,9 @@ struct Game {
     bool clarkLevel() const { return level == 0; }
     const char *hunterName() const { return level == 4 ? "THE PARTYGOER" : level == 0 ? "PIRATE CLARK" : "A SMILER"; }
     void updateHealth(float dt);              // grace countdown and regeneration
-    void updateLoopAudio(float dt);          // feed and fade the looping recordings (water, LEVEL FUN music)
     bool shiftAWall();                        // PAC-03: wall off one doorway you cannot see
     bool packDeaf() const;                    // ENT-04: are you quiet enough for the pack to lose you
-    void updateMenu(double now);              // drift the title-screen camera; any key begins
+    void updateMenu(const InputFrame &in, float dt, double now);   // drift the title-screen camera; any key begins
     void startRun(double now);                // leave the menu and start a fresh descent
     // Throw away the current descent and set up a fresh one from Level 0: a new
     // maze, you back at the start of it, gear and tallies reset. Records and the
@@ -428,7 +419,7 @@ struct Game {
     bool tick();                              // one frame; false = run ended (headless shot taken)
     void shutdown();
 
-    void applyLevel(int lv);
+    void applyLevel(int lv, double now);
     void seedStrangerChalk();
     void saveBest();
 
@@ -450,11 +441,11 @@ struct Game {
     // drink down on. Shared by the mesher-side render and the pickup test.
     float bottleShelfY(int a, int b);
     Vector2 pickupSpot(int a, int b);         // where in the cell the item stands (render + pickup test)
-    void updateDrink(float dt, double now); // run the drinking animation
+    void updateDrink(float dt);             // run the drinking animation
     void drawHeldWeapon(const Camera3D &cam);
     void drawCan(Matrix xf);                // one can, lit by the room like anything else
     void drawDrinkCan(const Camera3D &cam); // the can in your hand, mid-drink
-    void updateTapeDeck(float dt, double now);       // thread a tape, set the deck down, run the reels
+    void updateTapeDeck(const InputFrame &in, float dt, double now);   // thread a tape, set the deck down, run the reels
     void drawDeck(Matrix xf, bool lamp);             // one tape player, reels and all
     void drawHeldDeck(const Camera3D &cam);          // the deck in your hand, as real geometry
     bool coinAt(int a, int b);                // a doubloon he dropped on his rounds
@@ -468,19 +459,22 @@ struct Game {
     bool popBalloonAt(Vector3 point);
 
     // update, in frame order (game.cpp)
-    void updateLook();
+    InputFrame readInput(bool captureClick);
+    void step(const InputFrame &in, float dt, double now);
+    void updateFlashlight(const InputFrame &in, float dt);
+    void updateLook(const InputFrame &in);
     // Base camera fovy for the current window: locks the horizontal view so a
     // narrow portrait phone does not play through a 34 deg keyhole. Called
     // once a frame from the FOV smoothing in updateMovement — read `fov`.
     float baseFov() const;
     // The same mapping as a pure function of window size, for the harness.
     static float fovForWindow(int w, int h, float aim);
-    void updateMovement(float dt);
+    void updateMovement(const InputFrame &in, float dt, double now);
     bool updateSwimming(float dt, bool rise);
     void updateSprint(bool requested, bool moving, bool crouched, float dt);
-    void updateDevKeys(double now);
-    void updateWeapons(float dt, double now);
-    void updateFlare(float dt, double now);
+    void updateDevKeys(const DevKeys &dev, double now);
+    void updateWeapons(const InputFrame &in, float dt, double now);
+    void updateFlare(const InputFrame &in, float dt, double now);
     // The questions the rest of the game asks about burning flares, rather than
     // the whole array. Clark and the pack want plain distance — they turn at a
     // radius, and a fire two metres away is two metres away however low it has
@@ -494,9 +488,9 @@ struct Game {
     // the one lighting the room are always the same flare.
     static float flarePresence(const FlareProj &f, float x, float z);
     const FlareProj *dominantFlare(float x, float z) const;     // null if none are burning
-    void updateInteraction();
+    void updateInteraction(const InputFrame &in);
     void updateAmbience(float dt, double now);
-    void updateEntity(float dt, double now);
+    void updateEntity(float dt, double now, bool forceSpawn = false);
     void updateDogs(float dt, double now);    // the Red Halls pack: hunts by sound
     void updateExits(double now);
     // Climb or drop a whole storey: move the floating origin by one pitch,

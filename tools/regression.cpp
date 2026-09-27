@@ -17,10 +17,16 @@ struct EmbeddedAsset { const char *path; const unsigned char *data; size_t size;
 #include <cstring>
 
 
+// A tick with nothing pressed, in the window the harness runs in.
+static InputFrame noInput(Game &g) {
+    InputFrame in;
+    in.screenFov = g.baseFov();
+    return in;
+}
 static int captureCount = 0;
 static void capture(Game &g, const char *name) {
     ++captureCount;
-    g.updateLook();
+    g.updateLook(noInput(g));
     // Fill the complete visible ring; three calls previously left black holes
     // in shots after moving the camera or changing level. And the storeys seen
     // through an opening, which stream after your own storey's ring: seven
@@ -69,7 +75,7 @@ int main() {
     // Poolrooms: deep water floats, dives, resurfaces and releases onto land.
     // Test at three update rates, and exercise real generated floors.
     {
-        g.applyLevel(2); g.inMenu=false;
+        g.applyLevel(2,GetTime()); g.inMenu=false;
         int deepX=0,deepZ=0; bool found=false;
         int wet=0,deep=0;
         for (int x=16;x<48;++x) for (int z=16;z<48;++z) {
@@ -112,17 +118,17 @@ int main() {
         basin.pool[5][5]=basin.pool[6][5]=1;
         basin.elev[5][5]=-28;basin.elev[6][5]=-6;
         g.px=139.95f;g.pz=139;g.py=-2.7f;g.vy=0;g.velx=4;g.velz=0;
-        g.grounded=false;g.swimming=true;g.updateMovement(0.05f);
+        g.grounded=false;g.swimming=true;g.updateMovement(noInput(g),0.05f,GetTime());
         CHECK(g.px<140 && g.py<-2.5f);
-        g.py=WATER_Y-1.35f;g.vy=0;g.velx=4;g.updateMovement(0.05f);
+        g.py=WATER_Y-1.35f;g.vy=0;g.velx=4;g.updateMovement(noInput(g),0.05f,GetTime());
         CHECK(g.px>140 && g.grounded && !g.swimming);
         CHECK_NEAR(g.py,-0.6f,0.001f);CHECK(g.swimClimb>0.5f);
-        g.px=141.95f;g.velx=4;g.updateMovement(0.05f);
+        g.px=141.95f;g.velx=4;g.updateMovement(noInput(g),0.05f,GetTime());
         CHECK(g.px>142 && g.grounded);CHECK_NEAR(g.py,0,0.001f);
         basin.wallW[6][5]=WALL_SOLID;
         g.px=139.5f;g.py=WATER_Y-1.35f;g.velx=4;g.grounded=false;
-        g.updateMovement(0.05f);CHECK(g.px<139.6f);
-        g.applyLevel(0);g.beginDescent(0);
+        g.updateMovement(noInput(g),0.05f,GetTime());CHECK(g.px<139.6f);
+        g.applyLevel(0,GetTime());g.beginDescent(0);
     }
 
     // A full battery does not consume a pickup; revisiting with charge missing does.
@@ -131,12 +137,12 @@ int main() {
         if (g.pickupAt(x,z)!=Pickup::Battery) continue;
         g.px=x*CELL+1; g.pz=z*CELL+1; g.py=g.world.floorY(x,z);
         uint64_t key=Game::cellKey2(x,z); g.battery=1;
-        g.updateInteraction(); CHECK(!g.taken.count(key));
-        g.battery=0.4f; g.updateInteraction();
+        g.updateInteraction(noInput(g)); CHECK(!g.taken.count(key));
+        g.battery=0.4f; g.updateInteraction(noInput(g));
         CHECK(g.taken.count(key) && g.battery>0.8f); testedBattery=true;
     }
     CHECK(testedBattery);
-    g.applyLevel(0); g.px=15;g.pz=15;g.py=0;g.eyeY=1.62f;g.yaw=0.8f;g.pitch=0;
+    g.applyLevel(0,GetTime()); g.px=15;g.pz=15;g.py=0;g.eyeY=1.62f;g.yaw=0.8f;g.pitch=0;
     g.weapon=WEAPON_REVOLVER;g.ammo=3;
     g.updateAim(true,.2f);CHECK(g.aiming && g.aimBlend==1 && !g.canReload());
     capture(g,"iron-sights.png");
@@ -168,8 +174,8 @@ int main() {
         // The targets themselves are fixed numbers in updateMovement and the
         // sweep frames above pin the base; this pins that they still compose.
         g.aimBlend=1;g.sprinting=false;g.slide=0;g.px=15;g.pz=15;g.py=0;
-        g.updateMovement(1.0f/60);CHECK(g.fov<69.5f && g.fov>62.0f);
-        g.aimBlend=0;g.updateMovement(1.0f/60);CHECK(g.fov>68.0f && g.fov<70.0f);   // easing back up
+        g.updateMovement(noInput(g),1.0f/60,GetTime());CHECK(g.fov<69.5f && g.fov>62.0f);
+        g.aimBlend=0;g.updateMovement(noInput(g),1.0f/60,GetTime());CHECK(g.fov>68.0f && g.fov<70.0f);   // easing back up
         // Sprint and slide: `sprinting` is recomputed from the shift key
         // every updateMovement and no key state exists headless (CGEvents
         // reach GLFW neither under shot.sh nor from the harness), so those
@@ -270,7 +276,7 @@ int main() {
     g.chalk[g.level].push_back({{g.px,g.py+0.016f,g.pz},g.yaw});
     g.pitch=-0.9f;capture(g,"chalk-arrow.png");
     // Model-space shading must place a dropped deck at the same exposure as the floor.
-    g.applyLevel(2);g.px=95;g.pz=79;g.yaw=1.2f;g.pitch=-0.2f;g.weapon=WEAPON_DECK;
+    g.applyLevel(2,GetTime());g.px=95;g.pz=79;g.yaw=1.2f;g.pitch=-0.2f;g.weapon=WEAPON_DECK;
     g.deck.carried=false;g.deck.playing=true;g.deck.x=96;g.deck.z=81;g.deck.y=g.world.floorY(cellOf(96),cellOf(81));
     capture(g,"deck-world.png");
     // Inspect several real prop sites rather than relying on the empty spawn room.
@@ -281,7 +287,7 @@ int main() {
     const int kindLevel[]={4,0,3,1};
     for(int ki=0;ki<4;++ki) {
         int kind=kinds[ki];
-        g.applyLevel(kindLevel[ki]);
+        g.applyLevel(kindLevel[ki],GetTime());
         bool found=false;
         for(int x=0;x<70 && !found;++x) for(int z=0;z<70 && !found;++z) {
             if(g.world.propAt(x,z)!=kind) continue;
@@ -298,7 +304,7 @@ int main() {
     // Manila Room exactly as the article has it — 8x8 m, a door on each
     // wall, a table in the middle, a wooden floor and no tubes over it.
     {
-        g.applyLevel(0);
+        g.applyLevel(0,GetTime());
         int bad=0, windows=0, manilas=0;
         for(int x=-80;x<80;++x) for(int z=-80;z<80;++z) {
             uint8_t pk=g.world.propAt(x,z);
@@ -309,7 +315,7 @@ int main() {
         printf("Level 0: %d furnished cells, %d windows, %d Manila Rooms in %zu chunks\n",
                bad, windows, manilas, g.world.chunks.size());
         CHECK(bad==0); CHECK(windows==0); CHECK(manilas>0);
-        g.world.manilaTest=true; g.applyLevel(0);          // one pinned east of spawn
+        g.world.manilaTest=true; g.applyLevel(0,GetTime());          // one pinned east of spawn
         ChunkData &md=g.world.data(1,0);
         CHECK(md.manila);
         int doors=0;
@@ -353,7 +359,7 @@ int main() {
     // slab, not a sheen on all of it), and supply crates that are there, keep
     // out of doorways, "appear and disappear" when a blackout ends, and open.
     {
-        g.applyLevel(1);
+        g.applyLevel(1,GetTime());
         int wet=0, n=0;
         for(float x=-80;x<80;x+=1.37f) for(float z=-80;z<80;z+=1.41f) { n++; wet += carpetWetCPU(x,z,LEVELS[1].wetFrom)>0.5f; }
         float pct=100.0f*wet/n;
@@ -386,7 +392,7 @@ int main() {
     // so nothing it produces exercises the riser blocker; a rule that never
     // fires is not a rule that works, so force a drop and check it directly.
     {
-        g.applyLevel(0);
+        g.applyLevel(0,GetTime());
         int ci=24, ck=24;                       // inside chunk (1,1), clear of the spawn room
         int cx=fdiv(ci,CCELLS), cz=fdiv(ck,CCELLS);
         ChunkData &cd=g.world.data(cx,cz);
@@ -420,7 +426,7 @@ int main() {
     // in the map: a rule that depends on the generator happening to produce a
     // shape is a rule that stops being tested the day it stops producing it.
     {
-        g.applyLevel(0);
+        g.applyLevel(0,GetTime());
         int ci=28, ck=28;                        // clear of the spawn room
         int cx=fdiv(ci,CCELLS), cz=fdiv(ck,CCELLS);
         ChunkData &cd=g.world.data(cx,cz);
@@ -519,7 +525,6 @@ int main() {
     // the nearest actor rather than the first actor in the array.
     {
         Game p;
-        p.sndHit=g.sndHit;
         for (int x=-1;x<=1;++x) for (int z=-1;z<=1;++z)
             p.world.chunks[World::key(x,z)]={};
         auto &chunk=p.world.chunks[World::key(0,0)];
@@ -573,9 +578,9 @@ int main() {
     // proximity test this replaced fired the instant you came inside 1.25 m,
     // silently — survivable when being caught was free, unfair once it is not.
     {
-        g.applyLevel(0); g.beginDescent(0);
+        g.applyLevel(0,GetTime()); g.beginDescent(0);
         g.inMenu=false; g.deathT=0; g.hidden=false; g.deathCount=0;
-        g.px=40; g.pz=40; g.py=0; g.yaw=0; g.pitch=0; g.updateLook();
+        g.px=40; g.pz=40; g.py=0; g.yaw=0; g.pitch=0; g.updateLook(noInput(g));
         g.ent.st=EState::Chase; g.ent.hp=3; g.ent.stagger=0; g.ent.dispY=0;
         // well inside reach, but he has not committed and cannot yet
         g.ent.x=g.px+1.0f; g.ent.z=g.pz; g.ent.lunge=0; g.ent.lungeCd=5.0f;
@@ -631,7 +636,7 @@ int main() {
     // ---- the hunter actually moves now (ENT-01/ENT-02). Look at these: a
     // walk cycle that does not read as a walk is worse than no walk cycle.
     {
-        g.applyLevel(0);
+        g.applyLevel(0,GetTime());
         // A fixed spot drifts behind a wall whenever the generator changes, and
         // these shots then silently show an empty corridor. Find one with a
         // clear 7 m line down +x instead.
@@ -643,7 +648,7 @@ int main() {
         }
         g.px=sx; g.pz=sz; g.py=0; g.eyeY=1.62f; g.pitch=0; g.deathT=0; g.inMenu=false;
         g.ent.x=g.px+7.0f; g.ent.z=g.pz; g.ent.dispY=0; g.ent.hp=3; g.ent.stagger=0;
-        g.yaw=0; g.updateLook();
+        g.yaw=0; g.updateLook(noInput(g));
         // stalking, head still down the corridor, mid-stride at four phases
         g.ent.st=EState::Stalk; g.ent.gaze=0;
         for (int i=0;i<4;++i) {
@@ -665,7 +670,7 @@ int main() {
         // Level 0 is Pirate Clark's; the Smiler hunts Level 1 and the Red Halls.
         CHECK(strcmp(g.hunterName(),"PIRATE CLARK")==0);
         {
-            g.applyLevel(1);
+            g.applyLevel(1,GetTime());
             CHECK(strcmp(g.hunterName(),"A SMILER")==0);
             float qx=41, qz=41;
             for (int k=0;k<400;++k) {
@@ -676,15 +681,15 @@ int main() {
             g.px=qx; g.pz=qz; g.py=0; g.eyeY=1.62f; g.yaw=0; g.pitch=0;
             g.ent.x=g.px+7.0f; g.ent.z=g.pz; g.ent.dispY=0; g.ent.st=EState::Chase; g.ent.lunge=0;
             capture(g,"smiler-chase.png");
-            g.applyLevel(4); CHECK(strcmp(g.hunterName(),"THE PARTYGOER")==0);
-            g.applyLevel(0);
-            g.px=sx; g.pz=sz; g.ent.x=g.px+7.0f; g.ent.z=g.pz; g.yaw=0; g.updateLook();
+            g.applyLevel(4,GetTime()); CHECK(strcmp(g.hunterName(),"THE PARTYGOER")==0);
+            g.applyLevel(0,GetTime());
+            g.px=sx; g.pz=sz; g.ent.x=g.px+7.0f; g.ent.z=g.pz; g.yaw=0; g.updateLook(noInput(g));
         }
         g.ent.st=EState::Hidden; g.ent.lunge=0;
         // The pack, mid-bound. Captured on Level 0 rather than in the Red Halls
         // they actually live in: the Red Halls sit at mean luma 12 and a black
         // dog against it is unreviewable. This shot is for the run cycle only.
-        g.px=sx; g.pz=sz; g.yaw=0; g.updateLook();
+        g.px=sx; g.pz=sz; g.yaw=0; g.updateLook(noInput(g));
         g.dogs[0].st=DState::Charge; g.dogs[0].x=g.px+5.0f; g.dogs[0].z=g.pz;
         g.dogs[0].dispY=0; g.dogs[0].hp=2; g.dogs[0].gait=0.5f;
         for (int i=0;i<2;++i) {
@@ -699,8 +704,8 @@ int main() {
     // asserted by eye: the claim "sometimes he is already round the corner"
     // needs a number behind it.
     {
-        g.applyLevel(0); g.beginDescent(0); g.inMenu=false; g.deathT=0;
-        g.px=40; g.pz=40; g.yaw=0.8f; g.pitch=0; g.updateLook();
+        g.applyLevel(0,GetTime()); g.beginDescent(0); g.inMenu=false; g.deathT=0;
+        g.px=40; g.pz=40; g.yaw=0.8f; g.pitch=0; g.updateLook(noInput(g));
         int near=0, unseen=0, nearUnseen=0, total=400;
         float dmin=1e9f, dmax=0;
         for (int i=0;i<total;++i) {
@@ -739,8 +744,8 @@ int main() {
 
     // ---- the building moves when you are not looking (PAC-03)
     {
-        g.applyLevel(0); g.beginDescent(0); g.inMenu=false;
-        g.px=40; g.pz=40; g.py=0; g.eyeY=1.62f; g.updateLook();
+        g.applyLevel(0,GetTime()); g.beginDescent(0); g.inMenu=false;
+        g.px=40; g.pz=40; g.py=0; g.eyeY=1.62f; g.updateLook(noInput(g));
         size_t before = g.world.shifted.size();
         int moved=0;
         for (int i=0;i<40;++i) if (g.shiftAWall()) moved++;
@@ -761,7 +766,7 @@ int main() {
 
     // ---- and the grip meter is an ending now, not a difficulty setting (STK-03)
     {
-        g.applyLevel(0); g.beginDescent(0); g.inMenu=false; g.deathT=0; g.deathCount=0;
+        g.applyLevel(0,GetTime()); g.beginDescent(0); g.inMenu=false; g.deathT=0; g.deathCount=0;
         g.sanity=0.0f;
         g.updateAmbience(0.001f, 200.0);
         CHECK(g.inMenu && g.deathT>0);
@@ -778,7 +783,7 @@ int main() {
 
     // A low view at a tiled Poolrooms wall exposes shadow lookup leaking
     // across the wall when texture relief is used as the ray-origin normal.
-    g.applyLevel(2);
+    g.applyLevel(2,GetTime());
     bool corner=false;
     for (int a=2;a<30 && !corner;++a) for (int b=2;b<30 && !corner;++b) {
         if (g.world.wallNVal(a,b)!=WALL_SOLID || g.world.poolAt(a,b) || g.world.pillarAt(a,b)) continue;
@@ -824,7 +829,7 @@ int main() {
     }
     // Isolated pillar: exposes the old hard contact rectangle and the bright
     // square where shadow rays skipped their first/last occupancy cells.
-    g.applyLevel(0); g.world.unloadAll();
+    g.applyLevel(0,GetTime()); g.world.unloadAll();
     auto &pillarRoom=g.world.data(0,0);
     std::memset(pillarRoom.wallN,0,sizeof(pillarRoom.wallN));
     std::memset(pillarRoom.wallW,0,sizeof(pillarRoom.wallW));
@@ -852,7 +857,7 @@ int main() {
     // ---- a ceiling balloon found where the renderer draws it can be shot:
     // render.cpp now places them through balloonAt, the function bullets test.
     {
-        g.applyLevel(4);
+        g.applyLevel(4,GetTime());
         int ba=0,bb=0; Vector3 bp{}; bool found=false;
         for (int a=0;a<60 && !found;++a) for (int b=0;b<60 && !found;++b)
             if (g.balloonAt(a,b,bp)) { ba=a; bb=b; found=true; }
@@ -861,7 +866,7 @@ int main() {
         Vector3 again;
         CHECK(!g.balloonAt(ba,bb,again));
         g.poppedBalloons.clear(); g.confetti.clear();
-        g.applyLevel(0);
+        g.applyLevel(0,GetTime());
     }
 
     // ---- storeys (Level 0). The floors are generated blind of each other and
@@ -871,7 +876,7 @@ int main() {
     // agree across the boundary where the switch happens, and a real movement
     // loop takes you up a flight, onto the next floor, and back.
     {
-        g.applyLevel(0); g.inMenu=false; g.deathT=0;
+        g.applyLevel(0,GetTime()); g.inMenu=false; g.deathT=0;
         World &w=g.world;
         const float H=w.storeyH;
         CHECK(H>4.0f && H<5.0f && w.storey==0);
@@ -942,7 +947,7 @@ int main() {
         int climbFrames=0; bool rose=false; float lastPy=0, worstDrop=0;
         for (; climbFrames<400 && !(w.storey==1 && g.py>-0.02f); ++climbFrames) {
             g.velx=dx*4.0f; g.velz=dz*4.0f;
-            g.updateMovement(1.0f/30);
+            g.updateMovement(noInput(g),1.0f/30,GetTime());
             if (w.storey==0) { worstDrop=fmaxf(worstDrop,lastPy-g.py); lastPy=g.py; }
             if (w.storey==1 && !rose) {
                 rose=true;
@@ -962,7 +967,7 @@ int main() {
         for (int i=0;i<400 && !(w.storey==0 && g.py<0.05f && g.py>-0.05f &&
                                  w.vflagAt(cellOf(g.px),cellOf(g.pz))==VF_KEEP);++i) {
             g.velx=-dx*4.0f; g.velz=-dz*4.0f;
-            g.updateMovement(1.0f/30);
+            g.updateMovement(noInput(g),1.0f/30,GetTime());
         }
         CHECK(w.storey==0 && fabsf(g.py)<0.05f && g.health==1);
 
@@ -986,7 +991,7 @@ int main() {
                 float dx=in.x-edge.x,dz=in.z-edge.z,len=sqrtf(dx*dx+dz*dz);
                 bool crossed=false;
                 for(int frame=0;frame<hz;++frame) {
-                    g.velx=dx/len*4;g.velz=dz/len*4;g.updateMovement(1.0f/hz);
+                    g.velx=dx/len*4;g.velz=dz/len*4;g.updateMovement(noInput(g),1.0f/hz,GetTime());
                     if(w.vflagAt(cellOf(g.px),cellOf(g.pz))&VF_HOLE) { crossed=true;break; }
                 }
                 CHECK(crossed);
@@ -997,7 +1002,7 @@ int main() {
         }
         g.px=over.x; g.pz=over.z; g.py=0; g.vy=0; g.grounded=false; g.fallFrom=0;
         g.health=1; g.hurtT=0; g.velx=g.velz=0;
-        for (int i=0;i<200 && !(w.storey==0 && g.grounded);++i) g.updateMovement(1.0f/30);
+        for (int i=0;i<200 && !(w.storey==0 && g.grounded);++i) g.updateMovement(noInput(g),1.0f/30,GetTime());
         CHECK(w.storey==0 && g.grounded && fabsf(g.py)<0.05f);
         float fallDmg=1-g.health;
         printf("  a storey's fall through an atrium took %.2f of the health meter\n", fallDmg);
@@ -1055,14 +1060,14 @@ int main() {
             capture(g,"storey-stair-top.png");
             g.changeStorey(-1,100);
         }
-        g.applyLevel(0);
+        g.applyLevel(0,GetTime());
         CHECK(w.storey==0);
     }
 
     // Both orientations and both approaches must activate white Level 0 exits.
     // Put both orientations at one cell to catch an else-if masking the west door.
     for (int west=0; west<2; ++west) for (int side : {-1,1}) {
-        g.applyLevel(0); g.escapeT=0; g.coins=0;
+        g.applyLevel(0,GetTime()); g.escapeT=0; g.coins=0;
         int ci=7,ck=7;
         while (g.world.cursedExit(ci,ck)) ++ci;
         auto &d=g.world.data(0,0);
@@ -1076,7 +1081,7 @@ int main() {
     // Aligned tall courts preserve a closed cap, matching holes on every
     // intermediate storey, and a real floor at the bottom of a long fall.
     for(int floors : {3,5,7}) {
-        g.applyLevel(0);auto &w=g.world;bool found=false;
+        g.applyLevel(0,GetTime());auto &w=g.world;bool found=false;
         for(int cx=-10;cx<=10 && !found;++cx) for(int cz=-10;cz<=10 && !found;++cz) {
             VertFeat f;
             if(!w.pairFeature(cx,cz,0,f) || f.kind!=VK_ATRIUM || f.x0!=4 || f.z0!=4 || f.lv!=4) continue;
@@ -1108,10 +1113,10 @@ int main() {
     }
     printf("PASS white doors from both axes/sides and 3/5/7-storey court caps/holes/streaming\n");
 
-    g.applyLevel(0);g.ent.st=EState::Stalk;g.ent.x=g.px+10;g.ent.z=g.pz;
-    g.ent.gaze=-100;g.updateEntity(1.0f/60,100);CHECK(g.synth.growlTarget==0);
+    g.applyLevel(0,GetTime());g.ent.st=EState::Stalk;g.ent.x=g.px+10;g.ent.z=g.pz;
+    g.ent.gaze=-100;g.updateEntity(1.0f/60,100);CHECK(g.ambience.growl==0);
     g.ent.st=EState::Chase;g.ent.lungeCd=10;g.updateEntity(1.0f/60,100);
-    CHECK(g.synth.growlTarget==0);
+    CHECK(g.ambience.growl==0);
 
     // ---- headless captures must not be able to black out (BUG-08)
     CHECK(g.noBlackout && g.nextBlackout >= Game::BLACKOUT_NEVER);

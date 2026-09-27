@@ -177,41 +177,7 @@ void Game::init() {
     mats[MAT_CAN].maps[MATERIAL_MAP_DIFFUSE].texture = texAlmondWrap;
     mats[MAT_DECK].maps[MATERIAL_MAP_DIFFUSE].texture = texDeck;
 
-    for (int i = 0; i < 4; i++) steps[i] = makeFootstep(100 + i * 17);
-    sndNoclip = makeNoclip();      SetSoundVolume(sndNoclip, 0.8f);
-    for (int i = 0; i < 4; i++) {
-        entSteps[i] = makeFootstep(300 + i * 23);                  // heavier, its own gait
-        entStepsThrough[i] = makeFootstep(300 + i * 23, true);     // ...and the same foot, through a wall
-    }
-    for (int i = 0; i < 3; i++) {
-        splashIn[i]  = loadEmbeddedSound(TextFormat("sounds/water/splash_in_%d.ogg", i + 1));
-        splashOut[i] = loadEmbeddedSound(TextFormat("sounds/water/splash_out_%d.ogg", i + 1));
-    }
-    for (int i = 0; i < 4; i++)
-        swimStrokes[i] = loadEmbeddedSound(TextFormat("sounds/water/swim_%d.ogg", i + 1));
-    musUnderwater = loadEmbeddedMusic("sounds/water/underwater.ogg");
-    musParty = loadEmbeddedMusic("sounds/music/level_fun.ogg");
-    sndClick = makeClick();
-    sndScare = makeJumpscare();
-    sndWin = makeWinChime();
-    sndFlare = makeFlareStrike();
-    sndShot = makeGunshot();
-    sndPop = makeBalloonPop();
-    sndHit = makeJumpscare();  SetSoundPitch(sndHit, 1.7f);  SetSoundVolume(sndHit, 0.40f);
-    sndKill = makeJumpscare(); SetSoundPitch(sndKill, 0.55f); SetSoundVolume(sndKill, 0.80f);
-    sndHeartbeat = makeHeartbeat(); SetSoundVolume(sndHeartbeat, 0.55f);
-    sndTape = makeTapeChime();     SetSoundVolume(sndTape, 0.6f);
-    sndValve = makeValveTurn();    SetSoundVolume(sndValve, 0.7f);
-    sndHowl = makeDogHowl();       SetSoundVolume(sndHowl, 0.5f);
-    sndGulp = makeGulp();          SetSoundVolume(sndGulp, 0.60f);
-    sndVoice = makeTapeVoice();    SetSoundVolume(sndVoice, 0.9f);
-    sndGroan = makeFloorGroan();   SetSoundVolume(sndGroan, 0.85f);
-    for (int i = 0; i < NBARKS; i++) {
-        sndBarks[i] = makeDogBark(400 + i * 31);
-        sndBarksThrough[i] = makeDogBark(400 + i * 31, true);
-    }
-
-    synth.init();
+    audio.load();
 
     world.seed = shotPath ? 1337u : (unsigned)time(nullptr);
     if (const char *seedEnv = getenv("BACKROOMS_SEED")) world.seed = (unsigned)strtoul(seedEnv, nullptr, 10);
@@ -255,8 +221,8 @@ void Game::init() {
         fclose(bf);
     }
 
-    applyLevel(0);
-    if (const char *lvEnv = getenv("BACKROOMS_LEVEL")) applyLevel(atoi(lvEnv) % NLEVELS);   // testing
+    applyLevel(0, GetTime());
+    if (const char *lvEnv = getenv("BACKROOMS_LEVEL")) applyLevel(atoi(lvEnv) % NLEVELS, GetTime());
     // Testing: start on another storey of a storeyed level. The floor you
     // stand on is still the one at y = 0 (World::storeyH), so BACKROOMS_POS
     // means the same thing on every storey.
@@ -294,7 +260,7 @@ void Game::shutdown() {
     UnloadMesh(flareMesh);
     for (Surface &sf : surfaces) if (sf.albedo.id) { UnloadTexture(sf.albedo); UnloadTexture(sf.detail); }
     UnloadTexture(neutralDetail);
-    UnloadMusicStream(musUnderwater); UnloadMusicStream(musParty);
+    audio.unload();
     CloseAudioDevice();
     CloseWindow();
 }
@@ -332,7 +298,7 @@ void Game::winRun(double now) {
     winTime = (float)(now - runStart);
     winM = (int)distWalked; winKills = killCount;
     winCount++; winT = 8.0f;
-    PlaySound(sndWin);
+    play(Sfx::Win);
     saveBest();
     // a clean new maze, from the top, gear and tallies reset — records persist
     beginDescent(now);
@@ -355,8 +321,8 @@ void Game::dieRun(double now, const char *by, const char *title) {
     deathT = DEATH_CARD;
     if ((int)deathTime > bestRun) bestRun = (int)deathTime;   // longest run, however it ended
     saveBest();
-    PlaySound(sndScare);
-    if (IsSoundPlaying(sndVoice)) StopSound(sndVoice);
+    play(Sfx::Scare);
+    stopVoice();
     beginDescent(now);          // a clean maze waiting behind the card
     inMenu = true;
     if (!shotPath) EnableCursor();
@@ -370,35 +336,38 @@ bool Game::hurtPlayer(double now, float dmg, const char *by, float fromX, float 
     // when the grace runs out.
     float dx = px - fromX, dz = pz - fromZ, d = hypotf(dx, dz);
     if (d > 0.01f) { velx = dx / d * 6.0f; velz = dz / d * 6.0f; }
-    // sndGroan is otherwise the floor giving way: a low body-blow thud, pitched up a little.
-    SetSoundPitch(sndGroan, 1.3f); PlaySound(sndGroan);
+    // The floor's groan, pitched up: a low body-blow thud.
+    play(Sfx::Groan).atPitch(1.3f);
     fear = fmaxf(fear, 0.9f);
     return false;
 }
 
-void Game::updateLoopAudio(float dt) {
-    // The Poolrooms have no water bed: a running-water loop read as a tap left
-    // on, and the level is meant to be still. Only the muffled underwater loop.
-    bool under = level == 2 && !inMenu && eyeY < WATER_Y && world.poolAt(cellOf(px), cellOf(pz));
-    float k = 1 - expf(-3.0f * dt);
-    underwaterVol += ((under ? 0.5f : 0.0f) - underwaterVol) * (1 - expf(-8.0f * dt));
-    auto feed = [](Music &m, float vol) {
-        if (!m.stream.buffer) return;   // failed to load: stay silent rather than crash
-        if (vol > 0.005f) {
-            if (!IsMusicStreamPlaying(m)) PlayMusicStream(m);
-            SetMusicVolume(m, vol);
-            UpdateMusicStream(m);
-        } else if (IsMusicStreamPlaying(m)) StopMusicStream(m);
-    };
-    feed(musUnderwater, underwaterVol);
-    // LEVEL FUN: a cheerful loop played slow and flat, the pitch wandering like
-    // a tape stretched on a failing motor. Ducks with the lights in a blackout.
-    partyVol += ((level == 4 && !inMenu ? 0.32f * synth.hum : 0.0f) - partyVol) * k;
-    if (musParty.stream.buffer) {
-        loopT += dt;
-        SetMusicPitch(musParty, 0.84f + 0.025f * sinf(loopT * 0.41f) + 0.008f * sinf(loopT * 1.9f));
-    }
-    feed(musParty, partyVol);
+// Where updateLoopAudio used to read the state in the tick: the platform
+// feeds the looping recordings from this.
+LoopCue Game::loopCue() {
+    // The Poolrooms have no water bed; only the muffled loop with your head under.
+    return { level == 2 && !inMenu && eyeY < WATER_Y && world.poolAt(cellOf(px), cellOf(pz)),
+             level == 4 && !inMenu };
+}
+
+AudioEvent &Game::audioEvent(AudioEvent::Kind kind) {
+    audioEvents.emplace_back();
+    audioEvents.back().kind = kind;
+    return audioEvents.back();
+}
+
+AudioEvent &Game::play(Sfx sfx, int variant) {
+    AudioEvent &e = audioEvent(AudioEvent::PLAY);
+    e.sfx = sfx;
+    e.variant = (uint8_t)variant;
+    return e;
+}
+
+void Game::stopVoice() { audioEvent(AudioEvent::VOICE_STOP); }
+
+void Game::playAudio() {
+    audio.play(audioEvents);
+    audioEvents.clear();
 }
 
 void Game::updateHealth(float dt) {
@@ -408,9 +377,8 @@ void Game::updateHealth(float dt) {
 }
 
 // Title screen: the world drifts by behind the card until any key drops you in.
-void Game::updateMenu(double now) {
-    float dt = fminf(GetFrameTime(), 0.05f);
-    yaw += dt * 0.085f;                         // slow pan across the hall
+void Game::updateMenu(const InputFrame &in, float dt, double now) {
+    yaw += dt * 0.085f;                       // slow pan across the hall
     pitch = sinf((float)now * 0.22f) * 0.045f;  // faint breathing tilt
     fwd = { cosf(pitch) * cosf(yaw), sinf(pitch), cosf(pitch) * sinf(yaw) };
     f2x = cosf(yaw); f2z = sinf(yaw);
@@ -427,14 +395,7 @@ void Game::updateMenu(double now) {
     // reads — the hand that just died is still on the keys. Hold the first
     // stretch of it, then let any key move on.
     if (deathT > DEATH_CARD - 1.6f) return;
-    int k = GetKeyPressed();                    // F11 (fullscreen) shouldn't count as "begin"
-    // On a phone the only other way in was one small button in the corner, and
-    // a title card that says "press any key" to a device with no keys is a dead
-    // end that reads as the game being broken. A tap on open screen or a push
-    // of the stick begins the run too — and a stick push leaves you already
-    // walking, which is the right thing to happen when "move" is what started it.
-    if ((k != 0 && k != KEY_F11) || inMousePressed(MOUSE_BUTTON_LEFT) || webStartGesture())
-        startRun(now);
+    if (in.begin) startRun(now);
 }
 
 // Can the pack still place you? Sound only: they do not care what you are
@@ -535,12 +496,12 @@ const Surface &Game::surface(int slot) {
 void Game::beginDescent(double now) {
     world.seed = shotPath ? 1337u : (unsigned)time(nullptr) ^ (unsigned)(now * 977.0);
     grng = Rng(hash64(world.seed ^ 0xABCDEF));
-    applyLevel(0);
+    applyLevel(0, now);
     Vector2 sp = world.findOpenSpot(15, 15);
     px = sp.x; pz = sp.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
     yaw = 0.8f; pitch = 0.0f;
     coins = 0; almond = 0; tapes = 0; keys = 0; flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; battery = 1.0f;
-    deck = TapeDeck{}; if (IsSoundPlaying(sndVoice)) StopSound(sndVoice);
+    deck = TapeDeck{}; stopVoice();
     escapeCount = 0; killCount = 0; distWalked = 0;
     deepest = level;
     for (int &v : visits) v = 0;   // a new descent gets the levels back as they were authored
@@ -584,7 +545,7 @@ void Game::seedStrangerChalk() {
     }
 }
 
-void Game::applyLevel(int lv) {
+void Game::applyLevel(int lv, double now) {
     level = lv;
     if (lv > deepest) deepest = lv;   // how far down this descent got, for the records
     // Which time this is, this descent. Read before the increment, so the first
@@ -604,7 +565,7 @@ void Game::applyLevel(int lv) {
     // it would otherwise hang in the new maze at the old coordinates, lighting
     // and warding a room it was never thrown into
     for (FlareProj &f : litFlares) f.active = f.flying = false;
-    if (IsSoundPlaying(sndVoice)) StopSound(sndVoice);
+    stopVoice();
     const LevelCfg &c = LEVELS[lv];
     world.unloadAll();
     world.level = lv;
@@ -649,14 +610,14 @@ void Game::applyLevel(int lv) {
     SetShaderValue(worldShader, locWetFrom, &c.wetFrom, SHADER_UNIFORM_FLOAT);
     SetShaderValue(worldShader, locMacro, &SURF_MACRO[lv], SHADER_UNIFORM_FLOAT);
     SetShaderValue(worldShader, locBoard, &CEIL_BOARD[lv], SHADER_UNIFORM_FLOAT);
-    synth.tHum = lv == 0 ? 1.0f : lv == 4 ? 0.5f : lv == 2 ? 0.035f : 0.15f;
-    synth.tDrone = lv == 1 ? 1.0f : 0.0f;
-    nextBlackout = lv == 2 ? BLACKOUT_NEVER : blackoutIn(GetTime(), 30, 60);   // no blackouts in the poolrooms
+    ambience.humLevel = lv == 0 ? 1.0f : lv == 4 ? 0.5f : lv == 2 ? 0.035f : 0.15f;
+    ambience.droneLevel = lv == 1 ? 1.0f : 0.0f;
+    nextBlackout = lv == 2 ? BLACKOUT_NEVER : blackoutIn(now, 30, 60);   // no blackouts in the poolrooms
     blackoutEnd = -1;
     occValid = false;                                   // different floorplan, different shadows
     for (auto &d : dogs) d.st = DState::Gone;           // the pack doesn't follow you out
-    nextPack = GetTime() + (lv == 3 ? 8 + grng.f01() * 8 : 1e9);
-    nextHowl = GetTime() + 12 + grng.f01() * 20;
+    nextPack = now + (lv == 3 ? 8 + grng.f01() * 8 : 1e9);
+    nextHowl = now + 12 + grng.f01() * 20;
     valvesTurned.clear(); pipesShut = false; valveT = 0;   // a fresh set of standpipes
     taken.clear(); coinsWorld.clear();                  // it's a different maze down here
     // Chalk is NOT cleared here. It is the one thing the player made, it is
@@ -713,8 +674,7 @@ float Game::sanityDrain(int lv) {
 // The carton comes up, tips back for three swallows, and drops away. The payout
 // lands on the middle swallow rather than on the keypress, so the animation is
 // the thing you are actually waiting through.
-void Game::updateDrink(float dt, double now) {
-    (void)now;
+void Game::updateDrink(float dt) {
     if (drinkT <= 0) return;
     float el = DRINK_TIME - drinkT;             // seconds since it went up
     if (!drinkLanded && el >= 0.62f) {
@@ -841,7 +801,7 @@ bool Game::popBalloonAt(Vector3 point) {
                 float ex = bp.x - wx, ey = bp.y - wy, ez = bp.z - wz;
                 if (ex * ex + ey * ey + ez * ez <= 0.24f * 0.24f) {
                     poppedBalloons.insert(cellKey2(ca, cb));
-                    SetSoundPitch(sndPop, 0.9f + grng.f01() * 0.3f); SetSoundPan(sndPop, panFor(0)); PlaySound(sndPop);
+                    play(Sfx::Pop).atPitch(0.9f + grng.f01() * 0.3f).atPan(0);
                     burst(bp, PARTY[(ih(ca, cb, pickupSalt() ^ 0xBA11u) >> 10) % 5], 16);
                     return true;
                 }
@@ -853,7 +813,7 @@ bool Game::popBalloonAt(Vector3 point) {
                     float ex = bpos[k].x - wx, ey = bpos[k].y - wy, ez = bpos[k].z - wz;
                     if (ex * ex + ey * ey + ez * ez > 0.26f * 0.26f) continue;
                     poppedTableBunches.insert(cellKey2(ca, cb));
-                    SetSoundPitch(sndPop, 0.95f + grng.f01() * 0.3f); SetSoundPan(sndPop, panFor(0)); PlaySound(sndPop);
+                    play(Sfx::Pop).atPitch(0.95f + grng.f01() * 0.3f).atPan(0);
                     for (int j = 0; j < nb; j++) burst(bpos[j], bcol[j], 11);
                     return true;
                 }
@@ -884,7 +844,8 @@ bool Game::tick() {
     if (IsKeyPressed(KEY_F11)) ToggleBorderlessWindowed();
 
     if (inMenu) {                              // title screen: world drifts, any key begins
-        updateMenu(now);
+        updateMenu(readInput(false), dt, now);
+        playAudio();
         renderScene(now);
         renderUI(now);
         if (shotPath && frame == shotFrame) { TakeScreenshot(shotPath); return false; }   // testing
@@ -913,66 +874,24 @@ bool Game::tick() {
             for (auto &d : dogs) { d.nextBark += held; d.nextRoam += held; }
             DisableCursor();
         }
-        SetSoundPitch(sndClick, paused ? 0.7f : 1.1f);
-        PlaySound(sndClick);
+        play(Sfx::Click).atPitch(paused ? 0.7f : 1.1f);
     }
     if (paused) {
-        // frozen, but the ambience stream still has to be fed or it underruns
-        synth.growlTarget = 0; synth.hissTarget = 0; synth.whisperTarget = 0;
-        synth.update();
-        updateLoopAudio(0);   // keep the loops fed; a stalled stream repeats its last buffer
+        playAudio();
+        audio.holdPaused(ambience, loopCue());
         renderScene(now);
         renderUI(now);
         if (shotPath && frame == shotFrame) { TakeScreenshot(shotPath); return false; }   // testing
         return true;
     }
 
-    if (inKeyPressed(KEY_F) || inKeyPressed(KEY_L)) {
-        if (flashOn || battery > 0.001f) {
-            flashOn = !flashOn;
-            SetSoundPitch(sndClick, flashOn ? 1.0f : 0.85f);
-            PlaySound(sndClick);
-        } else { SetSoundPitch(sndClick, 0.55f); PlaySound(sndClick); }   // dead battery: just the switch
-    }
-    flashCur += ((flashOn ? 1.0f : 0.0f) - flashCur) * fminf(1, 25 * dt);
-    if (flashOn) {
-        battery = fmaxf(0.0f, battery - dt / 100.0f);
-        if (battery <= 0.0f) flashOn = false;   // it just dies
-    }
     if (inKeyPressed(KEY_F3)) debugHud = !debugHud;
     if (inKeyPressed(KEY_ESCAPE) && inCursorHidden()) EnableCursor();
-    captureClick = false;
-    if (!inCursorHidden() && !shotPath && inMousePressed(MOUSE_BUTTON_LEFT)) {
-        DisableCursor();
-        captureClick = true;   // this click is spoken for — no accidental discharge
-    }
-
-    if (chalkSeedPending) { seedStrangerChalk(); chalkSeedPending = false; }
-    updateLook();
-    updateMovement(dt);
-    updateDevKeys(now);
-    updateWeapons(dt, now);
-    updateBullets(dt);
-    updateFlare(dt, now);
-    updateTapeDeck(dt, now);
-    updateInteraction();
-    updateDrink(dt, now);
-    updateAmbience(dt, now);
-    updateManila(dt, now);
-    updateCrates(dt, now);
-    updateLoopAudio(dt);
-    updateEntity(dt, now);
-    updateDogs(dt, now);
-    updateExits(now);
-    deathT = fmaxf(0, deathT - dt);
-    updateHealth(dt);
-    escapeT = fmaxf(0, escapeT - dt);
-    killT = fmaxf(0, killT - dt);
-    fellT = fmaxf(0, fellT - dt);
-    winT = fmaxf(0, winT - dt);
-    closeCallT = fmaxf(0, closeCallT - dt);
-    tapeFoundT = fmaxf(0, tapeFoundT - dt);
-    valveT = fmaxf(0, valveT - dt);
+    // A click that captures the mouse is spoken for: it must not also fire.
+    bool captureClick = !inCursorHidden() && !shotPath && inMousePressed(MOUSE_BUTTON_LEFT);
+    if (captureClick) DisableCursor();
+    step(readInput(captureClick), dt, now);
+    playAudio();
     streamChunks();
     updateOccupancy();
 
@@ -987,10 +906,105 @@ bool Game::tick() {
     return true;
 }
 
-void Game::updateLook() {
-    // ---- look
-    if (inCursorHidden()) {
-        Vector2 md = inMouseDelta();
+// Read after the cursor is captured or released for this tick, so `playing`
+// is what the rest of the tick would have seen.
+InputFrame Game::readInput(bool captureClick) {
+    InputFrame in;
+    in.playing = inCursorHidden();
+    in.touch = inTouchActive();
+    in.forward = inKeyDown(KEY_W);
+    in.back = inKeyDown(KEY_S);
+    in.left = inKeyDown(KEY_A);
+    in.right = inKeyDown(KEY_D);
+    in.forwardPressed = inKeyPressed(KEY_W);
+    in.moveScale = webMoveScale();
+    in.sprint = inKeyDown(KEY_LEFT_SHIFT);
+    in.crouch = inKeyDown(KEY_LEFT_CONTROL);
+    in.squeeze = inKeyDown(KEY_C);
+    in.jumpHeld = inKeyDown(KEY_SPACE);
+    in.jumpPressed = inKeyPressed(KEY_SPACE);
+    in.look = inMouseDelta();
+    in.wheel = inWheel();
+    in.pickRevolver = inKeyPressed(KEY_ONE);
+    in.pickFlare = inKeyPressed(KEY_TWO);
+    in.pickDeck = inKeyPressed(KEY_FOUR);
+    in.fire = inMousePressed(MOUSE_BUTTON_LEFT) && !captureClick;
+    in.aim = inMouseDown(MOUSE_BUTTON_RIGHT);
+    in.reload = inKeyPressed(KEY_R);
+    in.throwFlare = inKeyPressed(KEY_Q);
+    in.flashlight = inKeyPressed(KEY_F) || inKeyPressed(KEY_L);
+    in.use = inKeyPressed(KEY_E);
+    in.drink = inKeyPressed(KEY_THREE);
+    in.chalk = inKeyPressed(KEY_M);
+    int key = GetKeyPressed();   // F11 is the window's, not a request to begin
+    in.begin = (key != 0 && key != KEY_F11) || inMousePressed(MOUSE_BUTTON_LEFT) || webStartGesture();
+    if (debugHud) {
+        in.dev.blackout = inKeyPressed(KEY_B);
+        in.dev.spawnAhead = inKeyPressed(KEY_E);
+        in.dev.chase = inKeyPressed(KEY_C);
+        in.dev.banish = inKeyPressed(KEY_H);
+        in.dev.refill = inKeyPressed(KEY_G);
+        in.dev.storeyUp = inKeyPressed(KEY_PAGE_UP);
+        in.dev.storeyDown = inKeyPressed(KEY_PAGE_DOWN);
+        in.dev.nextLevel = inKeyPressed(KEY_N);
+    }
+    in.screenFov = baseFov();
+    in.forceSpawn = shotPath && !benchmark && frame == 300;
+    return in;
+}
+
+// One tick of play, in a fixed order: each update may rely on the ones before
+// it (a shot lands before the hunter decides what to do about it).
+void Game::step(const InputFrame &in, float dt, double now) {
+    updateFlashlight(in, dt);
+    if (chalkSeedPending) { seedStrangerChalk(); chalkSeedPending = false; }
+    updateLook(in);
+    updateMovement(in, dt, now);
+    updateDevKeys(in.dev, now);
+    updateWeapons(in, dt, now);
+    updateBullets(dt);
+    updateFlare(in, dt, now);
+    updateTapeDeck(in, dt, now);
+    updateInteraction(in);
+    updateDrink(dt);
+    updateAmbience(dt, now);
+    updateManila(dt, now);
+    updateCrates(now);
+    {
+        AudioEvent &e = audioEvent(AudioEvent::LOOPS);
+        e.loops = loopCue(); e.dt = dt;
+    }
+    updateEntity(dt, now, in.forceSpawn);
+    updateDogs(dt, now);
+    updateExits(now);
+    deathT = fmaxf(0, deathT - dt);
+    updateHealth(dt);
+    escapeT = fmaxf(0, escapeT - dt);
+    killT = fmaxf(0, killT - dt);
+    fellT = fmaxf(0, fellT - dt);
+    winT = fmaxf(0, winT - dt);
+    closeCallT = fmaxf(0, closeCallT - dt);
+    tapeFoundT = fmaxf(0, tapeFoundT - dt);
+    valveT = fmaxf(0, valveT - dt);
+}
+
+void Game::updateFlashlight(const InputFrame &in, float dt) {
+    if (in.flashlight) {
+        if (flashOn || battery > 0.001f) {
+            flashOn = !flashOn;
+            play(Sfx::Click).atPitch(flashOn ? 1.0f : 0.85f);
+        } else play(Sfx::Click).atPitch(0.55f);   // dead battery: just the switch
+    }
+    flashCur += ((flashOn ? 1.0f : 0.0f) - flashCur) * fminf(1, 25 * dt);
+    if (flashOn) {
+        battery = fmaxf(0.0f, battery - dt / 100.0f);
+        if (battery <= 0.0f) flashOn = false;
+    }
+}
+
+void Game::updateLook(const InputFrame &in) {
+    if (in.playing) {
+        Vector2 md = in.look;
         float sensitivity = 0.0030f * (1 - 0.25f * aimBlend);
         yaw += md.x * sensitivity;
         pitch = clampf(pitch - md.y * sensitivity, -1.45f, 1.45f);
@@ -1106,29 +1120,26 @@ void Game::updateSqueeze(bool held, float dt) {
     squeezeBlend += ((squeezing ? 1.0f : 0.0f)-squeezeBlend)*fminf(1,10*dt);
 }
 
-void Game::updateMovement(float dt) {
-    // ---- move
+void Game::updateMovement(const InputFrame &in, float dt, double now) {
     float ix = 0, iz = 0;
-    if (inKeyDown(KEY_W)) { ix += f2x; iz += f2z; }
-    if (inKeyDown(KEY_S)) { ix -= f2x; iz -= f2z; }
-    if (inKeyDown(KEY_D)) { ix += r2x; iz += r2z; }
-    if (inKeyDown(KEY_A)) { ix -= r2x; iz -= r2z; }
+    if (in.forward) { ix += f2x; iz += f2z; }
+    if (in.back) { ix -= f2x; iz -= f2z; }
+    if (in.right) { ix += r2x; iz += r2z; }
+    if (in.left) { ix -= r2x; iz -= r2z; }
     float il = sqrtf(ix * ix + iz * iz);
     bool moving = il > 0.01f;
     if (moving) { ix /= il; iz /= il; }
-    // A thumbstick is analog where a key is not: half a push is half a speed.
-    // webMoveScale returns 1 for keys and for a stick at full deflection, so
-    // this multiplies nothing away on any other platform.
-    if (moving) { float ms = webMoveScale(); ix *= ms; iz *= ms; }
-    updateSqueeze(inCursorHidden() && inKeyDown(KEY_C),dt);
+    // A thumbstick is analog: half a push is half a speed.
+    if (moving) { ix *= in.moveScale; iz *= in.moveScale; }
+    updateSqueeze(in.playing && in.squeeze, dt);
     bool inWater = world.poolAt(cellOf(px),cellOf(pz)) && py < WATER_Y-0.08f;
-    bool crouched = inKeyDown(KEY_LEFT_CONTROL) && !inWater;
+    bool crouched = in.crouch && !inWater;
     crouchCur += ((crouched ? 1.0f : 0.0f) - crouchCur) * fminf(1, 10 * dt);
     // Double-tap W to run: the second press inside W_TAP holds the sprint until W is let go.
     wTapT = fmaxf(0, wTapT - dt);
-    if (!inTouchActive() && inKeyPressed(KEY_W)) { if (wTapT > 0) wSprint = true; wTapT = W_TAP; }
-    if (!inKeyDown(KEY_W)) wSprint = false;
-    updateSprint(inKeyDown(KEY_LEFT_SHIFT) || wSprint, moving, crouched || squeezing, dt);
+    if (!in.touch && in.forwardPressed) { if (wTapT > 0) wSprint = true; wTapT = W_TAP; }
+    if (!in.forward) wSprint = false;
+    updateSprint(in.sprint || wSprint, moving, crouched || squeezing, dt);
     boostT = fmaxf(0, boostT - dt);
     swimClimb *= expf(-10*dt);
     float groundY = world.groundAt(px, pz, py);
@@ -1153,8 +1164,8 @@ void Game::updateMovement(float dt) {
                 px=oldX; pz=oldZ; velx=velz=0;
             } else {
                 swimClimb += ledge-py; py=ledge; vy=0; grounded=true; swimming=false;
-                Sound &out=splashOut[grng.ri(0,2)];
-                SetSoundPitch(out,0.92f+grng.f01()*0.16f); SetSoundVolume(out,0.6f); PlaySound(out);
+                int v = grng.ri(0, 2);
+                play(Sfx::SplashOut, v).atPitch(0.92f + grng.f01() * 0.16f).atVolume(0.6f);
             }
         }
     }
@@ -1182,23 +1193,19 @@ void Game::updateMovement(float dt) {
     // test refused to fire at all — the trapdoor silently stopped being a
     // trapdoor, and the only symptom was a screenshot that never changed level.
     if (level == 0 && grounded && py > -SOFT_DEPTH - 0.05f && world.softAt(cellOf(px), cellOf(pz))) {
-        double tnow = GetTime();
-        if (softTimer <= 0.0f) nextGroan = tnow;      // the first complaint is immediate
+        if (softTimer <= 0.0f) nextGroan = now;      // the first complaint is immediate
         softTimer += dt;
-        if (tnow >= nextGroan && fellT <= 0) {
-            SetSoundPitch(sndGroan, 0.88f + softTimer * 0.30f);
-            SetSoundVolume(sndGroan, 0.55f + softTimer * 0.45f);
-            PlaySound(sndGroan);
-            nextGroan = tnow + 0.55 - softTimer * 0.30;  // and it comes faster the longer you stay
+        if (now >= nextGroan && fellT <= 0) {
+            play(Sfx::Groan).atPitch(0.88f + softTimer * 0.30f).atVolume(0.55f + softTimer * 0.45f);
+            nextGroan = now + 0.55 - softTimer * 0.30;  // and it comes faster the longer you stay
         }
         if (softTimer > 0.9f && fellT <= 0 && escapeT <= 0 && deathT <= 0) {
             fellT = 4.0f;
-            SetSoundVolume(splashIn[0], 0.5f); SetSoundPitch(splashIn[0], 0.5f);
-            PlaySound(splashIn[0]);
-            applyLevel(1);
+            play(Sfx::SplashIn, 0).atVolume(0.5f).atPitch(0.5f);
+            applyLevel(1, now);
             Vector2 spot = world.findOpenSpot(px, pz);
             px = spot.x; pz = spot.y; velx = velz = 0; py = 0.6f; vy = 0; grounded = false;
-            ent.st = EState::Hidden; ent.nextSpawn = GetTime() + 20;
+            ent.st = EState::Hidden; ent.nextSpawn = now + 20;
         }
     } else softTimer = fmaxf(0.0f, softTimer - dt * 2.0f);
     // The bowl is 8.5 cm deep in the mesh; standing in it adds most of that again,
@@ -1210,12 +1217,12 @@ void Game::updateMovement(float dt) {
     // jump + floor height (groundY recomputed after collision; furniture tops count)
     groundY = world.groundAt(px, pz, py);
     bool wasSwimming=swimming;
-    bool afloat=updateSwimming(dt,inKeyDown(KEY_SPACE));
+    bool afloat=updateSwimming(dt,in.jumpHeld);
     if (afloat && !wasSwimming) {
-        Sound &in=splashIn[grng.ri(0,2)];
-        SetSoundPitch(in,0.95f+grng.f01()*0.1f); SetSoundVolume(in,0.55f); PlaySound(in);
+        int v = grng.ri(0, 2);
+        play(Sfx::SplashIn, v).atPitch(0.95f + grng.f01() * 0.1f).atVolume(0.55f);
     }
-    if (!afloat && inKeyPressed(KEY_SPACE) && grounded) { vy = inWater ? 4.3f : 5.6f; grounded = false; }
+    if (!afloat && in.jumpPressed && grounded) { vy = inWater ? 4.3f : 5.6f; grounded = false; }
     if (grounded) {
         if (py > groundY + 0.05f && world.poolAt(cellOf(px), cellOf(pz))) { grounded = false; vy = 0; }  // pool edge: drop in
         // Walked off something taller than a step — a terrace lip, the top of a
@@ -1235,16 +1242,14 @@ void Game::updateMovement(float dt) {
         fallFrom = fmaxf(fallFrom, py);
         if (py <= groundY) {
             py = groundY; grounded = true;
-            landFrom(fallFrom - groundY, GetTime());
+            landFrom(fallFrom - groundY, now);
             if (groundY < -0.1f && world.poolAt(cellOf(px), cellOf(pz))) {
-                Sound &in = splashIn[grng.ri(0, 2)];
-                SetSoundPitch(in, 0.9f + grng.f01() * 0.15f); SetSoundVolume(in, clampf(-vy * 0.12f, 0.4f, 0.8f)); PlaySound(in);
+                int v = grng.ri(0, 2);
+                play(Sfx::SplashIn, v).atPitch(0.9f + grng.f01() * 0.15f).atVolume(clampf(-vy * 0.12f, 0.4f, 0.8f));
             }
             else {
-                Sound &s = steps[grng.ri(0, 3)];    // landing thud
-                SetSoundPitch(s, 0.62f + grng.f01() * 0.1f);
-                SetSoundVolume(s, clampf(-vy * 0.14f, 0.3f, 0.85f));
-                PlaySound(s);
+                int v = grng.ri(0, 3);    // landing thud
+                play(Sfx::Step, v).atPitch(0.62f + grng.f01() * 0.1f).atVolume(clampf(-vy * 0.14f, 0.3f, 0.85f));
             }
             landDip = clampf(-vy * 0.028f, 0.0f, 0.22f);   // knees absorb the drop
             vy = 0;
@@ -1258,8 +1263,8 @@ void Game::updateMovement(float dt) {
     // standing on the tread at the midpoint cannot flicker between two floors.
     if (world.storeyH > 0.0f && deathT <= 0) {
         float half = world.storeyH * 0.5f;
-        if (py > half + 0.1f) changeStorey(+1, GetTime());
-        else if (py < -half - 0.1f) changeStorey(-1, GetTime());
+        if (py > half + 0.1f) changeStorey(+1, now);
+        else if (py < -half - 0.1f) changeStorey(-1, now);
     }
 
     // Head bob and footsteps run off ONE phase, because the footfall *is* the
@@ -1295,8 +1300,8 @@ void Game::updateMovement(float dt) {
         floatRoll = (0.045f * sinf(floatT * 1.05f + 0.6f) + 0.015f * sinf(floatT * 2.3f)) * surf;
         // Slow strokes replace land footfalls; never bob the camera like a run.
         if ((int)(swimPhase/3.14159f)!=(int)((swimPhase-dt*(1.1f+0.45f*spd))/3.14159f) && spd>0.2f) {
-            Sound &stroke=swimStrokes[grng.ri(0,3)];
-            SetSoundPitch(stroke,0.9f+grng.f01()*0.2f); SetSoundVolume(stroke,0.55f); PlaySound(stroke);
+            int v = grng.ri(0, 3);
+            play(Sfx::SwimStroke, v).atPitch(0.9f + grng.f01() * 0.2f).atVolume(0.55f);
         }
     } else floatRoll *= expf(-6 * dt);
     eyeY -= swimClimb;
@@ -1304,10 +1309,10 @@ void Game::updateMovement(float dt) {
         // Wading: a swim stroke, pitched up, is a leg pushing through water.
         // Wet floors look wet but sound like any other floor: a squelch on the
         // damp patches was tried and removed at the owner's request.
-        Sound &s = inWater ? swimStrokes[grng.ri(0, 3)] : steps[grng.ri(0, 3)];
-        SetSoundPitch(s, (inWater ? 1.15f : 0.9f) + grng.f01() * 0.22f);
-        SetSoundVolume(s, (0.35f + 0.3f * bobAmt) * (inWater ? 1.2f : 1.0f));
-        PlaySound(s);
+        int v = grng.ri(0, 3);
+        play(inWater ? Sfx::SwimStroke : Sfx::Step, v)
+            .atPitch((inWater ? 1.15f : 0.9f) + grng.f01() * 0.22f)
+            .atVolume((0.35f + 0.3f * bobAmt) * (inWater ? 1.2f : 1.0f));
     }
     // Keep the phase from drifting into float mush over a long run. 4096 is an
     // integer number of strides and an even one, so both the footfall crossing
@@ -1327,8 +1332,7 @@ void Game::updateMovement(float dt) {
     // notice the meter. Sprinting overrides the aim term because you cannot
     // hold sights at a run. Both stay the same vertical degrees at every
     // screen shape: they are about the action, not about the viewport.
-    float fovT = fovForWindow(GetScreenWidth(), GetScreenHeight(), 0)
-        + (sprinting ? 9.0f : -8.0f * aimBlend) - slide * 15.0f;
+    float fovT = in.screenFov + (sprinting ? 9.0f : -8.0f * aimBlend) - slide * 15.0f;
     // At the 1440x850 window the whole game was authored against this is
     // exactly the old 70 / 79 / 62 / 55; every other screen shape only ever
     // widens the view, never past the comfort floor below.
@@ -1368,42 +1372,38 @@ void Game::updateMovement(float dt) {
     } else hideBreakT = 0;
 }
 
-void Game::updateDevKeys(double now) {
-    // ---- dev tools (only while the F3 debug HUD is up)
-    if (debugHud) {
-        if (inKeyPressed(KEY_B)) {   // force a blackout now
-            blackoutEnd = now + 3.0 + grng.f01() * 3.0;
-            nextBlackout = level == 2 ? BLACKOUT_NEVER : blackoutIn(blackoutEnd, 45, 75);
-        }
-        if (inKeyPressed(KEY_E)) {   // (re)spawn Clark stalking ~12m ahead
-            Vector2 spot = world.findOpenSpot(px + f2x * 12, pz + f2z * 12);
+void Game::updateDevKeys(const DevKeys &dev, double now) {
+    if (dev.blackout) {
+        blackoutEnd = now + 3.0 + grng.f01() * 3.0;
+        nextBlackout = level == 2 ? BLACKOUT_NEVER : blackoutIn(blackoutEnd, 45, 75);
+    }
+    if (dev.spawnAhead) {
+        Vector2 spot = world.findOpenSpot(px + f2x * 12, pz + f2z * 12);
+        ent.x = spot.x; ent.z = spot.y;
+        ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.hp = 3; ent.stagger = 0;
+    }
+    if (dev.chase) {
+        if (ent.st == EState::Hidden) {
+            Vector2 spot = world.findOpenSpot(px + f2x * 14, pz + f2z * 14);
             ent.x = spot.x; ent.z = spot.y;
-            ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.hp = 3; ent.stagger = 0;
+            ent.hp = 3;
         }
-        if (inKeyPressed(KEY_C)) {   // force chase (spawns him first if hidden)
-            if (ent.st == EState::Hidden) {
-                Vector2 spot = world.findOpenSpot(px + f2x * 14, pz + f2z * 14);
-                ent.x = spot.x; ent.z = spot.y;
-                ent.hp = 3;
-            }
-            ent.st = EState::Chase; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.repathT = 0;
-        }
-        if (inKeyPressed(KEY_H)) {   // banish him
-            ent.st = EState::Hidden; ent.nextSpawn = now + 20 + grng.f01() * 20;
-        }
-        if (inKeyPressed(KEY_G)) { flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; }   // refill weapons
-        if (world.storeyH > 0.0f && (inKeyPressed(KEY_PAGE_UP) || inKeyPressed(KEY_PAGE_DOWN))) {
-            // up or down a storey where you stand, for looking at one
-            changeStorey(inKeyPressed(KEY_PAGE_UP) ? 1 : -1, now);
-            Vector2 spot = world.findOpenSpot(px, pz);
-            px = spot.x; pz = spot.y; py = 0; vy = 0; grounded = true; fallFrom = 0;
-        }
-        if (inKeyPressed(KEY_N)) {   // jump to next level (incl. Red Halls)
-            applyLevel((level + 1) % NLEVELS);
-            Vector2 spot = world.findOpenSpot(px, pz);
-            px = spot.x; pz = spot.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
-            ent.st = EState::Hidden; ent.nextSpawn = now + 30;
-        }
+        ent.st = EState::Chase; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.repathT = 0;
+    }
+    if (dev.banish) {
+        ent.st = EState::Hidden; ent.nextSpawn = now + 20 + grng.f01() * 20;
+    }
+    if (dev.refill) { flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; }
+    if (world.storeyH > 0.0f && (dev.storeyUp || dev.storeyDown)) {
+        changeStorey(dev.storeyUp ? 1 : -1, now);
+        Vector2 spot = world.findOpenSpot(px, pz);
+        px = spot.x; pz = spot.y; py = 0; vy = 0; grounded = true; fallFrom = 0;
+    }
+    if (dev.nextLevel) {
+        applyLevel((level + 1) % NLEVELS, now);
+        Vector2 spot = world.findOpenSpot(px, pz);
+        px = spot.x; pz = spot.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
+        ent.st = EState::Hidden; ent.nextSpawn = now + 30;
     }
 }
 
@@ -1421,21 +1421,17 @@ bool Game::canReload() const {
         ammo < MAXAMMO && reloadT <= 0 && drinkT <= 0 && deathT <= 0 && winT <= 0;
 }
 
-void Game::updateWeapons(float dt, double now) {
-    // ---- weapons: keys 1/2/4 pick one directly, the wheel cycles, left click
-    // uses whichever is in your hands
-    if (inKeyPressed(KEY_ONE)) weapon = WEAPON_REVOLVER;
-    if (inKeyPressed(KEY_TWO)) weapon = WEAPON_FLARE;
-    if (inKeyPressed(KEY_FOUR)) weapon = WEAPON_DECK;
+void Game::updateWeapons(const InputFrame &in, float dt, double now) {
+    if (in.pickRevolver) weapon = WEAPON_REVOLVER;
+    if (in.pickFlare) weapon = WEAPON_FLARE;
+    if (in.pickDeck) weapon = WEAPON_DECK;
     wheelCd = fmaxf(0, wheelCd - dt);
-    {   // the wheel runs the loop both ways: +1 forward, -1 as +(N-1) to stay positive
-        float mw = inWheel();
-        if (wheelCd <= 0 && fabsf(mw) > 0.5f) {
-            weapon = (weapon + (mw > 0 ? 1 : WEAPON_COUNT - 1)) % WEAPON_COUNT;
-            wheelCd = 0.25f;
-        }
+    // The wheel runs the loop both ways: +1 forward, -1 as +(N-1) to stay positive.
+    if (wheelCd <= 0 && fabsf(in.wheel) > 0.5f) {
+        weapon = (weapon + (in.wheel > 0 ? 1 : WEAPON_COUNT - 1)) % WEAPON_COUNT;
+        wheelCd = 0.25f;
     }
-    updateAim(inCursorHidden() && inMouseDown(MOUSE_BUTTON_RIGHT), dt);
+    updateAim(in.playing && in.aim, dt);
     // Touch latches the aim (input_web.cpp), so a refused aim has to drop the
     // latch rather than leave the button lit over a gun that never comes up.
     // A reload is the one refusal that is temporary — it finishes and the sights
@@ -1448,15 +1444,14 @@ void Game::updateWeapons(float dt, double now) {
     recoil += (0 - recoil) * fminf(1, 10 * dt);
     if (reloadT > 0) {
         reloadT -= dt;
-        if (reloadT <= 0) { ammo = MAXAMMO; SetSoundPitch(sndClick, 1.15f); PlaySound(sndClick); }
+        if (reloadT <= 0) { ammo = MAXAMMO; play(Sfx::Click).atPitch(1.15f); }
     }
-    if (weapon == WEAPON_REVOLVER && inCursorHidden() && !captureClick && deathT <= 0 && reloadT <= 0 && gunCd <= 0 &&
-        drinkT <= 0 &&
-        inMousePressed(MOUSE_BUTTON_LEFT)) {
-        if (ammo <= 0) { SetSoundPitch(sndClick, 0.7f); PlaySound(sndClick); gunCd = 0.25f; }  // dry fire
+    if (weapon == WEAPON_REVOLVER && in.playing && in.fire && deathT <= 0 && reloadT <= 0 && gunCd <= 0 &&
+        drinkT <= 0) {
+        if (ammo <= 0) { play(Sfx::Click).atPitch(0.7f); gunCd = 0.25f; }  // dry fire
         else {
             ammo--; gunCd = Revolver::SHOT_INTERVAL; muzzleT = 0.09f; recoil = 1.0f; muzzleSmoke = 1.0f;
-            PlaySound(sndShot);
+            play(Sfx::Shot);
             fireBullet();
             // the report carries down every hallway
             if (ent.st == EState::Hidden) ent.nextSpawn = fmin(ent.nextSpawn, now + 5 + grng.f01() * 6);
@@ -1464,9 +1459,9 @@ void Game::updateWeapons(float dt, double now) {
 
         }
     }
-    if (inKeyPressed(KEY_R) && inCursorHidden() && canReload()) {
+    if (in.reload && in.playing && canReload()) {
         reloadT = 1.8f;
-        SetSoundPitch(sndClick, 0.95f); PlaySound(sndClick);
+        play(Sfx::Click).atPitch(0.95f);
     }
 }
 
@@ -1552,10 +1547,9 @@ void Game::updateBullets(float dt) {
             float ex = d.x - px, ez = d.z - pz;
             if (--d.hp <= 0) {
                 d.st = DState::Yelp; d.life = 0;
-                SetSoundPitch(sndBarks[i % 3], 1.6f); SetSoundVolume(sndBarks[i % 3], 0.9f);
-                PlaySound(sndBarks[i % 3]);
+                play(Sfx::Bark, i % 3).atPitch(1.6f).atVolume(0.9f);
             } else {
-                PlaySound(sndHit);
+                play(Sfx::Hit);
                 float dl = sqrtf(ex * ex + ez * ez) + 1e-4f;
                 d.x += ex / dl * 0.8f; d.z += ez / dl * 0.8f;   // rocked, not repelled
                 world.collideCircle(d.x, d.z, 0.3f, d.dispY);
@@ -1563,7 +1557,7 @@ void Game::updateBullets(float dt) {
         } else if (target == MAXDOGS) {
             ent.hp--;
             if (ent.hp <= 0) {   // put down
-                PlaySound(sndKill);
+                play(Sfx::Kill);
                 killT = 3.0f; killCount++;
                 ent.st = EState::Die; ent.life = 0;
                 for (int c2 = 0; c2 < 5; c2++) {   // he spills his doubloons
@@ -1572,7 +1566,7 @@ void Game::updateBullets(float dt) {
                 }
                 saveBest();
             } else {             // hurt, and now it knows exactly where you are
-                PlaySound(sndHit);
+                play(Sfx::Hit);
                 float ex = ent.x - px, ez = ent.z - pz;
                 float dd = sqrtf(ex * ex + ez * ez);
                 if (dd > 0.01f) { ent.x += ex / dd * 0.5f; ent.z += ez / dd * 0.5f; }
@@ -1632,10 +1626,9 @@ const FlareProj *Game::dominantFlare(float x, float z) const {
     return best;
 }
 
-void Game::updateFlare(float dt, double now) {
-    // ---- flare weapon
-    if (inCursorHidden() && deathT <= 0 && flares > 0 && drinkT <= 0 &&
-        (inKeyPressed(KEY_Q) || (weapon == WEAPON_FLARE && !captureClick && inMousePressed(MOUSE_BUTTON_LEFT)))) {
+void Game::updateFlare(const InputFrame &in, float dt, double now) {
+    if (in.playing && deathT <= 0 && flares > 0 && drinkT <= 0 &&
+        (in.throwFlare || (weapon == WEAPON_FLARE && in.fire))) {
         flares--;
         // A free slot if there is one. There are as many slots as flares you can
         // carry, so running out needs a fresh flare in your coat while all of
@@ -1653,7 +1646,7 @@ void Game::updateFlare(float dt, double now) {
         fl.active = true; fl.flying = true; fl.burn = FLAREBURN;
         fl.x = px + fwd.x * 0.4f; fl.y = eyeY - 0.15f; fl.z = pz + fwd.z * 0.4f;
         fl.vx = fwd.x * 10.5f; fl.vz = fwd.z * 10.5f; fl.vy = fwd.y * 10.5f + 2.4f;
-        PlaySound(sndFlare);
+        play(Sfx::FlareStrike);
         if (ent.st == EState::Hidden) ent.nextSpawn = fmin(ent.nextSpawn, now + 12 + grng.f01() * 10);  // he hears the strike
     }
     float hiss = 0;
@@ -1673,9 +1666,7 @@ void Game::updateFlare(float dt, double now) {
                 else { flare.flying = false; flare.vx = flare.vy = flare.vz = 0; }
             }
             if (world.poolAt(cellOf(flare.x), cellOf(flare.z)) && flare.y < -0.10f) {   // hit pool water: fizzles out
-                Sound &s = splashOut[grng.ri(0, 2)];
-                SetSoundPitch(s, 1.3f); SetSoundVolume(s, 0.7f);
-                PlaySound(s);
+                play(Sfx::SplashOut, grng.ri(0, 2)).atPitch(1.3f).atVolume(0.7f);
                 flare.active = false;
                 continue;
             }
@@ -1692,7 +1683,7 @@ void Game::updateFlare(float dt, double now) {
         // hear is the fire you can see by.
         hiss = fmaxf(hiss, flarePresence(flare, px, pz));
     }
-    synth.hissTarget = hiss;
+    ambience.hiss = hiss;
     if (flares >= MAXFLARES) nextFlareRegen = now + 75;   // scavenge a fresh flare over time
     else if (now > nextFlareRegen) { flares++; nextFlareRegen = now + 75; }
 }
@@ -1707,18 +1698,17 @@ void Game::updateFlare(float dt, double now) {
 // rather than a hard lock: set it far enough out to send them somewhere useful
 // and you give up most of the voice, and keep it near enough to hear properly
 // and the pack arrives where you happen to be standing.
-void Game::updateTapeDeck(float dt, double now) {
+void Game::updateTapeDeck(const InputFrame &in, float dt, double now) {
     deckNoteT = fmaxf(0, deckNoteT - dt);
 
     // ---- thread a tape, or set the running deck down
-    if (inCursorHidden() && !captureClick && deathT <= 0 && drinkT <= 0 &&
-        weapon == WEAPON_DECK && deck.carried && inMousePressed(MOUSE_BUTTON_LEFT)) {
+    if (in.playing && in.fire && deathT <= 0 && drinkT <= 0 && weapon == WEAPON_DECK && deck.carried) {
         if (!deck.playing && tapes > 0) {
             tapes--;
             deck.playing = true;
             deck.t = TAPE_RUN;
             deckNoteT = 2.6f; deckNote = "the tape runs. someone is talking.";
-            SetSoundPitch(sndClick, 1.05f); PlaySound(sndClick);
+            play(Sfx::Click).atPitch(1.05f);
             // It carries, and he comes to noise the same way he comes to a shot
             // or a struck flare. Pulled once, on the press — doing it every
             // frame would pin his next spawn to the length of the tape.
@@ -1734,7 +1724,7 @@ void Game::updateTapeDeck(float dt, double now) {
             deckNoteT = 2.6f; deckNote = "you leave it talking, and walk away.";
         } else if (tapes <= 0) {
             deckNoteT = 2.2f; deckNote = "no tape. the deck is empty.";
-            SetSoundPitch(sndClick, 0.7f); PlaySound(sndClick);
+            play(Sfx::Click).atPitch(0.7f);
         }
     }
 
@@ -1755,8 +1745,7 @@ void Game::updateTapeDeck(float dt, double now) {
         // water kills it outright, the same way it kills a flare
         if (world.poolAt(cellOf(deck.x), cellOf(deck.z)) && deck.y < -0.10f && deck.playing) {
             deck.playing = false; deck.t = 0;
-            Sound &sp = splashIn[grng.ri(0, 2)];
-            SetSoundPitch(sp, 1.25f); SetSoundVolume(sp, 0.5f); PlaySound(sp);
+            play(Sfx::SplashIn, grng.ri(0, 2)).atPitch(1.25f).atVolume(0.5f);
             deckNoteT = 2.6f; deckNote = "the water takes it. the voice stops.";
         }
     }
@@ -1769,19 +1758,18 @@ void Game::updateTapeDeck(float dt, double now) {
         if (deck.t <= 0) {
             deck.playing = false; deck.t = 0;
             deckNoteT = 2.6f; deckNote = "the tape runs out.";
-            SetSoundPitch(sndClick, 0.85f); PlaySound(sndClick);
+            play(Sfx::Click).atPitch(0.85f);
         }
     }
 
     // ---- place the voice in the room, and let it steady you
     float sx = deck.carried ? px : deck.x, sz = deck.carried ? pz : deck.z;
     if (deck.playing) {
-        if (!IsSoundPlaying(sndVoice)) PlaySound(sndVoice);   // the clip loops itself
         float ddx = sx - px, ddz = sz - pz;
         float dist = sqrtf(ddx * ddx + ddz * ddz);
-        float pan = dist > 0.25f ? clampf((ddx / dist) * r2x + (ddz / dist) * r2z, -1.0f, 1.0f) : 0.0f;
-        SetSoundPan(sndVoice, panFor(pan));
-        SetSoundVolume(sndVoice, clampf(1.0f / (1.0f + 0.05f * dist * dist), 0.0f, 0.9f));
+        AudioEvent &voice = audioEvent(AudioEvent::VOICE);
+        voice.pan = dist > 0.25f ? clampf((ddx / dist) * r2x + (ddz / dist) * r2z, -1.0f, 1.0f) : 0.0f;
+        voice.volume = clampf(1.0f / (1.0f + 0.05f * dist * dist), 0.0f, 0.9f);
 
         // You have to be able to hear it for it to do you any good, so the
         // further you set it from yourself the less it gives back — and through
@@ -1792,10 +1780,10 @@ void Game::updateTapeDeck(float dt, double now) {
                   : clampf(1.0f - dist / 14.0f, 0.0f, 1.0f) *
                     (world.lineOfSight(px, pz, deck.x, deck.z) ? 1.0f : 0.45f);
         sanity = clampf(sanity + 0.0105f * aud * dt, 0.0f, 1.0f);
-    } else if (IsSoundPlaying(sndVoice)) StopSound(sndVoice);
+    } else stopVoice();
 }
 
-void Game::updateInteraction() {
+void Game::updateInteraction(const InputFrame &in) {
     // ---- pickups, drinking, vending machines, chalk
     int pci = cellOf(px), pck = cellOf(pz);
     for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
@@ -1821,26 +1809,26 @@ void Game::updateInteraction() {
         switch (kind) {
         case Pickup::AlmondWater:
             almond++;
-            SetSoundPitch(sndClick, 1.3f); PlaySound(sndClick);
+            play(Sfx::Click).atPitch(1.3f);
             break;
         case Pickup::Doubloon:
             coins++;
-            SetSoundPitch(sndClick, 1.6f); PlaySound(sndClick);
+            play(Sfx::Click).atPitch(1.6f);
             break;
         case Pickup::Battery:
             battery = clampf(battery + 0.45f, 0, 1);
-            SetSoundPitch(sndClick, 0.85f); PlaySound(sndClick);
+            play(Sfx::Click).atPitch(0.85f);
             break;
         case Pickup::Tape:
             tapes++;
             tapeFoundT = 3.2f;
             tapeLine = TAPE_LINES[grng.ri(0, TAPE_LINE_COUNT - 1)];
-            PlaySound(sndTape);
+            play(Sfx::TapeChime);
             break;
         case Pickup::Key:
             keys++;
             deckNoteT = 2.4f; deckNote = "a key. something near here is locked.";
-            SetSoundPitch(sndClick, 1.45f); PlaySound(sndClick);
+            play(Sfx::Click).atPitch(1.45f);
             break;
         case Pickup::None:
             break;
@@ -1851,21 +1839,21 @@ void Game::updateInteraction() {
         // .y is the floor they lie on: not one a storey down, seen through a stairwell
         if (ddx * ddx + ddz * ddz < 0.7f * 0.7f && fabsf(coinsWorld[c2].y - py) < 1.2f) {
             coins++;
-            SetSoundPitch(sndClick, 1.6f); PlaySound(sndClick);
+            play(Sfx::Click).atPitch(1.6f);
             coinsWorld.erase(coinsWorld.begin() + c2);
         } else ++c2;
     }
-    if (inKeyPressed(KEY_THREE) && almond > 0 && drinkT <= 0) {   // drink: steady your hands
+    if (in.drink && almond > 0 && drinkT <= 0) {   // drink: steady your hands
         almond--;
         drinkT = DRINK_TIME;
         drinkLanded = false;
-        PlaySound(sndGulp);
+        play(Sfx::Gulp);
     }
     // ---- E: the one "use what's in front of me" key. Each of the three things
     // it can reach lives in its own block below. They can't collide: a valve
     // cell never holds a prop, so a standpipe and a vending machine are never
     // the same cell, and the deck is wherever you personally put it down.
-    if (inKeyPressed(KEY_E)) {
+    if (in.use) {
         // Level 1: prise the lid off a supply crate.
         if (level == 1) {
             for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
@@ -1881,7 +1869,7 @@ void Game::updateInteraction() {
             if (ddx * ddx + ddz * ddz < 1.9f * 1.9f) {
                 notePage = notesRead ? (notePage + 1) % MANILA_NOTE_COUNT : 0;
                 noteT = 9.0f;
-                SetSoundPitch(sndClick, 1.9f); PlaySound(sndClick);
+                play(Sfx::Click).atPitch(1.9f);
                 if (!notesRead) { notesRead = true; markWayOut(); }
             }
         }
@@ -1899,10 +1887,10 @@ void Game::updateInteraction() {
                 valvesTurned.insert(ky);
                 valveT = 3.4f;
                 turned = true;
-                PlaySound(sndValve);
+                play(Sfx::Valve);
                 if ((int)valvesTurned.size() >= VALVES_NEEDED && !pipesShut) {
                     pipesShut = true;
-                    PlaySound(sndWin);
+                    play(Sfx::Win);
                     // The cache is there once a descent, not once a visit. It
                     // pays 9 against an ESCAPE_COST of 12, and a cursed exit
                     // (1 in 6) drops you straight back into the Red Halls — so
@@ -1930,7 +1918,7 @@ void Game::updateInteraction() {
                 float ddx = px - mx, ddz = pz - mz;
                 if (ddx * ddx + ddz * ddz < 1.6f * 1.6f && coins >= 3) {
                     coins -= 3; almond++;
-                    SetSoundPitch(sndClick, 0.8f); PlaySound(sndClick);
+                    play(Sfx::Click).atPitch(0.8f);
                 }
             }
         }
@@ -1956,7 +1944,7 @@ void Game::updateInteraction() {
                     // in front of you would otherwise go on casting its shadow.
                     occValid = false;
                     deckNoteT = 2.2f; deckNote = "the lock turns. the door swings in.";
-                    SetSoundPitch(sndClick, 0.7f); PlaySound(sndClick);
+                    play(Sfx::Click).atPitch(0.7f);
                     opened = true;
                 }
             }
@@ -1967,11 +1955,11 @@ void Game::updateInteraction() {
                 deck.carried = true; deck.flying = false;
                 deckNoteT = 2.2f; deckNote = deck.playing ? "you pick it up. it's still running."
                                                           : "you pick the deck back up.";
-                SetSoundPitch(sndClick, 1.1f); PlaySound(sndClick);
+                play(Sfx::Click).atPitch(1.1f);
             }
         }
     }
-    if (inKeyPressed(KEY_M)) {   // chalk mark: the only map you get
+    if (in.chalk) {   // chalk mark: the only map you get
         float x = px + f2x * 0.5f, z = pz + f2z * 0.5f;
         if (!grounded || !world.lineOfSight(px, pz, x, z)) return;
         auto &marks = chalk[level];
@@ -1992,7 +1980,7 @@ void Game::updateAmbience(float dt, double now) {
         nextWhisper = now + (70 + grng.f01() * 90) * (0.35 + 0.65 * sanity);
     }
     whisperT = level==2 ? 0 : fmaxf(0, whisperT - dt);
-    synth.whisperTarget = whisperT > 0 ? 0.55f : 0.0f;
+    ambience.whisper = whisperT > 0 ? 0.55f : 0.0f;
 
     // ---- blackout events
     bool blackout = now < blackoutEnd;
@@ -2006,7 +1994,7 @@ void Game::updateAmbience(float dt, double now) {
     blackoutCur += ((blackout ? 0.02f : 1.0f) - blackoutCur) * fminf(1, 18 * dt);
     // the Manila Room is the one quiet place: "the isolation effect of Level
     // 0 will begin to weaken", and so does the buzz
-    synth.humTarget = blackout ? 0.12f : inManila ? 0.22f : 1.0f;
+    ambience.hum = blackout ? 0.12f : inManila ? 0.22f : 1.0f;
 
     // ---- what the room sounds like from where you are standing (AUD-03/04).
     //
@@ -2019,7 +2007,7 @@ void Game::updateAmbience(float dt, double now) {
         float nx = (floorf(px / ls) + 0.5f) * ls, nz = (floorf(pz / ls) + 0.5f) * ls;
         float pd = sqrtf((px - nx) * (px - nx) + (pz - nz) * (pz - nz));
         // right underneath it is 1, and it is gone by about 4 m out
-        synth.panelTarget = (blackout || inManila) ? 0.0f : clampf(1.0f - pd / 4.0f, 0.0f, 1.0f);
+        ambience.panel = (blackout || inManila) ? 0.0f : clampf(1.0f - pd / 4.0f, 0.0f, 1.0f);
 
         // And how big the space is, for the reverb's decay. Walk the four
         // cardinal directions from your cell until a wall stops you: the mean
@@ -2038,7 +2026,7 @@ void Game::updateAmbience(float dt, double now) {
             }
         }
         float openRun = (total / 4.0f) * CELL;                 // metres, averaged over the four
-        synth.spaceTarget = clampf(openRun / (ROOM_PROBE * CELL), 0.0f, 1.0f);
+        ambience.space = clampf(openRun / (ROOM_PROBE * CELL), 0.0f, 1.0f);
     }
 
     // ---- your grip on the place. It only ever goes one way on its own.
@@ -2075,8 +2063,7 @@ void Game::updateAmbience(float dt, double now) {
     if (sanity < 0.34f && now > nextHeartbeat) {
         // ...and in the slide it stops being a warning and starts being the
         // loudest thing in the room.
-        SetSoundVolume(sndHeartbeat, clampf(0.55f + 0.45f * slide, 0.0f, 1.0f));
-        PlaySound(sndHeartbeat);
+        play(Sfx::Heartbeat).atVolume(clampf(0.55f + 0.45f * slide, 0.0f, 1.0f));
         nextHeartbeat = now + (1.1 + sanity * 3.4) * (1.0f - 0.45f * slide);
     }
     // ---- the last of it (STK-03). The meter's whole fiction is that the place
@@ -2088,7 +2075,7 @@ void Game::updateAmbience(float dt, double now) {
     slide = clampf((SLIDE_FROM - sanity) / SLIDE_FROM, 0.0f, 1.0f);
     if (slide > 0.0f) {
         // the whispers stop being texture and start being close
-        synth.whisperTarget = fmaxf(synth.whisperTarget, 0.30f + 0.70f * slide);
+        ambience.whisper = fmaxf(ambience.whisper, 0.30f + 0.70f * slide);
         fear = fmaxf(fear, 0.35f + 0.55f * slide);
     }
     if (sanity <= 0.0f && deathT <= 0 && !inMenu) {
@@ -2119,17 +2106,17 @@ void Game::updateAmbience(float dt, double now) {
     }
 }
 
-void Game::updateEntity(float dt, double now) {
+void Game::updateEntity(float dt, double now, bool forceSpawn) {
     // Sublimity is a refuge. No scripted capture spawn or debug chase survives.
     if (level==2) {
         ent.st=EState::Hidden; ent.nextSpawn=now+60; entDist=1e9f;
         entDarkCur += (0-entDarkCur)*fminf(1,4*dt);
         fear += (0-fear)*fminf(1,2*dt);
-        synth.growlTarget=0;
+        ambience.growl=0;
         return;
     }
     // ---- entity
-    if (shotPath && !benchmark && frame == 300 && ent.st == EState::Hidden) {   // autotest: force a visible spawn
+    if (forceSpawn && ent.st == EState::Hidden) {
         Vector2 spot = world.findOpenSpot(px + fwd.x * 8, pz + fwd.z * 8);
         ent.x = spot.x; ent.z = spot.y;
         ent.st = EState::Stalk; ent.gaze = -100; ent.life = 0; ent.unseen = 0; ent.hp = 3; ent.stagger = 0;
@@ -2245,9 +2232,7 @@ void Game::updateEntity(float dt, double now) {
             if (entDist < LUNGE_REACH && level2 && ent.lunge <= 0 && ent.lungeCd <= 0 && !hidden) {
                 ent.lunge = LUNGE_TIME;
                 ent.lungeCd = LUNGE_TIME + 1.2f;   // a breath between attempts, so it is not a grind
-                SetSoundPitch(sndScare, 0.62f);    // the growl drops and spikes: he has decided
-                SetSoundVolume(sndScare, 0.85f);
-                PlaySound(sndScare);
+                play(Sfx::Scare).atPitch(0.62f).atVolume(0.85f);   // the growl drops and spikes: he has decided
                 fearT = 1.0f;
             }
             float chaseSpd = 3.3f + 1.0f * clampf(1 - entDist / 25.0f, 0, 1) + (ent.lunge > 0 ? 3.2f : 0.0f);
@@ -2279,7 +2264,7 @@ void Game::updateEntity(float dt, double now) {
             if (ent.unseen > 6 && (entDist > 14 || hidden)) ent.st = EState::Hidden, ent.nextSpawn = now + 25 + grng.f01() * 40;
             if (hidden && entDist < 2.2f && closeCallT <= 0) {   // it's right there and doesn't know
                 closeCallT = 3.0f;
-                PlaySound(sndHeartbeat);
+                play(Sfx::Heartbeat);
             }
             // He can only take you out of a lunge he has committed to, and the
             // commit is loud and 0.6 s long — see the chase block above. The
@@ -2327,12 +2312,11 @@ void Game::updateEntity(float dt, double now) {
                 // cost you the certainty, not just a few dB. entLos is the same
                 // ray entVisible already needed, hoisted so it is cast once.
                 int pick = grng.ri(0, 3);
-                Sound &s = entLos ? entSteps[pick] : entStepsThrough[pick];
-                SetSoundPan(s, panFor(sd));
-                SetSoundPitch(s, 0.66f + grng.f01() * 0.08f);   // heavy, unhurried
                 float occ = entLos ? 1.0f : 0.45f;
-                SetSoundVolume(s, clampf(1.4f * occ / (1.0f + (entLos ? 0.07f : 0.13f) * entDist * entDist), 0.0f, 0.9f));
-                PlaySound(s);
+                play(entLos ? Sfx::EntStep : Sfx::EntStepThrough, pick)
+                    .atPan(sd)
+                    .atPitch(0.66f + grng.f01() * 0.08f)   // heavy, unhurried
+                    .atVolume(clampf(1.4f * occ / (1.0f + (entLos ? 0.07f : 0.13f) * entDist * entDist), 0.0f, 0.9f));
             }
         }
         if (ent.st == EState::Die) {   // shot down: crumples, gone a long while
@@ -2365,8 +2349,8 @@ void Game::updateEntity(float dt, double now) {
     entDarkCur += (darkT - entDarkCur) * fminf(1, 1.6f * dt);
     // Presence/state must not announce a spawn or a chase through the walls.
     // Actual footsteps and close-range attack audio still belong to actions.
-    synth.growlTarget = 0.0f;
-    synth.update();
+    ambience.growl = 0.0f;
+    audioEvent(AudioEvent::AMBIENCE).mix = ambience;
 }
 
 // The Red Halls pack. Where Clark hunts by sight — stare at him and he comes —
@@ -2403,7 +2387,7 @@ void Game::updateDogs(float dt, double now) {
         nextHowl = now + 26 + grng.f01() * 34;
         int live = 0;
         for (auto &d : dogs) if (d.st != DState::Gone) live++;
-        if (live > 0) { SetSoundPan(sndHowl, panFor(0)); PlaySound(sndHowl); }
+        if (live > 0) play(Sfx::Howl).atPan(0);
     }
     // send them in one at a time so the hall fills up rather than swarming
     if (now > nextPack) {
@@ -2441,7 +2425,7 @@ void Game::updateDogs(float dt, double now) {
                 float fx = d.x - nearest->x, fz = d.z - nearest->z;
                 if (fx * fx + fz * fz < 5.5f * 5.5f) {
                     d.st = DState::Yelp; d.life = 0;
-                    SetSoundPitch(sndBarks[i % 3], 1.5f); PlaySound(sndBarks[i % 3]);
+                    play(Sfx::Bark, i % 3).atPitch(1.5f);
                 }
             }
             float sdx = nsx - d.x, sdz = nsz - d.z;
@@ -2490,13 +2474,12 @@ void Game::updateDogs(float dt, double now) {
                 d.nextBark = now + (d.st == DState::Charge ? 0.7 + grng.f01() * 0.6
                                                           : 3.5 + grng.f01() * 4.0);
                 bool dogLos = world.lineOfSight(px, pz, d.x, d.z);
-                Sound &s = dogLos ? sndBarks[i % 3] : sndBarksThrough[i % 3];
                 float sd = clampf((ddx / dist) * r2x + (ddz / dist) * r2z, -1.0f, 1.0f);
-                SetSoundPan(s, panFor(sd));
-                SetSoundPitch(s, 0.92f + grng.f01() * 0.2f);
                 float occ = dogLos ? 1.0f : 0.45f;
-                SetSoundVolume(s, clampf(1.5f * occ / (1.0f + (dogLos ? 0.05f : 0.10f) * dist * dist), 0.0f, 0.95f));
-                PlaySound(s);
+                play(dogLos ? Sfx::Bark : Sfx::BarkThrough, i % 3)
+                    .atPan(sd)
+                    .atPitch(0.92f + grng.f01() * 0.2f)
+                    .atVolume(clampf(1.5f * occ / (1.0f + (dogLos ? 0.05f : 0.10f) * dist * dist), 0.0f, 0.95f));
             }
             // They hunt by SOUND. `hidden` is visual cover — crouched, beside
             // furniture — and letting it stop a dog undercut the one mechanic
@@ -2615,10 +2598,10 @@ void Game::updateExits(double now) {
                 if (wayOpen() && !cursed) { winRun(now); return; }   // the true way out
                 // Cursed doors lead to the Red Halls; white doors lead onward.
                 noclipped = false;
-                PlaySound(noclipped ? sndNoclip : sndWin);
+                play(Sfx::Win);
                 escapeT = 6.0f; escapeCount++;
                 saveBest();
-                applyLevel(cursed ? 3 : EXIT_NEXT[level]);
+                applyLevel(cursed ? 3 : EXIT_NEXT[level], now);
                 Vector2 spot = world.findOpenSpot(px, pz);
                 px = spot.x; pz = spot.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
                 ent.st = EState::Hidden; ent.nextSpawn = now + 30;
@@ -2767,7 +2750,7 @@ void Game::updateManila(float dt, double now) {
     bool blackout = now < blackoutEnd;
     if (level == 0 && !inManila && !blackout) {
         // builds under the tubes: about four minutes of Level 0 to the worst of it
-        migraine = fminf(1.0f, migraine + dt / 240.0f * (0.45f + 0.55f * synth.panelTarget));
+        migraine = fminf(1.0f, migraine + dt / 240.0f * (0.45f + 0.55f * ambience.panel));
     } else {
         migraine = fmaxf(0.0f, migraine - dt / (inManila ? 25.0f : 150.0f));
     }
@@ -2814,7 +2797,7 @@ void Game::openCrate(int a, int b) {
         "a bundle of human hair.",
     };
     deckNoteT = 2.6f;
-    SetSoundPitch(sndClick, 0.6f); PlaySound(sndClick);
+    play(Sfx::Click).atPitch(0.6f);
     switch (h % 10) {
     case 0: case 1: almond++;                                   deckNote = "a supply crate: a carton of almond water."; break;
     case 2:         battery = clampf(battery + 0.6f, 0, 1);     deckNote = "a supply crate: batteries. the torch will keep."; break;
@@ -2825,8 +2808,7 @@ void Game::openCrate(int a, int b) {
     }
 }
 
-void Game::updateCrates(float dt, double now) {
-    (void)dt;
+void Game::updateCrates(double now) {
     if (level != 1) return;
     // the epoch turns when the lights come back, not when they go: nobody sees
     // the crates move, and the supplies that were there are simply not

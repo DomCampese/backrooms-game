@@ -19,14 +19,14 @@ void AudioSynth::update() {
     static short buf[CHUNK_FRAMES * 2];   // interleaved stereo
     while (IsAudioStreamProcessed(stream)) {
         for (int i = 0; i < CHUNK_FRAMES; i++) {
-            hum += (humTarget - hum) * 2e-5f;
-            growl += (growlTarget - growl) * 4e-5f;
-            hiss += (hissTarget - hiss) * 6e-5f;
-            whisper += (whisperTarget - whisper) * 8e-5f;
-            wHum += (tHum - wHum) * 1.5e-5f;
-            wDrone += (tDrone - wDrone) * 1.5e-5f;
-            panel += (panelTarget - panel) * 3e-5f;
-            space += (spaceTarget - space) * 1.2e-5f;   // rooms change slowly; a stepping tail is audible
+            hum += (mix.hum - hum) * 2e-5f;
+            growl += (mix.growl - growl) * 4e-5f;
+            hiss += (mix.hiss - hiss) * 6e-5f;
+            whisper += (mix.whisper - whisper) * 8e-5f;
+            wHum += (mix.humLevel - wHum) * 1.5e-5f;
+            wDrone += (mix.droneLevel - wDrone) * 1.5e-5f;
+            panel += (mix.panel - panel) * 3e-5f;
+            space += (mix.space - space) * 1.2e-5f;   // rooms change slowly; a stepping tail is audible
             float wn = frand();
             lp1 += 0.035f * (wn - lp1);
             // L0: the fluorescent hum. Canon is explicit that this is "notably
@@ -54,7 +54,7 @@ void AudioSynth::update() {
             // No Poolrooms water bed: synthesized noise read as static and a
             // recorded stream read as a running tap. The level is meant to be still.
             float room = lp1 * 0.08f;
-            // LEVEL FUN's music is a looped recording (Game::updateLoopAudio).
+            // LEVEL FUN's music is a looped recording (GameAudio::feedLoops).
             // ...and in a blackout it does not simply go away. `hum` ducks the
             // whole bed, and what is left underneath is a thin high ring — the
             // sound of a room that was buzzing a second ago and now isn't,
