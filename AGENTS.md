@@ -5,6 +5,48 @@
 - docs/migration.md: the core / sim / platform layers and what may depend on
   what. docs/unreal-handoff.md: the planned move to Unreal Engine 5.
 
+# Unreal port, first slice (September 2026)
+
+The Unreal project is `unreal/` (its README, docs/unreal-handoff.md "Status").
+The raylib build stays the reference and nothing in it depends on `unreal/`.
+Nothing there has been compiled by Unreal yet. What will bite:
+
+- **A new .cpp in src/core, src/sim or src/port needs a one-line wrapper** in
+  `unreal/Plugins/Backrooms/Source/Backrooms/Private/Shared`, or the Unreal
+  module does not compile it. `tools/unreal-check.sh` fails until it has one;
+  it also builds the wrappers the module's way (clang, C++20, `-Werror`,
+  `-Wshadow`, FMA on, no `-ffp-contract=off`) and runs the contract and traces.
+- **One module, not two.** Core has no export annotations and editor modules
+  are shared libraries with hidden symbols, so code in a second module cannot
+  call core. No PCH either: the shared PCH is force-included into core's files.
+- **Unreal defines `check()` as a macro.** A shared function named `check` is
+  expanded by it in any file that also includes Unreal (`contract::compare`).
+- **The sim includes `fp_strict.h` now, like core.** Without it (or the flag)
+  a trace replayed with gcc or clang at `-march=native` diverged at frame 31.
+- **Traces** (`BACKROOMS_RECORD=path`, `./replay path`, src/sim/trace.h): a new
+  `InputFrame` field goes into `inputFields` in trace.cpp or it is not recorded.
+  `tests/traces/walk-l0-l2.trace` is a golden for the sim; a change that moves
+  the sim on purpose re-records it with `tools/record-trace.sh` (needs
+  xdotool) and says so in the commit.
+- **xdotool taps are shorter than a frame.** At the sandbox's 2-3 fps a
+  `xdotool key` press and release land inside one poll and raylib never sees
+  the key. Hold every key across a frame (record-trace.sh's `key`).
+- **The game starts a run through `SimStart`** (src/sim/start.h): `Game::init`
+  fills it from the BACKROOMS_* knobs and calls `simBegin`, `enterLevel`,
+  `simPlace`. A replay and a port call the same three.
+- **A capture's spawn spot is chosen before any level is entered**: `simBegin`
+  runs `findOpenSpot` in Level 0's maze at visit 0 on one storey, and the
+  capture then stands at that spot in whatever level it enters.
+  `tools/greybox-view.cpp` repeats this; a tool that picks its spot in the
+  final level's maze photographs somewhere else (the stairwell shot did).
+- **`mapdump --cells` with an even number overflowed a buffer** (the window is
+  `-half..half`, one more than N) and aborted with "double free or corruption".
+  It now rounds up to odd; every documented command used odd sizes.
+- **The layout golden (`tests/golden/layout.txt`) prints every field**, so an
+  uninitialised field shows as a nondeterministic line: `Fixture::end` was
+  garbage for most kinds until it was zeroed. A new field needs a value for
+  every kind.
+
 # Core library (September 2026)
 
 The generator is a library with no raylib in it, so an engine port can reuse
@@ -620,6 +662,8 @@ time so the executable remains independent of its working directory.
 | `core/level_rules.h` | per-level rules: wall height, light pitch, storey pitch, name, which tubes work, exits |
 | `core/layout.{h,cpp}` | `ChunkLayout`: a chunk's props, fixtures, light fittings and openings, decided from the seed |
 | `core/hash.{h,cpp}`, `core/vec.h` | hashes, RNG, value noise; `Vec2`/`Vec3`, `TAU`, `clampf` |
+| `sim/start.{h,cpp}`, `sim/trace.{h,cpp}` | how a run starts (`SimStart`); recording and replaying the calls on the sim |
+| `port/greybox.{h,cpp}` | a chunk as plain boxes and quads for a port's first milestone; core only |
 | `world_mesh.{h,cpp}` | the chunk mesher (`bakeChunk`), `ChunkMesh` slots, `ChunkMeshCache` |
 | `mesh_builder.{h,cpp}` | `MB`, `addPropBox`, `addSolidBox`, `PLAIN_UV` |
 | `object_meshes.{h,cpp}` | can, tape deck, reels, flare, supply crate |
@@ -1020,6 +1064,7 @@ Environment variables, all read at startup:
 | `BACKROOMS_MENU=1` | hold on the title screen instead of starting the run |
 | `BACKROOMS_FLASH=1` | start with the flashlight on |
 | `BACKROOMS_MANILA=1` | put a Manila Room in the chunk east of spawn (centre x 48, z 16) |
+| `BACKROOMS_RECORD=path` | record every call on the sim, for `./replay` and the port (src/sim/trace.h) |
 
 **`BACKROOMS_NOENT` does not exist.** It appears in scratch scripts written
 during development and is silently ignored — it never suppressed the entity.

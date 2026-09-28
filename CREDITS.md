@@ -122,6 +122,15 @@ above and in their README.
   `.wasm`, so that notice is distributed too.
   [License](LICENSES/emscripten.txt).
 
+- **Unreal Engine 5**, by **Epic Games**, under the
+  [Unreal Engine EULA](https://www.unrealengine.com/eula) (not an open-source
+  license). Only the port in `unreal/` uses it, and no Unreal build has been
+  distributed. Code linked into an Unreal binary is distributed under Epic's terms, which
+  are not compatible with GPL-3.0-only, so an Unreal build cannot be released
+  until the copyright holder decides how the original code is licensed for it
+  (docs/unreal-handoff.md, "Before any code"). Third-party material keeps its own
+  terms in either build.
+
 The raylib notice above names the version the **desktop** release is built
 against. The web build pins its own raylib in `tools/web-build.sh`; keep that
 tag and the notice in `LICENSES/` in step, because the notice is what ships.
