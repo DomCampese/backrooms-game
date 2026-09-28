@@ -39,14 +39,35 @@ A new `.cpp` in `src/core`, `src/sim` or `src/port` needs a wrapper in
 
 ## Opening it
 
-1. Unreal Engine 5.8 (the project's EngineAssociation).
-2. Right-click `BackroomsGame.uproject` > Generate Xcode Project, or open it and
-   let the editor offer to build the modules.
-3. Press Play. The default map is the engine's empty Entry map; the game mode
+The project compiles files from the repository's `src/`, so check out the whole
+repository, not just this folder. On the Mac:
+
+1. Xcode, the version Unreal 5.8's release notes ask for, opened once so it
+   finishes installing its components.
+2. Unreal Engine 5.8 from the Epic Games Launcher.
+3. Build the editor modules from a terminal, which prints any compile errors
+   in full (the editor's own prompt hides them behind "could not be compiled"):
+
+   ```bash
+   "/Users/Shared/Epic Games/UE_5.8/Engine/Build/BatchFiles/Mac/Build.sh" \
+       BackroomsGameEditor Mac Development \
+       -Project="$PWD/unreal/BackroomsGame.uproject" -WaitMutex
+   ```
+
+   Run it from the repository's root. The path is the Launcher's default
+   install; change it if the engine is elsewhere.
+4. Open the project: double-click `unreal/BackroomsGame.uproject`, or in the
+   Launcher, Unreal Engine > Library > Launch 5.8 > Browse, and pick it. If the
+   editor asks to rebuild missing modules, say yes (step 3 already did).
+5. Press Play. The default map is the engine's empty Entry map; the game mode
    starts a run on Level 0 at seed 1337 and the sim drives the camera: WASD,
    the mouse, the raylib build's keys (F3 for the debug keys). The hunter and
    the pack show as debug capsules and the state as a line of text until the
    actors and HUD are ported.
+
+For an Xcode project (debugging, or browsing the code), run
+`"/Users/Shared/Epic Games/UE_5.8/Engine/Build/BatchFiles/Mac/GenerateProjectFiles.sh" -project="$PWD/unreal/BackroomsGame.uproject" -game`
+and open the `.xcworkspace` it writes into `unreal/`.
 
 From the console: `open /Engine/Maps/Entry?level=1?seed=42` starts a run on
 Level 1; `open /Engine/Maps/Entry?mode=free?level=2` flies a free camera over
