@@ -3,21 +3,21 @@
 #include <cmath>
 
 // One row per level, after the rules it extends. Columns in declaration order:
-//     rules           dead   lightMul fogDen gloss  lightCol            amb                     fogCol
-// then vary, faulty, wet, wetFrom where they differ from the defaults.
+//     rules           lightMul fogDen gloss  lightCol            amb                     fogCol
+// then wet, wetFrom where they differ from the defaults.
 //
 // Every ambient is calibrated against the filmic tone curve's toe (roomLight
 // in shaders.cpp); the Red Halls' 0.052 puts that level's mean luma near 12.
 // lightMul rises where the grid is sparse (Level 1) or the panels are far from
 // the floor (the Poolrooms, 7.4 m).
 const LevelCfg LEVELS[NLEVELS] = {
-    { LEVEL_RULES[0], 0.20f, 0.36f, 0.050f, 0.06f, {1.00f,0.95f,0.76f}, {0.045f,0.042f,0.030f}, {0.140f,0.125f,0.070f},
-      0.42f, 0.16f, 0.0f, 0.60f },
-    { LEVEL_RULES[1], 0.30f, 1.05f, 0.070f, 0.07f, {0.93f,0.97f,0.86f}, {0.054f,0.057f,0.052f}, {0.070f,0.075f,0.068f},
-      0.35f, 0.20f, 0.0f, 0.78f },
-    { LEVEL_RULES[2], 0.06f, 1.25f, 0.026f, 0.55f, {1.00f,0.98f,0.89f}, {0.16f,0.18f,0.18f},    {0.16f,0.23f,0.22f} },
-    { LEVEL_RULES[3], 0.45f, 0.80f, 0.095f, 0.10f, {1.00f,0.22f,0.15f}, {0.052f,0.014f,0.011f}, {0.055f,0.010f,0.008f} },
-    { LEVEL_RULES[4], 0.10f, 1.05f, 0.055f, 0.06f, {1.00f,0.82f,0.76f}, {0.050f,0.040f,0.036f}, {0.150f,0.100f,0.085f} },
+    { LEVEL_RULES[0], 0.36f, 0.050f, 0.06f, {1.00f,0.95f,0.76f}, {0.045f,0.042f,0.030f}, {0.140f,0.125f,0.070f},
+      0.0f, 0.60f },
+    { LEVEL_RULES[1], 1.05f, 0.070f, 0.07f, {0.93f,0.97f,0.86f}, {0.054f,0.057f,0.052f}, {0.070f,0.075f,0.068f},
+      0.0f, 0.78f },
+    { LEVEL_RULES[2], 1.25f, 0.026f, 0.55f, {1.00f,0.98f,0.89f}, {0.16f,0.18f,0.18f},    {0.16f,0.23f,0.22f} },
+    { LEVEL_RULES[3], 0.80f, 0.095f, 0.10f, {1.00f,0.22f,0.15f}, {0.052f,0.014f,0.011f}, {0.055f,0.010f,0.008f} },
+    { LEVEL_RULES[4], 1.05f, 0.055f, 0.06f, {1.00f,0.82f,0.76f}, {0.050f,0.040f,0.036f}, {0.150f,0.100f,0.085f} },
 };
 // The Poolrooms are kept nearly uniform on purpose: new tile in a still hall.
 const float SURF_MACRO[NLEVELS] = { 0.05f, 0.08f, 0.015f, 0.07f, 0.06f };
@@ -36,10 +36,6 @@ static float gMaskCPU[4] = { 0, 0, 0, 0 }, gLampCPU[4] = { 0, 0, 0, 0 };
 void setLightExtrasCPU(const float mask[4], const float lamp[4]) {
     for (int i = 0; i < 4; i++) { gMaskCPU[i] = mask[i]; gLampCPU[i] = lamp[i]; }
 }
-static float lhashCPU(float gx, float gz) {
-    float v = sinf(gx * 127.1f + gz * 311.7f) * 43758.5453f;
-    return v - floorf(v);
-}
 static StoreyLightCPU gStoreyCPU;
 void setStoreyLightCPU(const StoreyLightCPU &s) { gStoreyCPU = s; }
 // One byte of the occupancy snapshot: `ch` 0 = your storey, 1 = below, 2 = above.
@@ -51,14 +47,6 @@ static int occCPU(int ci, int ck, int ch) {
     return s.occ[(z * s.occN + x) * 4 + ch];
 }
 static int chanOf(int rel) { return rel == 0 ? 0 : rel == -1 ? 1 : rel == 1 ? 2 : -1; }
-// Each storey's tubes fail in their own places: the panel hash is offset per
-// storey. Bounded (a golden-ratio fraction of 97 cells) rather than growing
-// with the storey number, because the shader's sin() loses the hash at large
-// arguments. Storey 0 is offset 0, so its tubes are the ones it always had.
-float storeyHashOffset(int s) {
-    float t = (float)s * 0.6180339f;
-    return (t - floorf(t)) * 97.0f;
-}
 float lightAtCPU(float x, float y, float z, float blackout,
                         float ls, float ly, float dead, float mul, float ambLum,
                         float entX, float entZ, float entDark, float vary) {
@@ -84,7 +72,7 @@ float lightAtCPU(float x, float y, float z, float blackout,
             if (po & 8) continue;                        // no fitting: it would hang in an opening
             if (layer == 1 && !(po & 32)) continue;      // above you, but over floor, not the hole
         }
-        float h = lhashCPU(gx + so, gz + so * 1.7f);
+        float h = tubeHash(gx + so, gz + so * 1.7f);
         if (h < dead) continue;
         float out = 1.0f - vary * (h * 53.7f - floorf(h * 53.7f));   // same spread as lightState()
         if (lx >= gMaskCPU[0] && lx <= gMaskCPU[2] && lz >= gMaskCPU[1] && lz <= gMaskCPU[3]) continue;
@@ -142,7 +130,7 @@ float lightAtCPU(float x, float y, float z, float blackout,
 static float vnoiseCPU(float x, float z) {
     float ix = floorf(x), iz = floorf(z), fx = x - ix, fz = z - iz;
     fx = fx * fx * (3 - 2 * fx); fz = fz * fz * (3 - 2 * fz);
-    float a = lhashCPU(ix, iz), b = lhashCPU(ix + 1, iz), c = lhashCPU(ix, iz + 1), d = lhashCPU(ix + 1, iz + 1);
+    float a = tubeHash(ix, iz), b = tubeHash(ix + 1, iz), c = tubeHash(ix, iz + 1), d = tubeHash(ix + 1, iz + 1);
     return (a + (b - a) * fx) + ((c + (d - c) * fx) - (a + (b - a) * fx)) * fz;
 }
 float carpetWetCPU(float x, float z, float from) {

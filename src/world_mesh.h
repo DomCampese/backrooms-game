@@ -1,28 +1,11 @@
 #pragma once
-// The chunk mesher: turns core's floorplan into raylib meshes, and keeps them
-// for as long as core keeps the chunk they were baked from.
+// The chunk mesher: turns core's floorplan and layout (core/layout.h) into
+// raylib meshes, and keeps them for as long as core keeps the chunk they were
+// baked from. Core decides what stands where; this file decides how it looks.
 #include "raylib.h"
 #include "core/world.h"
 #include <cstdint>
 #include <unordered_map>
-
-// How often the fittings turn up: one in N solid wall edges (both
-// orientations) unless marked otherwise. Outlets are common on purpose, a thing
-// of known size to judge a corridor by.
-constexpr uint32_t OUTLET_RATE   = 5;
-constexpr uint32_t OUTLET_BROKEN = 4;    // one outlet in this many has lost its cover
-constexpr uint32_t SWITCH_RATE   = 23;
-constexpr uint32_t GRILLE_RATE   = 27;
-constexpr uint32_t EXITSIGN_RATE = 97;
-constexpr uint32_t SPRINK_RATE   = 11;   // per ceiling cell
-constexpr uint32_t DIFFUSER_RATE = 13;   // per ceiling cell
-constexpr uint32_t CONDUIT_RUN   = 6;    // cells per conduit run, so runs are runs
-
-// Wall scrawl: one in SCRAWL_RATE solid wall edges carries a phrase.
-// SCRAWL_PHRASES must match makeScrawlTex's atlas (4 columns x 8 rows), or
-// walls show half of one phrase and half of another.
-constexpr uint32_t SCRAWL_RATE = 40;
-constexpr uint32_t SCRAWL_PHRASES = 32;
 
 // Slots in ChunkMeshes::meshes. Each is baked separately because each needs a
 // different material or a different draw order (see Game::renderScene).

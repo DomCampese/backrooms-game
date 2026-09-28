@@ -14,8 +14,9 @@ will bite:
 - **`src/core/` includes only itself and the standard library.** It holds the
   math types (`Vec2`, `Vec3`, `TAU`, `clampf`), hashes and noise (`hash.h`),
   the per-level rules (`level_rules.h`: wall height, light pitch, storey
-  pitch, name, `EXIT_NEXT`) and the world (`world.{h,cpp}`: generation,
-  storeys, collision, sight, pathfinding, the occupancy grid).
+  pitch, name, which tubes work, `EXIT_NEXT`), the world (`world.{h,cpp}`:
+  generation, storeys, collision, sight, pathfinding, the occupancy grid) and
+  the chunk layout (`layout.{h,cpp}`, below).
   `tools/core-check.sh` compiles each file alone with `-fno-exceptions
   -fno-rtti` and fails on any include outside the layer, raylib or GL. Run it
   after touching core. Platform code converts with `toRl`/`fromRl`
@@ -82,6 +83,34 @@ contracts. What will bite:
   `sin(GetTime() * 0.22)`, so the frame depends on how long 60 frames took: the
   baseline binary differed from itself by 26% of pixels under load. The world
   frames are pinned and must match to the pixel.
+
+# Chunk layout (September 2026)
+
+`chunkLayout(world, cx, cz)` (src/core/layout.h) decides what a chunk holds
+besides its floorplan: props, wall and ceiling fixtures, light fittings and
+the openings in its walls, in metres. `bakeChunk` builds each item and decides
+nothing about where it goes. Walls, floors, ceilings, stairs and pools are
+still the mesher's. What will bite:
+
+- **A new decoration is decided in core and built in the mesher.** Add a
+  `FixtureKind`, push it in `cellFixtures` (or the chunk-wide list), and build
+  it in `addFixture`. A hash in world_mesh.cpp that decides whether something
+  exists is the pattern this replaced; an Unreal port would have to copy it.
+- **Emission order is part of the output.** Fixtures are pushed in cell order
+  and, inside a cell, in the order the mesher used to decide them. The mesher
+  builds them at three points in its cell walk (`FixtureStage`: with the walls,
+  on the pillar, in the service pass after the flights) and then the chunk's
+  own. Moving a kind to another stage reorders quads in a shared builder,
+  which changes blending of translucent geometry and depth ties.
+- **Which tubes work is a rule now.** `dead`, `vary` and `faulty` moved from
+  `LevelCfg` to `LevelRules`; `tubeHash` and `storeyHashOffset` live in core,
+  and `lightAtCPU` calls them. The layout's `LightFitting::dead/output/faulty`
+  come from the same hash. The shader keeps its own GLSL copy.
+- **Conduit buckets the cell with unsigned division** (`gi / CONDUIT_RUN` on a
+  `uint32_t`), so a negative cell's run is not `fdiv`'s. Make it signed and
+  every conduit run west or north of the origin moves.
+- `./mapdump --layout CX CZ` prints a chunk's layout (use `--level`,
+  `--visit`, `--storey` as for the plan).
 
 # Vending machine (September 2026)
 
@@ -313,8 +342,8 @@ byte-identical. How it fits together, and what will bite:
   (`floor((y + 0.3) / H)`), lights OPENUP cells with a second pass over the
   storey above's fittings — the ones that exist up there and are missing here,
   since a hole above is an opening below — and hashes each storey's tubes with
-  its own offset (`storeyOffset` ⇔ `storeyHashOffset` in levels.cpp: change
-  both). `lightAtCPU` mirrors the lighting through `StoreyLightCPU`, looking
+  its own offset (`storeyOffset` ⇔ `storeyHashOffset` in core/layout.cpp:
+  change both). `lightAtCPU` mirrors the lighting through `StoreyLightCPU`, looking
   bit 3 up per fitting, which is fine on the CPU.
 - **Where the frame goes, and why it is shaped like this.** Looking bit 3 up per
   fitting in the shader cost 13% of the frame everywhere, so bit 6 gates it and
@@ -408,8 +437,9 @@ entries, and the 2002 photograph (CREDITS.md). What changed, and what will bite:
   only cover, so do not thin them further without looking at `hide spot` in mapdump.
 - **Light grid.** L0 `ls` is 4 m (was 8). The panel mesher reads `LEVEL_RULES[].ls`
   now; it used to hardcode `level == 1 ? 12 : 8` and would have drawn fittings
-  where no light came from. `vary`/`faulty` (LevelCfg) make tubes uneven and
-  stutter; lightState() and lightAtCPU both apply `vary`, change both. L0 trays
+  where no light came from. `vary`/`faulty` (LevelRules) make tubes uneven and
+  stutter; lightState(), lightAtCPU and chunkLayout all apply them, change all
+  three. L0 trays
   are flush lay-in troffers; the light plane stays at `wallH - 0.12`.
 - **Wet carpet** is world-space in the shader (`uWet`), not in the carpet tile:
   a puddle baked into a 2 m texture repeats every 2 m. `carpetWetCPU` mirrors it
@@ -579,7 +609,8 @@ time so the executable remains independent of its working directory.
 | `game_audio.{h,cpp}` | every `Sound`/`Music` handle and the synth; plays the sim's `AudioEvent`s in order |
 | `render.cpp` | 3D scene pass, viewmodels, HUD, overlays, drawn from `sim` |
 | `core/world.{h,cpp}` | infinite maze: chunk generation, storeys, collision, line of sight, pathfinding, occupancy grid. `WallKind` / `PropKind` name the codes stored per cell. No raylib |
-| `core/level_rules.h` | per-level rules: wall height, light pitch, storey pitch, name, exits |
+| `core/level_rules.h` | per-level rules: wall height, light pitch, storey pitch, name, which tubes work, exits |
+| `core/layout.{h,cpp}` | `ChunkLayout`: a chunk's props, fixtures, light fittings and openings, decided from the seed |
 | `core/hash.{h,cpp}`, `core/vec.h` | hashes, RNG, value noise; `Vec2`/`Vec3`, `TAU`, `clampf` |
 | `world_mesh.{h,cpp}` | the chunk mesher (`bakeChunk`), `ChunkMesh` slots, `ChunkMeshCache` |
 | `mesh_builder.{h,cpp}` | `MB`, `addPropBox`, `addSolidBox`, `PLAIN_UV` |
@@ -1951,7 +1982,7 @@ pass, and both obey the same three rules, learned the hard way:
   it and the boxes sample a transparent cell and disappear.
 - **The scrawl atlas grid lives in two places and they must agree**:
   `makeScrawlTex` (textures.cpp) lays the phrases out 4 across and 8 down, and
-  `SCRAWL_PHRASES` / the `uvOf` lambda in world_mesh.cpp cut the UVs to match. Add a
+  `SCRAWL_PHRASES` (core/layout.h) and `addScrawl` in world_mesh.cpp cut the UVs to match. Add a
   phrase without changing both and walls start showing you half of one line and
   half of another. The pen clips every dab to its own cell for the same reason —
   an atlas cell that bleeds puts a stray stroke from a neighbouring phrase on a

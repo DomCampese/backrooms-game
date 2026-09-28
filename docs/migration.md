@@ -127,7 +127,7 @@ Filled in as each seam lands.
 | `vec.h` | `Vec2`, `Vec3`, `TAU`, `clampf` |
 | `hash.{h,cpp}` | `hash64`, `Rng`, `ih`, `lat`, `vnoise2`, `fbm2` |
 | `fp_strict.h` | no floating-point contraction for the file that includes it first (Floating point, above) |
-| `level_rules.h` | `LevelRules` (wall height, light pitch, storey pitch, name), `LEVEL_RULES`, `EXIT_NEXT` |
+| `level_rules.h` | `LevelRules` (wall height, light pitch, storey pitch, name, which tubes work), `LEVEL_RULES`, `EXIT_NEXT` |
 | `world.{h,cpp}` | `ChunkData`, generation, storeys and vertical features, the wall/prop/floor/ceiling accessors and overlays, collision (`gatherCellAABBs`, `collideCircle`, `groundAt`), `lineOfSight`, `canStep`, `pathStep`, `findOpenSpot`, `buildOccupancy`, the Manila Room, vending placement (`vendFootprint`, `liftHash`) |
 
 The platform side of the seam:
@@ -151,10 +151,8 @@ as long as its chunk data and `setStorey` needs no event.
 Still coupled, and why:
 
 - The mesher reads the world through `World`'s accessors (`bakeChunk(World &,
-  ...)`), and it still decides decoration itself from hashes: which walls carry
-  fittings, scrawl, conduit, lift doors, spalls and pipes, the light-fitting
-  grid, the Red Rooms tint. A second renderer would have to repeat those rules.
-  The planned `ChunkLayout` (core describes what to build) is not done.
+  ...)`). What it used to decide from hashes (fixtures, fittings, props, doors)
+  is now core's `ChunkLayout`: see seam 2 below for what is left.
 - Game rules that read the world live in `src/game.cpp` (seam 2): hide spots,
   coins and crates hash cells there, and `tools/mapdump.cpp` mirrors
   `hideSpotAt` and `coinAt`.
@@ -162,7 +160,9 @@ Still coupled, and why:
   `gatherCellAABBs` (core) and `Game::bottleShelfY`.
 - Lighting constants are mirrored by hand between core, the mesher, the
   shader and `lightAtCPU`: the panel half-size (0.62), the light plane
-  (`wallH - 0.12`), the occupancy bits.
+  (core's `LIGHT_DROP`; render.cpp and the shader uniforms still write
+  `wallH - 0.12`), the occupancy bits, the tube hash (`tubeHash` in core, `lhash`
+  in GLSL).
 - The render loop reads `ChunkData` directly for the stairwell landing lights
   (`nfeat`, `feats`).
 
@@ -177,6 +177,52 @@ that binary give the noise floor):
 | `tools/core-check.sh` | passes; fails as expected on a core header that includes `src/util.h` or any `src/` header |
 | code that only moved or was renamed | identical assembly: `ih`, `lat`, `vnoise2`, `fbm2` in their new file; `world_mesh.cpp`, `mesh_builder.cpp`, `object_meshes.cpp` before and after naming shared constants |
 | comment rewrite | every touched file token-identical with comments removed (`c++ -fpreprocessed -E`) |
+
+### Seam 2: layout (partial, September 2026)
+
+`chunkLayout(world, cx, cz)` (`src/core/layout.{h,cpp}`) describes what a chunk
+of storey `qs` holds besides its floorplan, in world metres in that storey's
+frame. `bakeChunk` builds each item and decides nothing about where it goes.
+`./mapdump --layout CX CZ` prints it.
+
+| list | holds |
+|---|---|
+| `props` | kind, cell, centre (after `vendFootprint`), floor height, quarter turns and yaw, the against-wall flag, the variation hashes the mesher builds from |
+| `fixtures` | outlets (whole and broken), switches, grilles, exit signs, diffusers, sprinklers, conduit runs, scrawl (phrase, size, tilt, tint), lift doors, spalls on walls and columns, pipe runs, valve standpipes; per chunk, the Manila Room and Level 4's streamers |
+| `fittings` | every light fitting on the level's grid in the chunk: position, the ceiling it hangs from, why one is not there (under an opening, in the Manila Room), Level 1's turn, and the static tube state (dead, output, faulty) from the same hash as the shader and `lightAtCPU` |
+| `openings` | doorways (with joined neighbours), locked doors, exits and cursed exits (with their glyph and room for an open leaf), windows, rails (cap heights, which side is a void): the opening, wall base and top, header, sill |
+
+The per-level choice of decorations is one table (`DECOR` in layout.cpp).
+Flicker, blackouts and the hunter's dead-light pool vary with time and stay in
+the renderer. Which tubes work (`dead`, `vary`, `faulty`) moved to
+`LevelRules`, and `tubeHash`/`storeyHashOffset` to core.
+
+Still decided in the mesher, and why:
+
+| what | why it stays |
+|---|---|
+| walls, floors, ceilings and soffits, stairs, pools, the Poolrooms' arches, baked AO, skirting | the follow-up seam: geometry of the floorplan itself |
+| Level 1's dock safety edging | follows floor drops, which is floor geometry |
+| the Red Rooms tint | a colour field round cursed exits in the 3 x 3 chunks, read from core's `cursedExit`; it is how the walls look, not something standing there |
+| the Manila Room's floorboards, paper, notes and chandelier | built from one `Rng` seeded by the layout's seed; the notes share the stream with the boards, so moving them means moving the boards |
+| each prop's shape and variation (stacked cartons, the dead vending machine, cup count) | derived from the layout's hashes; how a prop looks |
+| fitting style per level (troffer, batten, tray), exit glow colours, which exits get a glyph (Level 1), Level 2's emissive window panes | looks |
+| the stairwell landing lamp's body | stairs |
+
+Proofs, against the tree before this seam (a2755e9):
+
+| proof | result |
+|---|---|
+| mapdump set (this file) | byte-identical to the baseline, all 11 runs |
+| mesh bake | 1900 chunk bakes, old mesher against new, every slot's vertex, uv, normal, colour and index arrays byte-identical (43.5 M vertices a side). 100 chunks (cx, cz in -5..4) for each of: every level at visits 0 and 1, Level 0 storeys -1 and +1, exits everywhere on every level, the pinned Manila Room. Every fixture, opening and fitting-gap kind occurs. Moving the decal standoff by 0.1 mm fails it in 3037 slots |
+| `tools/proof-shots.sh` | all 11 world frames 0 pixels differing (>16) against the baseline; menu.png 18% (its camera runs on the wall clock). Below the threshold the frames wobble with frame rate: the baseline binary recaptured differs from its own earlier lv1 by 624k pixels (max 13 levels), and from the new binary captured beside it by 95k (max 4) |
+| regression harness | exit 0, 59 captures |
+| `tools/core-check.sh` | passes, layout.h and layout.cpp included |
+
+The mesh bake proof compiles the saved old `world_mesh.cpp` with
+`-DbakeChunk=bakeChunkOld -DChunkMeshCache=ChunkMeshCacheOld` beside the
+current one, opens a hidden raylib window (meshes upload to GL), bakes each
+chunk with both and `memcmp`s the arrays. It lived in scratch space.
 
 ### Seam 3: simulation and presentation
 
