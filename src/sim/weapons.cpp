@@ -60,8 +60,8 @@ void Sim::updateWeapons(const InputFrame &in, float dt, double now) {
 
 // Along the sight ray, so the front blade is the aim point.
 void Sim::fireBullet() {
-    Vector3 origin{px, eyeY, pz};
-    bullets.push_back({origin, origin, Vector3Normalize(fwd), 60.0f, 0.0f});
+    Vec3 origin{px, eyeY, pz};
+    bullets.push_back({origin, origin, normalize(fwd), 60.0f, 0.0f});
 }
 
 // Rounds travel at 220 m/s and test the whole segment each tick. Level
@@ -74,14 +74,14 @@ void Sim::updateBullets(float dt) {
     for (auto &bullet : bullets) {
         if (bullet.remaining <= 0) { bullet.fade -= dt; continue; }
         float travel = fminf(220.0f * dt, bullet.remaining);
-        Ray ray{bullet.pos, bullet.direction};
+        Ray3 ray{bullet.pos, bullet.direction};
         float nearest = travel;
         bool hit = false;
         int target = -1;             // -1 level geometry, 0..MAXDOGS-1 a dog, MAXDOGS the hunter, -2 a balloon
-        Vector3 normal = Vector3Negate(bullet.direction);
+        Vec3 normal = negate(bullet.direction);
         if (tracer && tracer->nearestSolid(ray, nearest, normal)) hit = true;
         auto body = [&](float x, float z, float y, float h, float radius, int id) {
-            RayCollision c = rayBox(ray, {{x - radius, y, z - radius}, {x + radius, y + h, z + radius}});
+            RayHit c = rayBox(ray, {{x - radius, y, z - radius}, {x + radius, y + h, z + radius}});
             if (c.hit && c.distance >= 0 && c.distance <= nearest) {
                 nearest = c.distance; normal = c.normal; target = id; hit = true;
             }
@@ -95,17 +95,17 @@ void Sim::updateBullets(float dt) {
             body(ent.x, ent.z, ent.dispY, 1.95f, 0.55f, MAXDOGS);
         // Balloons up to the nearest solid hit, in steps shorter than their radius.
         if (level == 4) for (float d = 0; d < nearest; d += 0.1f) {
-            if (popBalloonAt(Vector3Add(ray.position, Vector3Scale(ray.direction, d)))) {
+            if (popBalloonAt(add(ray.position, scale(ray.direction, d)))) {
                 nearest = d; hit = true; target = -2; break;
             }
         }
         bullet.tail = bullet.pos;
-        bullet.pos = Vector3Add(ray.position, Vector3Scale(ray.direction, nearest));
+        bullet.pos = add(ray.position, scale(ray.direction, nearest));
         bullet.remaining -= nearest;
         bullet.fade = 0.055f;
         if (!hit) continue;
         bullet.remaining = 0;
-        bulletImpacts.push_back({Vector3Add(bullet.pos, Vector3Scale(normal, 0.012f)), normal, 0.24f, target >= 0});
+        bulletImpacts.push_back({add(bullet.pos, scale(normal, 0.012f)), normal, 0.24f, target >= 0});
         if (target >= 0 && target < MAXDOGS) bulletHitsDog(target);
         else if (target == MAXDOGS) bulletHitsHunter();
     }
@@ -249,7 +249,7 @@ bool Sim::flyFlare(FlareProj &flare, float dt) {
 }
 
 // LEVEL FUN's ceiling balloon in this cell, if one floats here unpopped.
-bool Sim::balloonAt(int a, int b, Vector3 &out) {
+bool Sim::balloonAt(int a, int b, Vec3 &out) {
     if (level != 4) return false;
     if (poppedBalloons.count(cellKey2(a, b))) return false;
     uint32_t h = ih(a, b, pickupSalt() ^ 0xBA11u);
@@ -261,7 +261,7 @@ bool Sim::balloonAt(int a, int b, Vector3 &out) {
 }
 
 // Without the renderer's sway, which is small next to the hit radius.
-int Sim::tableBalloonBunch(int a, int b, Vector3 *pos, Color *cols, Vector3 &tie) {
+int Sim::tableBalloonBunch(int a, int b, Vec3 *pos, uint8_t *colours, Vec3 &tie) {
     if (level != 4 || world.propAt(a, b) != PROP_PARTY_TABLE) return 0;
     uint32_t h = ih(a, b, pickupSalt() ^ 0x8A11u);
     if (h % 3 != 0) return 0;                       // most tables, not all
@@ -275,37 +275,37 @@ int Sim::tableBalloonBunch(int a, int b, Vector3 *pos, Color *cols, Vector3 &tie
         float oz = (((bh >> 7) & 7) / 7.0f - 0.5f) * 0.42f;
         float by = ty + 1.15f + (((bh >> 11) & 3) * 0.06f);
         pos[k] = { tx + ox, by, tz + oz };
-        if (cols) cols[k] = PARTY[(bh >> 13) % 5];
+        if (colours) colours[k] = (uint8_t)((bh >> 13) % PARTY_COLOURS);
     }
     return nb;
 }
 
-bool Sim::popBalloonAt(Vector3 point) {
+bool Sim::popBalloonAt(Vec3 point) {
     if (level != 4) return false;
-    auto burst = [&](Vector3 at, Color base, int n) {
+    auto burst = [&](Vec3 at, uint8_t base, int n) {
         for (int c2 = 0; c2 < n; c2++) {
             float aa = grng.f01() * TAU, sp = 1.2f + grng.f01() * 2.2f;
             confetti.push_back({ at, { cosf(aa) * sp, 0.6f + grng.f01() * 1.6f, sinf(aa) * sp },
                                  1.3f + grng.f01() * 0.9f,
-                                 grng.f01() < 0.5f ? base : PARTY[c2 % 5] });
+                                 grng.f01() < 0.5f ? base : (uint8_t)(c2 % PARTY_COLOURS) });
         }
     };
     float wx = point.x, wy = point.y, wz = point.z;
     int a = cellOf(wx), b = cellOf(wz);
     for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
         int ca = a + dx, cb = b + dz;
-        Vector3 bp;
+        Vec3 bp;
         if (balloonAt(ca, cb, bp)) {   // a lone ceiling balloon
             float ex = bp.x - wx, ey = bp.y - wy, ez = bp.z - wz;
             if (ex * ex + ey * ey + ez * ez <= 0.24f * 0.24f) {
                 poppedBalloons.insert(cellKey2(ca, cb));
                 play(Sfx::Pop).atPitch(0.9f + grng.f01() * 0.3f).atPan(0);
-                burst(bp, PARTY[(ih(ca, cb, pickupSalt() ^ 0xBA11u) >> 10) % 5], 16);
+                burst(bp, (uint8_t)((ih(ca, cb, pickupSalt() ^ 0xBA11u) >> 10) % PARTY_COLOURS), 16);
                 return true;
             }
         }
         if (!poppedTableBunches.count(cellKey2(ca, cb))) {   // a table bunch: all of it goes
-            Vector3 bpos[4], tie; Color bcol[4];
+            Vec3 bpos[4], tie; uint8_t bcol[4];
             int nb = tableBalloonBunch(ca, cb, bpos, bcol, tie);
             for (int k = 0; k < nb; k++) {
                 float ex = bpos[k].x - wx, ey = bpos[k].y - wy, ez = bpos[k].z - wz;

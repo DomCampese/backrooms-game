@@ -4,6 +4,9 @@
 // plays its audio events and draws its state (docs/migration.md).
 #include "raylib.h"
 #include "sim/sim.h"
+#include "levels.h"
+#include "util.h"
+#include "vec_rl.h"
 #include "game_audio.h"
 #include "world_mesh.h"
 #include "object_meshes.h"
@@ -33,7 +36,7 @@ struct MeshTracer : SolidTracer {
     World &world;
     ChunkMeshCache &meshes;
     MeshTracer(World &w, ChunkMeshCache &m) : world(w), meshes(m) {}
-    bool nearestSolid(const Ray &ray, float &nearest, Vector3 &normal) override;
+    bool nearestSolid(const Ray3 &shot, float &nearest, Vec3 &normal) override;
 };
 
 struct Game {

@@ -541,7 +541,7 @@ int main() {
         p.sim.fireBullet(); p.sim.updateBullets(0.1f);
         CHECK(p.sim.dogs[1].hp==2 && p.sim.dogs[0].hp==3 && p.sim.ent.hp==3);
         p.sim.bullets.clear(); p.sim.bulletImpacts.clear();
-        p.sim.fwd=Vector3Normalize({1,2,0}); p.sim.fireBullet(); p.sim.updateBullets(0.1f);
+        p.sim.fwd=normalize({1,2,0}); p.sim.fireBullet(); p.sim.updateBullets(0.1f);
         CHECK(p.sim.dogs[1].hp==2 && p.sim.dogs[0].hp==3 && p.sim.ent.hp==3);
         p.sim.bullets.clear(); p.sim.fwd={1,0,0}; p.sim.fireBullet(); p.sim.updateBullets(0.001f);
         CHECK_NEAR(p.sim.bullets[0].pos.x,1.22f,0.001f); // finite travel, not hitscan
@@ -853,12 +853,12 @@ int main() {
     // render.cpp now places them through balloonAt, the function bullets test.
     {
         sim.applyLevel(4,GetTime());
-        int ba=0,bb=0; Vector3 bp{}; bool found=false;
+        int ba=0,bb=0; Vec3 bp{}; bool found=false;
         for (int a=0;a<60 && !found;++a) for (int b=0;b<60 && !found;++b)
             if (sim.balloonAt(a,b,bp)) { ba=a; bb=b; found=true; }
         CHECK(found);
         CHECK(sim.popBalloonAt(bp));
-        Vector3 again;
+        Vec3 again;
         CHECK(!sim.balloonAt(ba,bb,again));
         sim.poppedBalloons.clear(); sim.confetti.clear();
         sim.applyLevel(0,GetTime());
@@ -1132,16 +1132,18 @@ int main() {
         Rng r(7);
         int hits=0;
         for (int i=0;i<200000;++i) {
-            Vector3 c{r.f01()*10-5, r.f01()*2, r.f01()*10-5};
+            Vec3 c{r.f01()*10-5, r.f01()*2, r.f01()*10-5};
             float rad=0.2f+r.f01()*0.5f, h=0.5f+r.f01()*1.5f;
-            BoundingBox b{{c.x-rad,c.y,c.z-rad},{c.x+rad,c.y+h,c.z+rad}};
-            Vector3 o = i%7==0 ? Vector3{c.x+(r.f01()*2-1)*rad, c.y+r.f01()*h, c.z+(r.f01()*2-1)*rad}
-                               : Vector3{r.f01()*16-8, r.f01()*4-1, r.f01()*16-8};
-            Vector3 d=Vector3Normalize({r.f01()*2-1, i%11==0 ? 0.0f : r.f01()*2-1, r.f01()*2-1});
-            RayCollision a=rayBox({o,d},b), e=GetRayCollisionBox({o,d},b);
+            Box3 b{{c.x-rad,c.y,c.z-rad},{c.x+rad,c.y+h,c.z+rad}};
+            Vec3 o = i%7==0 ? Vec3{c.x+(r.f01()*2-1)*rad, c.y+r.f01()*h, c.z+(r.f01()*2-1)*rad}
+                            : Vec3{r.f01()*16-8, r.f01()*4-1, r.f01()*16-8};
+            Vec3 d=normalize({r.f01()*2-1, i%11==0 ? 0.0f : r.f01()*2-1, r.f01()*2-1});
+            RayHit a=rayBox({o,d},b);
+            RayCollision e=GetRayCollisionBox(toRl(Ray3{o,d}),toRl(b));
+            Vec3 en=fromRl(e.normal);
             CHECK(a.hit==e.hit);
             CHECK(memcmp(&a.distance,&e.distance,sizeof(float))==0);
-            CHECK(memcmp(&a.normal,&e.normal,sizeof(Vector3))==0);
+            CHECK(memcmp(&a.normal,&en,sizeof(Vec3))==0);
             hits+=e.hit;
         }
         CHECK(hits>1000);

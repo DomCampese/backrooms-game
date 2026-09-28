@@ -28,7 +28,7 @@ struct InputFrame {
     float moveScale = 1.0f;       // a thumbstick's share of full speed; 1 for keys
     bool sprint = false, crouch = false, squeeze = false;
     bool jumpHeld = false, jumpPressed = false;
-    Vector2 look{};               // mouse or touch-drag delta, px
+    Vec2 look{};               // mouse or touch-drag delta, px
 
     float wheel = 0;              // weapon-cycle steps
     bool pickRevolver = false, pickFlare = false, pickDeck = false;

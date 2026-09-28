@@ -19,7 +19,7 @@ void Sim::updateEntity(float dt, double now, bool forceSpawn) {
         return;
     }
     if (forceSpawn && ent.st == EState::Hidden) {
-        Vector2 spot = toRl(world.findOpenSpot(px + fwd.x * 8, pz + fwd.z * 8));
+        Vec2 spot = world.findOpenSpot(px + fwd.x * 8, pz + fwd.z * 8);
         ent.x = spot.x; ent.z = spot.y;
         ent.st = EState::Stalk; ent.gaze = -100; ent.life = 0; ent.unseen = 0; ent.hp = 3; ent.stagger = 0;
     }
@@ -123,7 +123,7 @@ void Sim::updateEntity(float dt, double now, bool forceSpawn) {
 // inside the fog.
 void Sim::spawnHunter() {
     auto unseenSpot = [&](float wx, float wz, float &ox, float &oz) {
-        Vector2 s = toRl(world.findOpenSpot(wx, wz));
+        Vec2 s = world.findOpenSpot(wx, wz);
         float dx = s.x - px, dz = s.y - pz, d = sqrtf(dx * dx + dz * dz);
         if (d < SPAWN_NEAR_MIN || d > SPAWN_NEAR_MAX) return false;
         if (world.lineOfSight(px, pz, s.x, s.y)) return false;
@@ -157,7 +157,7 @@ void Sim::spawnHunter() {
     if (!placed) {
         float a = grng.f01() * TAU;
         float d = SPAWN_FAR_MIN + grng.f01() * SPAWN_FAR_SPAN;
-        Vector2 spot = toRl(world.findOpenSpot(px + cosf(a) * d, pz + sinf(a) * d));
+        Vec2 spot = world.findOpenSpot(px + cosf(a) * d, pz + sinf(a) * d);
         sx = spot.x; sz = spot.y;
     }
     ent.x = sx; ent.z = sz;
@@ -236,7 +236,7 @@ void Sim::updateDogs(float dt, double now) {
         for (auto &d : dogs) {
             if (d.st != DState::Gone) continue;
             float a = grng.f01() * TAU, dist = 17 + grng.f01() * 9;
-            Vector2 spot = toRl(world.findOpenSpot(px + cosf(a) * dist, pz + sinf(a) * dist));
+            Vec2 spot = world.findOpenSpot(px + cosf(a) * dist, pz + sinf(a) * dist);
             d.x = spot.x; d.z = spot.y;
             d.st = DState::Prowl; d.life = 0; d.lost = 0; d.hp = 2;
             d.dispY = world.groundAt(d.x, d.z, py + 1.0f);
@@ -309,7 +309,7 @@ bool Sim::updateDog(int i, float dt, double now, float noise, float nsx, float n
             float rdx = d.roamX - d.x, rdz = d.roamZ - d.z;
             if (now > d.nextRoam || rdx * rdx + rdz * rdz < 1.4f * 1.4f) {
                 float a = grng.f01() * TAU, r = 9 + grng.f01() * 11;
-                Vector2 sp = toRl(world.findOpenSpot(d.x + cosf(a) * r, d.z + sinf(a) * r));
+                Vec2 sp = world.findOpenSpot(d.x + cosf(a) * r, d.z + sinf(a) * r);
                 d.roamX = sp.x; d.roamZ = sp.y;
                 d.nextRoam = now + 9 + grng.f01() * 9;
             }

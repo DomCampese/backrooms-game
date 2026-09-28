@@ -105,7 +105,7 @@ void Sim::beginDescent(double now) {
     world.seed = fixedSeed ? 1337u : clockSeed ^ (unsigned)(now * 977.0);
     grng = Rng(hash64(world.seed ^ 0xABCDEF));
     applyLevel(0, now);
-    Vector2 sp = toRl(world.findOpenSpot(15, 15));
+    Vec2 sp = world.findOpenSpot(15, 15);
     px = sp.x; pz = sp.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
     yaw = 0.8f; pitch = 0.0f;
     coins = 0; almond = 0; tapes = 0; keys = 0; flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; battery = 1.0f;
@@ -136,7 +136,7 @@ void Sim::seedStrangerChalk() {
     Rng r(hash64((uint64_t)world.seed ^ ((uint64_t)level * 0x9E3779B97F4A7C15ULL) ^ 0xC4A15ULL));
     for (int i = 0; i < 2; i++) {
         float a = r.f01() * TAU, d = 18 + r.f01() * 22;
-        Vector2 spot = toRl(world.findOpenSpot(px + cosf(a) * d, pz + sinf(a) * d));
+        Vec2 spot = world.findOpenSpot(px + cosf(a) * d, pz + sinf(a) * d);
         chalk[level].push_back({{ spot.x, world.groundAt(spot.x, spot.y, 0.0f) + 0.016f, spot.y },
                                 r.f01() * TAU, false, world.storey });
     }
@@ -160,7 +160,7 @@ void Sim::applyLevel(int lv, double now) {
     deck.carried = true; deck.flying = false; deck.playing = false; deck.t = 0;
     for (FlareProj &f : litFlares) f.active = f.flying = false;
     stopVoice();
-    const LevelCfg &c = LEVELS[lv];
+    const LevelRules &c = LEVEL_RULES[lv];
     world.unloadAll();
     world.level = lv;
     world.wallH = c.wallH;
@@ -264,13 +264,13 @@ void Sim::updateDevKeys(const DevKeys &dev, double now) {
         nextBlackout = level == 2 ? BLACKOUT_NEVER : blackoutIn(blackoutEnd, 45, 75);
     }
     if (dev.spawnAhead) {
-        Vector2 spot = toRl(world.findOpenSpot(px + f2x * 12, pz + f2z * 12));
+        Vec2 spot = world.findOpenSpot(px + f2x * 12, pz + f2z * 12);
         ent.x = spot.x; ent.z = spot.y;
         ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.hp = 3; ent.stagger = 0;
     }
     if (dev.chase) {
         if (ent.st == EState::Hidden) {
-            Vector2 spot = toRl(world.findOpenSpot(px + f2x * 14, pz + f2z * 14));
+            Vec2 spot = world.findOpenSpot(px + f2x * 14, pz + f2z * 14);
             ent.x = spot.x; ent.z = spot.y;
             ent.hp = 3;
         }
@@ -282,12 +282,12 @@ void Sim::updateDevKeys(const DevKeys &dev, double now) {
     if (dev.refill) { flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; }
     if (world.storeyH > 0.0f && (dev.storeyUp || dev.storeyDown)) {
         changeStorey(dev.storeyUp ? 1 : -1, now);
-        Vector2 spot = toRl(world.findOpenSpot(px, pz));
+        Vec2 spot = world.findOpenSpot(px, pz);
         px = spot.x; pz = spot.y; py = 0; vy = 0; grounded = true; fallFrom = 0;
     }
     if (dev.nextLevel) {
         applyLevel((level + 1) % NLEVELS, now);
-        Vector2 spot = toRl(world.findOpenSpot(px, pz));
+        Vec2 spot = world.findOpenSpot(px, pz);
         px = spot.x; pz = spot.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
         ent.st = EState::Hidden; ent.nextSpawn = now + 30;
     }

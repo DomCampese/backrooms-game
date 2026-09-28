@@ -430,7 +430,7 @@ InputFrame Game::readInput(bool captureClick) {
     in.squeeze = inKeyDown(KEY_C);
     in.jumpHeld = inKeyDown(KEY_SPACE);
     in.jumpPressed = inKeyPressed(KEY_SPACE);
-    in.look = inMouseDelta();
+    in.look = fromRl(inMouseDelta());
     in.wheel = inWheel();
     in.pickRevolver = inKeyPressed(KEY_ONE);
     in.pickFlare = inKeyPressed(KEY_TWO);
@@ -554,7 +554,8 @@ void Game::updateOccupancy() {
 // Triangles, not bounds, so doorways and the gaps under furniture stay open;
 // chunk bounds keep the test local. The storeys above and below are in their
 // own frames, drawn a pitch up or down.
-bool MeshTracer::nearestSolid(const Ray &ray, float &nearest, Vector3 &normal) {
+bool MeshTracer::nearestSolid(const Ray3 &shot, float &nearest, Vec3 &normal) {
+    const Ray ray = toRl(shot);
     const float travel = nearest;
     bool hit = false;
     for (int rel = -1; rel <= 1; rel++) {
@@ -582,7 +583,7 @@ bool MeshTracer::nearestSolid(const Ray &ray, float &nearest, Vector3 &normal) {
                 if (!inside && (!bounds.hit || bounds.distance > travel)) continue;
                 RayCollision c = GetRayCollisionMesh(ray, mesh, rel ? MatrixTranslate(0, oy, 0) : MatrixIdentity());
                 if (c.hit && c.distance >= 0 && c.distance <= nearest) {
-                    nearest = c.distance; normal = c.normal; hit = true;
+                    nearest = c.distance; normal = fromRl(c.normal); hit = true;
                 }
             }
         }

@@ -104,7 +104,7 @@ bool Sim::hideSpotAt(int a, int b) {
 
 // The middle of the cell, except on the Manila Room's table, which is anchored
 // on one cell and built on its far corner.
-Vector2 Sim::pickupSpot(int a, int b) {
+Vec2 Sim::pickupSpot(int a, int b) {
     if (world.propAt(a, b) == PROP_MANILA_TABLE) return { a * CELL + 1.78f, b * CELL + 1.84f };
     return { a * CELL + 1.0f, b * CELL + 1.0f };
 }
@@ -207,7 +207,7 @@ void Sim::collectPickups() {
         if (taken.count(ky)) continue;
         Pickup kind = pickupAt(a, b);
         if (kind == Pickup::None) continue;
-        Vector2 spot = pickupSpot(a, b);
+        Vec2 spot = pickupSpot(a, b);
         float ddx = px - spot.x, ddz = pz - spot.y;
         // A carton on furniture is reached across it, since collision keeps
         // you off the piece; never through a wall (lineOfSight ignores props).

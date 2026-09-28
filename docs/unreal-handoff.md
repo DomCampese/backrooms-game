@@ -43,10 +43,14 @@ does not move: the game runs smoothly on the owner's Mac.
 - One plugin, `Backrooms`, with a Runtime module `BackroomsCore` containing
   `src/core` verbatim. Build.cs: C++17 or later, `bEnableExceptions = false`,
   `bUseRTTI = false` (core already builds this way under tools/core-check.sh).
+- A second Runtime module, `BackroomsSim`, containing `src/sim` and depending
+  on `BackroomsCore`. The same settings as core.
 - Floating point: core's generation compares noise against thresholds, and a
   compiler that fuses multiply-adds can flip a comparison and build a different
   maze. Core carries this in source (docs/migration.md, "Contract tests"); do
-  not remove those pragmas, and do not enable fast-math for the module.
+  not remove those pragmas, and do not enable fast math for either module. The
+  sim's vector functions (`src/sim/sim_math.h`) reproduce raymath bit for bit
+  only without contraction.
 - Unity builds merge .cpp files. Core has file-static helpers; if two collide,
   exclude the module from unity builds rather than renaming things.
 - `World` is not thread-safe: `data()` generates on read and `StoreyScope`
@@ -69,7 +73,7 @@ full; this is the list to wire up.
 | `Sim::step(InputFrame, dt, now)` | sim | one tick of play; `dt` clamped to 0.05 s, `now` a monotonic clock in seconds |
 | `Sim::menuDrift`, `menuBegin`, `setPaused` | sim | the title screen and pause |
 | `Sim::events` (`AudioEvent`) | sim | sounds to play this tick, in order |
-| `SolidTracer` | platform, supplied by the port | the one query the sim asks the renderer: first solid triangle along a ray (bullets). In Unreal, a line trace against the chunk meshes |
+| `SolidTracer` | platform, supplied by the port | the one query the sim asks the renderer: the first solid triangle along a `Ray3`, returning distance and a `Vec3` normal (bullets). In Unreal, a line trace against the chunk meshes |
 
 What the port supplies to the sim each tick:
 
@@ -83,7 +87,8 @@ What the port reads from the sim to draw: the player (`px, py, pz, eyeY, yaw,
 pitch, fwd, fov`, lean and roll), `ent`, `dogs`, `litFlares`, `deck`,
 `bullets`, `bulletImpacts`, `coinsWorld`, `confetti`, `chalk`, the pickup and
 balloon functions, and the HUD state (`deckNote`, `sanityLine`, `tapeLine`,
-`deathBy`, `deathTitle`).
+`deathBy`, `deathTitle`). Balloon and confetti colours are indices into a
+palette of `PARTY_COLOURS` entries; the port owns the colours.
 
 ## Mapping
 
