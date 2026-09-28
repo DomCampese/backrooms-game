@@ -31,8 +31,8 @@ does not move: the game runs smoothly on the owner's Mac.
 |---|---|---|
 | `src/core/` | as source | an Unreal plugin module, unchanged |
 | `tests/golden`, `tools/contract.cpp` | as the acceptance test | run the same checks from an Unreal automation test |
-| `src/sim/` | as source, after its math is on core types | a second module that depends on core |
-| layout (`ChunkLayout`) | as data | drives instanced meshes, lights and doors |
+| `src/sim/` | as source | a second module, `BackroomsSim`, that depends on core |
+| layout (`chunkLayout`, src/core/layout.h) | as data | drives instanced meshes, light fittings and doors; the per-level choice of decorations is the `DECOR` table in layout.cpp |
 | mesher (`src/world_mesh.cpp`) | as reference only | its vertex arrays can feed a greybox (M2); art replaces it |
 | shader, occupancy texture, `lightAtCPU`, texture painters | no | Unreal's lighting and materials replace them |
 | raylib audio, input, window | no | MetaSounds / Sound Cues, Enhanced Input, the engine |
@@ -52,6 +52,38 @@ does not move: the game runs smoothly on the owner's Mac.
 - `World` is not thread-safe: `data()` generates on read and `StoreyScope`
   changes `World::qs`. Generate on one thread, or give a worker thread its own
   `World` with the same seed, level and visit.
+
+## Entry points
+
+The whole surface an Unreal port calls. docs/migration.md has the contracts in
+full; this is the list to wire up.
+
+| call | layer | what it gives |
+|---|---|---|
+| `World::seed`, `level`, `visit`, `wallH`, `storeyH` from `LEVEL_RULES` | core | set before the first `data()` |
+| `World::data(cx, cz)` | core | a generated chunk (`ChunkData`), made on first read |
+| `chunkLayout(world, cx, cz)` | core | props, fixtures, light fittings and openings of a chunk on storey `qs`, in metres |
+| `wallNVal`, `wallWVal`, `floorY`, `ceilY`, `vflagAt`, `stairY` | core | the floorplan, overlays included |
+| `collideCircle`, `groundAt`, `lineOfSight`, `canStep`, `pathStep`, `findOpenSpot` | core | physics and AI queries, storey-local |
+| `World::staleChunks` | core | chunks whose geometry must be rebuilt; drain every tick |
+| `Sim::step(InputFrame, dt, now)` | sim | one tick of play; `dt` clamped to 0.05 s, `now` a monotonic clock in seconds |
+| `Sim::menuDrift`, `menuBegin`, `setPaused` | sim | the title screen and pause |
+| `Sim::events` (`AudioEvent`) | sim | sounds to play this tick, in order |
+| `SolidTracer` | platform, supplied by the port | the one query the sim asks the renderer: first solid triangle along a ray (bullets). In Unreal, a line trace against the chunk meshes |
+
+What the port supplies to the sim each tick:
+
+| input | from |
+|---|---|
+| `InputFrame` (movement, look delta in px, held and pressed buttons, `playing`) | Enhanced Input actions; `look` scaled so a pixel means what a raylib mouse pixel meant (0.0030 rad) until retuned |
+| `dt`, `now` | the engine's delta and a game-time clock. Blackouts, spawns and whispers are scheduled on `now` |
+| `AudioEvent` playback | a sound component: per-clip pitch, volume and pan persist between plays and the rules rely on it (docs/migration.md, seam 3) |
+
+What the port reads from the sim to draw: the player (`px, py, pz, eyeY, yaw,
+pitch, fwd, fov`, lean and roll), `ent`, `dogs`, `litFlares`, `deck`,
+`bullets`, `bulletImpacts`, `coinsWorld`, `confetti`, `chalk`, the pickup and
+balloon functions, and the HUD state (`deckNote`, `sanityLine`, `tapeLine`,
+`deathBy`, `deathTitle`).
 
 ## Mapping
 
