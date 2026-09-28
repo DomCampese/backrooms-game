@@ -6,6 +6,8 @@
 #include <cmath>
 #include <algorithm>
 
+static_assert(sizeof(PARTY) / sizeof(PARTY[0]) == PARTY_COLOURS, "the sim draws balloon colours from PARTY_COLOURS");
+
 // How hard one flare is burning right now: a fast flare-up as the cap comes
 // off, a fade over the last second and a half, and the flicker on top. Both
 // the point light and the halo spheres read it, so a flare that is nearly out
@@ -95,7 +97,7 @@ void Game::renderScene(double now) {
     int pci = cellOf(sim.px), pck = cellOf(sim.pz);
     Camera3D cam = {};
     cam.position = { sim.px, sim.eyeY, sim.pz };
-    cam.target = Vector3Add(cam.position, sim.fwd);
+    cam.target = Vector3Add(cam.position, toRl(sim.fwd));
     // roll the up-vector a touch when strafing, so the camera leans into it
     float roll = sim.leanCur * -0.035f + sim.squeezeBlend * 0.07f + sim.floatRoll;
     cam.up = { sim.r2x * sinf(roll), cosf(roll), sim.r2z * sinf(roll) };
@@ -199,8 +201,8 @@ void Game::renderScene(double now) {
     struct VisibleChunk { const ChunkMeshes *data; float distance2; float yOff; };
     VisibleChunk visible[25 + 2 * STOREY_REACH * 25];
     int visibleCount = 0;
-    Vector3 cameraRight = Vector3Normalize(Vector3CrossProduct(sim.fwd, cam.up));
-    Vector3 cameraUp = Vector3Normalize(Vector3CrossProduct(cameraRight, sim.fwd));
+    Vector3 cameraRight = Vector3Normalize(Vector3CrossProduct(toRl(sim.fwd), cam.up));
+    Vector3 cameraUp = Vector3Normalize(Vector3CrossProduct(cameraRight, toRl(sim.fwd)));
     float tanV = tanf(cam.fovy * DEG2RAD * 0.5f);
     float tanH = tanV * rt.texture.width / rt.texture.height;
     // Bounds include the deepest atrium, ceiling and slight wall overlap — and,
@@ -211,7 +213,7 @@ void Game::renderScene(double now) {
     // A sphere against the view frustum, conservatively.
     auto sphereVisible = [&](Vector3 c, float r) {
         Vector3 delta{c.x - sim.px, c.y - sim.eyeY, c.z - sim.pz};
-        float depth = Vector3DotProduct(delta, sim.fwd);
+        float depth = Vector3DotProduct(delta, toRl(sim.fwd));
         return !(depth < -r ||
                  fabsf(Vector3DotProduct(delta, cameraRight)) > depth*tanH + r*sqrtf(1+tanH*tanH) ||
                  fabsf(Vector3DotProduct(delta, cameraUp)) > depth*tanV + r*sqrtf(1+tanV*tanV));
@@ -392,7 +394,7 @@ void Game::renderScene(double now) {
         if (sim.taken.count(sim.cellKey(a, b))) continue;
         Pickup kind = sim.pickupAt(a, b);            // the same call the pickup test makes
         if (kind == Pickup::None) continue;
-        Vector2 spot = sim.pickupSpot(a, b);
+        Vec2 spot = sim.pickupSpot(a, b);
         float bxx = spot.x, bzz = spot.y;
         float gy = sim.world.floorY(a, b);
         float pl = propLum(bxx, gy + 0.15f, bzz);
@@ -457,27 +459,27 @@ void Game::renderScene(double now) {
             // against. A copy of its hash here kept the old world.seed salt after
             // levels began reseeding per visit, so the balloons you could see were
             // never the ones a round could hit.
-            Vector3 bp;
+            Vec3 bp;
             if (!sim.balloonAt(a, b, bp)) continue;   // none here, or already shot
             uint32_t h = ih(a, b, sim.pickupSalt() ^ 0xBA11u);
             float bxx = bp.x, bzz = bp.z;
             float bob = sinf((float)now * 0.8f + a * 1.3f + b * 2.1f) * 0.05f;
             float by = bp.y + bob;
             float pl = propLum(bxx, by, bzz) * 0.85f;
-            DrawSphere({ bxx, by, bzz }, 0.17f, lit(PARTY[(h >> 10) % 5], pl));
+            DrawSphere({ bxx, by, bzz }, 0.17f, lit(PARTY[(h >> 10) % PARTY_COLOURS], pl));
             DrawCylinderEx({ bxx, by - 0.15f, bzz }, { bxx + 0.04f, by - 0.95f, bzz + 0.02f },
                            0.005f, 0.005f, 4, lit({ 190, 185, 175, 150 }, pl));
         }
         for (int dx = -6; dx <= 6; dx++) for (int dz = -6; dz <= 6; dz++) {   // balloon bunches tied to party tables
             int a = pci + dx, b = pck + dz;
             if (sim.poppedTableBunches.count(Sim::cellKey2(a, b))) continue;   // this bunch has been shot
-            Vector3 bpos[4], tie; Color bcol[4];
+            Vec3 bpos[4], tie; uint8_t bcol[4];
             int nb = sim.tableBalloonBunch(a, b, bpos, bcol, tie);        // same positions the aim uses
             for (int k = 0; k < nb; k++) {
                 float sway = sinf((float)now * 0.9f + a * 1.7f + k * 2.3f) * 0.04f;
                 float bxx = bpos[k].x + sway, by = bpos[k].y, bzz = bpos[k].z;
                 float pl = propLum(bxx, by, bzz) * 0.9f;
-                DrawSphere({ bxx, by, bzz }, 0.15f, lit(bcol[k], pl));
+                DrawSphere({ bxx, by, bzz }, 0.15f, lit(PARTY[bcol[k]], pl));
                 DrawCylinderEx({ bxx, by - 0.13f, bzz }, { tie.x + 0.02f, tie.y + 0.02f, tie.z },
                                0.004f, 0.004f, 4, lit({ 200, 195, 185, 150 }, pl));
             }
@@ -485,8 +487,9 @@ void Game::renderScene(double now) {
         for (auto &c : sim.confetti) {   // bursts still tumbling to the carpet
             float pl = propLum(c.pos.x, c.pos.y, c.pos.z);
             float fade = clampf(c.life * 1.6f, 0, 1);
-            Color cc = lit({ c.col.r, c.col.g, c.col.b, (unsigned char)(255 * fade) }, pl);
-            DrawCube(c.pos, 0.05f, 0.05f, 0.05f, cc);
+            Color base = PARTY[c.colour];
+            Color cc = lit({ base.r, base.g, base.b, (unsigned char)(255 * fade) }, pl);
+            DrawCube(toRl(c.pos), 0.05f, 0.05f, 0.05f, cc);
         }
     }
     for (const auto &m0 : sim.chalk[sim.level]) {
@@ -496,7 +499,7 @@ void Game::renderScene(double now) {
         if (ds < -1 || ds > 1) continue;
         ChalkMark mark = m0;
         mark.pos.y += ds * sim.world.storeyH;
-        const Vector3 &cm = mark.pos;
+        const Vector3 cm = toRl(mark.pos);
         if (fabsf(cm.x-sim.px) > 30 || fabsf(cm.z-sim.pz) > 30) continue;
         // The stranger's chalk has been down longer than yours: duller, yellower,
         // further gone. Same arrow, so it reads as a mark first and as somebody
@@ -655,10 +658,11 @@ void Game::renderScene(double now) {
         }
     }
     for (const Sim::Bullet &b : sim.bullets) {
-        Vector3 tail = Vector3Subtract(b.pos, Vector3Scale(b.direction,
-            fminf(1.2f, Vector3Distance(b.pos,b.tail))));
-        DrawCylinderEx(tail,b.pos,0.006f,0.009f,5,{255,211,126,220});
-        DrawSphere(b.pos,0.012f,{255,237,187,255});
+        Vector3 pos = toRl(b.pos);
+        Vector3 tail = Vector3Subtract(pos, Vector3Scale(toRl(b.direction),
+            fminf(1.2f, Vector3Distance(pos,toRl(b.tail)))));
+        DrawCylinderEx(tail,pos,0.006f,0.009f,5,{255,211,126,220});
+        DrawSphere(pos,0.012f,{255,237,187,255});
     }
     if (sim.level == 1) {
         // Level 1's "low-hanging fog with no discernable source". The level's
@@ -697,10 +701,11 @@ void Game::renderScene(double now) {
         float age=0.24f-impact.life;
         Color color=impact.body ? Color{125,32,24,190} : Color{211,188,144,190};
         color.a=cl8(190*impact.life/0.24f);
-        DrawBillboard(cam,texParticle,impact.pos,0.06f+age*0.7f,color);
+        Vector3 pos = toRl(impact.pos), normal = toRl(impact.normal);
+        DrawBillboard(cam,texParticle,pos,0.06f+age*0.7f,color);
         for (int i=0;i<5;++i) {
             Vector3 spread{cosf(i*2.4f)*0.7f, sinf(i*3.7f)*0.7f, sinf(i*2.4f)*0.7f};
-            Vector3 p=Vector3Add(impact.pos,Vector3Scale(Vector3Add(impact.normal,spread),age*1.4f));
+            Vector3 p=Vector3Add(pos,Vector3Scale(Vector3Add(normal,spread),age*1.4f));
             p.y-=age*age*2;
             DrawSphere(p,0.009f,color);
         }
@@ -734,7 +739,7 @@ void Game::renderScene(double now) {
 // post-processing all affect it just as they affect the can and the deck.
 void Game::drawHeldWeapon(const Camera3D &cam) {
     Vector3 right{sim.r2x, 0, sim.r2z};
-    Vector3 up = Vector3Normalize(Vector3CrossProduct(right, sim.fwd));
+    Vector3 up = Vector3Normalize(Vector3CrossProduct(right, toRl(sim.fwd)));
     float dip = sim.weapon == WEAPON_REVOLVER && sim.reloadT > 0
         ? sinf(clampf(1 - sim.reloadT / RELOAD_TIME, 0, 1) * PI) : 0;
     float kick = sim.weapon == WEAPON_REVOLVER ? sim.recoil : 0;
@@ -743,12 +748,12 @@ void Game::drawHeldWeapon(const Camera3D &cam) {
     // the camera ray, with the eye just clearing the rear frame rib. Aligning
     // the rib top exactly with the blade hides the blade behind this model's solid rear face.
     float tilt = sim.weapon == WEAPON_REVOLVER ? 0.06f - 0.063f * aim + kick * 0.30f - dip * 0.65f : 0.85f;
-    Vector3 forward = Vector3Normalize(Vector3Add(sim.fwd,
+    Vector3 forward = Vector3Normalize(Vector3Add(toRl(sim.fwd),
         Vector3Add(Vector3Scale(right, -0.20f * (1 - aim)), Vector3Scale(up, tilt))));
     Vector3 axisUp = Vector3Normalize(Vector3CrossProduct(right, forward));
     Vector3 axisRight = Vector3Normalize(Vector3CrossProduct(forward, axisUp));
     float sway = sinf(sim.bobPhase * PI) * 0.003f * sim.bobAmt * (1 - aim);
-    Vector3 pos = Vector3Add(cam.position, Vector3Add(Vector3Scale(sim.fwd, 0.155f-kick*0.012f),
+    Vector3 pos = Vector3Add(cam.position, Vector3Add(Vector3Scale(toRl(sim.fwd), 0.155f-kick*0.012f),
         Vector3Add(Vector3Scale(right, 0.077f*(1-aim)+sway), Vector3Scale(up, -0.072f+0.03605f*aim-dip*0.024f))));
     // Farthest vertex is <0.33 m from the eye, even during recoil/reload.
     float scale = sim.weapon == WEAPON_REVOLVER ? 0.48f : 0.64f;
@@ -1179,7 +1184,7 @@ void Game::drawDeck(Matrix xf, bool lamp) {
 // inside 0.34 m so no corridor can cut through it, depth testing left alone,
 // and the caller lifts the world shadowing off it before this runs.
 void Game::drawHeldDeck(const Camera3D &cam) {
-    Vector3 F = sim.fwd;
+    Vector3 F = toRl(sim.fwd);
     Vector3 Rt = { sim.r2x, 0, sim.r2z };
     Vector3 Up = Vector3Normalize(Vector3CrossProduct(Rt, F));
 
@@ -1233,7 +1238,7 @@ void Game::drawDrinkCan(const Camera3D &cam) {
     }
 
     // camera basis, matching the convention the rest of the game uses
-    Vector3 F = sim.fwd;
+    Vector3 F = toRl(sim.fwd);
     Vector3 Rt = { sim.r2x, 0, sim.r2z };
     Vector3 Up = Vector3Normalize(Vector3CrossProduct(Rt, F));
 

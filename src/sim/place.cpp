@@ -56,7 +56,7 @@ void Sim::updateAmbience(float dt, double now) {
 void Sim::updateRoomSound(bool blackout) {
     // Fittings sit at the centres of the level's uLS grid, the one the shader
     // lights from, so the nearest is your position rounded to it.
-    float ls = LEVELS[level].ls;
+    float ls = LEVEL_RULES[level].ls;
     float nx = (floorf(px / ls) + 0.5f) * ls, nz = (floorf(pz / ls) + 0.5f) * ls;
     float pd = sqrtf((px - nx) * (px - nx) + (pz - nz) * (pz - nz));
     ambience.panel = (blackout || inManila) ? 0.0f : clampf(1.0f - pd / 4.0f, 0.0f, 1.0f);   // gone by 4 m
@@ -177,7 +177,7 @@ void Sim::updateExits(double now) {
             escapeT = 6.0f; escapeCount++;
             bankRecords();
             applyLevel(cursed ? 3 : EXIT_NEXT[level], now);
-            Vector2 spot = toRl(world.findOpenSpot(px, pz));
+            Vec2 spot = world.findOpenSpot(px, pz);
             px = spot.x; pz = spot.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
             ent.st = EState::Hidden; ent.nextSpawn = now + 30;
             return;

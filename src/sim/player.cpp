@@ -209,7 +209,7 @@ void Sim::updateSoftFloor(float dt, double now) {
             fellT = 4.0f;
             play(Sfx::SplashIn, 0).atVolume(0.5f).atPitch(0.5f);
             applyLevel(1, now);
-            Vector2 spot = toRl(world.findOpenSpot(px, pz));
+            Vec2 spot = world.findOpenSpot(px, pz);
             px = spot.x; pz = spot.y; velx = velz = 0; py = 0.6f; vy = 0; grounded = false;
             ent.st = EState::Hidden; ent.nextSpawn = now + 20;
         }
@@ -319,7 +319,7 @@ void Sim::changeStorey(int dir, double now) {
                 int s1 = used.kind == VK_STAIR ? used.wu - 1 : used.stairU;
                 u = (s0 + s1 + 1) * CELL * 0.5f; v = dir > 0 ? 3.0f : 9.0f;
             }
-            Vector3 at = toRl(world.featureWorld(used, ucx, ucz, u, 0, v));
+            Vec3 at = world.featureWorld(used, ucx, ucz, u, 0, v);
             ent.x = at.x; ent.z = at.z;
             ent.dispY = world.groundAt(ent.x, ent.z, py + 1.0f);
             ent.wpx = ent.x; ent.wpz = ent.z; ent.repathT = 0;
