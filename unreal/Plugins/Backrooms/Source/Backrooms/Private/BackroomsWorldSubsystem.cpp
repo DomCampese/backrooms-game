@@ -452,6 +452,11 @@ void UBackroomsWorldSubsystem::DropAll()
 }
 
 // The raylib build draws pickups 7 cells out and balloons 9; 24 m covers both.
+bool UBackroomsWorldSubsystem::IsRevolverMissing() const
+{
+	return Hand && !Hand->HasRevolver();
+}
+
 void UBackroomsWorldSubsystem::ShowScene()
 {
 	FActorSpawnParameters Params;

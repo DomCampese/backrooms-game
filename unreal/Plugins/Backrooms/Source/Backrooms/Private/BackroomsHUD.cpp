@@ -75,6 +75,10 @@ void ABackroomsHUD::DrawHUD()
 	{
 		Line(Hud.SanityWarning.ToString(), W * 0.5f, H * 0.2f, Warn, true, 1.2f * K);
 	}
+	if (Backrooms->IsRevolverMissing())
+	{
+		Line(TEXT("The revolver is not imported: see the Output Log (LogTemp, LogPython)"), W * 0.5f, 60.0f * K, Warn, true, K);
+	}
 	if (Hud.bPaused)
 	{
 		Line(TEXT("PAUSED  ·  P to resume"), W * 0.5f, H * 0.45f, Pale, true, 1.8f * K);

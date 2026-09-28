@@ -47,10 +47,11 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Look")
 	bool bCameraLight = true;
 
-	// The sim turns 0.0030 rad per raylib mouse pixel; this scales Unreal's
-	// mouse delta to match. Flip the vertical if up and down come out reversed.
-	UPROPERTY(Config, EditAnywhere, Category = "Input")
-	float LookScale = 1.0f;
+	// The sim turns 0.0030 rad per raylib mouse pixel, and this multiplies
+	// Unreal's mouse delta before it gets there. At 1 the first run on a Mac
+	// turned too slowly. Flip the vertical if up and down come out reversed.
+	UPROPERTY(Config, EditAnywhere, Category = "Input", meta = (ClampMin = 0.1, ClampMax = 10))
+	float LookScale = 2.5f;
 	UPROPERTY(Config, EditAnywhere, Category = "Input")
 	bool bInvertLookY = false;
 
