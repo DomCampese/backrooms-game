@@ -98,7 +98,7 @@ constexpr float VEND_DEPTH_BACK = 0.36f, VEND_DEPTH_FRONT = 0.39f;
 // out: the machine's centre (px, pz) and its axis-aligned box.
 void vendFootprint(uint8_t rotByte, float cx, float cz, float &px, float &pz,
                    float &x0, float &z0, float &x1, float &z1);
-// Level 1's lift doors: which north edges carry one. The mesher builds them;
+// Level 1's lift doors: which north edges carry one. chunkLayout places them;
 // the vending pass keeps machines from backing onto them.
 bool liftHash(int gi, int gk, unsigned s);
 
@@ -316,7 +316,7 @@ struct World {
     // How far the rotten patch has sunk at (x,z), metres. The mesher and groundAt
     // both use it, so the dip drawn is the dip walked.
     float softDip(float x, float z);
-    // Red Halls only: a standpipe with a shut-off wheel. The mesher builds it;
+    // Red Halls only: a standpipe with a shut-off wheel. chunkLayout places it;
     // the game runs the valve puzzle.
     bool valveAt(int ci, int ck);
     // Exits that lead to the Red Halls instead of onward.
