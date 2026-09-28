@@ -81,7 +81,7 @@ vec4 chanFor(int rel){
     return vec4(rel == 0 ? 1.0 : 0.0, rel == -1 ? 1.0 : 0.0, rel == 1 ? 1.0 : 0.0, 0.0);
 }
 // The per-storey offset into the tube hash. MUST match storeyHashOffset() in
-// levels.cpp. Bounded, because sin() loses the hash at large arguments.
+// core/layout.cpp. Bounded, because sin() loses the hash at large arguments.
 float storeyOffset(float st){ return fract(st * 0.6180339) * 97.0; }
 
 // Half-width of one ceiling diffuser. MUST match `hp` in world_mesh.cpp's panel

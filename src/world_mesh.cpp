@@ -3,6 +3,7 @@
 #include "textures.h"   // FIXTURES and the vending machine's door: where each sits in the atlas
 #include "util.h"
 #include "vec_rl.h"
+#include "core/layout.h"
 #include "core/level_rules.h"
 #include <algorithm>
 #include <cmath>
