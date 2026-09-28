@@ -47,6 +47,19 @@ Nothing there has been compiled by Unreal yet. What will bite:
   (unreal/.../BackroomsTypes.h), and `EBackroomsItem` lists `SceneKind`
   (src/port/scene.h); a new prop kind, greybox surface or scene kind goes into
   both, or a level look's meshes land on the wrong things.
+- **The revolver's placement and pose are src/port/held.cpp's** (`heldWeapon`,
+  `revolverPose`), which render.cpp, revolver.cpp and the Unreal
+  `ABackroomsHeldActor` all read; the move was checked against a capture of
+  the old build (0 pixels over 16/255, none on the gun). The Unreal side
+  assumes the glTF importer maps glTF (x, y, z) to Unreal (z, x, y) in
+  centimetres; if the gun faces the wrong way on import, set
+  `RevolverMeshRotation` in Project Settings > Game > Backrooms, and fix
+  `FromGlb` in BackroomsHeldActor.cpp to match.
+- **The editor imports the repository's models itself.**
+  `Plugins/Backrooms/Content/Python/init_unreal.py` runs when the editor opens
+  the project and imports any missing ones to the paths the settings name;
+  `unreal/Content/Backrooms/Revolver/` is gitignored because of it. A game run
+  from a project the editor has never opened has no gun.
 - **`simScene` (src/port/scene.cpp) repeats render.cpp's placement** of
   pickups, crates, balloons, chalk and the rest, for the Unreal build. Change
   where render.cpp draws one of those and change it there too, until render.cpp

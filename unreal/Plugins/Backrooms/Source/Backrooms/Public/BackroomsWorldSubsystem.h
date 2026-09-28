@@ -12,6 +12,7 @@ class ABackroomsChunkActor;
 class UBackroomsLevelLook;
 class APointLight;
 class ABackroomsSceneActor;
+class ABackroomsHeldActor;
 
 // Owns the game: one Sim (the rules, and core's World inside it) for this
 // Unreal world. Streams the world's chunks round the player as greybox actors
@@ -70,7 +71,8 @@ private:
 	void BuildChunk(const FIntVector& Key);
 	void DropChunk(const FIntVector& Key);
 	void DropAll();
-	// Moves the pickups, crates, hunter and the rest to where the sim has them.
+	// Moves the pickups, crates, hunter and the rest to where the sim has them,
+	// and the revolver in hand.
 	void ShowScene();
 	// The level's look from the project settings, loaded once per level.
 	const UBackroomsLevelLook* CurrentLook();
@@ -91,6 +93,8 @@ private:
 	TObjectPtr<APointLight> CameraLight;
 	UPROPERTY()
 	TObjectPtr<ABackroomsSceneActor> Scene;
+	UPROPERTY()
+	TObjectPtr<ABackroomsHeldActor> Hand;
 	UPROPERTY()
 	TObjectPtr<UBackroomsLevelLook> Look;
 	int32 LookLevel = -1;

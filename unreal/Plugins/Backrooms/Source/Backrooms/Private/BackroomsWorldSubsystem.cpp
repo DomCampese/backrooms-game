@@ -1,6 +1,7 @@
 #include "BackroomsWorldSubsystem.h"
 #include "BackroomsChunkActor.h"
 #include "BackroomsCoords.h"
+#include "BackroomsHeldActor.h"
 #include "BackroomsLevelLook.h"
 #include "BackroomsSceneActor.h"
 #include "BackroomsSettings.h"
@@ -206,6 +207,11 @@ void UBackroomsWorldSubsystem::FreeSim()
 	{
 		Scene->Destroy();
 		Scene = nullptr;
+	}
+	if (Hand)
+	{
+		Hand->Destroy();
+		Hand = nullptr;
 	}
 	delete Recorder;
 	Recorder = nullptr;
@@ -448,15 +454,22 @@ void UBackroomsWorldSubsystem::DropAll()
 // The raylib build draws pickups 7 cells out and balloons 9; 24 m covers both.
 void UBackroomsWorldSubsystem::ShowScene()
 {
+	FActorSpawnParameters Params;
+	Params.ObjectFlags |= RF_Transient;
 	if (!Scene)
 	{
-		FActorSpawnParameters Params;
-		Params.ObjectFlags |= RF_Transient;
 		Scene = GetWorld()->SpawnActor<ABackroomsSceneActor>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
-		if (!Scene)
-		{
-			return;
-		}
 	}
-	Scene->Show(simScene(*Game, 24.0f), CurrentLook(), StoreyOrigin());
+	if (!Hand)
+	{
+		Hand = GetWorld()->SpawnActor<ABackroomsHeldActor>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
+	}
+	if (Scene)
+	{
+		Scene->Show(simScene(*Game, 24.0f), CurrentLook(), StoreyOrigin());
+	}
+	if (Hand)
+	{
+		Hand->Show(*Game, StoreyOrigin());
+	}
 }

@@ -5,6 +5,8 @@
 #include "BackroomsSettings.generated.h"
 
 class ABackroomsChunkActor;
+class UAnimSequence;
+class USkeletalMesh;
 class UBackroomsLevelLook;
 class UInputAction;
 class UInputMappingContext;
@@ -59,6 +61,23 @@ public:
 	TSoftObjectPtr<UInputMappingContext> InputContext;
 	UPROPERTY(Config, EditAnywhere, Category = "Input")
 	TMap<EBackroomsControl, TSoftObjectPtr<UInputAction>> InputActions;
+
+	// The revolver in hand. The editor imports assets/models/revolver.glb to
+	// these paths the first time it opens the project
+	// (Plugins/Backrooms/Content/Python/backrooms_import.py).
+	UPROPERTY(Config, EditAnywhere, Category = "Held")
+	TSoftObjectPtr<USkeletalMesh> RevolverMesh{ FSoftObjectPath(TEXT("/Game/Backrooms/Revolver/SK_Revolver.SK_Revolver")) };
+	UPROPERTY(Config, EditAnywhere, Category = "Held")
+	TSoftObjectPtr<UAnimSequence> RevolverIdle{ FSoftObjectPath(TEXT("/Game/Backrooms/Revolver/A_Revolver_Idle.A_Revolver_Idle")) };
+	UPROPERTY(Config, EditAnywhere, Category = "Held")
+	TSoftObjectPtr<UAnimSequence> RevolverReload{ FSoftObjectPath(TEXT("/Game/Backrooms/Revolver/A_Revolver_Reload.A_Revolver_Reload")) };
+	UPROPERTY(Config, EditAnywhere, Category = "Held")
+	TSoftObjectPtr<UAnimSequence> RevolverShoot{ FSoftObjectPath(TEXT("/Game/Backrooms/Revolver/A_Revolver_Shoot.A_Revolver_Shoot")) };
+	// Turns the imported mesh before it is placed. The placement assumes the glTF
+	// importer maps glTF (x, y, z) to Unreal (z, x, y); if the gun comes out
+	// facing the wrong way, this corrects it without a code change.
+	UPROPERTY(Config, EditAnywhere, Category = "Held")
+	FRotator RevolverMeshRotation = FRotator::ZeroRotator;
 
 	// The look for a level, loaded, or null.
 	UBackroomsLevelLook* LookFor(int32 Level) const;

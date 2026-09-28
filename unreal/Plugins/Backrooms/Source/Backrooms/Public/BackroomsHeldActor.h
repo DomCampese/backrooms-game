@@ -1,0 +1,51 @@
+#pragma once
+#include "CoreMinimal.h"
+#include "GameFramework/Actor.h"
+#include "BackroomsHeldActor.generated.h"
+
+struct Sim;
+class UAnimSequence;
+class UPointLightComponent;
+class UPoseableMeshComponent;
+class USkeletalMeshComponent;
+
+// The revolver in the player's hand, placed and posed as the raylib build
+// draws it (src/port/held.h): the clip and how far through it, the drum's turn
+// across shots, the muzzle flash. The model is the repository's
+// assets/models/revolver.glb, which the editor imports on first open
+// (Plugins/Backrooms/Content/Python); Project Settings > Game > Backrooms names
+// the assets.
+UCLASS(Blueprintable, Transient)
+class BACKROOMS_API ABackroomsHeldActor : public AActor
+{
+	GENERATED_BODY()
+
+public:
+	ABackroomsHeldActor();
+
+	// Origin places the sim's storey frame in the world.
+	void Show(const Sim& Game, const FVector& Origin);
+
+	// False once the revolver's assets were looked for and not found.
+	bool HasRevolver() const { return !bMissing; }
+
+private:
+	bool Load();
+
+	// Plays the clip, hidden; the gun copies its pose and turns the drum.
+	UPROPERTY(VisibleAnywhere, Category = "Backrooms")
+	TObjectPtr<USkeletalMeshComponent> Animator;
+	UPROPERTY(VisibleAnywhere, Category = "Backrooms")
+	TObjectPtr<UPoseableMeshComponent> Gun;
+	UPROPERTY(VisibleAnywhere, Category = "Backrooms")
+	TObjectPtr<UPointLightComponent> Flash;
+
+	// Idle, Reload, Shoot: RevolverClip's order.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UAnimSequence>> Clips;
+
+	TArray<FName> DrumBones;
+	FName Handle;
+	bool bLoaded = false;
+	bool bMissing = false;
+};

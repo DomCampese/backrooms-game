@@ -65,7 +65,10 @@ repository, not just this folder. On the Mac:
    look yet, so the maze is the greybox's flat colours, and the pickups,
    crates, balloons, the hunter and the pack are plain shapes at their real
    size (`ABackroomsSceneActor`). A text HUD (`ABackroomsHUD`) shows the meters,
-   inventory, notes and the death card.
+   inventory, notes and the death card. The revolver is in your hand
+   (`ABackroomsHeldActor`): the editor imports `assets/models/revolver.glb` the
+   first time it opens the project (the Output Log says "imported the
+   revolver"), and a game started before that shows no gun.
 
 For an Xcode project (debugging, or browsing the code), run
 `"/Users/Shared/Epic Games/UE_5.8/Engine/Build/BatchFiles/Mac/GenerateProjectFiles.sh" -project="$PWD/unreal/BackroomsGame.uproject" -game`
