@@ -47,9 +47,11 @@ done; done
 
 ## Contract tests
 
-`tools/contract.cpp` links src/core alone and compares its answers with the
-text files in `tests/golden`. A port running the same core must reproduce every
-line. It runs in under 0.1 s.
+`tools/contract_lib.cpp` generates core's answers and compares them with the
+text files in `tests/golden`; `tools/contract.cpp` is its command line, and the
+Unreal automation test (unreal/, docs/unreal-handoff.md) runs the same library.
+Both link src/core alone. A port running the same core must reproduce every
+line. It runs in under a second.
 
 ```bash
 tools/sandbox-build.sh contract    # or: make contract-check
@@ -63,6 +65,7 @@ tools/sandbox-build.sh contract    # or: make contract-check
 | `chunks_full.txt` | 18 of those chunks field by field, one row per z: the origin chunk of every level and visit, and the Level 0 visit 1 feature chunks |
 | `queries.txt` | `gatherCellAABBs`, `collideCircle`, `groundAt` (through a hole into the storey below, on flights, on a vending machine), `stairY` up each flight kind, `lineOfSight`, `canStep`, `pathStep`, `findOpenSpot`, `ceilY`, `buildOccupancy` over a 48-cell window, `vendFootprint` for each turn and flag. Probes are doors, a locked door, rails, a pillar, holes and vending machines found in the generated world, and seeded samples, each printed with the coordinates of the call |
 | `mutations.txt` | `shiftEdge` and `unlockEdge` on chosen edges: the walls read back through `wallNVal`/`wallWVal`, the `staleChunks` entries appended, and a repeat that appends nothing |
+| `layout.txt` | `chunkLayout` item by item, every field: the origin and far chunks of every level and visit, both storeys of each Level 0 feature kind at visit 1, and a Manila Room |
 
 A failure names the file, line, chunk and field: `FAIL chunks.txt:4 [chunk L0
 v0 s0 (0,-1)] fields elev`, or the field and row of a full dump. Floats are
@@ -102,16 +105,24 @@ defaults and run the contract tests under it.
 
 libm: generation uses no transcendental function. `sqrtf` (collision, sight)
 is correctly rounded by IEEE 754 on every platform, and `floorf`, `ceilf` and
-`fabsf` are exact. The one dependency is `vendFootprint` (world.cpp,
-`float yaw = (rotByte & 3) * PROP_TURN, ca = cosf(yaw), sa = sinf(yaw);`),
-which feeds the vending machine's collision box and the mesher. `PROP_TURN` is
-1.5708, not pi/2, so the results are tiny non-zero values (glibc: cos 1.5708 =
--0x1.e5ddeap-19) whose last bit another libm may round differently. That moves
-a corner by about 1e-13 m before rounding, enough to change a stored coordinate
-by one ulp. The contract prints these boxes, so a port on another
-libm would fail there first. Replacing the two calls with a four-entry table of
-glibc's values (hex float literals) is cheap and preserves every result on this
-build; it has not been done.
+`fabsf` are exact. `vendFootprint` used `cosf`/`sinf` of a quarter turn;
+`PROP_TURN` is 1.5708, not pi/2, so the results are tiny non-zero values whose
+last bit another libm may round differently. It now reads a four-entry table of
+glibc's values (hex float literals), so every result is unchanged here and the
+same everywhere.
+
+One libm dependency remains: `tubeHash` (layout.cpp) is `fract(sinf(...) *
+43758.5453)`, the GLSL hash the shader also uses, and decides which fittings
+are dead, dim or faulty. A `sinf` that rounds its last bit differently can flip
+one of those on a port. `layout.txt` prints every fitting's state, so a port
+fails there first, and only on fitting lines. Replacing the hash changes which
+tubes are dead in the raylib build too, so it waits for the port to need it.
+
+Evaluation order: a function's arguments are evaluated in no fixed order, and
+gcc and clang differ. `railOn` passed two calls that both wrote `voidSide` to
+`std::max`; gcc and clang gave different `voidSide` for a rail with holes on
+both sides (one the mesher does not draw). The layout golden caught it on its
+first clang run. Call anything with a side effect as its own statement.
 
 ## Status
 

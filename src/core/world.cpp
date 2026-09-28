@@ -292,7 +292,12 @@ bool liftHash(int gi, int gk, unsigned s) { return ih(gi, gk, s ^ 0xE1E7u) % 71 
 static constexpr float VEND_BACK_OFFSET = CELL * 0.5f - WT - 0.08f - VEND_DEPTH_BACK;
 void vendFootprint(uint8_t rotByte, float cx, float cz, float &px, float &pz,
                    float &x0, float &z0, float &x1, float &z1) {
-    float yaw = (rotByte & 3) * PROP_TURN, ca = cosf(yaw), sa = sinf(yaw);
+    // cosf and sinf of turn * PROP_TURN as glibc rounds them. PROP_TURN is not
+    // pi/2, so these are not 0 and 1, and another libm may round the last bit
+    // differently and move a collision box by an ulp.
+    static const float COS_TURN[4] = { 0x1p+0f, -0x1.e5ddeap-19f, -0x1p+0f, 0x1.70667p-17f };
+    static const float SIN_TURN[4] = { 0x0p+0f, 0x1p+0f, -0x1.e5ddeap-18f, -0x1p+0f };
+    float ca = COS_TURN[rotByte & 3], sa = SIN_TURN[rotByte & 3];
     float o = (rotByte & PROP_AGAINST_WALL) ? VEND_BACK_OFFSET : 0.0f;
     px = cx - o * sa; pz = cz + o * ca;                   // local +z is the back
     x0 = z0 = 1e9f; x1 = z1 = -1e9f;

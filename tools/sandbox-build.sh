@@ -43,7 +43,7 @@ build_mapdump() {
 # contract: core's golden answers (docs/migration.md, "Contract tests").
 build_contract() {
     rm -f contract
-    c++ "${CORE_FLAGS[@]}" tools/contract.cpp "${CORE[@]}" -o contract
+    c++ "${CORE_FLAGS[@]}" tools/contract.cpp tools/contract_lib.cpp "${CORE[@]}" -o contract
     echo "built ./contract (core only)"
 }
 # texdump: every texture generator, run without a window, written to PNG with

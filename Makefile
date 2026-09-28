@@ -66,8 +66,8 @@ benchmark-animation: $(GENERATED) tools/bench-animation.cpp $(filter-out src/mai
 # Core's golden answers, linked against src/core alone (docs/migration.md,
 # "Contract tests").
 CORE_SRCS := $(wildcard src/core/*.cpp)
-contract: tools/contract.cpp $(CORE_SRCS) $(wildcard src/core/*.h)
-	c++ $(CXX_FLAGS) tools/contract.cpp $(CORE_SRCS) -o contract
+contract: tools/contract.cpp tools/contract_lib.cpp tools/contract_lib.h $(CORE_SRCS) $(wildcard src/core/*.h)
+	c++ $(CXX_FLAGS) tools/contract.cpp tools/contract_lib.cpp $(CORE_SRCS) -o contract
 
 contract-check: contract
 	./contract --check
