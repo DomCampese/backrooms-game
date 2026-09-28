@@ -73,3 +73,8 @@ contract-check: contract
 	./contract --check
 
 .PHONY: contract-check
+
+# A recorded trace (BACKROOMS_RECORD) replayed through the sim alone.
+SIM_SRCS := $(wildcard src/sim/*.cpp)
+replay: tools/replay.cpp $(SIM_SRCS) $(CORE_SRCS) $(wildcard src/sim/*.h src/core/*.h)
+	c++ $(CXX_FLAGS) tools/replay.cpp $(SIM_SRCS) $(CORE_SRCS) -o replay

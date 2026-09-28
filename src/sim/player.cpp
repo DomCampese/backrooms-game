@@ -1,4 +1,5 @@
 // The player's body: looking, walking, swimming, falling, hiding, storeys.
+#include "../core/fp_strict.h"
 #include "sim.h"
 #include <cmath>
 

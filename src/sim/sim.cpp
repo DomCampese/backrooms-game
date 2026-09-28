@@ -1,4 +1,5 @@
 // The tick, and the shape of a run: levels, descents, death and escape.
+#include "../core/fp_strict.h"
 #include "sim.h"
 #include <cmath>
 

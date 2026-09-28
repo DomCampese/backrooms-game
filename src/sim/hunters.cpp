@@ -1,5 +1,6 @@
 // What hunts you: the level's hunter (Pirate Clark, a Smiler, the Partygoer)
 // and the Red Halls pack.
+#include "../core/fp_strict.h"
 #include "sim.h"
 #include <cmath>
 

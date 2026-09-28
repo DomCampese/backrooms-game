@@ -1,5 +1,5 @@
 #pragma once
-// Include first in every core .cpp. Turns off floating-point contraction for
+// Include first in every core and sim .cpp. Turns off floating-point contraction for
 // the rest of the translation unit: a fused multiply-add rounds once where the
 // source rounds twice, which can flip a noise threshold (fbm2(...) > 0.60f) and
 // generate a different maze on another compiler. The build scripts also pass

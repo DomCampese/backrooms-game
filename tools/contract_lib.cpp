@@ -712,7 +712,7 @@ std::string whatDiffers(const std::string &want, const std::string &got) {
 
 }  // namespace
 
-int check(const std::string &dir, const std::vector<Golden> &gs, std::string &report) {
+int compare(const std::string &dir, const std::vector<Golden> &gs, std::string &report) {
     auto say = [&](const char *fmt, auto... args) {
         char buf[4096];
         snprintf(buf, sizeof buf, fmt, args...);

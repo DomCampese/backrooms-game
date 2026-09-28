@@ -1,5 +1,6 @@
 // Things in the world: loose pickups, drinking, the tape deck, the use key,
 // chalk, and Level 1's supply crates.
+#include "../core/fp_strict.h"
 #include "sim.h"
 #include <cmath>
 #include <cstdlib>

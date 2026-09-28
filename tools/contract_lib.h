@@ -29,6 +29,7 @@ std::vector<Golden> produce();
 // Compares `gs` with the files in `dir` and appends one line per file, and the
 // first differing lines of each, to `report`. Returns the number of files that
 // differ or are missing.
-int check(const std::string &dir, const std::vector<Golden> &gs, std::string &report);
+// Not named check: Unreal defines check() as a macro.
+int compare(const std::string &dir, const std::vector<Golden> &gs, std::string &report);
 
 }  // namespace contract

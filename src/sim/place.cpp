@@ -1,5 +1,6 @@
 // The place itself: blackouts, whispers, sanity and its slide, walls that
 // move, exits, and Level 0's Manila Room.
+#include "../core/fp_strict.h"
 #include "sim.h"
 #include <cmath>
 

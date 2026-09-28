@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
         return 0;
     }
     std::string report;
-    int bad = contract::check(dir, gs, report);
+    int bad = contract::compare(dir, gs, report);
     fputs(report.c_str(), stdout);
     printf(bad ? "contract: FAILED\n" : "contract: passed\n");
     return bad ? 1 : 0;

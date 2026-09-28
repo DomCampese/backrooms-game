@@ -2,8 +2,8 @@
 # Compile the engine-independent layers alone, the way an Unreal module would:
 # C++17, no exceptions, no RTTI, and nothing on the include path but src/.
 # Fails if a file does not compile that way, or if it includes anything outside
-# its allowed layers (docs/migration.md): core may include core; sim may include
-# core and sim. A raylib, GL or platform header anywhere in the chain fails too,
+# its allowed layers (docs/migration.md): core may include core; sim and port
+# may include core and themselves. A raylib, GL or platform header anywhere in the chain fails too,
 # even where one happens to be installed system-wide.
 #
 #   tools/core-check.sh
@@ -50,5 +50,6 @@ check() {
 
 check core src/core src/core
 check sim src/sim src/core src/sim
+check port src/port src/core src/port
 
 [ $fail = 0 ] && echo "core-check: passed" || { echo "core-check: FAILED"; exit 1; }

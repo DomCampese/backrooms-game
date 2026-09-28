@@ -783,11 +783,11 @@ void World::generate(ChunkData &d, int cx, int cz) {
                 if (!moved) edgeAt(t) = WALL_DOOR;           // nowhere better; leave it alone
             }
         };
-        for (int k = 1; k < CCELLS; k++)
-            tidyLine([&](int t) -> uint8_t & { return d.wallN[t][k]; },
-                     [&](int t) { return (d.prot[t][k] & 1) != 0; },
-                     [&](int t, int &x, int &z) { x = t; z = k; },
-                     [&](int t, int &x, int &z) { x = t; z = k - 1; }, CCELLS);
+        for (int kk = 1; kk < CCELLS; kk++)
+            tidyLine([&](int t) -> uint8_t & { return d.wallN[t][kk]; },
+                     [&](int t) { return (d.prot[t][kk] & 1) != 0; },
+                     [&](int t, int &x, int &z) { x = t; z = kk; },
+                     [&](int t, int &x, int &z) { x = t; z = kk - 1; }, CCELLS);
         for (int i = 1; i < CCELLS; i++)
             tidyLine([&](int t) -> uint8_t & { return d.wallW[i][t]; },
                      [&](int t) { return (d.prot[i][t] & 2) != 0; },

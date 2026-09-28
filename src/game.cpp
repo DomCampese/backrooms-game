@@ -25,10 +25,11 @@ void Game::init() {
     // Headless captures schedule no blackouts: blackouts run on the wall clock,
     // and at a software rasteriser's 2 fps a capture lands inside one and comes
     // out as black as a failed shader. BACKROOMS_NOBLACKOUT=0 puts them back.
-    sim.noBlackout = shotPath != nullptr;
-    if (const char *nb = getenv("BACKROOMS_NOBLACKOUT")) sim.noBlackout = atoi(nb) != 0;
-    sim.fixedSeed = shotPath != nullptr;
-    sim.keepRecords = !shotPath && !benchmark;   // automated runs must not change the player's records
+    SimStart start;
+    start.noBlackout = shotPath != nullptr;
+    if (const char *nb = getenv("BACKROOMS_NOBLACKOUT")) start.noBlackout = atoi(nb) != 0;
+    start.fixedSeed = shotPath != nullptr;
+    start.keepRecords = !shotPath && !benchmark;   // automated runs must not change the player's records
     SetTraceLogLevel(LOG_WARNING);
     SetConfigFlags((benchmark ? 0 : FLAG_VSYNC_HINT) | FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
 #ifdef __APPLE__
@@ -164,39 +165,28 @@ void Game::init() {
 
     audio.load();
 
-    World &world = sim.world;
-    world.seed = shotPath ? 1337u : (unsigned)time(nullptr);
-    if (const char *seedEnv = getenv("BACKROOMS_SEED")) world.seed = (unsigned)strtoul(seedEnv, nullptr, 10);
-    world.exitTest = getenv("BACKROOMS_EXITS") != nullptr;
-    world.manilaTest = getenv("BACKROOMS_MANILA") != nullptr;
-    sim.grng = Rng(hash64(world.seed ^ 0xABCDEF));
-
-    Vector2 sp = toRl(world.findOpenSpot(15, 15));
-    sim.px = sp.x; sim.pz = sp.y;
+    start.seed = shotPath ? 1337u : (unsigned)time(nullptr);
+    if (const char *seedEnv = getenv("BACKROOMS_SEED")) start.seed = (unsigned)strtoul(seedEnv, nullptr, 10);
+    start.exitTest = getenv("BACKROOMS_EXITS") != nullptr;
+    start.manilaTest = getenv("BACKROOMS_MANILA") != nullptr;
     if (const char *posEnv = getenv("BACKROOMS_POS")) {   // "x,z,yaw[,pitch]", pitch up positive
-        float ex, ez, ey, ep;
-        int n = sscanf(posEnv, "%f,%f,%f,%f", &ex, &ez, &ey, &ep);
-        if (n >= 3) {
-            Vector2 s2 = toRl(world.findOpenSpot(ex, ez));
-            sim.px = s2.x; sim.pz = s2.y; sim.yaw = ey;
-            if (n == 4) sim.pitch = ep;
-        }
+        int n = sscanf(posEnv, "%f,%f,%f,%f", &start.x, &start.z, &start.yaw, &start.pitch);
+        start.placed = n >= 3;
+        start.pitched = n == 4;
     }
-
-    // The order of these draws on grng is part of the seed's contract.
-    sim.nextFlareRegen = GetTime() + Sim::FLARE_REGEN;
-    sim.nextBlackout = sim.blackoutIn(0, 40, 60);
-    sim.runStart = GetTime();
+    if (const char *lvEnv = getenv("BACKROOMS_LEVEL")) start.level = atoi(lvEnv) % NLEVELS;
+    if (const char *stEnv = getenv("BACKROOMS_STOREY")) { start.storeyed = true; start.storey = atoi(stEnv); }
+    // The torch is the one light you aim, so a fixed-position capture needs it switched on.
+    start.flash = getenv("BACKROOMS_FLASH") != nullptr;
+    everFlashed = start.flash;
+    start.menu = (shotPath == nullptr) || getenv("BACKROOMS_MENU") != nullptr;   // headless shots skip the title
     // From the window in hand, so a phone's first frame does not open at the
     // desktop's angle and slide.
-    sim.fov = baseFov();
-    rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
-    SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);   // post CA/bloom sample past the edges: clamp, don't wrap
-    sim.nextWhisper = sim.runStart + 45 + sim.grng.f01() * 60;
+    start.fov = baseFov();
 
     snprintf(bestPath, sizeof(bestPath), "%s/.backrooms_best", getenv("HOME") ? getenv("HOME") : ".");
     if (FILE *bf = fopen(bestPath, "r")) {
-        Records &b = sim.best;
+        Records &b = start.best;
         // Fields were appended over time; a file missing the later ones reads them as 0.
         if (fscanf(bf, "%d %d %d", &b.escapes, &b.kills, &b.metres) != 3) b.escapes = b.kills = b.metres = 0;
         if (fscanf(bf, "%d", &b.wins) != 1) b.wins = 0;
@@ -205,28 +195,30 @@ void Game::init() {
         fclose(bf);
     }
 
-    // The look first: applyLevel's schedules start from after its surfaces are made.
-    applyLevelLook(0);
-    sim.applyLevel(0, GetTime());
-    if (const char *lvEnv = getenv("BACKROOMS_LEVEL")) {
-        int lv = atoi(lvEnv) % NLEVELS;
-        applyLevelLook(lv);
-        sim.applyLevel(lv, GetTime());
+    if (const char *recEnv = getenv("BACKROOMS_RECORD")) {
+        if (trace.open(recEnv)) sim.tracer = &recordingTracer;
+        else fprintf(stderr, "BACKROOMS_RECORD: cannot write %s\n", recEnv);
     }
-    lookEntries = sim.levelEntries;
-    // BACKROOMS_POS means the same on every storey: the one you stand on is at y = 0.
-    if (const char *stEnv = getenv("BACKROOMS_STOREY")) {
-        if (world.storeyH > 0.0f) {
-            world.setStorey(atoi(stEnv));
-            Vector2 s2 = toRl(world.findOpenSpot(sim.px, sim.pz));
-            sim.px = s2.x; sim.pz = s2.y;
-        }
-    }
-    // The torch is the one light you aim, so a fixed-position capture needs it switched on.
-    if (getenv("BACKROOMS_FLASH")) { sim.flashOn = true; sim.flashCur = 1.0f; everFlashed = true; }
+    double now = GetTime();
+    if (trace) trace.start(start, now);
+    simBegin(sim, start, now);
+    rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
+    SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);   // post CA/bloom sample past the edges: clamp, don't wrap
 
-    sim.inMenu = (shotPath == nullptr) || getenv("BACKROOMS_MENU") != nullptr;   // headless shots skip the title
+    // The look first: applyLevel's schedules start from after its surfaces are made.
+    enterLevel(0);
+    if (start.level >= 0) enterLevel(start.level);
+    lookEntries = sim.levelEntries;
+    if (trace) trace.place();
+    simPlace(sim, start);
     if (!shotPath && !sim.inMenu) DisableCursor();
+}
+
+void Game::enterLevel(int lv) {
+    applyLevelLook(lv);
+    double now = GetTime();
+    if (trace) trace.level(lv, now);
+    sim.applyLevel(lv, now);
 }
 
 void Game::shutdown() {
@@ -238,6 +230,7 @@ void Game::shutdown() {
                frameSamples.size(), sum / frameSamples.size(), frameSamples[frameSamples.size()/2],
                frameSamples[(frameSamples.size()-1)*95/100]);
     }
+    trace.close();
     sim.bankRecords();
     if (sim.recordsChanged) saveRecords();
     UnloadTexture(texParticle);
@@ -362,16 +355,19 @@ bool Game::tick() {
         rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
         SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);   // post CA/bloom sample past the edges: clamp, don't wrap
         sim.fov = baseFov();   // a phone turned on its side is framed from the first frame
+        if (trace) trace.fov(sim.fov);
     }
     if (IsKeyPressed(KEY_F11)) ToggleBorderlessWindowed();
 
     if (sim.inMenu) {
         InputFrame in = readInput(false);
+        if (trace) trace.menu(in, dt, now, sim.clockSeed);
         sim.menuDrift(dt, now);
         webReleaseAim();   // the aim latch must not survive into a new run
         streamChunks();
         updateOccupancy();
         sim.menuBegin(in, now);
+        if (trace) trace.digest(sim);
         finishStep(true);
         renderScene(now);
         renderUI(now);
@@ -382,7 +378,9 @@ bool Game::tick() {
     if (inKeyPressed(KEY_P) && !shotPath) {
         bool pause = !sim.paused;
         if (pause && inCursorHidden()) EnableCursor();
+        if (trace) trace.pause(pause, now);
         sim.setPaused(pause, now);
+        if (trace && pause) trace.digest(sim);
         if (!pause) DisableCursor();
     }
     if (sim.paused) {
@@ -399,7 +397,10 @@ bool Game::tick() {
     // A click that captures the mouse is spoken for: it must not also fire.
     bool captureClick = !inCursorHidden() && !shotPath && inMousePressed(MOUSE_BUTTON_LEFT);
     if (captureClick) DisableCursor();
-    sim.step(readInput(captureClick), dt, now);
+    InputFrame in = readInput(captureClick);
+    if (trace) trace.step(in, dt, now, sim.clockSeed);
+    sim.step(in, dt, now);
+    if (trace) trace.digest(sim);
     finishStep(false);
     streamChunks();
     updateOccupancy();
