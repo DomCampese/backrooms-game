@@ -115,7 +115,15 @@ build; it has not been done.
 
 ## Status
 
-Filled in as each seam lands.
+| seam | state | check that holds it |
+|---|---|---|
+| 1 core | done | `tools/core-check.sh`, `./contract --check`, the mapdump set |
+| 2 layout | props, fixtures, light fittings, openings done; floorplan geometry still built in the mesher | mesh-bake comparison (method below), `./contract --check` |
+| 3 sim | done; src/sim depends on core only | `tools/core-check.sh`, the regression harness |
+
+Each seam was proved against a build of main from before any of them
+(374a84e): mapdump byte-identical, 0 differing pixels on every world frame of
+`tools/proof-shots.sh`, regression harness exit 0.
 
 ### Seam 1: core (September 2026)
 
@@ -153,11 +161,11 @@ Still coupled, and why:
 - The mesher reads the world through `World`'s accessors (`bakeChunk(World &,
   ...)`). What it used to decide from hashes (fixtures, fittings, props, doors)
   is now core's `ChunkLayout`: see seam 2 below for what is left.
-- Game rules that read the world live in `src/game.cpp` (seam 2): hide spots,
-  coins and crates hash cells there, and `tools/mapdump.cpp` mirrors
-  `hideSpotAt` and `coinAt`.
+- Game rules that hash cells (hide spots, coins, crates) live in the sim
+  (src/sim/items.cpp), and `tools/mapdump.cpp` mirrors `hideSpotAt` and
+  `coinAt`.
 - A prop's height is written in three places: `addProp` (mesher),
-  `gatherCellAABBs` (core) and `Game::bottleShelfY`.
+  `gatherCellAABBs` (core) and `Sim::bottleShelfY`.
 - Lighting constants are mirrored by hand between core, the mesher, the
   shader and `lightAtCPU`: the panel half-size (0.62), the light plane
   (core's `LIGHT_DROP`; render.cpp and the shader uniforms still write
@@ -321,7 +329,6 @@ with `toRl`/`fromRl` (src/vec_rl.h), including `Ray3` and `Box3` for
 
 | coupling | why | goes when |
 |---|---|---|
-| `applyLevel` calls `world.unloadAll()`; `unlockEdge`/`shiftEdge` rebake chunks | `World` still owns the meshes | the mesher leaves world.cpp |
 | HUD strings are `const char *` in sim state | text is content the rules choose | a port maps them to its own text type |
 
 **Behaviour that changed, knowingly.** Schedules set during a tick (applyLevel's

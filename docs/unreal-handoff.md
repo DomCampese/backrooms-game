@@ -47,7 +47,7 @@ does not move: the game runs smoothly on the owner's Mac.
   on `BackroomsCore`. The same settings as core.
 - Floating point: core's generation compares noise against thresholds, and a
   compiler that fuses multiply-adds can flip a comparison and build a different
-  maze. Core carries this in source (docs/migration.md, "Contract tests"); do
+  maze. Core carries this in source (docs/migration.md, "Floating point"); do
   not remove those pragmas, and do not enable fast math for either module. The
   sim's vector functions (`src/sim/sim_math.h`) reproduce raymath bit for bit
   only without contraction.
@@ -72,7 +72,7 @@ full; this is the list to wire up.
 | `World::staleChunks` | core | chunks whose geometry must be rebuilt; drain every tick |
 | `Sim::step(InputFrame, dt, now)` | sim | one tick of play; `dt` clamped to 0.05 s, `now` a monotonic clock in seconds |
 | `Sim::menuDrift`, `menuBegin`, `setPaused` | sim | the title screen and pause |
-| `Sim::events` (`AudioEvent`) | sim | sounds to play this tick, in order |
+| `Sim::audio` (`AudioEvent`s) | sim | sounds to play this tick, in order; the port plays and clears it |
 | `SolidTracer` | platform, supplied by the port | the one query the sim asks the renderer: the first solid triangle along a `Ray3`, returning distance and a `Vec3` normal (bullets). In Unreal, a line trace against the chunk meshes |
 
 What the port supplies to the sim each tick:
@@ -117,7 +117,7 @@ Each ends with a check that can fail.
 | M1 core | `BackroomsCore` compiles in Unreal; an automation test runs every case in `tests/golden` and passes |
 | M2 greybox | chunks stream round a free camera on Level 0 and Level 1, walls and floors from core, storeys stacked; frame time measured on the Mac |
 | M3 layout | props, fixtures, doors and panel positions placed from `ChunkLayout`; a screenshot at the proof-shot positions (tools/proof-shots.sh) matches the raylib frame's layout |
-| M4 sim | the sim ticks in Unreal from Enhanced Input; walking the same scripted input as the raylib build reaches the same positions (sim trace comparison) |
+| M4 sim | the sim ticks in Unreal from Enhanced Input; replaying a recorded input trace from the raylib build reaches the same positions and events (the trace recorder does not exist yet: see below) |
 | M5 look | lighting, materials and post per level; performance budget met on the Mac |
 | M6 actors and sound | hunter, dogs, sound events, HUD |
 
@@ -137,8 +137,20 @@ Each ends with a check that can fail.
 - The mesher reads neighbouring chunks (for ceilings and wall bases), so baking
   a chunk can generate its neighbours. Generation itself never reads a
   neighbour.
-- `mapdump` and the goldens default to visit 0; the game's first arrival on a
-  level after the menu is visit 1 on Level 0. Use `--visit 1` when comparing
-  with a capture.
+- `mapdump` and the goldens default to visit 0. A headless capture of Level 0
+  shows visit 1, and of Level 1 visit 0 (AGENTS.md). Match the visit before
+  comparing positions with a capture.
 - AGENTS.md "Things that will bite you" is written for the raylib build; most
   of it dies with the renderer, but the generator and storey entries still hold.
+
+## Not done yet
+
+What the seams leave for the port, or for the raylib build before it.
+
+| item | where | why it matters |
+|---|---|---|
+| floorplan geometry as data | walls, floors, ceilings, soffits, stairs, pools, arches, skirting are still built directly by `bakeChunk` | a port either reuses the mesher's arrays (M2) or needs core to describe the floorplan the way `chunkLayout` describes fixtures |
+| input trace recorder | nothing records `InputFrame`, `dt` and `now` per tick | M4's parity check needs it: record in the raylib build, replay in Unreal, compare positions and events per tick |
+| `vendFootprint`'s `cosf`/`sinf` | src/core/world.cpp | the only libm-dependent result in core; another libm may move a vending collision box by one ulp and fail a golden. A four-entry table of this build's values fixes it (docs/migration.md, "Floating point") |
+| lighting numbers mirrored by hand | panel half-size, light plane, tube hash in core, the mesher, the shader and `lightAtCPU` | a port reads them from core; the raylib build still has copies |
+| HUD strings are `const char *` sim state | src/sim | a port maps them to its own text type |
