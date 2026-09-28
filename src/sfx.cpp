@@ -523,29 +523,3 @@ Sound makeFloorGroan() {
     }
     Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
 }
-
-// Noclipping: the world's geometry failing to hold you. A bitcrushed burst of
-// static that tears downward in pitch, a sub drop under it, and a tape-stop
-// sag at the end — the sound of passing through something solid.
-Sound makeNoclip() {
-    const int n = (int)(1.25f * SAMPLE_RATE);
-    Wave w = makeWaveBuf(n);
-    short *d = (short *)w.data;
-    Rng r(0x0C11FULL);
-    float held = 0, ph = 0, sub = 0;
-    int holdN = 0;
-    for (int i = 0; i < n; i++) {
-        float t = (float)i / SAMPLE_RATE;
-        // sample-and-hold rate falls across the sound: crushed, then more crushed
-        int hold = 1 + (int)(t * t * 90.0f);
-        if (holdN-- <= 0) { held = r.f01() * 2 - 1; holdN = hold; }
-        ph += TAU * (900.0f * expf(-t * 3.2f) + 40.0f) / SAMPLE_RATE;
-        sub += TAU * (70.0f * expf(-t * 1.6f) + 18.0f) / SAMPLE_RATE;
-        float tone = sinf(ph) * 0.35f * (0.5f + 0.5f * sinf(t * 57.0f));
-        float env = (1.0f - expf(-t * 90.0f)) * expf(-t * 2.2f);
-        float gate = fmodf(t * (9.0f + 20.0f * t), 1.0f) < 0.7f ? 1.0f : 0.25f;
-        float s = (held * 0.55f * gate + tone) * env + sinf(sub) * 0.8f * expf(-t * 1.8f);
-        d[i] = (short)(clampf1(tanhf(s * 1.4f)) * 27000.0f);
-    }
-    Sound s = LoadSoundFromWave(w); UnloadWave(w); return s;
-}

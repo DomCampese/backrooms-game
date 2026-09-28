@@ -764,7 +764,7 @@ const char *POST_FS = GLSL_VERSION_HEADER R"GLSL(
 in vec2 fragTexCoord; in vec4 fragColor;
 uniform sampler2D texture0; uniform vec4 colDiffuse;
 uniform float uTime; uniform float uFear; uniform float uWater;
-uniform float uMigraine;   // Level 0's hum headache, 0..1 (Game::migraine)
+uniform float uMigraine;   // Level 0's hum headache, 0..1 (Sim::migraine)
 out vec4 finalColor;
 float hh(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)))*43758.5453); }
 void main(){

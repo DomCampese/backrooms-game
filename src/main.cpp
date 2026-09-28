@@ -3,16 +3,17 @@
 // Procedural worlds plus embedded CC0 materials and revolver.
 //
 // Module map:
-//   util      hashes, RNG, value noise, shared palette
-//   shaders   world + post-process GLSL
-//   textures  every surface, synthesized at startup
-//   sfx       one-shot sounds (footsteps, gunshot, ...)
-//   audio     streaming ambience synth (hum, drone, water, music box)
-//   levels    per-level look/feel tables
-//   world     infinite maze: chunk gen, meshing, collision, line of sight
-//   entity    PIRATE CLARK's state
-//   game      run state + per-frame update logic
-//   render    3D scene pass, viewmodel, HUD, overlays
+//   util        hashes, RNG, value noise, shared palette
+//   shaders     world + post-process GLSL
+//   textures    every surface, synthesized at startup
+//   sfx         one-shot sounds (footsteps, gunshot, ...)
+//   audio       streaming ambience synth (hum, drone)
+//   game_audio  every sound handle; plays the sim's audio events
+//   levels      per-level look/feel tables
+//   world       infinite maze: chunk gen, meshing, collision, line of sight
+//   sim/        game state and rules, stepped once a tick
+//   game        the platform: window, input, assets, the tick
+//   render      3D scene pass, viewmodel, HUD, overlays
 #include "game.h"
 
 #ifdef PLATFORM_WEB

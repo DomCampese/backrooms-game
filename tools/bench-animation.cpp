@@ -8,14 +8,15 @@ int main() {
     setenv("BACKROOMS_TIME","4",1);
     setenv("BACKROOMS_CLEAN","1",1);
     Game g;g.init();EnableCursor();
-    g.px=15;g.pz=15;g.py=0;g.eyeY=1.62f;g.yaw=.8f;g.pitch=0;
-    g.weapon=WEAPON_REVOLVER;g.updateLook();
+    Sim &sim=g.sim;
+    sim.px=15;sim.pz=15;sim.py=0;sim.eyeY=1.62f;sim.yaw=.8f;sim.pitch=0;
+    sim.weapon=WEAPON_REVOLVER;sim.updateLook(InputFrame{});
     for(int i=0;i<7;++i)g.streamChunks();g.updateOccupancy();
     for(int frame=0;frame<300;++frame) {
         int cycle=frame%150;
-        g.reloadT=cycle<108?1.8f*(1-cycle/108.0f):0;
-        g.gunCd=cycle>=108?.42f*(1-(cycle-108)%25/25.0f):0;
-        g.ammo=cycle<108?0:5-(cycle-108)/25;
+        sim.reloadT=cycle<108?RELOAD_TIME*(1-cycle/108.0f):0;
+        sim.gunCd=cycle>=108?.42f*(1-(cycle-108)%25/25.0f):0;
+        sim.ammo=cycle<108?0:5-(cycle-108)/25;
         double start=GetTime();
         g.renderScene(4);g.renderUI(4);
         if(frame>=60)g.frameSamples.push_back((float)((GetTime()-start)*1000));

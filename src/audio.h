@@ -1,6 +1,7 @@
 #pragma once
 #include "raylib.h"
 #include "util.h"
+#include "sim/audio_events.h"
 #include <cstdint>
 #include <cmath>
 
@@ -8,20 +9,13 @@
 // Continuously synthesized ambience: fluorescent hum, room tone, entity growl.
 struct AudioSynth {
     AudioStream stream;
-    float humTarget = 1, hum = 1, growlTarget = 0, growl = 0;   // humTarget ducks all ambience
-    float hissTarget = 0, hiss = 0;                             // burning flare hiss
-    float whisperTarget = 0, whisper = 0;                       // something in the walls
-    // Per-level ambience mix. applyLevel sets the t* targets; the w* weights
-    // chase them a sample at a time in update(), so a level change is a
+    // The targets, set by the rules. Each value below chases its target a
+    // sample at a time in update(), so a level change or a blackout is a
     // crossfade rather than a cut.
-    float tHum = 1, tDrone = 0;
+    AmbienceMix mix;
+    float hum = 1, growl = 0, hiss = 0, whisper = 0;
     float wHum = 1, wDrone = 0;
-    // AUD-03: how hard you are standing under a live fluorescent, 0..1, and
-    // AUD-04: how big the space around you sounds, 0 (corridor) to 1 (hall).
-    // Game::updateAmbience sets the targets once a frame; they are chased a
-    // sample at a time below so neither one steps.
-    float panelTarget = 0, panel = 0;
-    float spaceTarget = 0.25f, space = 0.25f;
+    float panel = 0, space = 0.25f;
     // One running phase per oscillator, indexed by osc(). The index is an
     // OWNERSHIP claim, not a scratch slot: two signals sharing one advance it at
     // both their frequencies, so each gets the other's detune folded in and both

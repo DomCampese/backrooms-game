@@ -55,7 +55,7 @@ bool touchOn() { return g.active != 0; }
 // leaves nothing to fire with while the left thumb is already walking.
 //
 // The latch lives here rather than in the shell because the game is what decides
-// whether an aim is legal at all (Game::updateAim), and a latch the game has
+// whether an aim is legal at all (Sim::updateAim), and a latch the game has
 // refused has to drop rather than sit lit. The shell only reports the tap and
 // draws whatever state it is told.
 bool aimLatch = false;
@@ -97,7 +97,7 @@ void webInputPoll() {
 
     if (!touchOn()) { setAimLatch(false); return; }
     if (g.pressed & BTN_AIM) setAimLatch(!aimLatch);
-    // Reload is the one thing the latch can deadlock: Game::canReload refuses
+    // Reload is the one thing the latch can deadlock: Sim::canReload refuses
     // while the sights are up, so a latched aim would swallow every tap of LOAD
     // and the gun could never be reloaded again. Dropping the sights is what a
     // mouse player does before pressing R, so do it for them. Everything else
@@ -126,7 +126,7 @@ bool inKeyDown(int key) {
         case KEY_LEFT_SHIFT:   return (g.down & BTN_SPRINT) != 0;
         case KEY_C: return (g.down & BTN_SQUEEZE) != 0;
         case KEY_LEFT_CONTROL: return (g.down & BTN_CROUCH) != 0;
-        // Swimming rises while SPACE is held (Game::updateSwimming), so JUMP
+        // Swimming rises while SPACE is held (Sim::updateSwimming), so JUMP
         // has to answer the held query too, not just the press edge below —
         // without it a swimmer on a phone can only sink.
         case KEY_SPACE:        return (g.down & BTN_JUMP) != 0;
