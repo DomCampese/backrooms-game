@@ -123,7 +123,12 @@ build; it has not been done.
 
 Each seam was proved against a build of main from before any of them
 (374a84e): mapdump byte-identical, 0 differing pixels on every world frame of
-`tools/proof-shots.sh`, regression harness exit 0.
+`tools/proof-shots.sh`, regression harness exit 0. One capture of the final
+tree, taken straight after another capture run, put 13 pixels of lv1.png over
+the threshold (a small, slightly brighter patch; frame mean +0.5); two fresh
+captures of the same binary gave 0. Some of what a Level 1 frame shows still
+follows the wall clock, so recapture on a quiet machine before believing a
+small difference.
 
 ### Seam 1: core (September 2026)
 
