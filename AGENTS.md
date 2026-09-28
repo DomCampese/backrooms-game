@@ -1,3 +1,125 @@
+# Read first
+
+- docs/readability.md: how code, comments, commit messages and docs are written
+  here. Follow it for everything you touch.
+- docs/migration.md: the core / sim / platform layers and what may depend on
+  what. docs/unreal-handoff.md: the planned move to Unreal Engine 5.
+
+# Core library (September 2026)
+
+The generator is a library with no raylib in it, so an engine port can reuse
+it (docs/migration.md has the layers and their status). What moved, and what
+will bite:
+
+- **`src/core/` includes only itself and the standard library.** It holds the
+  math types (`Vec2`, `Vec3`, `TAU`, `clampf`), hashes and noise (`hash.h`),
+  the per-level rules (`level_rules.h`: wall height, light pitch, storey
+  pitch, name, which tubes work, `EXIT_NEXT`), the world (`world.{h,cpp}`:
+  generation, storeys, collision, sight, pathfinding, the occupancy grid) and
+  the chunk layout (`layout.{h,cpp}`, below).
+  `tools/core-check.sh` compiles each file alone with `-fno-exceptions
+  -fno-rtti` and fails on any include outside the layer, raylib or GL. Run it
+  after touching core. Platform code converts with `toRl`/`fromRl`
+  (`src/vec_rl.h`).
+- **`./contract --check` is core's acceptance test** (`tools/sandbox-build.sh
+  contract`): generated chunks, query answers and wall mutations against
+  `tests/golden`, in under a second. Run it after touching core, alongside the
+  mapdump set. Regenerate with `--write` only for a deliberate generator change,
+  and say so in the commit (docs/migration.md, "Contract tests").
+- **No fused multiply-adds in core.** Every build passes `-ffp-contract=off`,
+  and each core .cpp includes `fp_strict.h` first, which sets the same by
+  pragma. Without them clang with FMA changed a `stairY` answer; a flipped noise
+  threshold would change the maze. Never build core with fast math
+  (docs/migration.md, "Floating point").
+- **`LevelCfg` extends `LevelRules`.** `LEVELS[lv].wallH` and
+  `LEVEL_RULES[lv].wallH` are one number; add a rule field to `LevelRules`,
+  a look field (colour, fog, gloss, light output) to `LevelCfg`.
+- **The mesher is `bakeChunk` in `src/world_mesh.cpp`, and ChunkData holds no
+  meshes.** `Game::chunkMeshes` (`ChunkMeshCache`) keys baked chunks by
+  absolute storey and chunk. Core appends to `World::staleChunks` wherever a
+  chunk's geometry goes stale (`unloadFar`, `unloadAll`, `rebuildChunk`, and so
+  `shiftEdge`/`unlockEdge`), and every cache call drains that list first.
+  Draw or ray-test a chunk only through `chunkMeshes.find`; a pointer kept
+  across a world mutation can outlive its mesh. A new place in core that drops
+  or invalidates a chunk must append to `staleChunks`, or its old meshes stay
+  on screen (and in GPU memory).
+- **Numbers collision and the mesher share live in core/world.h**: the doorway
+  opening (`DOOR_LO`, `DOOR_HI`, `DOOR_HEAD`), the pillar footprint, the rail
+  size (`RAIL_T`, `RAIL_H`), the vending body (`VEND_HW`, `VEND_Y1`, depths,
+  `vendFootprint`), `PROP_TURN`, `PROP_HASH_SALT`. textures.h reads the vending
+  body from core.
+- **The wall paper's vertical mapping is state on the wall builder**
+  (`WallBuilder::tileV`, `tallPaper` in world_mesh.cpp), set per bake; it used
+  to be two file globals (`gWallV`, `gTallPaper`).
+
+# Simulation and platform (September 2026)
+
+The rules live in `src/sim/` as `Sim`; `Game` (game.cpp, render.cpp,
+game_audio.cpp) is the raylib platform around it. docs/migration.md has the
+contracts. What will bite:
+
+- **The sim reads input only through `InputFrame`.** `Game::readInput` fills it
+  once a tick from src/input.h, after the cursor is captured or released, so
+  `playing` is what the rest of the tick sees. A new control is a field there
+  and a line in `readInput`.
+- **The sim never reads the clock.** `Sim::step(in, dt, now)` gets the tick's
+  `GetTime()`. `captureTime` (BACKROOMS_TIME) pins only what rendering sees.
+- **Sound is `AudioEvent`s, played in order after the step.** A raylib clip
+  keeps its pitch, volume and pan between plays, and the rules rely on it (the
+  hurt groan plays at the volume the soft floor last set), so a PLAY sets only
+  the properties it flags. The tape voice, the looping recordings and the synth
+  feed are events too, emitted where the old code polled or fed them.
+- **The synth is fed once a tick, from `updateEntity`**, and so not on Level 2
+  or the title screen, where that returns early or does not run. The move kept
+  this as it was.
+- **Flags the platform clears:** `shadowsStale` (`Game::updateOccupancy`),
+  `dropAimLatch` and `recordsChanged` (`Game::finishStep`). `levelEntries`
+  counts `applyLevel` calls; `Game::syncLevelLook` applies a new level's
+  surfaces and uniforms when it moves, after the step and before a render.
+- **src/sim includes core and the standard library only.** Its math is core's
+  `Vec2`/`Vec3` and `sim_math.h` (`add`, `scale`, `normalize`, ..., `Ray3`,
+  `Box3`, `RayHit`, `rayBox`), each raymath's formula in raymath's order, so
+  results match the raylib build to the bit. Level numbers come from
+  `LEVEL_RULES`, never `LEVELS`. Colours are presentation: balloons and
+  confetti carry an index below `PARTY_COLOURS`, and render.cpp looks it up in
+  `PARTY`. Convert at the boundary with `toRl`/`fromRl`. `tools/core-check.sh`
+  fails on any other include.
+- **Bullets meet level geometry through `SolidTracer`** (`MeshTracer` in
+  game.cpp tests the chunk meshes). Actor bodies use `rayBox`, raylib's
+  `GetRayCollisionBox` step for step; the regression compares them on 200k rays.
+- **proof-shots' menu.png is wall-clock noise.** The title camera's pitch is
+  `sin(GetTime() * 0.22)`, so the frame depends on how long 60 frames took: the
+  baseline binary differed from itself by 26% of pixels under load. The world
+  frames are pinned and must match to the pixel.
+
+# Chunk layout (September 2026)
+
+`chunkLayout(world, cx, cz)` (src/core/layout.h) decides what a chunk holds
+besides its floorplan: props, wall and ceiling fixtures, light fittings and
+the openings in its walls, in metres. `bakeChunk` builds each item and decides
+nothing about where it goes. Walls, floors, ceilings, stairs and pools are
+still the mesher's. What will bite:
+
+- **A new decoration is decided in core and built in the mesher.** Add a
+  `FixtureKind`, push it in `cellFixtures` (or the chunk-wide list), and build
+  it in `addFixture`. A hash in world_mesh.cpp that decides whether something
+  exists is the pattern this replaced; an Unreal port would have to copy it.
+- **Emission order is part of the output.** Fixtures are pushed in cell order
+  and, inside a cell, in the order the mesher used to decide them. The mesher
+  builds them at three points in its cell walk (`FixtureStage`: with the walls,
+  on the pillar, in the service pass after the flights) and then the chunk's
+  own. Moving a kind to another stage reorders quads in a shared builder,
+  which changes blending of translucent geometry and depth ties.
+- **Which tubes work is a rule now.** `dead`, `vary` and `faulty` moved from
+  `LevelCfg` to `LevelRules`; `tubeHash` and `storeyHashOffset` live in core,
+  and `lightAtCPU` calls them. The layout's `LightFitting::dead/output/faulty`
+  come from the same hash. The shader keeps its own GLSL copy.
+- **Conduit buckets the cell with unsigned division** (`gi / CONDUIT_RUN` on a
+  `uint32_t`), so a negative cell's run is not `fdiv`'s. Make it signed and
+  every conduit run west or north of the origin moves.
+- `./mapdump --layout CX CZ` prints a chunk's layout (use `--level`,
+  `--visit`, `--storey` as for the plan).
+
 # Vending machine (September 2026)
 
 `PROP_VENDING` (Levels 1 and 4) was one grey box with a flat blue quad on it.
@@ -8,11 +130,12 @@ selling almond water. What will bite:
   The fittings keep the left half at the same pixels (`FIXPX`); `FIXTURES`
   divides u by 1024. The door is `VEND_PX` and the price strips
   `VEND_STRIP_PX`, both in the right half. Every rect on the door is in metres
-  in textures.h (`VEND_WIN`, `VEND_BIN`, ...), and both the painter
+  in textures.h (`VEND_WIN`, `VEND_BIN`, ...; the body's `VEND_HW` and `VEND_Y1`
+  are core's), and both the painter
   (`drawVendingFront`) and the mesher go through `vendUV`, so move a rect there
   and the paint moves with the geometry. Widening the atlas moved UV
   (0.375, 0.75) from pixel (192, 384) to (384, 384), so the plain-metal swatch
-  `addSolidBox` samples moved with it — to the strip between the diffuser and
+  `addSolidBox` samples (`PLAIN_UV`) moved with it — to the strip between the diffuser and
   the exit sign. Lose it and every conduit, sprinkler and lift door vanishes.
 - **Door x is mirrored against local x.** Seen from the front (local -z) local
   +x is on the viewer's left, the same thing that flipped the carton lettering.
@@ -67,7 +190,7 @@ objects were redrawn. What changed, and what will bite:
   anything scattered. `./texdump out/` writes each surface and a `_wrap` copy
   shifted half a tile, so a seam is in the middle of the picture.
 - **Things are their real size.** Floors/ceilings map 2 m to a repeat, walls
-  3 m across and `gWallV` down. Level 0's boards are 2/3 m (three to a repeat),
+  3 m across and `WallBuilder::tileV` down. Level 0's boards are 2/3 m (three to a repeat),
   so a grid line runs through every light centre (2 + 4k m) and the tray's
   0.69 m half-width lands on the next one: a troffer fills a 2x2 bay. Brick is
   13 x 40 to a 3 m wall (231 x 75 mm on centre). Pool tile is 1/6 m on floors
@@ -163,7 +286,7 @@ Level 0 is no longer one floorplan. The Threshold article's wanderers stumble
 and the photograph it began with is of a building's second floor, so Level 0
 is now a stack of floors joined by enclosed stairwells, straight flights under
 openings in the ceiling, and double-height atria railed round on the floor
-above (CREDITS.md). `LevelCfg::storeyH` is the floor-to-floor pitch: 4.32 m on
+above (CREDITS.md). `LevelRules::storeyH` is the floor-to-floor pitch: 4.32 m on
 Level 0 (24 risers of 180 mm), 0 on every other level, which is how they stay
 byte-identical. How it fits together, and what will bite:
 
@@ -172,7 +295,7 @@ byte-identical. How it fits together, and what will bite:
   march) is untouched and works on one storey in local coordinates. The others
   live in `World::layers` and are drawn translated by a pitch. Crossing the
   middle of a flight (`py > H/2 + 0.1`, or below `-H/2 - 0.1` on the way down)
-  calls `Game::changeStorey`, which swaps the chunk maps and rebases *everything
+  calls `Sim::changeStorey`, which swaps the chunk maps and rebases *everything
   with a position* by one pitch: player, eye, fall height, flares, the tape
   deck, bullets, impacts, coins, confetti, dogs, the hunter. **Add a new
   positional thing and it goes in that list**, or it jumps a storey the moment
@@ -215,7 +338,7 @@ byte-identical. How it fits together, and what will bite:
   the storeys disagree at the corner of an opening.
 - **`groundAt` looks down holes**: on a `VF_HOLE` cell it recurses into storey
   `qs - 1` (up to `STOREY_REACH`), so a fall into an atrium lands where the floor
-  below is. Landing calls `Game::landFrom`: about 0.4 of the health meter for
+  below is. Landing calls `Sim::landFrom`: about 0.4 of the health meter for
   one storey, most of it for two.
 - **Occupancy is RGBA, and twice as tall as it is wide.** Rows 0..n-1 are
   cells: byte 0 your storey, 1 the one below, 2 the one above. Bit 3 = no
@@ -227,8 +350,8 @@ byte-identical. How it fits together, and what will bite:
   (`floor((y + 0.3) / H)`), lights OPENUP cells with a second pass over the
   storey above's fittings — the ones that exist up there and are missing here,
   since a hole above is an opening below — and hashes each storey's tubes with
-  its own offset (`storeyOffset` ⇔ `storeyHashOffset` in levels.cpp: change
-  both). `lightAtCPU` mirrors the lighting through `StoreyLightCPU`, looking
+  its own offset (`storeyOffset` ⇔ `storeyHashOffset` in core/layout.cpp:
+  change both). `lightAtCPU` mirrors the lighting through `StoreyLightCPU`, looking
   bit 3 up per fitting, which is fine on the CPU.
 - **Where the frame goes, and why it is shaped like this.** Looking bit 3 up per
   fitting in the shader cost 13% of the frame everywhere, so bit 6 gates it and
@@ -253,13 +376,13 @@ byte-identical. How it fits together, and what will bite:
   opening that is *not* inside a feature footprint breaks this.
 - **Wallpaper on tall walls.** The L0 tile has its baseboard baked into the
   bottom, so a wall that climbs past 3 m (a shaft, the fascia round an opening,
-  the void side of a rail) repeats it at 3 m. `gTallPaper` (storeyed levels
+  the void side of a rail) repeats it at 3 m. `WallBuilder::tallPaper` (storeyed levels
   only) carries on from the tile's clean middle instead, and faces over a void
   (`voidFace`) never show the baseboard at all. Every other level keeps its
   deliberate repeat, byte for byte.
 - **Streaming.** Adjacent storeys are generated and meshed only round chunks
   that link to them (and ±2 through stacked links); `unloadFar` drops layers
-  more than two storeys away. The regression's `capture()` runs `streamChunks`
+  more than `STOREY_REACH` storeys away. The regression's `capture()` runs `streamChunks`
   24 times, not 7: with 7 the storey above had not been meshed yet and every
   opening in a capture was black.
 - **The landing lamp.** Enclosed stairwells have no ceiling grid over them, so
@@ -290,7 +413,7 @@ Level 1 follows the wiki's "Habitable Zone" article (CREDITS.md). What changed:
   dead, a fifth stuttering, faint green-white; the tubes sit on uLY. An 8 m grid
   was tried and cost 58% more frame: nearly all nine summed fittings then fall
   inside shadow-trace range. Brighter or more live tubes cost frame the same way.
-- **Walls run floor to ceiling once.** `gWallV` (world.cpp) is the vertical
+- **Walls run floor to ceiling once.** `WallBuilder::tileV` (world_mesh.cpp) is the vertical
   metres per wall-texture tile: 3 everywhere, `wallH` on L1, because the
   concrete now carries a damp band, tide line and pour joints at real heights
   and a 3 m repeat drew a second tide line under the 4.2 m slab. Anything baked
@@ -298,7 +421,7 @@ Level 1 follows the wiki's "Habitable Zone" article (CREDITS.md). What changed:
 - **Ground mist** is billboards in `renderScene`, not shader fog: no depth
   writes (or each bank punches a hole in the next), lit by `propLum`, faded out
   within 1.2 m of the eye.
-- **Supply crates** are not in any chunk mesh. `Game::crateAt` hashes the cell
+- **Supply crates** are not in any chunk mesh. `Sim::crateAt` hashes the cell
   with `crateEpoch`, which advances when a blackout *ends*, so crates move while
   nobody can see. They are drawn with `MAT_PROPS`, pushed out of the player in
   `updateCrates` (world collision knows nothing about them), and never stand in
@@ -320,10 +443,11 @@ entries, and the 2002 photograph (CREDITS.md). What changed, and what will bite:
   drawn from the rng and discarded so the stream stays aligned. The regression
   asserts zero furnished cells and zero windows. Cartons are Clark's level's
   only cover, so do not thin them further without looking at `hide spot` in mapdump.
-- **Light grid.** L0 `ls` is 4 m (was 8). The panel mesher reads `LEVELS[].ls`
+- **Light grid.** L0 `ls` is 4 m (was 8). The panel mesher reads `LEVEL_RULES[].ls`
   now; it used to hardcode `level == 1 ? 12 : 8` and would have drawn fittings
-  where no light came from. `vary`/`faulty` (LevelCfg) make tubes uneven and
-  stutter; lightState() and lightAtCPU both apply `vary`, change both. L0 trays
+  where no light came from. `vary`/`faulty` (LevelRules) make tubes uneven and
+  stutter; lightState(), lightAtCPU and chunkLayout all apply them, change all
+  three. L0 trays
   are flush lay-in troffers; the light plane stays at `wallH - 0.12`.
 - **Wet carpet** is world-space in the shader (`uWet`), not in the carpet tile:
   a puddle baked into a 2 m texture repeats every 2 m. `carpetWetCPU` mirrors it
@@ -345,13 +469,13 @@ entries, and the 2002 photograph (CREDITS.md). What changed, and what will bite:
   generate() stamps it before the connectivity flood *and again at the end*,
   so door thinning, the locked door and the exit pass cannot move its four
   doors. The table is anchored on room cell (7,7) but built on that cell's far
-  corner, so `Game::pickupSpot` offsets the can; the render and the pickup test
+  corner, so `Sim::pickupSpot` offsets the can; the render and the pickup test
   both go through it. The room's tubes are masked in the shader
   (`uRoomMask`) and the CPU mirror (`setLightExtrasCPU`), and its chandelier is
   `uLamp`. `applyLevel` must clear `inManila`/`manilaNear`: the first version
   did not, and the regression's grip-meter death stopped firing because a room
   from an earlier test was still "soothing" the player on a fresh descent.
-- **Migraine** (`Game::migraine`, post `uMigraine`) builds on L0 under live
+- **Migraine** (`Sim::migraine`, post `uMigraine`) builds on L0 under live
   tubes and deliberately survives a noclip, because the lore says it persists
   after you leave. beginDescent resets it.
 - **UTF-8 in level names.** The intro card letter-spaces the name byte by byte;
@@ -485,23 +609,37 @@ time so the executable remains independent of its working directory.
 | file | what lives there |
 |---|---|
 | `main.cpp` | `init()`, the `while (!WindowShouldClose())` loop, `shutdown()` |
-| `game.{h,cpp}` | all run state; per-frame update in `tick()` |
-| `render.cpp` | 3D scene pass, viewmodels, HUD, overlays |
-| `world.{h,cpp}` | infinite maze: chunk generation, mesh baking, collision, line of sight. `WallKind` / `PropKind` / `ChunkMesh` name the codes stored per cell |
-| `levels.{h,cpp}` | per-level look/feel table; CPU mirror of the shader's lighting |
+| `sim/` | game state and rules (`Sim`), stepped once a tick by `Sim::step`; see "Simulation and platform" below |
+| `sim/sim.cpp` | the tick order, levels, descents, death and escape |
+| `sim/player.cpp`, `weapons.cpp`, `items.cpp`, `hunters.cpp`, `place.cpp` | the body; what you hold; pickups, the deck and the use key; the hunter and the pack; blackouts, sanity, exits, the Manila Room |
+| `sim/input_frame.h`, `audio_events.h` | the contracts: what the platform tells the sim, and the sound the sim asks for |
+| `game.{h,cpp}` | the platform: window, assets, input into an `InputFrame`, chunk streaming, the occupancy grid; `Game::tick` |
+| `game_audio.{h,cpp}` | every `Sound`/`Music` handle and the synth; plays the sim's `AudioEvent`s in order |
+| `render.cpp` | 3D scene pass, viewmodels, HUD, overlays, drawn from `sim` |
+| `core/world.{h,cpp}` | infinite maze: chunk generation, storeys, collision, line of sight, pathfinding, occupancy grid. `WallKind` / `PropKind` name the codes stored per cell. No raylib |
+| `core/level_rules.h` | per-level rules: wall height, light pitch, storey pitch, name, which tubes work, exits |
+| `core/layout.{h,cpp}` | `ChunkLayout`: a chunk's props, fixtures, light fittings and openings, decided from the seed |
+| `core/hash.{h,cpp}`, `core/vec.h` | hashes, RNG, value noise; `Vec2`/`Vec3`, `TAU`, `clampf` |
+| `world_mesh.{h,cpp}` | the chunk mesher (`bakeChunk`), `ChunkMesh` slots, `ChunkMeshCache` |
+| `mesh_builder.{h,cpp}` | `MB`, `addPropBox`, `addSolidBox`, `PLAIN_UV` |
+| `object_meshes.{h,cpp}` | can, tape deck, reels, flare, supply crate |
+| `vec_rl.h` | `toRl` / `fromRl` between core's and the sim's math types and raylib's |
+| `levels.{h,cpp}` | per-level look table (`LevelCfg` extends `LevelRules`); CPU mirror of the shader's lighting |
 | `shaders.cpp` | the world and post-process GLSL, as string literals |
 | `surfaces.cpp` | the world surfaces: colour, height (m) and gloss per level surface, wrapped and at real scale |
 | `textures.cpp` | sprites, decals, fixtures, props atlas (with the CC0 material tiles), can, deck |
 | `revolver.{h,cpp}` | embedded authored revolver, pose interpolation, two material batches |
 | `sfx.cpp` | one-shot sounds synthesized into `Wave` buffers, plus the loaders for embedded recordings |
-| `audio.cpp` | the streaming ambience synth (hum, drone); recorded loops live in `Game::updateLoopAudio` |
-| `entity.h` | `Entity` (Clark on Level 0, the Smiler on 1 and 3, the Partygoer on 4) and `Dog` state |
-| `util.{h,cpp}` | hashes, RNG, value noise, shared helpers |
+| `audio.cpp` | the streaming ambience synth (hum, drone); recorded loops live in `GameAudio::feedLoops` |
+| `sim/entity.h` | `Entity` (Clark on Level 0, the Smiler on 1 and 3, the Partygoer on 4) and `Dog` state |
+| `util.{h,cpp}` | platform helpers (`cl8`, `SAMPLE_RATE`, `PARTY`); includes core's math and hashes |
 
-`tick()` calls the update functions in a fixed order — look, movement, dev
-keys, weapons, flare, tape deck, interaction, drink, ambience, entity, dogs,
-exits, then chunk streaming, then render. Order matters: e.g. weapons run before the
-entity update, so a shot lands before the entity decides what to do about it.
+`Sim::step` calls the update functions in a fixed order: flashlight, look,
+movement, dev keys, weapons, bullets, flare, tape deck, interaction, drink,
+ambience, Manila Room, crates, the loop-audio cue, entity, dogs, exits, timers.
+`Game::tick` then plays the audio events, streams chunks, rebuilds the
+occupancy grid and renders. Order matters: weapons run before the entity
+update, so a shot lands before the entity decides what to do about it.
 
 ## Building
 
@@ -568,7 +706,7 @@ Three things about that port are load-bearing:
 - **Records live in IndexedDB.** A tab's filesystem is a heap that dies with the
   page. `web/shell.html` mounts IDBFS over `$HOME` in `preRun` and holds main()
   back with `addRunDependency` until the load finishes, because `Game::init()`
-  reads the records file during startup. `Game::saveBest` flushes with
+  reads the records file during startup. `Game::saveRecords` flushes with
   `FS.syncfs` — and since `shutdown()` never runs, that is the only place on the
   web where records are written.
 
@@ -648,7 +786,8 @@ for its own drop shadow, so it calls `fitSize` by hand — change one, change bo
 the reload.** A held AIM button parks the right thumb for the length of a
 gunfight, leaving nothing to fire with. The latch lives in `input_web.cpp`
 rather than the shell because the *game* decides whether an aim is legal
-(`Game::updateAim`), so `webReleaseAim()` drops a latch the game refused and the
+(`Sim::updateAim`), so `webReleaseAim()` drops a latch the game refused (the sim
+sets `dropAimLatch`, and `Game::finishStep` releases it) and the
 button cannot sit lit over a gun that never comes up. The trap: `canReload()`
 refuses while the sights are up, so a latched aim silently swallows every tap of
 LOAD and the revolver can never be reloaded again — the poll drops the latch on
@@ -697,7 +836,7 @@ recover, up from 10 — a sprint that ends before you have crossed a 6 m hall is
 a sprint nobody uses.
 
 **Sprint limiting is currently off, and it is switched off in one number.**
-`SPRINT_DRAIN` in `Game::updateSprint` is 0, so stamina never falls and
+`SPRINT_DRAIN` in `Sim::updateSprint` is 0, so stamina never falls and
 `sprintExhausted` never latches in normal play. Nothing was deleted to do it:
 the hysteresis, the 6 s recovery, the HUD meter and the regression check are
 all still there and still exercised — the check forces `stamina = 0` by hand
@@ -826,9 +965,9 @@ one run: the world sat at ~100, dropped to 13 for one sample, and came back to
 
 **The env knobs do not survive the title screen, on either platform.**
 `BACKROOMS_LEVEL` is applied in `init()`, and then `startRun` calls
-`beginDescent`, which puts you on Level 0 — and `updateMenu` clears `flashOn`
+`beginDescent`, which puts you on Level 0 — and `Sim::menuDrift` clears `flashOn`
 every frame it runs. Natively this never shows, because `BACKROOMS_SHOT` skips
-the menu (`inMenu = shotPath == nullptr`); on the web there is no way to skip
+the menu (`sim.inMenu = shotPath == nullptr`); on the web there is no way to skip
 it, so `?level=3` genuinely starts a run on Level 0. Three separate sweeps
 "proved" the ES3 shader worked on every level and were all photographing
 Level 0. To reach another level in a browser you have to descend, or use the F3
@@ -940,8 +1079,8 @@ cannot otherwise reach.
 
 ## Measuring the layout, which screenshots will lie to you about
 
-`tools/mapdump.cpp` links the game's own `world.cpp` and calls `generate()`
-directly — no window, no GL, no Xvfb, about a second for a 258 m square:
+`tools/mapdump.cpp` links `src/core` alone and calls `generate()` directly —
+no window, no GL, no raylib, about a second for a 258 m square:
 
 ```bash
 tools/sandbox-build.sh mapdump                       # second build target
@@ -1002,9 +1141,9 @@ the partition was built to fix, and is not: the ring is 87 of a chunk's 256
 cells, so 34% of the floor *is* corridor, and a corridor has no walls. Compare
 the two numbers before reading anything into either.
 
-`hideSpotAt` and `coinAt` live on `Game`, which would drag the renderer into the
-harness, so mapdump mirrors those two rules. Change either in `game.cpp` and
-change it there too, or the harness quietly reports the old world.
+`hideSpotAt` and `coinAt` live on `Sim` (src/sim/items.cpp) and mapdump
+mirrors those two rules. Change either there and change it in mapdump too, or
+the harness quietly reports the old world.
 
 To compare frame cost against another build rather than eyeballing `fps=`
 (which is a smoothed integer, and the sandbox swings about 15% run to run):
@@ -1048,7 +1187,7 @@ sweeps concurrently — see the Xvfb note below.
 These each cost real debugging time. They are not hypothetical.
 
 **`mapdump` defaults to visit 0 and a headless capture runs at visit 1, so the
-two describe different worlds at the same seed.** `Game::applyLevel` does
+two describe different worlds at the same seed.** `Sim::applyLevel` does
 `world.visit = visits[lv]++`, and by the time `BACKROOMS_SHOT` takes its frame
 that has already happened twice — while `tools/mapdump.cpp` constructs a World
 and leaves `visit` at 0. The aggregate numbers still describe the generator
@@ -1243,7 +1382,7 @@ fallback, which is how it costs someone an hour.
 
 So headless captures no longer schedule blackouts at all — `BACKROOMS_SHOT`
 turns `noBlackout` on, and everything that sets `nextBlackout` goes through
-`Game::blackoutIn`, which returns `BLACKOUT_NEVER` in that mode. Pass
+`Sim::blackoutIn`, which returns `BLACKOUT_NEVER` in that mode. Pass
 `BACKROOMS_NOBLACKOUT=0` to shoot one on purpose; the F3 `B` key still forces
 one either way, because that is explicit. `blackoutIn` still *draws* its random
 number before discarding it, so a capture's `grng` stream stays aligned with a
@@ -1312,7 +1451,8 @@ the number instead of reading it.
 `tests/fixtures` or it exits immediately on its first `CHECK` — which reads as
 a broken build rather than a missing variable. `tools/sandbox-build.sh` has no
 regression target, so nothing in the repo tells you that; build it by hand with
-`src/*.cpp` minus `main.cpp` plus `tools/regression.cpp`.
+`src/*.cpp` and `src/core/*.cpp` (and `src/sim/*.cpp` once it exists) minus
+`main.cpp`, plus `tools/regression.cpp`.
 
 **raylib 6.0 redefined `SetSoundPan`'s argument without renaming it.** 5.5 took
 0..1 with **0 = hard right**; 6.0 takes -1..1 with **-1 = hard left**. The
@@ -1328,7 +1468,8 @@ puts `RAYLIB_VERSION_*` back into `rlshim/` (cffi strips it with every other
 
 **raylib `Sound` has no loop flag.** `PlaySound` is one-shot. To sustain
 something — the tape player's voice runs for 26 s off a 7.5 s clip — retrigger
-it on `!IsSoundPlaying(snd)` each frame. There is a one-frame gap at the seam,
+it on `!IsSoundPlaying(snd)` each frame (the sim emits `AudioEvent::VOICE`
+each tick and `GameAudio::play` retriggers). There is a one-frame gap at the seam,
 so a clip meant to loop has to begin and end somewhere quiet and be
 crossfaded, or the join clicks audibly.
 
@@ -1414,11 +1555,8 @@ and phone-landscape doesn't go binoculars. Two rules to keep: the sprint/aim/
 slide terms stay constant *vertical* offsets on the base — they are action,
 not viewport — and `fovForWindow` must invert raylib's own cone identity
 (`tan(fovy/2) = tan(fovX/2)·h/w`, the one render.cpp's culling uses), or the
-lock drifts from what the camera draws. A headless harness cannot drive
-`sprinting` through `updateMovement` — the flag is recomputed from the shift
-key each frame and CGEvent key injection does not reach GLFW — so the sprint
-composition is asserted as a target offset, not as a live flag; a check that
-passes only against a value the next line overwrites is worse than none.
+lock drifts from what the camera draws. The harness drives sprint through an
+`InputFrame` with `sprint` held, so the sprint pull is checked live.
 
 **A HUD authored in pixels is a HUD that only works at one resolution.** Every
 `DrawText` size and every offset from a screen edge in `render.cpp` goes through
@@ -1443,7 +1581,7 @@ and a spawn sets `dispY` exactly, so nothing ever legitimately stands on a cell
 whose riser it would otherwise be pushed off.
 
 **Vertical faces need three separate things to agree, or terrain is decorative.**
-`MAX_STEP` (world.h) is the whole rule: `gatherCellAABBs` emits a full-height
+`MAX_STEP` (core/world.h) is the whole rule: `gatherCellAABBs` emits a full-height
 blocker on any cell more than that above a neighbour, `canStep` refuses to route
 across one, and the mover leaves the floor instead of gliding down one. The
 generator *also* relaxes its own elevations to within `MAX_STEP` — without that
@@ -1524,7 +1662,8 @@ sight, the occupancy grid the shader marches, and the mesher all come through
 those two accessors — put the overlay anywhere else and the lighting and Clark
 disagree with the geometry the player can see. Two consequences to keep: shifting
 an edge must rebake *both* chunks that touch it (`World::shiftEdge` does), and it
-must set `occValid = false`, because `updateOccupancy` only rebuilds after you
+must set `shadowsStale` (which `updateOccupancy` turns into `occValid = false`),
+because `updateOccupancy` only rebuilds after you
 have walked six cells and a wall that appears in between lights as though it
 were not there.
 
@@ -1610,7 +1749,7 @@ real code. Use a unique multi-line anchor, and `git diff --stat` afterwards.
 
 ## Architecture invariants
 
-**Chalk is per level and per descent.** `Game::chalk` is an array indexed by
+**Chalk is per level and per descent.** `Sim::chalk` is an array indexed by
 level, not one list: `applyLevel` no longer clears it, `beginDescent` does. The
 marks are the only counter-play the game has to not knowing where you are, and
 finding one of your own again is the good moment — clearing them at every
@@ -1658,7 +1797,7 @@ that works.
 
 ### Chunk mesh slots
 
-`ChunkData::meshes[MESH_COUNT]` is indexed by `enum ChunkMesh` (world.h) and
+`ChunkMeshes::meshes[MESH_COUNT]` is indexed by `enum ChunkMesh` (world_mesh.h) and
 `Game::mats[MAT_COUNT]` by `enum MatSlot` (game.h). The first four entries of
 each are the same four surfaces in the same order — floor, ceiling, walls,
 props — which is what lets `renderScene` draw them in one loop. Keep that
@@ -1732,7 +1871,7 @@ brightness seam along every light-cell boundary.
 
 A panel is shaded as the **1.24 m square of glowing plastic it actually is**,
 not as a point: `PANEL_HALF` in `shaders.cpp` is the same half-extent as `hp`
-in world.cpp's panel mesher, and the shading point is `P` clamped into that
+in world_mesh.cpp's panel mesher, and the shading point is `P` clamped into that
 rectangle. Change the quad's size and change `PANEL_HALF` with it. Two things
 fall out of treating it as an area:
 
@@ -1790,7 +1929,7 @@ up to `MAXFLARES` alight at once, so one of them has to be chosen to feed it;
 every other fire still burns, wards Clark and the pack, and hisses, it just
 doesn't light the room on its own.
 
-**Choose it by `Game::flarePresence`, not by distance.** Presence is
+**Choose it by `Sim::flarePresence`, not by distance.** Presence is
 `burn-fraction / (1 + FLAREFALL·d²)` — how much of a fire actually reaches a
 point — and both `dominantFlare` (the point light) and the hiss in
 `updateFlare` go through it, so the fire you hear is always the fire you see
@@ -1845,13 +1984,13 @@ pass, and both obey the same three rules, learned the hard way:
   first version drew each fitting inside part of a square cell and hung the
   whole cell, and every outlet in the building came out a narrow vertical
   sliver.
-- **`addSolidBox` hardcodes UV (0.375, 0.75)** for every face it emits, so any
+- **`addSolidBox` samples `PLAIN_UV` (0.375, 0.75)** for every face it emits, so any
   atlas it draws from needs plain, opaque material at that spot. Both the props
   atlas and the fixtures atlas keep their metal swatch there deliberately. Move
   it and the boxes sample a transparent cell and disappear.
 - **The scrawl atlas grid lives in two places and they must agree**:
   `makeScrawlTex` (textures.cpp) lays the phrases out 4 across and 8 down, and
-  `SCRAWL_PHRASES` / the `uvOf` lambda in world.cpp cut the UVs to match. Add a
+  `SCRAWL_PHRASES` (core/layout.h) and `addScrawl` in world_mesh.cpp cut the UVs to match. Add a
   phrase without changing both and walls start showing you half of one line and
   half of another. The pen clips every dab to its own cell for the same reason —
   an atlas cell that bleeds puts a stray stroke from a neighbouring phrase on a
@@ -1864,8 +2003,8 @@ pass, and both obey the same three rules, learned the hard way:
   the gap did. `WALL_EXIT` still has no collision at all, so its jambs are
   phantom; that is pre-existing, not a pattern to copy.
 - **A prop's height lives in three places and they must agree**: `addProp`
-  builds it (world.cpp), `gatherCellAABBs` gives it a collision box, and
-  `Game::bottleShelfY` says how high a carton stands on it. Change one, change
+  builds it (world_mesh.cpp), `gatherCellAABBs` gives it a collision box, and
+  `Sim::bottleShelfY` says how high a carton stands on it. Change one, change
   all three, or you get furniture you fall through or cartons floating.
 - **The rotten floor patches are a shortcut, not an accident, and three things
   say so.** `World::softDip` is the single source of the bowl's shape: the floor
@@ -1900,8 +2039,9 @@ pass, and both obey the same three rules, learned the hard way:
 
 ## Projectiles and squeezing
 
-- `Revolver::SHOT_INTERVAL` controls both firing cadence and Shoot playback.
-  Keep those in sync when tuning the fire rate.
+- `SHOT_INTERVAL` (src/sim/weapon_timing.h) controls both firing cadence and
+  Shoot playback, and `RELOAD_TIME` the reload and its clip. One definition
+  each; the revolver's pose reads them.
 - Revolver rounds advance at 220 m/s and ray-test the full frame segment against
   solid world meshes and actor bounds. Keep nearest-hit selection shared across
   actors and walls; separate damage loops let one round hit multiple targets.
@@ -1923,7 +2063,7 @@ pass, and both obey the same three rules, learned the hard way:
 
 ## Health, swimming, double-tap run and the Smiler (September 2026)
 
-- Catches no longer end the run. `Game::hurtPlayer` takes `ENTITY_HIT` (0.6)
+- Catches no longer end the run. `Sim::hurtPlayer` takes `ENTITY_HIT` (0.6)
   for a landed lunge and `PACK_BITE` (0.6) per bite — one hit is survivable,
   a second before regeneration refills the bar is not — shoves the player 6 m/s
   away, and grants `HURT_GRACE` of immunity; `dieRun` only fires when health
@@ -1943,7 +2083,7 @@ pass, and both obey the same three rules, learned the hard way:
   swimmer sank — which reads as broken buoyancy, not a missing input mapping.
 - Double-tap W latches sprint (`wSprint`) until W is released; the second
   press must land inside `W_TAP`. Touch keeps its push-past-the-ring sprint.
-- One entity, three looks: `Game::hunterName()` / `clarkLevel()` pick Pirate
+- One entity, three looks: `Sim::hunterName()` / `clarkLevel()` pick Pirate
   Clark on Level 0 (`makeClarkTex`), the Partygoer on Level 4, and a Smiler on
   Levels 1 and 3. Death cards, the "IS DOWN" banner and `deathBy` go through
   `hunterName()`; the tally reads "hunters put down" because it spans levels.
@@ -1971,8 +2111,9 @@ pass, and both obey the same three rules, learned the hard way:
   a recorded running-water loop was tried and removed (it read as a tap left
   running); only the underwater loop plays, and only with your head under.
 - Loops are `Music` streams, not retriggered `Sound`s, so they wrap without a
-  gap. `Game::updateLoopAudio` must run every frame, including while paused,
-  or a stream underruns and stutters its last buffer.
+  gap. `GameAudio::feedLoops` must run every frame, including while paused,
+  or a stream underruns and stutters its last buffer: the sim emits
+  `AudioEvent::LOOPS` each step, and the paused tick calls `holdPaused`.
 - A stream loaded from memory keeps pointing at that memory. The embedded
   arrays are static, so this is safe; do not load music from a temporary buffer.
 - Surface swimming bobs the camera (`floatT`, `floatRoll` into the render roll)

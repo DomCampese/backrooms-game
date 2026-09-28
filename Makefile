@@ -18,8 +18,13 @@ ifeq ($(UNAME_S),Linux)
   LIBS_RL += -lm -ldl -lpthread
 endif
 
-SRCS := $(wildcard src/*.cpp)
-HDRS := $(wildcard src/*.h)
+# src/ is the raylib platform; src/core and src/sim are the engine-independent
+# layers (docs/migration.md).
+# No fused multiply-adds: core's results must not depend on the compiler
+# (src/core/fp_strict.h). Every command here compiles core with the rest.
+CXX_FLAGS := -std=c++17 -O2 -Wall -Wno-missing-field-initializers -ffp-contract=off
+SRCS := $(wildcard src/*.cpp src/core/*.cpp src/sim/*.cpp)
+HDRS := $(wildcard src/*.h src/core/*.h src/sim/*.h)
 
 src/object_materials.generated.h: tools/embed-materials.py $(wildcard assets/materials/*.jpg)
 	python3 tools/embed-materials.py objects
@@ -35,7 +40,7 @@ src/sounds.generated.h: tools/embed-materials.py $(shell find assets/sounds -nam
 GENERATED := src/object_materials.generated.h src/models.generated.h src/sounds.generated.h
 
 backrooms: $(SRCS) $(HDRS) $(GENERATED)
-	c++ -std=c++17 -O2 -Wall -Wno-missing-field-initializers $(CFLAGS_RL) $(SRCS) -o backrooms $(LIBS_RL)
+	c++ $(CXX_FLAGS) $(CFLAGS_RL) $(SRCS) -o backrooms $(LIBS_RL)
 
 run: backrooms
 	./backrooms
@@ -47,13 +52,24 @@ clean:
 
 # Uses the same native renderer as the game; run from shots/regression for captures.
 regression: $(GENERATED) tools/regression.cpp $(filter-out src/main.cpp,$(SRCS)) $(HDRS)
-	c++ -std=c++17 -O2 -Wall -Wno-missing-field-initializers $(CFLAGS_RL) -Isrc tools/regression.cpp $(filter-out src/main.cpp,$(SRCS)) -o /tmp/backrooms-regression $(LIBS_RL)
+	c++ $(CXX_FLAGS) $(CFLAGS_RL) -Isrc tools/regression.cpp $(filter-out src/main.cpp,$(SRCS)) -o /tmp/backrooms-regression $(LIBS_RL)
 	mkdir -p shots/regression
 	cd shots/regression && BACKROOMS_TEST_ASSET_DIR="$(CURDIR)/tests/fixtures" /tmp/backrooms-regression
 
 .PHONY: regression
 
 benchmark-animation: $(GENERATED) tools/bench-animation.cpp $(filter-out src/main.cpp,$(SRCS)) $(HDRS)
-	c++ -std=c++17 -O2 $(CFLAGS_RL) -Isrc tools/bench-animation.cpp $(filter-out src/main.cpp,$(SRCS)) -o /tmp/backrooms-animation-after $(LIBS_RL)
+	c++ -std=c++17 -O2 -ffp-contract=off $(CFLAGS_RL) -Isrc tools/bench-animation.cpp $(filter-out src/main.cpp,$(SRCS)) -o /tmp/backrooms-animation-after $(LIBS_RL)
 
 .PHONY: benchmark-animation
+
+# Core's golden answers, linked against src/core alone (docs/migration.md,
+# "Contract tests").
+CORE_SRCS := $(wildcard src/core/*.cpp)
+contract: tools/contract.cpp $(CORE_SRCS) $(wildcard src/core/*.h)
+	c++ $(CXX_FLAGS) tools/contract.cpp $(CORE_SRCS) -o contract
+
+contract-check: contract
+	./contract --check
+
+.PHONY: contract-check

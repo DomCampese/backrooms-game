@@ -1,6 +1,7 @@
 #pragma once
 // Procedural textures — surfaces are composed at startup, including embedded CC0 object tiles.
 #include "raylib.h"
+#include "core/world.h"   // VEND_HW, VEND_Y1: the vending machine's body
 
 // A world surface: its colour, and the detail map the shader reads beside it
 // (texture1: packed tangent slopes in RG, gloss mask in B, alpha 255). Both
@@ -65,14 +66,13 @@ extern const FixtureRect FIXTURES[FIX_COUNT];
 constexpr int FIX_ATLAS_W = 1024, FIX_ATLAS_H = 512;   // the fittings on the left half, the vending machine on the right
 
 // The vending machine's front door, painted at its real size into the right
-// half of the fixtures atlas and carved into pieces by the mesher (world.cpp,
+// half of the fixtures atlas and carved into pieces by the mesher (world_mesh.cpp,
 // PROP_VENDING): the frame round the window, the backlit header, the coin and
 // bill column, the delivery flap, and the lit back of the cabinet you see the
 // cans against through the glass. Every rect below is in metres on the door
 // (x across it from the middle, y up from the floor); `vendUV` turns a point
 // into the atlas, so a piece of geometry and the paint under it cannot drift.
-constexpr float VEND_HW = 0.44f;                 // half the door's width
-constexpr float VEND_Y0 = 0.06f, VEND_Y1 = 1.83f;  // door bottom (over the plinth) and top
+constexpr float VEND_Y0 = 0.06f;                 // door bottom, over the plinth; VEND_HW and VEND_Y1 are core's
 constexpr int   VEND_PX[4] = { 520, 4, 250, 504 };  // x, y, w, h in the atlas: 0.88 x 1.77 m
 struct VendRect { float x0, y0, x1, y1; };
 constexpr VendRect VEND_WIN    = { -0.40f, 0.62f, 0.17f, 1.70f };   // the glass

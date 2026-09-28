@@ -4,15 +4,16 @@
 #include "raymath.h"
 #include "rlgl.h"
 #include <cmath>
-#include "textures.h"   // ENT_FRAMES / DOG_FRAMES: how many frames each walk sheet holds
 #include <algorithm>
+
+static_assert(sizeof(PARTY) / sizeof(PARTY[0]) == PARTY_COLOURS, "the sim draws balloon colours from PARTY_COLOURS");
 
 // How hard one flare is burning right now: a fast flare-up as the cap comes
 // off, a fade over the last second and a half, and the flicker on top. Both
 // the point light and the halo spheres read it, so a flare that is nearly out
 // dims in the room and in its own glow together.
 static float flareGlow(const FlareProj &f, float flick) {
-    return clampf((Game::FLAREBURN - f.burn) * 6.0f, 0, 1) * clampf(f.burn / Game::FLAREFADE, 0, 1) * flick;
+    return clampf((Sim::FLAREBURN - f.burn) * 6.0f, 0, 1) * clampf(f.burn / Sim::FLAREFADE, 0, 1) * flick;
 }
 
 // Which two frames of a walk sheet a gait phase falls between, and how far.
@@ -89,55 +90,56 @@ static void hudTextR(const char *t, int rx, int y, int px, Color c) {
 }
 
 void Game::renderScene(double now) {
+    syncLevelLook();
     if (captureTime >= 0) now = captureTime;
     // ---- render 3D scene into rt
-    int pcx = fdiv(cellOf(px), CCELLS), pcz = fdiv(cellOf(pz), CCELLS);
-    int pci = cellOf(px), pck = cellOf(pz);
+    int pcx = fdiv(cellOf(sim.px), CCELLS), pcz = fdiv(cellOf(sim.pz), CCELLS);
+    int pci = cellOf(sim.px), pck = cellOf(sim.pz);
     Camera3D cam = {};
-    cam.position = { px, eyeY, pz };
-    cam.target = Vector3Add(cam.position, fwd);
+    cam.position = { sim.px, sim.eyeY, sim.pz };
+    cam.target = Vector3Add(cam.position, toRl(sim.fwd));
     // roll the up-vector a touch when strafing, so the camera leans into it
-    float roll = leanCur * -0.035f + squeezeBlend * 0.07f + floatRoll;
-    cam.up = { r2x * sinf(roll), cosf(roll), r2z * sinf(roll) };
-    cam.fovy = fov;
+    float roll = sim.leanCur * -0.035f + sim.squeezeBlend * 0.07f + sim.floatRoll;
+    cam.up = { sim.r2x * sinf(roll), cosf(roll), sim.r2z * sinf(roll) };
+    cam.fovy = sim.fov;
     cam.projection = CAMERA_PERSPECTIVE;
 
     float timeF = (float)now;
     Vector3 viewPos = cam.position;
     SetShaderValue(worldShader, locTime, &timeF, SHADER_UNIFORM_FLOAT);
-    float boSend = blackoutCur * (whisperT > 0 ? 0.86f : 1.0f);   // lights sag while it whispers
+    float boSend = sim.blackoutCur * (sim.whisperT > 0 ? 0.86f : 1.0f);   // lights sag while it whispers
     SetShaderValue(worldShader, locBlackout, &boSend, SHADER_UNIFORM_FLOAT);
     SetShaderValue(worldShader, locViewPos, &viewPos, SHADER_UNIFORM_VEC3);
-    float flashSend = flashCur;
-    if (flashOn && battery < 0.15f) {   // the battery's dying: a warning flicker before it goes dark
+    float flashSend = sim.flashCur;
+    if (sim.flashOn && sim.battery < 0.15f) {   // the battery's dying: a warning flicker before it goes dark
         float lowFlick = 0.55f + 0.45f * sinf(timeF * 19.0f) * sinf(timeF * 31.0f + 1.7f);
-        flashSend *= clampf(battery / 0.15f, 0.15f, 1.0f) * (0.7f + 0.3f * lowFlick);
+        flashSend *= clampf(sim.battery / 0.15f, 0.15f, 1.0f) * (0.7f + 0.3f * lowFlick);
     }
     SetShaderValue(worldShader, locFlash, &flashSend, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(worldShader, locFlashDir, &fwd, SHADER_UNIFORM_VEC3);
+    SetShaderValue(worldShader, locFlashDir, &sim.fwd, SHADER_UNIFORM_VEC3);
     float flick = 0.91f + 0.09f * sinf(timeF * 31.0f) * sinf(timeF * 47.3f + 1.3f);
     // The shader carries one flare point light, so several fires on the floor
     // become the one with the most presence at your feet — the others still
     // burn, ward and hiss, they just don't each get a light of their own.
     // Presence rather than distance: a guttering flare underfoot must not hold
-    // the light off a fresh one up the hall. See Game::dominantFlare.
-    const FlareProj *lead = dominantFlare(px, pz);
+    // the light off a fresh one up the hall. See Sim::dominantFlare.
+    const FlareProj *lead = sim.dominantFlare(sim.px, sim.pz);
     float flareInt = lead ? flareGlow(*lead, flick) : 0.0f;
     Vector3 flarePos = lead ? Vector3{ lead->x, lead->y + 0.06f, lead->z }
-                            : Vector3{ px, eyeY, pz };
-    if (!lead && muzzleT > 0) {   // muzzle flash borrows the flare point light
-        flareInt = muzzleT / 0.09f * 1.3f;
-        flarePos = { px + f2x * 0.6f, eyeY - 0.05f, pz + f2z * 0.6f };
+                            : Vector3{ sim.px, sim.eyeY, sim.pz };
+    if (!lead && sim.muzzleT > 0) {   // muzzle flash borrows the flare point light
+        flareInt = sim.muzzleT / Sim::MUZZLE_FLASH * 1.3f;
+        flarePos = { sim.px + sim.f2x * 0.6f, sim.eyeY - 0.05f, sim.pz + sim.f2z * 0.6f };
     }
     SetShaderValue(worldShader, locFlarePos, &flarePos, SHADER_UNIFORM_VEC3);
     SetShaderValue(worldShader, locFlareInt, &flareInt, SHADER_UNIFORM_FLOAT);
     // the hunter's pool of dead light travels with it
-    Vector3 entPos = { ent.x, ent.dispY + 1.0f, ent.z };
-    float entDarkSend = (ent.st == EState::Hidden) ? 0.0f : entDarkCur;
+    Vector3 entPos = { sim.ent.x, sim.ent.dispY + 1.0f, sim.ent.z };
+    float entDarkSend = (sim.ent.st == EState::Hidden) ? 0.0f : sim.entDarkCur;
     SetShaderValue(worldShader, locEntPos, &entPos, SHADER_UNIFORM_VEC3);
     SetShaderValue(worldShader, locEntDark, &entDarkSend, SHADER_UNIFORM_FLOAT);
     // ...and it's solid: a beam that catches it throws its shadow down the hall
-    float entBlock = (ent.st == EState::Hidden || ent.st == EState::Die) ? 0.0f : 1.0f;
+    float entBlock = (sim.ent.st == EState::Hidden || sim.ent.st == EState::Die) ? 0.0f : 1.0f;
     SetShaderValue(worldShader, locEntBlock, &entBlock, SHADER_UNIFORM_FLOAT);
     // The nearest enclosed stairwell's landing light, in this storey's frame:
     // the one rising from here, or the one arriving here whose landing is a
@@ -145,18 +147,18 @@ void Game::renderScene(double now) {
     // this a stair shaft is lit only by what falls down it from 7 m up.
     Vector3 wellLamp = { 0, 0, 0 };
     float wellD2 = 1e30f;
-    if (world.storeyH > 0.0f) {
+    if (sim.world.storeyH > 0.0f) {
         for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
             int cx = pcx + dx, cz = pcz + dz;
-            auto it = world.chunks.find(World::key(cx, cz));
-            if (it == world.chunks.end()) continue;
+            auto it = sim.world.chunks.find(World::key(cx, cz));
+            if (it == sim.world.chunks.end()) continue;
             const ChunkData &cd = it->second;
             for (int q = 0; q < cd.nfeat; q++) {
                 const VertFeat &f = cd.feats[q];
                 if (f.kind != VK_STAIRWELL) continue;
-                Vector3 lp = world.landingLamp(f, cx, cz);
-                lp.y += (f.lo - world.storey) * world.storeyH;
-                float d2 = (lp.x - px) * (lp.x - px) + (lp.y - eyeY) * (lp.y - eyeY) + (lp.z - pz) * (lp.z - pz);
+                Vector3 lp = toRl(sim.world.landingLamp(f, cx, cz));
+                lp.y += (f.lo - sim.world.storey) * sim.world.storeyH;
+                float d2 = (lp.x - sim.px) * (lp.x - sim.px) + (lp.y - sim.eyeY) * (lp.y - sim.eyeY) + (lp.z - sim.pz) * (lp.z - sim.pz);
                 if (d2 < wellD2) { wellD2 = d2; wellLamp = lp; }
             }
         }
@@ -167,19 +169,19 @@ void Game::renderScene(double now) {
         // like an old filament rather than stuttering like a tube.
         float mask[4] = { 1e6f, 1e6f, -1e6f, -1e6f }, lamp[4] = { 0, 0, 0, 0 };
         Vector3 lampCol = { 1.0f, 0.70f, 0.42f };
-        float manD2 = manilaNear ? (manilaX - px) * (manilaX - px) + (manilaZ - pz) * (manilaZ - pz) : 1e30f;
-        if (manilaNear) {
-            mask[0] = manilaX - 4.0f; mask[1] = manilaZ - 4.0f; mask[2] = manilaX + 4.0f; mask[3] = manilaZ + 4.0f;
+        float manD2 = sim.manilaNear ? (sim.manilaX - sim.px) * (sim.manilaX - sim.px) + (sim.manilaZ - sim.pz) * (sim.manilaZ - sim.pz) : 1e30f;
+        if (sim.manilaNear) {
+            mask[0] = sim.manilaX - 4.0f; mask[1] = sim.manilaZ - 4.0f; mask[2] = sim.manilaX + 4.0f; mask[3] = sim.manilaZ + 4.0f;
         }
-        if (manilaNear && manD2 <= wellD2) {
+        if (sim.manilaNear && manD2 <= wellD2) {
             float waver = 0.96f + 0.04f * sinf((float)now * 7.3f) * sinf((float)now * 2.9f + 1.1f);
-            lamp[0] = manilaX; lamp[1] = world.ceilY(cellOf(manilaX), cellOf(manilaZ)) - 0.80f;
-            lamp[2] = manilaZ; lamp[3] = 1.0f * waver;
+            lamp[0] = sim.manilaX; lamp[1] = sim.world.ceilY(cellOf(sim.manilaX), cellOf(sim.manilaZ)) - 0.80f;
+            lamp[2] = sim.manilaZ; lamp[3] = 1.0f * waver;
         } else if (wellD2 < 22.0f * 22.0f) {
             // A tube like any other: it goes out in a blackout and stutters
             // with the rest, rather than holding on the way the chandelier does.
             lamp[0] = wellLamp.x; lamp[1] = wellLamp.y; lamp[2] = wellLamp.z;
-            lamp[3] = 0.95f * blackoutCur * flick;
+            lamp[3] = 0.95f * sim.blackoutCur * flick;
             lampCol = { 0.95f, 0.93f, 0.80f };
         }
         SetShaderValue(worldShader, locRoomMask, mask, SHADER_UNIFORM_VEC4);
@@ -194,38 +196,38 @@ void Game::renderScene(double now) {
 
     BeginTextureMode(rt);
     // Long pool galleries fade into atmospheric colour beyond the streamed ring.
-    ClearBackground(level==2 ? Color{48,70,66,255} : BLACK);
+    ClearBackground(sim.level==2 ? Color{48,70,66,255} : BLACK);
     BeginMode3D(cam);
-    struct VisibleChunk { ChunkData *data; float distance2; float yOff; };
+    struct VisibleChunk { const ChunkMeshes *data; float distance2; float yOff; };
     VisibleChunk visible[25 + 2 * STOREY_REACH * 25];
     int visibleCount = 0;
-    Vector3 cameraRight = Vector3Normalize(Vector3CrossProduct(fwd, cam.up));
-    Vector3 cameraUp = Vector3Normalize(Vector3CrossProduct(cameraRight, fwd));
+    Vector3 cameraRight = Vector3Normalize(Vector3CrossProduct(toRl(sim.fwd), cam.up));
+    Vector3 cameraUp = Vector3Normalize(Vector3CrossProduct(cameraRight, toRl(sim.fwd)));
     float tanV = tanf(cam.fovy * DEG2RAD * 0.5f);
     float tanH = tanV * rt.texture.width / rt.texture.height;
     // Bounds include the deepest atrium, ceiling and slight wall overlap — and,
     // on a storeyed level, flights and shaft walls that climb to the next floor.
-    float yLo = -2.5f, yHi = fmaxf(LEVELS[level].wallH, world.storeyH) + 1.2f;
+    float yLo = -2.5f, yHi = fmaxf(LEVELS[sim.level].wallH, sim.world.storeyH) + 1.2f;
     float halfY = (yHi - yLo) * 0.5f;
     float radius = sqrtf(CHUNK*CHUNK*0.5f + halfY*halfY) + 0.5f;
     // A sphere against the view frustum, conservatively.
     auto sphereVisible = [&](Vector3 c, float r) {
-        Vector3 delta{c.x - px, c.y - eyeY, c.z - pz};
-        float depth = Vector3DotProduct(delta, fwd);
+        Vector3 delta{c.x - sim.px, c.y - sim.eyeY, c.z - sim.pz};
+        float depth = Vector3DotProduct(delta, toRl(sim.fwd));
         return !(depth < -r ||
                  fabsf(Vector3DotProduct(delta, cameraRight)) > depth*tanH + r*sqrtf(1+tanH*tanH) ||
                  fabsf(Vector3DotProduct(delta, cameraUp)) > depth*tanV + r*sqrtf(1+tanV*tanV));
     };
-    auto consider = [&](std::unordered_map<uint64_t, ChunkData> &m, int cx, int cz, float yOff) {
-        auto it = m.find(World::key(cx, cz));
-        if (it == m.end() || !it->second.built) return;
-        for (int q = 0; q < visibleCount; q++) if (visible[q].data == &it->second) return;
+    auto consider = [&](int storey, int cx, int cz, float yOff) {
+        const ChunkMeshes *baked = chunkMeshes.find(sim.world, storey, cx, cz);
+        if (!baked) return;
+        for (int q = 0; q < visibleCount; q++) if (visible[q].data == baked) return;
         Vector3 c{cx*CHUNK+CHUNK*0.5f, yLo + halfY + yOff, cz*CHUNK+CHUNK*0.5f};
         if (!sphereVisible(c, radius)) return;
         if (visibleCount < (int)(sizeof(visible) / sizeof(visible[0])))
-            visible[visibleCount++] = {&it->second, Vector3LengthSqr(Vector3{c.x-px, c.y-eyeY, c.z-pz}), yOff};
+            visible[visibleCount++] = {baked, Vector3LengthSqr(Vector3{c.x-sim.px, c.y-sim.eyeY, c.z-sim.pz}), yOff};
     };
-    for (int dx=-2; dx<=2; ++dx) for (int dz=-2; dz<=2; ++dz) consider(world.chunks, pcx+dx, pcz+dz, 0.0f);
+    for (int dx=-2; dx<=2; ++dx) for (int dz=-2; dz<=2; ++dz) consider(sim.world.storey, pcx+dx, pcz+dz, 0.0f);
     std::sort(visible, visible+visibleCount, [](const VisibleChunk &a, const VisibleChunk &b) {
         return a.distance2 < b.distance2;
     });
@@ -248,13 +250,13 @@ void Game::renderScene(double now) {
     // The opening between storeys lo and lo + 1 (relative to yours) in a chunk.
     auto portalOf = [&](int cx, int cz, int lo, Portal &p) {
         VertFeat f;
-        if (!world.pairFeature(cx, cz, world.storey + lo, f)) return false;
+        if (!sim.world.pairFeature(cx, cz, sim.world.storey + lo, f)) return false;
         float ax = (float)((cx * CCELLS + f.x0) * CELL), az = (float)((cz * CCELLS + f.z0) * CELL);
         float ex = (f.dir < 2 ? f.wu : f.lv) * CELL, ez = (f.dir < 2 ? f.lv : f.wu) * CELL;
-        p = { ax - 0.1f, az - 0.1f, ax + ex + 0.1f, az + ez + 0.1f, (lo + 1) * world.storeyH, lo >= 0 };
+        p = { ax - 0.1f, az - 0.1f, ax + ex + 0.1f, az + ez + 0.1f, (lo + 1) * sim.world.storeyH, lo >= 0 };
         // The prism between the two floors has to be in view at all.
-        Vector3 c{ax + ex * 0.5f, (lo + 0.5f) * world.storeyH, az + ez * 0.5f};
-        return sphereVisible(c, sqrtf(ex*ex + ez*ez + world.storeyH*world.storeyH) * 0.5f + 0.5f);
+        Vector3 c{ax + ex * 0.5f, (lo + 0.5f) * sim.world.storeyH, az + ez * 0.5f};
+        return sphereVisible(c, sqrtf(ex*ex + ez*ez + sim.world.storeyH*sim.world.storeyH) * 0.5f + 0.5f);
     };
     // Can anything in this chunk's box (at storey offset yOff) be seen through p?
     auto through = [&](const Portal &p, int cx, int cz, float yOff) {
@@ -275,16 +277,15 @@ void Game::renderScene(double now) {
         return !(mxx < p.x0 || mnx > p.x1 || mxz < p.z0 || mnz > p.z1);
     };
     int ownCount = visibleCount;
-    if (world.storeyH > 0.0f)
+    if (sim.world.storeyH > 0.0f)
         for (int rel = -1; rel <= 1; rel += 2)
             for (int dx=-1; dx<=1; ++dx) for (int dz=-1; dz<=1; ++dz) {
                 Portal p1;
                 if (!portalOf(pcx+dx, pcz+dz, rel > 0 ? 0 : -1, p1)) continue;
-                auto &m = world.layer(world.storey + rel);
                 for (int ex=-1; ex<=1; ++ex) for (int ez=-1; ez<=1; ++ez) {
                     int cx = pcx+dx+ex, cz = pcz+dz+ez;
-                    if (!through(p1, cx, cz, rel * world.storeyH)) continue;
-                    consider(m, cx, cz, rel * world.storeyH);
+                    if (!through(p1, cx, cz, rel * sim.world.storeyH)) continue;
+                    consider(sim.world.storey + rel, cx, cz, rel * sim.world.storeyH);
                     // Stairs stack: the flight you are looking up often lands
                     // beside the next one, and through that one's opening is
                     // the storey after. Its own chunk is all you can see of it,
@@ -294,9 +295,9 @@ void Game::renderScene(double now) {
                         if(!portalOf(cx,cz,rel>0 ? depth-1 : -depth,chain[depth-1])) break;
                         bool seen=true;
                         for(int j=0;j<depth;++j)
-                            if(!through(chain[j],cx,cz,depth*rel*world.storeyH)) { seen=false;break; }
+                            if(!through(chain[j],cx,cz,depth*rel*sim.world.storeyH)) { seen=false;break; }
                         if(!seen) break;
-                        consider(world.layer(world.storey+depth*rel),cx,cz,depth*rel*world.storeyH);
+                        consider(sim.world.storey+depth*rel,cx,cz,depth*rel*sim.world.storeyH);
                     }
                 }
             }
@@ -305,12 +306,12 @@ void Game::renderScene(double now) {
     });
     // The storey a chunk belongs to, for the shader's lighting (uDrawRel).
     auto setDrawRel = [&](float yOff) {
-        float rel = world.storeyH > 0.0f ? roundf(yOff / world.storeyH) : 0.0f;
+        float rel = sim.world.storeyH > 0.0f ? roundf(yOff / sim.world.storeyH) : 0.0f;
         SetShaderValue(worldShader, locDrawRel, &rel, SHADER_UNIFORM_FLOAT);
     };
     // Front to back lets depth rejection avoid expensive lighting on hidden rooms.
     for (int i=0; i<visibleCount; ++i) {
-        ChunkData &chunk = *visible[i].data;
+        const ChunkMeshes &chunk = *visible[i].data;
         Matrix xf = MatrixTranslate(0, visible[i].yOff, 0);
         setDrawRel(visible[i].yOff);
         for (int m=MESH_FLOOR; m<=MESH_PROPS; ++m)
@@ -323,7 +324,7 @@ void Game::renderScene(double now) {
     // Share the frustum test with transparent geometry, and blend distant chunks
     // first. Within a chunk, the existing AO / water / glass order is retained.
     for (int i=visibleCount-1; i>=0; --i) {
-        ChunkData &chunk = *visible[i].data;
+        const ChunkMeshes &chunk = *visible[i].data;
         Matrix xf = MatrixTranslate(0, visible[i].yOff, 0);
         setDrawRel(visible[i].yOff);
         if (chunk.meshes[MESH_AO].vertexCount > 0)
@@ -337,20 +338,20 @@ void Game::renderScene(double now) {
     // Stairwell landing lights: the tube on each batten near you, as bright as
     // the tubes are tonight (blackoutCur), drawn here because a chunk mesh
     // cannot go out. The one nearest is also the shader's uLamp.
-    if (world.storeyH > 0.0f) {
+    if (sim.world.storeyH > 0.0f) {
         for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
-            auto it = world.chunks.find(World::key(pcx + dx, pcz + dz));
-            if (it == world.chunks.end()) continue;
+            auto it = sim.world.chunks.find(World::key(pcx + dx, pcz + dz));
+            if (it == sim.world.chunks.end()) continue;
             for (int q = 0; q < it->second.nfeat; q++) {
                 const VertFeat &f = it->second.feats[q];
                 if (f.kind != VK_STAIRWELL) continue;
-                float yo = (f.lo - world.storey) * world.storeyH;
-                Vector3 c = world.featureWorld(f, pcx + dx, pcz + dz, CELL, world.storeyH * 0.5f + 2.25f - 0.065f + yo,
-                                               4 * CELL - WT - 0.145f);
-                Vector3 e = world.featureWorld(f, pcx + dx, pcz + dz, CELL + 1.0f, 0, 0);
-                Vector3 o = world.featureWorld(f, pcx + dx, pcz + dz, CELL, 0, 0);
+                float yo = (f.lo - sim.world.storey) * sim.world.storeyH;
+                Vector3 c = toRl(sim.world.featureWorld(f, pcx + dx, pcz + dz, CELL, sim.world.storeyH * 0.5f + 2.25f - 0.065f + yo,
+                                               4 * CELL - WT - 0.145f));
+                Vector3 e = toRl(sim.world.featureWorld(f, pcx + dx, pcz + dz, CELL + 1.0f, 0, 0));
+                Vector3 o = toRl(sim.world.featureWorld(f, pcx + dx, pcz + dz, CELL, 0, 0));
                 bool alongX = fabsf(e.x - o.x) > 0.5f;
-                unsigned char g8 = cl8(60 + 195 * blackoutCur * flick);
+                unsigned char g8 = cl8(60 + 195 * sim.blackoutCur * flick);
                 DrawCube(c, alongX ? 0.96f : 0.035f, 0.035f, alongX ? 0.035f : 0.96f, { g8, g8, cl8(g8 * 0.92f), 255 });
             }
         }
@@ -358,12 +359,12 @@ void Game::renderScene(double now) {
     // small props draw with raylib's unlit default shader, so estimate the room
     // light at each one (plus flare/muzzle glow) — no more balloons shining
     // through a blackout
-    const LevelCfg &lc = LEVELS[level];
+    const LevelCfg &lc = LEVELS[sim.level];
     float ambLumP = (lc.amb.x + lc.amb.y + lc.amb.z) / 3.0f;
-    float edSend = (ent.st == EState::Hidden) ? 0.0f : entDarkCur;
+    float edSend = (sim.ent.st == EState::Hidden) ? 0.0f : sim.entDarkCur;
     auto propLum = [&](float x, float y, float z) {
-        float lum = lightAtCPU(x, y, z, blackoutCur, lc.ls, lc.wallH - 0.12f, lc.dead, lc.lightMul, ambLumP,
-                               ent.x, ent.z, edSend, lc.vary);
+        float lum = lightAtCPU(x, y, z, sim.blackoutCur, lc.ls, lc.wallH - 0.12f, lc.dead, lc.lightMul, ambLumP,
+                               sim.ent.x, sim.ent.z, edSend, lc.vary);
         if (flareInt > 0.01f) {
             float fx = x - flarePos.x, fy = y - flarePos.y, fz = z - flarePos.z;
             lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fx * fx + fy * fy + fz * fz)), 0.0f, 1.0f);
@@ -373,15 +374,15 @@ void Game::renderScene(double now) {
     auto lit = [](Color c, float f) {
         return Color{ cl8(c.r * f), cl8(c.g * f), cl8(c.b * f), c.a };
     };
-    if (level == 1) {   // this epoch's supply crates (Game::crateAt)
+    if (sim.level == 1) {   // this epoch's supply crates (Sim::crateAt)
         for (int dx = -9; dx <= 9; dx++) for (int dz = -9; dz <= 9; dz++) {
             int a = pci + dx, b = pck + dz;
-            if (!crateAt(a, b)) continue;
-            float cxw = a * CELL + 1.0f, czw = b * CELL + 1.0f, gy = world.floorY(a, b);
+            if (!sim.crateAt(a, b)) continue;
+            float cxw = a * CELL + 1.0f, czw = b * CELL + 1.0f, gy = sim.world.floorY(a, b);
             float spin = (float)(ih(a, b, 0xC2A7u) & 3) * 1.5707963f + (((ih(a, b, 0xC2A8u) & 255) / 255.0f) - 0.5f) * 0.4f;
             Matrix xf = MatrixMultiply(MatrixRotateY(spin), MatrixTranslate(cxw, gy, czw));
             DrawMesh(crateMesh, mats[MAT_PROPS], xf);
-            if (!cratesOpened.count(cellKey2(a, b)))
+            if (!sim.cratesOpened.count(Sim::cellKey2(a, b)))
                 DrawMesh(crateLidMesh, mats[MAT_PROPS], MatrixMultiply(MatrixTranslate(0, 0.564f, 0), xf));
             else   // prised off and leaned against the side
                 DrawMesh(crateLidMesh, mats[MAT_PROPS],
@@ -390,16 +391,16 @@ void Game::renderScene(double now) {
     }
     for (int dx = -7; dx <= 7; dx++) for (int dz = -7; dz <= 7; dz++) {   // world pickups nearby
         int a = pci + dx, b = pck + dz;
-        if (taken.count(cellKey(a, b))) continue;
-        Pickup kind = pickupAt(a, b);            // the same call the pickup test makes
+        if (sim.taken.count(sim.cellKey(a, b))) continue;
+        Pickup kind = sim.pickupAt(a, b);            // the same call the pickup test makes
         if (kind == Pickup::None) continue;
-        Vector2 spot = pickupSpot(a, b);
+        Vec2 spot = sim.pickupSpot(a, b);
         float bxx = spot.x, bzz = spot.y;
-        float gy = world.floorY(a, b);
+        float gy = sim.world.floorY(a, b);
         float pl = propLum(bxx, gy + 0.15f, bzz);
         switch (kind) {
         case Pickup::AlmondWater: {   // the can itself, on the floor or up on the furniture
-            float shelf = bottleShelfY(a, b);
+            float shelf = sim.bottleShelfY(a, b);
             float sy = gy + (shelf >= 0 ? shelf : 0.0f);
             // the mesh is built with its base on y=0, so this just puts the base
             // where it belongs. Spin each one by its cell so they aren't clones.
@@ -442,63 +443,64 @@ void Game::renderScene(double now) {
             break;
         }
     }
-    if (!deck.carried)   // the deck, wherever you set it down, facing the way you threw it
-        drawDeck(MatrixMultiply(MatrixRotateY(deck.yaw), MatrixTranslate(deck.x, deck.y, deck.z)),
-                 deck.playing);
-    for (auto &cw : coinsWorld) {
+    if (!sim.deck.carried)   // the deck, wherever you set it down, facing the way you threw it
+        drawDeck(MatrixMultiply(MatrixRotateY(sim.deck.yaw), MatrixTranslate(sim.deck.x, sim.deck.y, sim.deck.z)),
+                 sim.deck.playing);
+    for (auto &cw : sim.coinsWorld) {
         float gy = cw.y;   // the floor they fell on, in this storey's frame
         float bob = sinf((float)now * 2.4f + cw.x) * 0.03f;
         DrawCylinder({ cw.x, gy + 0.06f + bob, cw.z }, 0.085f, 0.085f, 0.024f, 12,
                      lit({ 234, 188, 74, 255 }, propLum(cw.x, gy + 0.1f, cw.z)));
     }
-    if (level == 4) {   // balloons nose against the ceiling, strings hanging down
+    if (sim.level == 4) {   // balloons nose against the ceiling, strings hanging down
         for (int dx = -7; dx <= 7; dx++) for (int dz = -7; dz <= 7; dz++) {
             int a = pci + dx, b = pck + dz;
             // Placement comes from balloonAt, the same function the bullets test
             // against. A copy of its hash here kept the old world.seed salt after
             // levels began reseeding per visit, so the balloons you could see were
             // never the ones a round could hit.
-            Vector3 bp;
-            if (!balloonAt(a, b, bp)) continue;   // none here, or already shot
-            uint32_t h = ih(a, b, pickupSalt() ^ 0xBA11u);
+            Vec3 bp;
+            if (!sim.balloonAt(a, b, bp)) continue;   // none here, or already shot
+            uint32_t h = ih(a, b, sim.pickupSalt() ^ 0xBA11u);
             float bxx = bp.x, bzz = bp.z;
             float bob = sinf((float)now * 0.8f + a * 1.3f + b * 2.1f) * 0.05f;
             float by = bp.y + bob;
             float pl = propLum(bxx, by, bzz) * 0.85f;
-            DrawSphere({ bxx, by, bzz }, 0.17f, lit(PARTY[(h >> 10) % 5], pl));
+            DrawSphere({ bxx, by, bzz }, 0.17f, lit(PARTY[(h >> 10) % PARTY_COLOURS], pl));
             DrawCylinderEx({ bxx, by - 0.15f, bzz }, { bxx + 0.04f, by - 0.95f, bzz + 0.02f },
                            0.005f, 0.005f, 4, lit({ 190, 185, 175, 150 }, pl));
         }
         for (int dx = -6; dx <= 6; dx++) for (int dz = -6; dz <= 6; dz++) {   // balloon bunches tied to party tables
             int a = pci + dx, b = pck + dz;
-            if (poppedTableBunches.count(cellKey2(a, b))) continue;   // this bunch has been shot
-            Vector3 bpos[4], tie; Color bcol[4];
-            int nb = tableBalloonBunch(a, b, bpos, bcol, tie);        // same positions the aim uses
+            if (sim.poppedTableBunches.count(Sim::cellKey2(a, b))) continue;   // this bunch has been shot
+            Vec3 bpos[4], tie; uint8_t bcol[4];
+            int nb = sim.tableBalloonBunch(a, b, bpos, bcol, tie);        // same positions the aim uses
             for (int k = 0; k < nb; k++) {
                 float sway = sinf((float)now * 0.9f + a * 1.7f + k * 2.3f) * 0.04f;
                 float bxx = bpos[k].x + sway, by = bpos[k].y, bzz = bpos[k].z;
                 float pl = propLum(bxx, by, bzz) * 0.9f;
-                DrawSphere({ bxx, by, bzz }, 0.15f, lit(bcol[k], pl));
+                DrawSphere({ bxx, by, bzz }, 0.15f, lit(PARTY[bcol[k]], pl));
                 DrawCylinderEx({ bxx, by - 0.13f, bzz }, { tie.x + 0.02f, tie.y + 0.02f, tie.z },
                                0.004f, 0.004f, 4, lit({ 200, 195, 185, 150 }, pl));
             }
         }
-        for (auto &c : confetti) {   // bursts still tumbling to the carpet
+        for (auto &c : sim.confetti) {   // bursts still tumbling to the carpet
             float pl = propLum(c.pos.x, c.pos.y, c.pos.z);
             float fade = clampf(c.life * 1.6f, 0, 1);
-            Color cc = lit({ c.col.r, c.col.g, c.col.b, (unsigned char)(255 * fade) }, pl);
-            DrawCube(c.pos, 0.05f, 0.05f, 0.05f, cc);
+            Color base = PARTY[c.colour];
+            Color cc = lit({ base.r, base.g, base.b, (unsigned char)(255 * fade) }, pl);
+            DrawCube(toRl(c.pos), 0.05f, 0.05f, 0.05f, cc);
         }
     }
-    for (const auto &m0 : chalk[level]) {
+    for (const auto &m0 : sim.chalk[sim.level]) {
         // Chalk stays on the floor it was drawn on: a storey away it is drawn
         // where it lies (seen down a stairwell, if you can), further not at all.
-        int ds = m0.storey - world.storey;
+        int ds = m0.storey - sim.world.storey;
         if (ds < -1 || ds > 1) continue;
         ChalkMark mark = m0;
-        mark.pos.y += ds * world.storeyH;
-        const Vector3 &cm = mark.pos;
-        if (fabsf(cm.x-px) > 30 || fabsf(cm.z-pz) > 30) continue;
+        mark.pos.y += ds * sim.world.storeyH;
+        const Vector3 cm = toRl(mark.pos);
+        if (fabsf(cm.x-sim.px) > 30 || fabsf(cm.z-sim.pz) > 30) continue;
         // The stranger's chalk has been down longer than yours: duller, yellower,
         // further gone. Same arrow, so it reads as a mark first and as somebody
         // else's a moment later, which is the order that lands.
@@ -512,28 +514,28 @@ void Game::renderScene(double now) {
         DrawCylinderEx(tip,Vector3Add(shoulder,Vector3Scale(side,0.17f)),0.011f,0.011f,4,cc);
         DrawCylinderEx(tip,Vector3Subtract(shoulder,Vector3Scale(side,0.17f)),0.011f,0.011f,4,cc);
     }
-    if (wayOpen()) {   // enough doubloons: real exits burn green — the way out
+    if (sim.wayOpen()) {   // enough doubloons: real exits burn green — the way out
         float pulse = 0.7f + 0.3f * sinf((float)now * 3.0f);
         for (int dx = -6; dx <= 6; dx++) for (int dz = -6; dz <= 6; dz++) {
             int i = pci + dx, k = pck + dz;
             float doorX = 0, doorZ = 0;
-            if (world.wallNVal(i, k) == WALL_EXIT) { doorX = i * CELL + 1.0f; doorZ = k * CELL; }
-            else if (world.wallWVal(i, k) == WALL_EXIT) { doorX = i * CELL; doorZ = k * CELL + 1.0f; }
+            if (sim.world.wallNVal(i, k) == WALL_EXIT) { doorX = i * CELL + 1.0f; doorZ = k * CELL; }
+            else if (sim.world.wallWVal(i, k) == WALL_EXIT) { doorX = i * CELL; doorZ = k * CELL + 1.0f; }
             else continue;
-            if (world.cursedExit(i, k)) continue;   // cursed doors stay a trap, never green
+            if (sim.world.cursedExit(i, k)) continue;   // cursed doors stay a trap, never green
             Vector3 gp = { doorX, 1.15f, doorZ };
             DrawSphere(gp, 0.34f, { 150, 255, 170, (unsigned char)(150 * pulse) });   // bright core
             DrawSphere(gp, 0.62f, { 90, 255, 120, (unsigned char)(95 * pulse) });
             DrawSphere(gp, 1.35f, { 60, 235, 110, (unsigned char)(40 * pulse) });     // wide halo
         }
     }
-    if (level == 3) {   // valve wheels on their standpipes: red while open, green once shut
+    if (sim.level == 3) {   // valve wheels on their standpipes: red while open, green once shut
         for (int dx = -7; dx <= 7; dx++) for (int dz = -7; dz <= 7; dz++) {
             int a = pci + dx, b = pck + dz;
-            if (!world.valveAt(a, b)) continue;
+            if (!sim.world.valveAt(a, b)) continue;
             float vx = a * CELL + 1.0f, vz = b * CELL + 1.0f;
-            float wy = world.floorY(a, b) + 1.13f;
-            bool shut = valvesTurned.count(cellKey2(a, b)) > 0;
+            float wy = sim.world.floorY(a, b) + 1.13f;
+            bool shut = sim.valvesTurned.count(Sim::cellKey2(a, b)) > 0;
             float pl = propLum(vx, wy, vz);
             Color rim = shut ? Color{ 96, 210, 128, 255 } : Color{ 196, 62, 48, 255 };
             // a handwheel lying flat on a vertical pipe: rim, punched centre, hub
@@ -544,20 +546,20 @@ void Game::renderScene(double now) {
                            lit({ 122, 96, 70, 255 }, pl));
         }
     }
-    for (int i = 0; i < MAXDOGS; i++) {   // the pack, low and wide against the red
-        const Dog &d = dogs[i];
+    for (int i = 0; i < Sim::MAXDOGS; i++) {   // the pack, low and wide against the red
+        const Dog &d = sim.dogs[i];
         if (d.st == DState::Gone) continue;
-        float ddx = d.x - px, ddz = d.z - pz;
+        float ddx = d.x - sim.px, ddz = d.z - sim.pz;
         float dd = sqrtf(ddx * ddx + ddz * ddz);
         if (dd > 42) continue;
-        const LevelCfg &c = LEVELS[level];
+        const LevelCfg &c = LEVELS[sim.level];
         float ambLum = (c.amb.x + c.amb.y + c.amb.z) / 3.0f;
-        float lum = lightAtCPU(d.x, d.dispY + 0.5f, d.z, blackoutCur,
+        float lum = lightAtCPU(d.x, d.dispY + 0.5f, d.z, sim.blackoutCur,
                                c.ls, c.wallH - 0.12f, c.dead, c.lightMul, ambLum, 0, 0, 0, c.vary);
-        if (flashCur > 0.05f) {
+        if (sim.flashCur > 0.05f) {
             float d2 = dd * dd + 1e-4f;
-            float cone = powf(fmaxf((ddx * fwd.x + ddz * fwd.z) / (dd + 1e-4f), 0.0f), 26.0f);
-            lum = clampf(lum + flashCur * cone * 7.5f / (1.0f + 0.10f * d2), 0.0f, 1.0f);
+            float cone = powf(fmaxf((ddx * sim.fwd.x + ddz * sim.fwd.z) / (dd + 1e-4f), 0.0f), 26.0f);
+            lum = clampf(lum + sim.flashCur * cone * 7.5f / (1.0f + 0.10f * d2), 0.0f, 1.0f);
         }
         if (flareInt > 0.01f) {
             float fx = d.x - flarePos.x, fz = d.z - flarePos.z;
@@ -568,14 +570,14 @@ void Game::renderScene(double now) {
         unsigned char al = cl8(255 * clampf(expf(-dd * c.fogDen) * 1.6f, 0, 1) * fade);
         // shoulder height ~0.75 m, and a long body — drawn wide, not tall
         int df0, df1; float dt2;
-        gaitFrames(d.gait / (DOG_STRIDE * 2.0f), DOG_FRAMES, df0, df1, dt2);
+        gaitFrames(d.gait / (Sim::DOG_STRIDE * 2.0f), DOG_FRAMES, df0, df1, dt2);
         Vector3 dpos = { d.x, d.dispY + 0.46f, d.z };
         DrawBillboardRec(cam, texDog, { (float)df0 * 192, 0, 192, 128 }, dpos, { 1.45f, 0.97f },
                          { l8, l8, l8, cl8(al * (1.0f - dt2)) });
         DrawBillboardRec(cam, texDog, { (float)df1 * 192, 0, 192, 128 }, dpos, { 1.45f, 0.97f },
                          { l8, l8, l8, cl8(al * dt2) });
     }
-    for (const FlareProj &f : litFlares) {   // each flare: hot core, orange halo, stub of a body
+    for (const FlareProj &f : sim.litFlares) {   // each flare: hot core, orange halo, stub of a body
         if (!f.active) continue;
         // its own glow, not the point light's — that one belongs to whichever
         // flare is nearest you, and would size every other halo wrongly
@@ -586,33 +588,33 @@ void Game::renderScene(double now) {
         DrawSphere(fp, 0.13f, { 255, 120, 40, (unsigned char)(90 * glow) });
         DrawSphere(fp, 0.30f, { 255, 70, 20, (unsigned char)(28 * glow) });
     }
-    if (ent.st != EState::Hidden && entDist < 45) {
-        const LevelCfg &c = LEVELS[level];
+    if (sim.ent.st != EState::Hidden && sim.entDist < 45) {
+        const LevelCfg &c = LEVELS[sim.level];
         float ambLum = (c.amb.x + c.amb.y + c.amb.z) / 3.0f;
-        float eg = ent.dispY;
-        float lum = lightAtCPU(ent.x, eg + 0.95f, ent.z, blackoutCur,
+        float eg = sim.ent.dispY;
+        float lum = lightAtCPU(sim.ent.x, eg + 0.95f, sim.ent.z, sim.blackoutCur,
                                c.ls, c.wallH - 0.12f, c.dead, c.lightMul, ambLum,
-                               ent.x, ent.z, entDarkCur, c.vary);   // it stands in its own pool of dead light
-        if (flashCur > 0.05f) {   // flashlight picks him out of the dark
-            float vx2 = ent.x - px, vz2 = ent.z - pz;
+                               sim.ent.x, sim.ent.z, sim.entDarkCur, c.vary);   // it stands in its own pool of dead light
+        if (sim.flashCur > 0.05f) {   // flashlight picks him out of the dark
+            float vx2 = sim.ent.x - sim.px, vz2 = sim.ent.z - sim.pz;
             float d2 = vx2 * vx2 + vz2 * vz2 + 1e-4f, dl = sqrtf(d2);
-            float cone = powf(fmaxf((vx2 * fwd.x + vz2 * fwd.z) / dl, 0.0f), 26.0f);
-            lum = clampf(lum + flashCur * cone * 7.5f / (1.0f + 0.10f * d2), 0.0f, 1.0f);
+            float cone = powf(fmaxf((vx2 * sim.fwd.x + vz2 * sim.fwd.z) / dl, 0.0f), 26.0f);
+            lum = clampf(lum + sim.flashCur * cone * 7.5f / (1.0f + 0.10f * d2), 0.0f, 1.0f);
         }
         if (flareInt > 0.01f) {   // flare glow (or muzzle flash) reaches him too
-            float fvx = ent.x - flarePos.x, fvz = ent.z - flarePos.z;
+            float fvx = sim.ent.x - flarePos.x, fvz = sim.ent.z - flarePos.z;
             lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fvx * fvx + fvz * fvz)), 0.0f, 1.0f);
         }
         float sink = 0, dieA = 1;
-        if (ent.st == EState::Die) {   // crumples into the carpet
-            float t = clampf(ent.life / 1.2f, 0, 1);
+        if (sim.ent.st == EState::Die) {   // crumples into the carpet
+            float t = clampf(sim.ent.life / 1.2f, 0, 1);
             sink = 1.1f * t * t; dieA = 1.0f - t;
         }
-        float fogf = expf(-entDist * c.fogDen);
+        float fogf = expf(-sim.entDist * c.fogDen);
         unsigned char lum8 = cl8(40 + 215 * lum);
         unsigned char al = cl8(255 * clampf(fogf * 1.6f, 0, 1) * dieA);
         // LEVEL FUN has its own resident, Level 0 is Pirate Clark's, the rest are a Smiler's
-        Texture2D &spr = (level == 4) ? texPartygoer : clarkLevel() ? texClark : texEntity;
+        Texture2D &spr = (sim.level == 4) ? texPartygoer : sim.clarkLevel() ? texClark : texEntity;
         // The gait rides ent.gait, which is also what fires his footfalls, so
         // the foot plants on the sound rather than near it — by construction,
         // off one number, rather than by two accumulators agreeing.
@@ -622,7 +624,7 @@ void Game::renderScene(double now) {
         // covered, in every state, so a Clark grinding against a wall no longer
         // walks on the spot and a fleeing one has legs at all.
         int ef0, ef1; float et;
-        float gph = ent.gait * 0.5f;
+        float gph = sim.ent.gait * 0.5f;
         gaitFrames(gph, ENT_FRAMES, ef0, ef1, et);
         // A walk rises and falls twice a cycle, once per step, highest at
         // mid-stance and lowest as a foot lands — so the bob is |sin| of the
@@ -633,21 +635,21 @@ void Game::renderScene(double now) {
         // same timer that tips him into a chase at 1.6 s, so his head coming
         // round *is* the warning rather than a decoration beside it. In any
         // other state he is already looking at you.
-        float look = (ent.st == EState::Stalk) ? clampf((float)ent.gaze / 1.45f, 0, 1) : 1.0f;
+        float look = (sim.ent.st == EState::Stalk) ? clampf((float)sim.ent.gaze / 1.45f, 0, 1) : 1.0f;
         int headRow = look < 0.34f ? ENT_ROW_AWAY : (look < 0.72f ? ENT_ROW_HALF : ENT_ROW_FACE);
         // And he tips into where he is going. Only the part of his velocity that
         // runs across your view can show on a billboard, which is exactly the
         // part a lean would be visible for. Below a walking pace it stays
         // upright, so he does not twitch between rows while shuffling.
-        float side = ent.vx * r2x + ent.vz * r2z;
-        if (ent.st == EState::Chase && fabsf(side) > 1.4f)
+        float side = sim.ent.vx * sim.r2x + sim.ent.vz * sim.r2z;
+        if (sim.ent.st == EState::Chase && fabsf(side) > 1.4f)
             headRow = (side < 0) ? ENT_ROW_LEAN_L : ENT_ROW_LEAN_R;
-        Vector3 epos = { ent.x, eg + 0.98f - sink + bob, ent.z };
+        Vector3 epos = { sim.ent.x, eg + 0.98f - sink + bob, sim.ent.z };
         DrawBillboardRec(cam, spr, { (float)ef0 * 128, (float)headRow * 256, 128, 256 }, epos,
                          { 0.98f, 1.96f }, { lum8, lum8, lum8, cl8(al * (1.0f - et)) });
         DrawBillboardRec(cam, spr, { (float)ef1 * 128, (float)headRow * 256, 128, 256 }, epos,
                          { 0.98f, 1.96f }, { lum8, lum8, lum8, cl8(al * et) });
-        if (level != 4 && !clarkLevel()) {   // the Smiler's eyes and grin carry their own light
+        if (sim.level != 4 && !sim.clarkLevel()) {   // the Smiler's eyes and grin carry their own light
             unsigned char ga = cl8(255 * clampf(fogf * 2.2f, 0, 1) * dieA);
             DrawBillboardRec(cam, texEntityGlow, { (float)ef0 * 128, (float)headRow * 256, 128, 256 }, epos,
                              { 0.98f, 1.96f }, { 255, 255, 255, cl8(ga * (1.0f - et)) });
@@ -655,13 +657,14 @@ void Game::renderScene(double now) {
                              { 0.98f, 1.96f }, { 255, 255, 255, cl8(ga * et) });
         }
     }
-    for (const Bullet &b : bullets) {
-        Vector3 tail = Vector3Subtract(b.pos, Vector3Scale(b.direction,
-            fminf(1.2f, Vector3Distance(b.pos,b.tail))));
-        DrawCylinderEx(tail,b.pos,0.006f,0.009f,5,{255,211,126,220});
-        DrawSphere(b.pos,0.012f,{255,237,187,255});
+    for (const Sim::Bullet &b : sim.bullets) {
+        Vector3 pos = toRl(b.pos);
+        Vector3 tail = Vector3Subtract(pos, Vector3Scale(toRl(b.direction),
+            fminf(1.2f, Vector3Distance(pos,toRl(b.tail)))));
+        DrawCylinderEx(tail,pos,0.006f,0.009f,5,{255,211,126,220});
+        DrawSphere(pos,0.012f,{255,237,187,255});
     }
-    if (level == 1) {
+    if (sim.level == 1) {
         // Level 1's "low-hanging fog with no discernable source". The level's
         // exponential fog handles distance; this is the part that hangs: soft,
         // wide, faint banks lying on the slab, drifting on a draught nobody can
@@ -672,18 +675,18 @@ void Game::renderScene(double now) {
         // faded out right under you so you never have a sprite in your face.
         rlDrawRenderBatchActive();
         rlDisableDepthMask();
-        int mci = cellOf(px), mck = cellOf(pz);
+        int mci = cellOf(sim.px), mck = cellOf(sim.pz);
         float tnow = (float)now;
         for (int dx = -11; dx <= 11; dx++) for (int dz = -11; dz <= 11; dz++) {
             int a = mci + dx, b = mck + dz;
             uint32_t h = ih(a, b, 0xF06u);
-            if ((h & 3) == 0 || world.pillarAt(a, b)) continue;         // three cells in four
+            if ((h & 3) == 0 || sim.world.pillarAt(a, b)) continue;         // three cells in four
             float mxp = a * CELL + 1.0f + (((h >> 4) & 255) / 255.0f - 0.5f) * 1.2f + sinf(tnow * 0.07f + (h & 63)) * 0.35f;
             float mzp = b * CELL + 1.0f + (((h >> 12) & 255) / 255.0f - 0.5f) * 1.2f + cosf(tnow * 0.05f + (h & 31)) * 0.35f;
-            float ddx = mxp - px, ddz = mzp - pz, d = sqrtf(ddx * ddx + ddz * ddz);
+            float ddx = mxp - sim.px, ddz = mzp - sim.pz, d = sqrtf(ddx * ddx + ddz * ddz);
             if (d > 22.0f || d < 1.2f) continue;
             float fade = clampf((d - 1.2f) / 2.5f, 0.0f, 1.0f) * clampf((22.0f - d) / 6.0f, 0.0f, 1.0f);
-            float gy = world.floorY(a, b);
+            float gy = sim.world.floorY(a, b);
             float my = gy + 0.26f + ((h >> 20) & 7) * 0.03f;
             float lum = propLum(mxp, my, mzp);
             float breathe = 0.75f + 0.25f * sinf(tnow * 0.3f + (h >> 24));
@@ -694,20 +697,21 @@ void Game::renderScene(double now) {
         rlDrawRenderBatchActive();
         rlEnableDepthMask();
     }
-    for (const BulletImpact &impact : bulletImpacts) {
+    for (const Sim::BulletImpact &impact : sim.bulletImpacts) {
         float age=0.24f-impact.life;
         Color color=impact.body ? Color{125,32,24,190} : Color{211,188,144,190};
         color.a=cl8(190*impact.life/0.24f);
-        DrawBillboard(cam,texParticle,impact.pos,0.06f+age*0.7f,color);
+        Vector3 pos = toRl(impact.pos), normal = toRl(impact.normal);
+        DrawBillboard(cam,texParticle,pos,0.06f+age*0.7f,color);
         for (int i=0;i<5;++i) {
             Vector3 spread{cosf(i*2.4f)*0.7f, sinf(i*3.7f)*0.7f, sinf(i*2.4f)*0.7f};
-            Vector3 p=Vector3Add(impact.pos,Vector3Scale(Vector3Add(impact.normal,spread),age*1.4f));
+            Vector3 p=Vector3Add(pos,Vector3Scale(Vector3Add(normal,spread),age*1.4f));
             p.y-=age*age*2;
             DrawSphere(p,0.009f,color);
         }
     }
-    if (!inMenu && (drinkT > 0 || (weapon == WEAPON_DECK && deck.carried) ||
-                    weapon == WEAPON_REVOLVER || (weapon == WEAPON_FLARE && flares > 0))) {
+    if (!sim.inMenu && (sim.drinkT > 0 || (sim.weapon == WEAPON_DECK && sim.deck.carried) ||
+                    sim.weapon == WEAPON_REVOLVER || (sim.weapon == WEAPON_FLARE && sim.flares > 0))) {
         // Held against a wall, the can falls inside that wall's shadow and goes
         // black in your hands. A viewmodel shouldn't be shadowed by the room it
         // is being held in, so switch the occlusion grid off for this one draw
@@ -718,11 +722,11 @@ void Game::renderScene(double now) {
         // ...and give it a floor of ambient, so a can held up in an unlit stretch
         // of corridor is still legible rather than a silhouette. Only lifts where
         // the room is genuinely dark; anywhere lit, the panels dominate this.
-        const Vector3 &la = LEVELS[level].amb;
+        const Vector3 &la = LEVELS[sim.level].amb;
         Vector3 vmAmb = { fmaxf(la.x, 0.150f), fmaxf(la.y, 0.142f), fmaxf(la.z, 0.128f) };
         SetShaderValue(worldShader, locAmb, &vmAmb, SHADER_UNIFORM_VEC3);
-        if (drinkT > 0) drawDrinkCan(cam);        // both hands are busy — the deck goes away
-        else if (weapon == WEAPON_DECK) drawHeldDeck(cam);
+        if (sim.drinkT > 0) drawDrinkCan(cam);        // both hands are busy — the deck goes away
+        else if (sim.weapon == WEAPON_DECK) drawHeldDeck(cam);
         else drawHeldWeapon(cam);
         SetShaderValue(worldShader, locOccN, &occN, SHADER_UNIFORM_FLOAT);   // both as they were
         SetShaderValue(worldShader, locAmb, &la, SHADER_UNIFORM_VEC3);
@@ -734,34 +738,34 @@ void Game::renderScene(double now) {
 // Held geometry belongs to the scene pass: perspective, room lighting and
 // post-processing all affect it just as they affect the can and the deck.
 void Game::drawHeldWeapon(const Camera3D &cam) {
-    Vector3 right{r2x, 0, r2z};
-    Vector3 up = Vector3Normalize(Vector3CrossProduct(right, fwd));
-    float dip = weapon == WEAPON_REVOLVER && reloadT > 0
-        ? sinf(clampf(1 - reloadT / 1.8f, 0, 1) * PI) : 0;
-    float kick = weapon == WEAPON_REVOLVER ? recoil : 0;
-    float aim = weapon == WEAPON_REVOLVER ? aimBlend * aimBlend * (3 - 2 * aimBlend) : 0;
+    Vector3 right{sim.r2x, 0, sim.r2z};
+    Vector3 up = Vector3Normalize(Vector3CrossProduct(right, toRl(sim.fwd)));
+    float dip = sim.weapon == WEAPON_REVOLVER && sim.reloadT > 0
+        ? sinf(clampf(1 - sim.reloadT / RELOAD_TIME, 0, 1) * PI) : 0;
+    float kick = sim.weapon == WEAPON_REVOLVER ? sim.recoil : 0;
+    float aim = sim.weapon == WEAPON_REVOLVER ? sim.aimBlend * sim.aimBlend * (3 - 2 * sim.aimBlend) : 0;
     // The front blade is at GLB Z/Y (0.23706, 0.07560). Keep its tip on
     // the camera ray, with the eye just clearing the rear frame rib. Aligning
     // the rib top exactly with the blade hides the blade behind this model's solid rear face.
-    float tilt = weapon == WEAPON_REVOLVER ? 0.06f - 0.063f * aim + kick * 0.30f - dip * 0.65f : 0.85f;
-    Vector3 forward = Vector3Normalize(Vector3Add(fwd,
+    float tilt = sim.weapon == WEAPON_REVOLVER ? 0.06f - 0.063f * aim + kick * 0.30f - dip * 0.65f : 0.85f;
+    Vector3 forward = Vector3Normalize(Vector3Add(toRl(sim.fwd),
         Vector3Add(Vector3Scale(right, -0.20f * (1 - aim)), Vector3Scale(up, tilt))));
     Vector3 axisUp = Vector3Normalize(Vector3CrossProduct(right, forward));
     Vector3 axisRight = Vector3Normalize(Vector3CrossProduct(forward, axisUp));
-    float sway = sinf(bobPhase * PI) * 0.003f * bobAmt * (1 - aim);
-    Vector3 pos = Vector3Add(cam.position, Vector3Add(Vector3Scale(fwd, 0.155f-kick*0.012f),
+    float sway = sinf(sim.bobPhase * PI) * 0.003f * sim.bobAmt * (1 - aim);
+    Vector3 pos = Vector3Add(cam.position, Vector3Add(Vector3Scale(toRl(sim.fwd), 0.155f-kick*0.012f),
         Vector3Add(Vector3Scale(right, 0.077f*(1-aim)+sway), Vector3Scale(up, -0.072f+0.03605f*aim-dip*0.024f))));
     // Farthest vertex is <0.33 m from the eye, even during recoil/reload.
-    float scale = weapon == WEAPON_REVOLVER ? 0.48f : 0.64f;
+    float scale = sim.weapon == WEAPON_REVOLVER ? 0.48f : 0.64f;
     Matrix m{};
     m.m0=axisRight.x*scale; m.m1=axisRight.y*scale; m.m2=axisRight.z*scale;
     m.m4=axisUp.x*scale; m.m5=axisUp.y*scale; m.m6=axisUp.z*scale;
     m.m8=forward.x*scale; m.m9=forward.y*scale; m.m10=forward.z*scale;
     m.m12=pos.x; m.m13=pos.y; m.m14=pos.z; m.m15=1;
-    float gloss = weapon == WEAPON_REVOLVER ? 0.48f : 0.12f;
+    float gloss = sim.weapon == WEAPON_REVOLVER ? 0.48f : 0.12f;
     SetShaderValue(worldShader, locGloss, &gloss, SHADER_UNIFORM_FLOAT);
-    if (weapon == WEAPON_REVOLVER) {
-        revolver.pose(reloadT,gunCd,ammo);
+    if (sim.weapon == WEAPON_REVOLVER) {
+        revolver.pose(sim.reloadT,sim.gunCd,sim.ammo);
         // Its steel reflects the room (uObjRefl in the world shader); nothing
         // else drawn has metal in its detail map, so nothing else pays for it.
         float refl = 1.0f;
@@ -770,21 +774,21 @@ void Game::drawHeldWeapon(const Camera3D &cam) {
         refl = 0.0f;
         SetShaderValue(worldShader, locObjRefl, &refl, SHADER_UNIFORM_FLOAT);
     } else DrawMesh(flareMesh,mats[MAT_PROPS],m);
-    SetShaderValue(worldShader, locGloss, &LEVELS[level].gloss, SHADER_UNIFORM_FLOAT);
-    if (weapon == WEAPON_REVOLVER) {
+    SetShaderValue(worldShader, locGloss, &LEVELS[sim.level].gloss, SHADER_UNIFORM_FLOAT);
+    if (sim.weapon == WEAPON_REVOLVER) {
         Vector3 muzzle = Vector3Transform(revolver.muzzlePosition,m);
-        if (muzzleT > 0) {
-            float life = muzzleT/0.09f;
+        if (sim.muzzleT > 0) {
+            float life = sim.muzzleT / Sim::MUZZLE_FLASH;
             BeginBlendMode(BLEND_ADDITIVE);
             DrawBillboard(cam,texParticle,muzzle,0.07f*life,{255,175,70,230});
             DrawBillboard(cam,texParticle,muzzle,0.025f*life,{255,245,190,255});
             EndBlendMode();
         }
-        if (muzzleSmoke > 0.02f) {
+        if (sim.muzzleSmoke > 0.02f) {
             for (int i=0;i<3;++i) {
-                Vector3 puff=Vector3Add(muzzle,Vector3Scale(up,(1-muzzleSmoke)*0.025f+i*0.009f));
+                Vector3 puff=Vector3Add(muzzle,Vector3Scale(up,(1-sim.muzzleSmoke)*0.025f+i*0.009f));
                 DrawBillboard(cam,texParticle,puff,0.022f+i*0.011f,
-                              {155,151,142,cl8(muzzleSmoke*(55-i*12))});
+                              {155,151,142,cl8(sim.muzzleSmoke*(55-i*12))});
             }
         }
     }
@@ -794,45 +798,45 @@ void Game::renderUI(double now) {
     if (captureTime >= 0) now = captureTime;
     // ---- post + UI
     float timeF = (float)now;
-    double elapsed = now - runStart;
+    double elapsed = now - sim.runStart;
     BeginDrawing();
     ClearBackground(BLACK);
     SetShaderValue(postShader, locPTime, &timeF, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(postShader, locPFear, &fear, SHADER_UNIFORM_FLOAT);
-    float submerged = level==2 && world.poolAt(cellOf(px),cellOf(pz)) ? clampf((WATER_Y-eyeY)*8,0,1) : 0;
+    SetShaderValue(postShader, locPFear, &sim.fear, SHADER_UNIFORM_FLOAT);
+    float submerged = sim.level==2 && sim.world.poolAt(cellOf(sim.px),cellOf(sim.pz)) ? clampf((WATER_Y-sim.eyeY)*8,0,1) : 0;
     SetShaderValue(postShader,locPWater,&submerged,SHADER_UNIFORM_FLOAT);
-    SetShaderValue(postShader, locPMigraine, &migraine, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(postShader, locPMigraine, &sim.migraine, SHADER_UNIFORM_FLOAT);
     BeginShaderMode(postShader);
     DrawTextureRec(rt.texture, { 0, 0, (float)rt.texture.width, -(float)rt.texture.height }, { 0, 0 }, WHITE);
     EndShaderMode();
-    if (cleanShot && !inMenu) { EndDrawing(); return; }
+    if (cleanShot && !sim.inMenu) { EndDrawing(); return; }
 
     int sw = GetScreenWidth(), sh = GetScreenHeight();
-    if (swimming && !inMenu)
+    if (sim.swimming && !sim.inMenu)
         hudTextC(inTouchActive() ? "hold JUMP  stay up   ·   let go  dive" : "hold SPACE  stay up   ·   let go  dive   ·   SHIFT  swim faster",
                  sw/2,sh-hud(42),hud(16),Color{174,221,214,230});
 
-    if (inMenu && deathT > 0) {   // the run just ended; the card holds the title screen
+    if (sim.inMenu && sim.deathT > 0) {   // the run just ended; the card holds the title screen
         DrawRectangle(0, 0, sw, sh, Fade(Color{ 10, 3, 3, 255 }, 0.88f));
-        float a = clampf(deathT > DEATH_CARD - 0.6f ? (DEATH_CARD - deathT) / 0.6f : deathT / 1.0f, 0, 1);
-        hudTextC(deathTitle, sw / 2, sh / 3, hud(54), Fade({ 178, 34, 24, 255 }, a));
-        hudTextC(TextFormat("%s took you on %s", deathBy, LEVELS[deathLevel].name),
+        float a = clampf(sim.deathT > Sim::DEATH_CARD - 0.6f ? (Sim::DEATH_CARD - sim.deathT) / 0.6f : sim.deathT / 1.0f, 0, 1);
+        hudTextC(sim.deathTitle, sw / 2, sh / 3, hud(54), Fade({ 178, 34, 24, 255 }, a));
+        hudTextC(TextFormat("%s took you on %s", sim.deathBy, LEVELS[sim.deathLevel].name),
                  sw / 2, sh / 3 + hud(74), hud(20), Fade({ 176, 132, 122, 255 }, a * 0.95f));
         hudTextC(TextFormat("%02d:%02d   ·   %d m wandered   ·   %d hunter%s put down",
-                            (int)deathTime / 60, (int)deathTime % 60, deathM,
-                            deathKills, deathKills == 1 ? "" : "s"),
+                            (int)sim.deathTime / 60, (int)sim.deathTime % 60, sim.deathM,
+                            sim.deathKills, sim.deathKills == 1 ? "" : "s"),
                  sw / 2, sh / 3 + hud(106), hud(18), Fade({ 150, 118, 110, 255 }, a * 0.9f));
         hudTextC(TextFormat("run %d   ·   deepest ever  %s   ·   longest run  %02d:%02d",
-                            deathCount, LEVELS[bestDeep].name, bestRun / 60, bestRun % 60),
+                            sim.deathCount, LEVELS[sim.best.deepest].name, sim.best.longestRun / 60, sim.best.longestRun % 60),
                  sw / 2, sh / 3 + hud(140), hud(16), Fade({ 130, 106, 100, 255 }, a * 0.8f));
-        if (deathT < DEATH_CARD - 1.6f)
+        if (sim.deathT < Sim::DEATH_CARD - Sim::DEATH_CARD_HOLD)
             hudTextC(inTouchActive() ? "tap anywhere to descend again" : "press any key to descend again",
                      sw / 2, sh * 2 / 3 + hud(30), hud(18),
                      Fade({ 168, 144, 112, 255 }, a * (0.45f + 0.55f * (0.5f + 0.5f * sinf(timeF * 3.0f)))));
         EndDrawing();
         return;
     }
-    if (inMenu) {   // title card over the drifting world
+    if (sim.inMenu) {   // title card over the drifting world
         // darken the top and bottom so the type reads over any hall
         DrawRectangleGradientV(0, 0, sw, sh / 2, Fade(BLACK, 0.62f), Fade(BLACK, 0.12f));
         DrawRectangleGradientV(0, sh / 2, sw, sh / 2, Fade(BLACK, 0.12f), Fade(BLACK, 0.72f));
@@ -851,41 +855,41 @@ void Game::renderUI(double now) {
         // game being broken rather than as a line written for a keyboard.
         const char *pr = inTouchActive() ? "tap anywhere to descend" : "press any key to descend";
         hudTextC(pr, sw / 2, sh * 2 / 3, hud(24), Fade({ 210, 198, 150, 255 }, pl));
-        if (bestEsc || bestKill || bestM || bestWins) {
-            const char *tb = bestTapes > 0
+        if (sim.best.escapes || sim.best.kills || sim.best.metres || sim.best.wins) {
+            const char *tb = sim.best.tapes > 0
                 ? TextFormat("best:  %d got out   ·   %d hunter%s put down   ·   %d m wandered   ·   %d tape%s found",
-                             bestWins, bestKill, bestKill == 1 ? "" : "s", bestM, bestTapes, bestTapes == 1 ? "" : "s")
+                             sim.best.wins, sim.best.kills, sim.best.kills == 1 ? "" : "s", sim.best.metres, sim.best.tapes, sim.best.tapes == 1 ? "" : "s")
                 : TextFormat("best:  %d got out   ·   %d hunter%s put down   ·   %d m wandered",
-                             bestWins, bestKill, bestKill == 1 ? "" : "s", bestM);
+                             sim.best.wins, sim.best.kills, sim.best.kills == 1 ? "" : "s", sim.best.metres);
             hudTextC(tb, sw / 2, sh * 2 / 3 + hud(40), hud(16), { 140, 132, 100, 200 });
         }
-        if (bestDeep > 0 || bestRun > 0)
-            hudTextC(TextFormat("deepest  %s   ·   longest run  %02d:%02d", LEVELS[bestDeep].name,
-                                bestRun / 60, bestRun % 60),
+        if (sim.best.deepest > 0 || sim.best.longestRun > 0)
+            hudTextC(TextFormat("deepest  %s   ·   longest run  %02d:%02d", LEVELS[sim.best.deepest].name,
+                                sim.best.longestRun / 60, sim.best.longestRun % 60),
                      sw / 2, sh * 2 / 3 + hud(62), hud(16), { 140, 132, 100, 200 });
         const char *tc = inTouchActive()
             ? TextFormat("STICK move    AIM taps the sights up and down    LAMP torch    ITEM cycle    bank %d doubloons to leave",
-                         ESCAPE_COST)
+                         Sim::ESCAPE_COST)
             : TextFormat("WASD move    SHIFT run    C squeeze    F flashlight    1/2/4 item    bank %d doubloons to leave",
-                         ESCAPE_COST);
+                         Sim::ESCAPE_COST);
         hudTextC(tc, sw / 2, sh - hud(42), hud(15), { 128, 122, 96, 170 });
         EndDrawing();
         return;
     }
 
-    if (drinkT <= 0 && (weapon == WEAPON_REVOLVER || (weapon == WEAPON_FLARE && flares > 0)))
+    if (sim.drinkT <= 0 && (sim.weapon == WEAPON_REVOLVER || (sim.weapon == WEAPON_FLARE && sim.flares > 0)))
         // Scaled like every other HUD element (BUG-10), and faded out as the
         // sights come up (the iron-sight work): with the revolver aimed the
         // blade is the sight, and a dot floating over it reads as a smudge.
-        DrawCircle(sw / 2, sh / 2, hud(1.5f), Fade({230,220,190,110}, 1-aimBlend));
+        DrawCircle(sw / 2, sh / 2, hud(1.5f), Fade({230,220,190,110}, 1-sim.aimBlend));
 
-    if (elapsed < 9.0 && winT <= 0) {   // intro (suppressed while the escape screen is up)
+    if (elapsed < 9.0 && sim.winT <= 0) {   // intro (suppressed while the escape screen is up)
         float a = 1.0f - clampf((float)elapsed / 3.0f, 0, 1);
         DrawRectangle(0, 0, sw, sh, Fade(BLACK, a));
         float ta = clampf((float)elapsed / 1.5f, 0, 1) * (1.0f - clampf(((float)elapsed - 6.0f) / 3.0f, 0, 1));
         char t1[64];   // the level's name, letter-spaced
         int ti = 0;
-        for (const char *p = LEVELS[level].name; *p && ti < 60; p++) {
+        for (const char *p = LEVELS[sim.level].name; *p && ti < 60; p++) {
             t1[ti++] = *p;
             // a UTF-8 character is several bytes (Level 0's "·" is two), and
             // a space pushed between them draws as two '?' — space characters,
@@ -902,83 +906,71 @@ void Game::renderUI(double now) {
             ? "STICK walk   push past its ring to run   DUCK crouch   SQUEEZE   JUMP   LAMP torch   ITEM cycle   DRINK   MARK chalk   USE vend/pick up"
             : "WASD walk   SHIFT or W W run   CTRL crouch   C squeeze   SPACE jump   F flashlight   1/2/4 item   3 drink   M chalk   E vend/pick up";
         hudTextC(t3, sw / 2, sh - hud(60), hud(16), Fade({ 140, 132, 100, 255 }, ta * 0.8f));
-        if (bestEsc || bestKill || bestM || bestWins) {
-            const char *tb = bestTapes > 0
+        if (sim.best.escapes || sim.best.kills || sim.best.metres || sim.best.wins) {
+            const char *tb = sim.best.tapes > 0
                 ? TextFormat("best: %d got out  ·  %d hunter%s put down  ·  %d m wandered  ·  %d tape%s found",
-                             bestWins, bestKill, bestKill == 1 ? "" : "s", bestM, bestTapes, bestTapes == 1 ? "" : "s")
+                             sim.best.wins, sim.best.kills, sim.best.kills == 1 ? "" : "s", sim.best.metres, sim.best.tapes, sim.best.tapes == 1 ? "" : "s")
                 : TextFormat("best: %d got out  ·  %d hunter%s put down  ·  %d m wandered",
-                             bestWins, bestKill, bestKill == 1 ? "" : "s", bestM);
+                             sim.best.wins, sim.best.kills, sim.best.kills == 1 ? "" : "s", sim.best.metres);
             hudTextC(tb, sw / 2, sh / 3 + hud(98), hud(16), Fade({ 150, 140, 105, 255 }, ta * 0.8f));
         }
-        const char *tg = TextFormat("bank %d doubloons · fight what hunts you for them · then take a door out", ESCAPE_COST);
+        const char *tg = TextFormat("bank %d doubloons · fight what hunts you for them · then take a door out", Sim::ESCAPE_COST);
         hudTextC(tg, sw / 2, sh / 3 + hud(128), hud(16), Fade({ 120, 200, 140, 255 }, ta * 0.75f));
     }
-    if (winT > 0) {   // you bought your way out and found a true door
-        float a = clampf(winT > 7.2f ? (8.0f - winT) / 0.8f : winT / 7.2f, 0, 1);
+    if (sim.winT > 0) {   // you bought your way out and found a true door
+        float a = clampf(sim.winT > 7.2f ? (8.0f - sim.winT) / 0.8f : sim.winT / 7.2f, 0, 1);
         DrawRectangle(0, 0, sw, sh, Fade(Color{ 6, 12, 8, 255 }, a * 0.93f));
         const char *t = "YOU ESCAPED THE BACKROOMS";
         hudTextC(t, sw / 2, sh / 3, hud(54), Fade({ 120, 235, 145, 255 }, a));
         const char *t2 = TextFormat("out the true door   ·   %02d:%02d   ·   %d m wandered   ·   %d hunter%s put down",
-                                    (int)winTime / 60, (int)winTime % 60, winM, winKills, winKills == 1 ? "" : "s");
+                                    (int)sim.winTime / 60, (int)sim.winTime % 60, sim.winM, sim.winKills, sim.winKills == 1 ? "" : "s");
         hudTextC(t2, sw / 2, sh / 3 + hud(74), hud(20), Fade({ 150, 200, 160, 255 }, a * 0.95f));
-        const char *t3 = TextFormat("escape #%d   ·   best %d", winCount, bestWins);
+        const char *t3 = TextFormat("escape #%d   ·   best %d", sim.winCount, sim.best.wins);
         hudTextC(t3, sw / 2, sh / 3 + hud(106), hud(18), Fade({ 130, 175, 140, 255 }, a * 0.9f));
         const char *t4 = "...but the backrooms are patient. a new descent begins.";
         hudTextC(t4, sw / 2, sh - hud(78), hud(16), Fade({ 120, 150, 125, 255 }, a * 0.8f));
     }
-    if (fellT > 0) {   // the carpet gave way
-        float a = clampf(fellT / 4.0f, 0, 1);
-        DrawRectangle(0, 0, sw, sh, Fade(BLACK, a * 0.5f * clampf((fellT - 3.4f) / 0.6f, 0, 1)));
+    if (sim.fellT > 0) {   // the carpet gave way
+        float a = clampf(sim.fellT / 4.0f, 0, 1);
+        DrawRectangle(0, 0, sw, sh, Fade(BLACK, a * 0.5f * clampf((sim.fellT - 3.4f) / 0.6f, 0, 1)));
         const char *t = "THE FLOOR GIVES WAY";
         hudTextC(t, sw / 2, sh / 2 - hud(30), hud(46), Fade({ 200, 180, 120, 255 }, a));
         const char *t2 = "...there was another floor under this one";
         hudTextC(t2, sw / 2, sh / 2 + hud(30), hud(18), Fade({ 150, 138, 110, 255 }, a * 0.9f));
     }
-    if (escapeT > 0) {
-        float a = clampf(escapeT > 5.4f ? (6.0f - escapeT) / 0.6f : escapeT / 5.4f, 0, 1);
-        DrawRectangle(0, 0, sw, sh, Fade(WHITE, a * (escapeT > 5.4f ? 0.9f : 0.12f)));
-        if (noclipped && escapeT > 4.6f) {
-            // the frame tearing as you go through: offset slabs of the flash,
-            // re-rolled a dozen times a second for the first moment
-            Rng tr(hash64((uint64_t)(now * 12.0) ^ 0x7EA2ULL));
-            for (int b = 0; b < 9; b++) {
-                int y = (int)(tr.f01() * sh), hgt = 2 + (int)(tr.f01() * sh * 0.05f);
-                int off = (int)((tr.f01() - 0.5f) * sw * 0.16f);
-                DrawRectangle(off, y, sw, hgt, Fade(tr.f01() < 0.3f ? BLACK : Color{ 240, 228, 170, 255 },
-                                                    0.55f * clampf((escapeT - 4.6f) / 1.4f, 0, 1)));
-            }
-        }
-        const char *t = noclipped ? "YOU NOCLIPPED" : "YOU FOUND AN EXIT";
+    if (sim.escapeT > 0) {
+        float a = clampf(sim.escapeT > 5.4f ? (6.0f - sim.escapeT) / 0.6f : sim.escapeT / 5.4f, 0, 1);
+        DrawRectangle(0, 0, sw, sh, Fade(WHITE, a * (sim.escapeT > 5.4f ? 0.9f : 0.12f)));
+        const char *t = "YOU FOUND AN EXIT";
         hudTextC(t, sw / 2, sh / 2 - hud(60), hud(48), Fade({ 235, 228, 200, 255 }, a));
-        const char *t2 = TextFormat("...%s %s.  %d m wandered  ·  %d escape%s  ·  %s",
-                                    noclipped ? "through the wall, and out of Level 0, into" : "it leads to",
-                                    LEVELS[level].name, (int)distWalked, escapeCount, escapeCount == 1 ? "" : "s",
+        const char *t2 = TextFormat("...it leads to %s.  %d m wandered  ·  %d escape%s  ·  %s",
+                                    LEVELS[sim.level].name, (int)sim.distWalked, sim.escapeCount, sim.escapeCount == 1 ? "" : "s",
                                     TextFormat("%02d:%02d", (int)elapsed / 60, (int)elapsed % 60));
         hudTextC(t2, sw / 2, sh / 2 + hud(4), hud(18), Fade({ 180, 170, 140, 255 }, a));
     }
-    if (killT > 0) {
-        float a = clampf(killT / 3.0f, 0, 1);
-        const char *t = (level == 4) ? "THE PARTYGOER IS DOWN" : clarkLevel() ? "PIRATE CLARK IS DOWN" : "THE SMILER IS DOWN";
+    if (sim.killT > 0) {
+        float a = clampf(sim.killT / 3.0f, 0, 1);
+        const char *t = (sim.level == 4) ? "THE PARTYGOER IS DOWN" : sim.clarkLevel() ? "PIRATE CLARK IS DOWN" : "THE SMILER IS DOWN";
         hudTextC(t, sw / 2, sh / 2 - hud(96), hud(44), Fade({ 205, 60, 40, 255 }, a));
-        const char *t2 = TextFormat("...but nothing stays down, down here   ·   %d put down", killCount);
+        const char *t2 = TextFormat("...but nothing stays down, down here   ·   %d put down", sim.killCount);
         hudTextC(t2, sw / 2, sh / 2 - hud(44), hud(18), Fade({ 150, 122, 100, 255 }, a * 0.9f));
     }
-    if (closeCallT > 0) {   // it stood right beside you, and never knew
-        float a = clampf(closeCallT > 2.3f ? (3.0f - closeCallT) / 0.7f : closeCallT / 1.4f, 0, 1);
+    if (sim.closeCallT > 0) {   // it stood right beside you, and never knew
+        float a = clampf(sim.closeCallT > 2.3f ? (3.0f - sim.closeCallT) / 0.7f : sim.closeCallT / 1.4f, 0, 1);
         const char *t = "IT STOOD RIGHT THERE";
         hudTextC(t, sw / 2, sh / 2 - hud(130), hud(30), Fade({ 200, 70, 60, 255 }, a));
         const char *t2 = "...and never saw you";
         hudTextC(t2, sw / 2, sh / 2 - hud(98), hud(15), Fade({ 160, 130, 120, 220 }, a * 0.9f));
     }
-    if (deckNoteT > 0 && winT <= 0 && deathT <= 0) {   // the deck just did something
-        float a = clampf(deckNoteT > 2.0f ? (2.6f - deckNoteT) / 0.6f : deckNoteT / 1.2f, 0, 1);
-        hudTextC(deckNote, sw / 2, sh - hud(150), hud(16), Fade({ 196, 168, 214, 230 }, a * 0.9f));
+    if (sim.deckNoteT > 0 && sim.winT <= 0 && sim.deathT <= 0) {   // the deck just did something
+        float a = clampf(sim.deckNoteT > 2.0f ? (2.6f - sim.deckNoteT) / 0.6f : sim.deckNoteT / 1.2f, 0, 1);
+        hudTextC(sim.deckNote, sw / 2, sh - hud(150), hud(16), Fade({ 196, 168, 214, 230 }, a * 0.9f));
     }
-    if (tapeFoundT > 0) {   // a cassette recovered — someone else's fragment of the descent
-        float a = clampf(tapeFoundT > 2.6f ? (3.2f - tapeFoundT) / 0.6f : tapeFoundT / 1.6f, 0, 1);
+    if (sim.tapeFoundT > 0) {   // a cassette recovered — someone else's fragment of the descent
+        float a = clampf(sim.tapeFoundT > 2.6f ? (3.2f - sim.tapeFoundT) / 0.6f : sim.tapeFoundT / 1.6f, 0, 1);
         const char *t = "TAPE RECOVERED";
         hudTextC(t, sw / 2, sh - hud(150), hud(22), Fade({ 190, 178, 150, 255 }, a));
-        hudTextC(tapeLine, sw / 2, sh - hud(122), hud(15), Fade({ 150, 140, 118, 230 }, a * 0.9f));
+        hudTextC(sim.tapeLine, sw / 2, sh - hud(122), hud(15), Fade({ 150, 140, 118, 230 }, a * 0.9f));
     }
     if (!inCursorHidden() && !shotPath) {
         const char *t = "click to capture mouse";
@@ -986,38 +978,38 @@ void Game::renderUI(double now) {
     }
     hudTextR(TextFormat("%d", GetFPS()), sw - hud(14), hud(12), hud(16), { 190, 180, 140, 150 });
     // persistent flashlight reminder until first use; small state dot + charge bar after
-    if (flashOn) everFlashed = true;
+    if (sim.flashOn) everFlashed = true;
     if (!everFlashed && elapsed > 9.0)
         // NOT an em dash: raylib's default font stops at Latin-1, and anything
         // past it draws as a literal "?" on the HUD. U+00B7 is inside the range.
         hudTextR("F · flashlight", sw - hud(16), sh - hud(28), hud(16), { 190, 180, 140, 160 });
-    else if (flashOn)
+    else if (sim.flashOn)
         hudTextR("[ flashlight ]", sw - hud(16), sh - hud(26), hud(14), { 235, 225, 180, 120 });
     {   // sanity: always up, because it is always going down
         const int w = hud(90), x = sw - w - hud(16), y = sh - hud(60), th = hud(5);
         DrawRectangle(x - hud(1), y - hud(1), w + hud(2), th + hud(2), { 0, 0, 0, 120 });
         // steady cream, souring toward red as it empties; the last stretch pulses
-        Color bar = sanity > 0.5f  ? Color{ 168, 196, 176, 165 }
-                  : sanity > 0.25f ? Color{ 214, 190, 120, 180 }
+        Color bar = sim.sanity > 0.5f  ? Color{ 168, 196, 176, 165 }
+                  : sim.sanity > 0.25f ? Color{ 214, 190, 120, 180 }
                                    : Color{ 214, 96, 84, 200 };
-        if (sanity < 0.25f) bar.a = (unsigned char)(150 + 80 * (0.5f + 0.5f * sinf((float)now * 4.2f)));
-        DrawRectangle(x, y, (int)(w * sanity), th, bar);
+        if (sim.sanity < 0.25f) bar.a = (unsigned char)(150 + 80 * (0.5f + 0.5f * sinf((float)now * 4.2f)));
+        DrawRectangle(x, y, (int)(w * sim.sanity), th, bar);
         hudTextR("sanity", x - hud(6), y - hud(4), hud(12), { 150, 142, 122, 120 });
     }
-    if (manilaCardT > 0 && winT <= 0 && deathT <= 0) {   // you found it
-        float a = clampf(manilaCardT > 4.2f ? (5.0f - manilaCardT) / 0.8f : manilaCardT / 1.6f, 0, 1);
+    if (sim.manilaCardT > 0 && sim.winT <= 0 && sim.deathT <= 0) {   // you found it
+        float a = clampf(sim.manilaCardT > 4.2f ? (5.0f - sim.manilaCardT) / 0.8f : sim.manilaCardT / 1.6f, 0, 1);
         hudTextC("THE MANILA ROOM", sw / 2, sh / 2 - hud(150), hud(34), Fade({ 226, 206, 158, 255 }, a));
         hudTextC("...the hum is quieter here.  someone left notes on the table  [E]",
                  sw / 2, sh / 2 - hud(112), hud(16), Fade({ 190, 172, 132, 255 }, a * 0.9f));
     }
-    if (noteT > 0 && winT <= 0 && deathT <= 0) {   // a note from the table, held up to read
-        float a = clampf(noteT > 8.6f ? (9.0f - noteT) / 0.4f : noteT / 0.8f, 0, 1);
+    if (sim.noteT > 0 && sim.winT <= 0 && sim.deathT <= 0) {   // a note from the table, held up to read
+        float a = clampf(sim.noteT > 8.6f ? (9.0f - sim.noteT) / 0.4f : sim.noteT / 0.8f, 0, 1);
         int pw = std::min(sw - hud(40), hud(720)), ph = hud(170);
         int x0 = sw / 2 - pw / 2, y0 = sh / 2 - ph / 2 + hud(40);
         DrawRectangle(x0, y0, pw, ph, Fade({ 232, 222, 190, 255 }, 0.92f * a));
         DrawRectangleLines(x0, y0, pw, ph, Fade({ 150, 130, 96, 255 }, a));
         for (int ln = 0; ln < 4; ln++) {
-            const char *t = MANILA_NOTES[notePage][ln];
+            const char *t = MANILA_NOTES[sim.notePage][ln];
             if (!*t) continue;
             int fs = hud(18), tw = MeasureText(t, fs);
             if (tw > pw - hud(30)) { fs = fs * (pw - hud(30)) / tw; tw = MeasureText(t, fs); }
@@ -1025,16 +1017,16 @@ void Game::renderUI(double now) {
                      Fade(ln == 3 ? Color{ 110, 96, 80, 255 } : Color{ 58, 50, 44, 255 }, a));
         }
     }
-    if (sanityWarnT > 0 && winT <= 0 && deathT <= 0) {   // it just slipped a notch
-        float a = clampf(sanityWarnT / 1.2f, 0, 1) * clampf((4.0f - sanityWarnT) / 0.4f, 0, 1);
-        hudTextC(sanityLine, sw / 2, sh / 2 + hud(96), hud(19), Fade({ 206, 176, 176, 255 }, a * 0.9f));
+    if (sim.sanityWarnT > 0 && sim.winT <= 0 && sim.deathT <= 0) {   // it just slipped a notch
+        float a = clampf(sim.sanityWarnT / 1.2f, 0, 1) * clampf((4.0f - sim.sanityWarnT) / 0.4f, 0, 1);
+        hudTextC(sim.sanityLine, sw / 2, sh / 2 + hud(96), hud(19), Fade({ 206, 176, 176, 255 }, a * 0.9f));
     }
-    if (flashOn || battery < 0.99f) {   // charge bar, once it's been used or spent at all
+    if (sim.flashOn || sim.battery < 0.99f) {   // charge bar, once it's been used or spent at all
         const int w = hud(90), x = sw - w - hud(16), y = sh - hud(44), th = hud(5);   // one row below the sanity meter
         DrawRectangle(x - hud(1), y - hud(1), w + hud(2), th + hud(2), { 0, 0, 0, 120 });
-        Color bar = battery < 0.15f ? Color{ 220, 90, 70, 190 } : Color{ 200, 190, 150, 150 };
-        DrawRectangle(x, y, (int)(w * battery), th, bar);
-        if (flashOn && battery < 0.15f) {
+        Color bar = sim.battery < 0.15f ? Color{ 220, 90, 70, 190 } : Color{ 200, 190, 150, 150 };
+        DrawRectangle(x, y, (int)(w * sim.battery), th, bar);
+        if (sim.flashOn && sim.battery < 0.15f) {
             const char *t = "battery low";
             float pulse = 0.5f + 0.5f * sinf((float)now * 5.0f);
             hudTextR(t, sw - hud(16), sh - hud(78), hud(13), Fade({ 220, 120, 100, 220 }, pulse));   // clear of the sanity meter
@@ -1046,37 +1038,37 @@ void Game::renderUI(double now) {
         // small rotating buffer, and this block now formats more lines than
         // there are slots, so a held pointer comes back as a later line's text.
         Color selc = { 235, 200, 130, 210 }, dimc = { 150, 138, 112, 110 };
-        if (tapes > 0)
-            hudText(TextFormat("tapes  ×%d", tapes), hud(16), sh - hud(138), hud(16), { 172, 162, 190, 170 });
-        if (keys > 0)
-            hudText(TextFormat("keys  ×%d", keys), hud(16), sh - hud(160), hud(16), { 214, 186, 110, 190 });
-        if (coins > 0 || wayOpen())   // doubloons double as your ticket out (ESCAPE_COST to leave)
-            DrawText(TextFormat("doubloons  ×%d / %d", coins, ESCAPE_COST), 16, sh - 116, 16,
-                     wayOpen() ? Color{ 120, 230, 140, 210 } : Color{ 214, 178, 92, 170 });
-        DrawText(TextFormat("3  almond water  ×%d", almond), 16, sh - 94, 16,
-                 almond > 0 ? Color{ 150, 190, 235, 170 } : dimc);
+        if (sim.tapes > 0)
+            hudText(TextFormat("tapes  ×%d", sim.tapes), hud(16), sh - hud(138), hud(16), { 172, 162, 190, 170 });
+        if (sim.keys > 0)
+            hudText(TextFormat("keys  ×%d", sim.keys), hud(16), sh - hud(160), hud(16), { 214, 186, 110, 190 });
+        if (sim.coins > 0 || sim.wayOpen())   // doubloons double as your ticket out (ESCAPE_COST to leave)
+            DrawText(TextFormat("doubloons  ×%d / %d", sim.coins, Sim::ESCAPE_COST), 16, sh - 116, 16,
+                     sim.wayOpen() ? Color{ 120, 230, 140, 210 } : Color{ 214, 178, 92, 170 });
+        DrawText(TextFormat("3  almond water  ×%d", sim.almond), 16, sh - 94, 16,
+                 sim.almond > 0 ? Color{ 150, 190, 235, 170 } : dimc);
         // One TextFormat call per line, drawn straight off it: the return is a
         // slot in a small rotating buffer, so a second call before this one is
         // drawn would hand the revolver the flare's string. Hence the ternaries
         // inside the format arguments rather than a second TextFormat.
-        DrawText(reloadT > 0 ? "1  revolver  [reloading]"
-                    : TextFormat("1  revolver  %d/%d%s  · %s", ammo, MAXAMMO,
-                                 ammo == 0 ? (inTouchActive() ? "  · LOAD" : "  · R") : "",
+        DrawText(sim.reloadT > 0 ? "1  revolver  [reloading]"
+                    : TextFormat("1  revolver  %d/%d%s  · %s", sim.ammo, Sim::MAXAMMO,
+                                 sim.ammo == 0 ? (inTouchActive() ? "  · LOAD" : "  · R") : "",
                                  inTouchActive() ? "tap AIM" : "hold RMB aim"),
-                    16, sh - 50, 16, weapon == WEAPON_REVOLVER ? selc : dimc);
-        DrawText(TextFormat("2  flare  ×%d", flares), 16, sh - 72, 16, weapon == WEAPON_FLARE ? selc : dimc);
-        DrawText(!deck.carried
-                     ? (deck.playing ? "4  tape player  [running · left behind]"
+                    16, sh - 50, 16, sim.weapon == WEAPON_REVOLVER ? selc : dimc);
+        DrawText(TextFormat("2  flare  ×%d", sim.flares), 16, sh - 72, 16, sim.weapon == WEAPON_FLARE ? selc : dimc);
+        DrawText(!sim.deck.carried
+                     ? (sim.deck.playing ? "4  tape player  [running · left behind]"
                                      : inTouchActive() ? "4  tape player  [left behind · USE]"
                                                        : "4  tape player  [left behind · E]")
-                 : deck.playing ? TextFormat("4  tape player  [playing  %ds]", (int)deck.t + 1)
-                 : tapes > 0    ? "4  tape player  [tape ready]"
+                 : sim.deck.playing ? TextFormat("4  tape player  [playing  %ds]", (int)sim.deck.t + 1)
+                 : sim.tapes > 0    ? "4  tape player  [tape ready]"
                                 : "4  tape player  [no tape]",
                 hud(16), sh - hud(28), hud(16),
-                weapon == WEAPON_DECK ? (deck.playing ? Color{ 205, 150, 235, 220 } : selc) : dimc);
+                sim.weapon == WEAPON_DECK ? (sim.deck.playing ? Color{ 205, 150, 235, 220 } : selc) : dimc);
     }
-    if (wayOpen() && winT <= 0 && deathT <= 0 && escapeT <= 0) {   // you can leave now — go find a door
-        const char *t = level == 0 ? "the walls know you now  ·  find one that isn't cursed"
+    if (sim.wayOpen() && sim.winT <= 0 && sim.deathT <= 0 && sim.escapeT <= 0) {   // you can leave now — go find a door
+        const char *t = sim.level == 0 ? "the walls know you now  ·  find one that isn't cursed"
                                    : "the doors know you now  ·  find one that isn't cursed";
         float pl = 0.55f + 0.45f * sinf((float)now * 2.5f);
         hudTextC(t, sw / 2, hud(70), hud(20), Fade({ 120, 235, 145, 255 }, pl));
@@ -1085,8 +1077,8 @@ void Game::renderUI(double now) {
     // hit from dead. A hit flashes the edges red, and they stay tinged for as
     // long as you are wounded, fading as you heal. When the red is gone, you
     // can take a hit again.
-    if ((hurtT > 0 || health < 0.999f) && deathT <= 0) {
-        float a = fmaxf(hurtT / HURT_GRACE * 0.55f, (1.0f - health) * 0.45f);
+    if ((sim.hurtT > 0 || sim.health < 0.999f) && sim.deathT <= 0) {
+        float a = fmaxf(sim.hurtT / Sim::HURT_GRACE * 0.55f, (1.0f - sim.health) * 0.45f);
         Color r0 = Fade({120, 0, 0, 255}, a), r1 = Fade({120, 0, 0, 255}, 0);
         int e = sh / 4;
         DrawRectangleGradientV(0, 0, sw, e, r0, r1);
@@ -1094,50 +1086,50 @@ void Game::renderUI(double now) {
         DrawRectangleGradientH(0, 0, e, sh, r0, r1);
         DrawRectangleGradientH(sw - e, 0, e, sh, r1, r0);
     }
-    if (stamina < 0.98f) {   // sprint bar, bottom centre
+    if (sim.stamina < 0.98f) {   // sprint bar, bottom centre
         const int w = hud(220), x = sw / 2 - w / 2, y = sh - hud(42), th = hud(6);
         DrawRectangle(x - hud(1), y - hud(1), w + hud(2), th + hud(2), { 0, 0, 0, 120 });
-        DrawRectangle(x, y, (int)(w * stamina), th,
-                      sprintExhausted ? Color{190,100,66,180} : Color{200,180,120,160});
-        if (sprintExhausted) hudText("catch your breath", x + hud(48), y + hud(11), hud(12), {195,156,119,180});
+        DrawRectangle(x, y, (int)(w * sim.stamina), th,
+                      sim.sprintExhausted ? Color{190,100,66,180} : Color{200,180,120,160});
+        if (sim.sprintExhausted) hudText("catch your breath", x + hud(48), y + hud(11), hud(12), {195,156,119,180});
     }
     // Say which of the three states you are actually in. This line used to read
     // "hold still" whether or not stillness did anything, which was the one
     // instruction the game gave you and it was not true.
     const char *coverLine = nullptr;
     Color coverCol = { 140, 210, 165, 160 };
-    if (hidden && hideBreakT > 0) {   // moving, and about to lose it
+    if (sim.hidden && sim.hideBreakT > 0) {   // moving, and about to lose it
         coverLine = "[ hidden · you're giving it away ]";
         coverCol = { 228, 196, 128, 200 };
-    } else if (hidden) {
+    } else if (sim.hidden) {
         coverLine = "[ hidden · hold still ]";
-    } else if (nearCover) {           // cover is right there, you are just too quick for it
+    } else if (sim.nearCover) {           // cover is right there, you are just too quick for it
         coverLine = "[ cover · stop to hide ]";
         coverCol = { 190, 180, 150, 140 };
-    } else if (squeezing) {
+    } else if (sim.squeezing) {
         coverLine = "[ squeezing ]";
-    } else if (crouchCur > 0.5f) {
+    } else if (sim.crouchCur > 0.5f) {
         coverLine = "[ crouched ]";
         coverCol = { 180, 170, 140, 120 };
     }
     if (coverLine)
         hudTextC(coverLine, sw / 2, sh - hud(62), hud(14), coverCol);
-    if (level == 3 && valveT > 0) {   // just closed one
-        float a = clampf(valveT / 1.6f, 0, 1);
-        if (pipesShut) {
+    if (sim.level == 3 && sim.valveT > 0) {   // just closed one
+        float a = clampf(sim.valveT / 1.6f, 0, 1);
+        if (sim.pipesShut) {
             const char *t = "THE PIPES GO QUIET";
             hudTextC(t, sw / 2, sh / 2 - hud(110), hud(34), Fade({ 120, 230, 145, 255 }, a));
             const char *t2 = "...and the halls give up what they were holding";
             hudTextC(t2, sw / 2, sh / 2 - hud(74), hud(16), Fade({ 150, 200, 160, 255 }, a * 0.9f));
         } else {
-            const char *t = TextFormat("VALVE SHUT   %d / %d", (int)valvesTurned.size(), VALVES_NEEDED);
+            const char *t = TextFormat("VALVE SHUT   %d / %d", (int)sim.valvesTurned.size(), Sim::VALVES_NEEDED);
             hudTextC(t, sw / 2, sh / 2 - hud(100), hud(26), Fade({ 210, 180, 120, 255 }, a));
         }
     }
-    if (level == 3 && !valvesTurned.empty() && !pipesShut)   // standing tally
-        hudText(TextFormat("valves  %d / %d", (int)valvesTurned.size(), VALVES_NEEDED),
+    if (sim.level == 3 && !sim.valvesTurned.empty() && !sim.pipesShut)   // standing tally
+        hudText(TextFormat("valves  %d / %d", (int)sim.valvesTurned.size(), Sim::VALVES_NEEDED),
                 hud(16), sh - hud(138), hud(16), { 198, 150, 96, 175 });
-    if (paused) {
+    if (sim.paused) {
         DrawRectangle(0, 0, sw, sh, Fade(BLACK, 0.55f));
         const char *t = "P A U S E D";
         hudTextC(t, sw / 2, sh / 2 - hud(42), hud(46), { 225, 212, 160, 235 });
@@ -1146,11 +1138,11 @@ void Game::renderUI(double now) {
     }
     if (debugHud) {
         hudText(TextFormat("%d fps  pos(%.0f, %.0f)  chunks %d  entity %s  d=%.0fm  hidden=%d  batt=%.2f",
-                            GetFPS(), px, pz, (int)world.chunks.size(),
-                            ent.st == EState::Hidden ? "hidden" : ent.st == EState::Stalk ? "STALKING"
-                                : ent.st == EState::Chase ? "CHASING"
-                                : ent.st == EState::Flee ? "FLEEING" : "DYING",
-                            entDist > 1e8 ? 0.0f : entDist, hidden ? 1 : 0, battery),
+                            GetFPS(), sim.px, sim.pz, (int)sim.world.chunks.size(),
+                            sim.ent.st == EState::Hidden ? "hidden" : sim.ent.st == EState::Stalk ? "STALKING"
+                                : sim.ent.st == EState::Chase ? "CHASING"
+                                : sim.ent.st == EState::Flee ? "FLEEING" : "DYING",
+                            sim.entDist > 1e8 ? 0.0f : sim.entDist, sim.hidden ? 1 : 0, sim.battery),
                 hud(12), hud(12), hud(18), { 230, 220, 160, 220 });
         hudText("dev: B blackout   E spawn   C chase   H hide   G flares   N next level",
                 hud(12), hud(34), hud(16), { 200, 190, 140, 180 });
@@ -1172,7 +1164,7 @@ void Game::drawDeck(Matrix xf, bool lamp) {
     DrawMesh(deckMesh, mats[MAT_DECK], xf);
     for (int i = 0; i < 2; i++) {
         // both hubs turn the same way — the tape only travels in one direction
-        Matrix r = MatrixMultiply(MatrixRotateY(deck.reel),
+        Matrix r = MatrixMultiply(MatrixRotateY(sim.deck.reel),
                                   MatrixTranslate(i ? 0.024f : -0.024f, 0.0505f, 0.0f));
         DrawMesh(reelMesh, mats[MAT_DECK], MatrixMultiply(r, xf));
     }
@@ -1192,12 +1184,12 @@ void Game::drawDeck(Matrix xf, bool lamp) {
 // inside 0.34 m so no corridor can cut through it, depth testing left alone,
 // and the caller lifts the world shadowing off it before this runs.
 void Game::drawHeldDeck(const Camera3D &cam) {
-    Vector3 F = fwd;
-    Vector3 Rt = { r2x, 0, r2z };
+    Vector3 F = toRl(sim.fwd);
+    Vector3 Rt = { sim.r2x, 0, sim.r2z };
     Vector3 Up = Vector3Normalize(Vector3CrossProduct(Rt, F));
 
-    float sway = sinf(bobPhase * 3.14159f) * 0.007f * bobAmt;
-    float rise = sinf(bobPhase * 1.57079f) * 0.004f * bobAmt;
+    float sway = sinf(sim.bobPhase * 3.14159f) * 0.007f * sim.bobAmt;
+    float rise = sinf(sim.bobPhase * 1.57079f) * 0.004f * sim.bobAmt;
     // Down in the corner of the view, and — the rule the drink can had to learn
     // — the whole offset kept inside 0.34 m of the eye. Collision never lets you
     // that close to anything solid, so nothing in the world can cut into it.
@@ -1227,7 +1219,7 @@ void Game::drawHeldDeck(const Camera3D &cam) {
     m.m8 = az.x * SCALE; m.m9 = az.y * SCALE; m.m10 = az.z * SCALE;
     m.m12 = pos.x;       m.m13 = pos.y;       m.m14 = pos.z;
     m.m15 = 1.0f;
-    drawDeck(m, deck.playing);
+    drawDeck(m, sim.deck.playing);
 }
 
 // The drink, in three dimensions. The 2D version faked foreshortening by
@@ -1235,7 +1227,7 @@ void Game::drawHeldDeck(const Camera3D &cam) {
 // so the projection does it properly — it grows as it closes on your face, the
 // barrel shortens as it comes over, and the lid opens toward you on its own.
 void Game::drawDrinkCan(const Camera3D &cam) {
-    float el = DRINK_TIME - drinkT;
+    float el = Sim::DRINK_TIME - sim.drinkT;
     auto ease = [](float t) { t = clampf(t, 0, 1); return t * t * (3.0f - 2.0f * t); };
     float up  = ease(el / 0.42f) * (1.0f - ease((el - 1.36f) / 0.39f));   // in, then away
     float tip = ease((el - 0.34f) / 0.34f) * (1.0f - ease((el - 1.30f) / 0.34f));
@@ -1246,8 +1238,8 @@ void Game::drawDrinkCan(const Camera3D &cam) {
     }
 
     // camera basis, matching the convention the rest of the game uses
-    Vector3 F = fwd;
-    Vector3 Rt = { r2x, 0, r2z };
+    Vector3 F = toRl(sim.fwd);
+    Vector3 Rt = { sim.r2x, 0, sim.r2z };
     Vector3 Up = Vector3Normalize(Vector3CrossProduct(Rt, F));
 
     // Keep the can below the centre of the view and bring the lid toward the
@@ -1256,7 +1248,7 @@ void Game::drawDrinkCan(const Camera3D &cam) {
     float dist = 0.265f - tip * 0.055f;
     float side = 0.112f - tip * 0.028f;
     float vert = -0.255f + up * 0.145f + tip * 0.018f + bob * 0.003f;
-    float bx4 = sinf(bobPhase * 3.14159f) * 0.008f * bobAmt;
+    float bx4 = sinf(sim.bobPhase * 3.14159f) * 0.008f * sim.bobAmt;
     Vector3 pos = Vector3Add(cam.position,
                   Vector3Add(Vector3Scale(F, dist),
                   Vector3Add(Vector3Scale(Rt, side + bx4), Vector3Scale(Up, vert))));

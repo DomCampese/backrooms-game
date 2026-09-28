@@ -1,0 +1,29 @@
+## mutations, L0 v1
+shiftEdge west edge of (0,-16)
+  walls at (0,-16): north 0 west 0
+canStep before (0,-16) to (-1,-16) -> 1
+lineOfSight before (-1,-31) to (1,-31) -> 1
+  walls at (0,-16): north 0 west 1
+  staleChunks 2: (s0 0,-1) (s0 -1,-1)
+canStep after (0,-16) to (-1,-16) -> 0
+lineOfSight after (-1,-31) to (1,-31) -> 0
+gatherCellAABBs shifted cell (0,-16) props=0 -> 1
+  box x -0.109999999..0.109999999 z -32.1100006..-29.8899994 top 10000 seeThrough=0
+shiftEdge again
+  staleChunks 0:
+storey -1: west edge of (0,-16) is 0
+unlockEdge north edge of (17,-2), key at (16,-2)
+  walls at (17,-2): north 5 west 0
+  keyAt 1
+canStep before (17,-2) to (17,-3) -> 0
+  walls at (17,-2): north 4 west 0
+  staleChunks 1: (s0 1,-1)
+  keyAt 0
+canStep after (17,-2) to (17,-3) -> 1
+gatherCellAABBs unlocked cell (17,-2) props=0 -> 2
+  box x 33.8899994..34.3499985 z -4.11000013..-3.8900001 top 10000 seeThrough=0
+  box x 35.6500015..36.1100006 z -4.11000013..-3.8900001 top 10000 seeThrough=0
+unlockEdge again
+  staleChunks 0:
+rebuildChunk unloaded (1000,1000)
+  staleChunks 0:

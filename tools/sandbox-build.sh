@@ -11,8 +11,17 @@ SO=$(ls "$PWD"/.rlwheel/raylib/_raylib_cffi.cpython-*-linux-gnu.so 2>/dev/null |
 # from elsewhere — which tools/shot.sh does on every single screenshot.
 # the wheel's .so is a CPython extension, so link the matching libpython
 PYV=$(basename "$SO" | sed -n 's/.*cpython-\([0-9]\)\([0-9]*\)-.*/\1.\2/p')
-FLAGS=(-std=c++17 -O2 -Wall -Wno-missing-field-initializers -Irlshim)
+# -ffp-contract=off: no fused multiply-adds, so core's results do not depend on
+# the compiler (src/core/fp_strict.h). Every build here compiles core.
+CORE_FLAGS=(-std=c++17 -O2 -Wall -Wno-missing-field-initializers -ffp-contract=off)
+FLAGS=("${CORE_FLAGS[@]}" -Irlshim)
 LINK=("$SO" "-Wl,-rpath,$(dirname "$SO")" "-lpython$PYV" -lm -ldl -lpthread)
+# src/ is the raylib platform; src/core and src/sim are the engine-independent
+# layers (docs/migration.md). sim may not exist yet.
+shopt -s nullglob
+CORE=(src/core/*.cpp)
+GAME=(src/*.cpp "${CORE[@]}" src/sim/*.cpp)
+shopt -u nullglob
 
 # Delete the target before compiling, so a failed build cannot leave a working
 # binary behind. c++ only replaces its output on success, so without this the
@@ -28,9 +37,14 @@ LINK=("$SO" "-Wl,-rpath,$(dirname "$SO")" "-lpython$PYV" -lm -ldl -lpthread)
 # reads the tail.
 build_mapdump() {
     rm -f mapdump
-    c++ "${FLAGS[@]}" tools/mapdump.cpp src/world.cpp src/util.cpp src/levels.cpp \
-        src/textures.cpp -o mapdump "${LINK[@]}"
-    echo "built ./mapdump (python$PYV)"
+    c++ "${CORE_FLAGS[@]}" tools/mapdump.cpp "${CORE[@]}" -o mapdump
+    echo "built ./mapdump (core only)"
+}
+# contract: core's golden answers (docs/migration.md, "Contract tests").
+build_contract() {
+    rm -f contract
+    c++ "${CORE_FLAGS[@]}" tools/contract.cpp "${CORE[@]}" -o contract
+    echo "built ./contract (core only)"
 }
 # texdump: every texture generator, run without a window, written to PNG with
 # its mean colour — see the top of tools/texdump.cpp.
@@ -38,13 +52,13 @@ build_texdump() {
     rm -f texdump
     python3 tools/embed-materials.py
     c++ "${FLAGS[@]}" tools/texdump.cpp src/textures.cpp src/surfaces.cpp src/util.cpp \
-        -o texdump "${LINK[@]}"
+        "${CORE[@]}" -o texdump "${LINK[@]}"
     echo "built ./texdump (python$PYV)"
 }
 build_game() {
     rm -f backrooms
     python3 tools/embed-materials.py
-    c++ "${FLAGS[@]}" src/*.cpp -o backrooms "${LINK[@]}"
+    c++ "${FLAGS[@]}" "${GAME[@]}" -o backrooms "${LINK[@]}"
     echo "built ./backrooms (python$PYV)"
 }
 
@@ -52,6 +66,7 @@ case "${1:-game}" in
     game)    build_game ;;
     mapdump) build_mapdump ;;
     texdump) build_texdump ;;
-    all)     build_game; build_mapdump; build_texdump ;;
-    *)       echo "usage: $(basename "$0") [game|mapdump|texdump|all]"; exit 2 ;;
+    contract) build_contract ;;
+    all)     build_game; build_mapdump; build_contract; build_texdump ;;
+    *)       echo "usage: $(basename "$0") [game|mapdump|contract|texdump|all]"; exit 2 ;;
 esac

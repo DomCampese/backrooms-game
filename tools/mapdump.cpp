@@ -1,6 +1,6 @@
 // A measuring instrument for the generator. No window, no GL, no Xvfb: it links
-// the game's own world.cpp and calls generate() directly, so every number below
-// comes from exactly the code the game ships.
+// src/core alone and calls generate() directly, so every number below comes
+// from exactly the code the game ships.
 //
 // This exists because screenshots were actively misleading about the layout.
 // From captures alone the halls looked like they ran for hundreds of metres;
@@ -12,9 +12,10 @@
 //   tools/sandbox-build.sh mapdump     # builds ./mapdump
 //   ./mapdump --level 0 --seed 1337 --cells 129 --plan 0 0 48 32
 //
-#include "../src/world.h"
-#include "../src/util.h"
-#include "../src/levels.h"
+#include "../src/core/world.h"
+#include "../src/core/hash.h"
+#include "../src/core/level_rules.h"
+#include "../src/core/layout.h"
 
 #include <algorithm>
 #include <cmath>
@@ -49,8 +50,9 @@ struct Args {
     int level = 0, cells = 129, samples = 4000, storey = 0;
     unsigned visit = 0;
     unsigned seed = 1337;
-    bool plan = true, listExits = false, listStairs = false;
+    bool plan = true, listExits = false, listStairs = false, layout = false;
     int px = 0, pz = 0, pw = 48, ph = 32;
+    int lcx = 0, lcz = 0;
 };
 
 // A cell's glyph. Props win over pools because a prop standing in water is
@@ -73,9 +75,108 @@ char cellGlyph(World &w, int a, int b) {
     return ' ';   // coins and water are decided by the caller, which knows both
 }
 
+const char *PROP_NAME[] = {
+    "none", "boxes", "cabinet", "table", "fallen tile", "couch", "armoire", "lamp", "nightstand",
+    "bed", "vending", "party table", "desk", "shelving", "cooler", "plant", "manila table",
+};
+const char *FIXTURE_NAME[] = {
+    "outlet", "broken outlet", "switch", "grille", "exit sign", "diffuser", "sprinkler", "conduit",
+    "scrawl", "lift door", "spall", "pillar spall", "pipe", "valve", "streamer", "manila room",
+};
+const char *OPENING_NAME[] = { "doorway", "locked door", "exit", "cursed exit", "window", "rail" };
+
+// Which way a normal points, as +x, -z, down.
+const char *facing(Vec3 n) {
+    if (n.y < -0.5f) return "down";
+    if (n.x > 0.5f) return "+x";
+    if (n.x < -0.5f) return "-x";
+    if (n.z > 0.5f) return "+z";
+    if (n.z < -0.5f) return "-z";
+    return "-";
+}
+
+// Print chunk (cx, cz)'s layout: what the mesher builds besides the floorplan.
+void printLayout(World &w, int cx, int cz) {
+    ChunkLayout L = chunkLayout(w, cx, cz);
+    printf("\nlayout of chunk %d,%d  storey %d  (x %.0f..%.0f  z %.0f..%.0f, world metres)\n", cx, cz, L.storey,
+           cx * CHUNK, (cx + 1) * CHUNK, cz * CHUNK, (cz + 1) * CHUNK);
+    printf("\nprops (%zu)\n", L.props.size());
+    for (const PropPlacement &p : L.props)
+        printf("  cell %2d,%2d  %-12s at %7.2f %7.2f  floor %5.2f  turn %d%s  hash %08x %08x\n", p.i, p.k,
+               PROP_NAME[p.kind], p.x, p.z, p.floorY, p.turn, p.againstWall ? "  against wall" : "",
+               p.hash, p.hash2);
+    printf("\nfixtures (%zu)\n", L.fixtures.size());
+    for (const Fixture &f : L.fixtures) {
+        if (f.i >= 0) printf("  cell %2d,%2d  ", f.i, f.k);
+        else          printf("  chunk        ");
+        printf("%-13s at %7.2f %5.2f %7.2f", FIXTURE_NAME[(int)f.kind], f.pos.x, f.pos.y, f.pos.z);
+        switch (f.kind) {
+        case FixtureKind::Conduit: case FixtureKind::Pipe: case FixtureKind::Valve: case FixtureKind::Streamer:
+            printf("  to %7.2f %5.2f %7.2f", f.end.x, f.end.y, f.end.z);
+            break;
+        default: break;
+        }
+        if (f.kind != FixtureKind::Valve && f.kind != FixtureKind::Streamer && f.kind != FixtureKind::Pipe &&
+            f.kind != FixtureKind::ManilaRoom)
+            printf("  facing %s", facing(f.normal));
+        switch (f.kind) {
+        case FixtureKind::Scrawl:
+            printf("  %.2f x %.2f m  tilt %.3f  phrase %d  tint %d", 2 * f.w, 2 * f.h, f.angle, f.variant, f.tone);
+            break;
+        case FixtureKind::Spall: case FixtureKind::PillarSpall:
+            printf("  %.2f x %.2f m  seed %08x", 2 * f.w, 2 * f.h, f.seed);
+            break;
+        case FixtureKind::Pipe:
+            printf("  radius %.3f%s%s", f.w, f.tone ? "  rusted" : "", f.variant ? "  collar" : "");
+            break;
+        case FixtureKind::Streamer:
+            printf("  sags to %.2f  colour %d", f.h, f.variant);
+            break;
+        case FixtureKind::ManilaRoom:
+            printf("  seed %08x", f.seed);
+            break;
+        default: break;
+        }
+        printf("\n");
+    }
+    int gaps = 0, dead = 0;
+    for (const LightFitting &f : L.fittings) { gaps += f.gap != FittingGap::None; dead += f.dead; }
+    printf("\nlight fittings (%zu: %d not there, %d dead)\n", L.fittings.size(), gaps, dead);
+    for (const LightFitting &f : L.fittings) {
+        printf("  grid %4d,%4d  at %7.2f %5.2f %7.2f  ceiling %5.2f", f.gx, f.gz, f.pos.x, f.pos.y, f.pos.z,
+               f.ceilingY);
+        if (f.gap == FittingGap::UnderOpening) printf("  none: under an opening");
+        else if (f.gap == FittingGap::ManilaRoom) printf("  none: Manila Room");
+        else printf("  %s  output %.2f%s%s", f.dead ? "dead" : "lit ", f.output, f.faulty ? "  faulty" : "",
+                    f.turned ? "  turned" : "");
+        printf("\n");
+    }
+    printf("\nopenings (%zu; along: x for a north edge, z for a west one)\n", L.openings.size());
+    for (const Opening &o : L.openings) {
+        printf("  cell %2d,%2d  %-5s %-12s", o.i, o.k, o.west ? "west" : "north", OPENING_NAME[(int)o.kind]);
+        if (o.kind == OpeningKind::Rail) {
+            if (o.overVoid) printf("  over a void: drawn by the storey below");
+            else printf("  base %5.2f  cap %5.2f to %5.2f%s", o.base, o.railTop0, o.railTop1,
+                        o.underside ? "  underside shows" : "");
+            printf("\n");
+            continue;
+        }
+        printf("  along %7.2f..%7.2f  wall %5.2f..%5.2f  head %5.2f", o.a0, o.a1, o.base, o.top, o.headY);
+        if (o.kind == OpeningKind::Window) printf("  sill %5.2f", o.sillY);
+        if (o.joinLo || o.joinHi) printf("  joins%s%s", o.joinLo ? " low" : "", o.joinHi ? " high" : "");
+        if (o.kind == OpeningKind::Exit || o.kind == OpeningKind::CursedExit) {
+            printf("  glyph");
+            for (int n = 0; n < o.glyphLen; n++) printf(" %d", o.glyph[n]);
+            if (o.leafRoom) printf("  leaf room");
+        }
+        printf("\n");
+    }
+}
+
 const char *usage =
     "usage: mapdump [--level N] [--seed S] [--storey N] [--cells N] [--samples N]\n"
-    "               [--plan X Z W H] [--no-plan] [--list-exits] [--list-stairs]\n";
+    "               [--plan X Z W H] [--no-plan] [--list-exits] [--list-stairs]\n"
+    "               [--layout CX CZ]\n";
 
 }  // namespace
 
@@ -94,6 +195,7 @@ int main(int argc, char **argv) {
         else if (k == "--list-exits") a.listExits = true;
         else if (k == "--list-stairs") a.listStairs = true;
         else if (k == "--plan")    { a.px = num(0); a.pz = num(0); a.pw = num(48); a.ph = num(32); }
+        else if (k == "--layout")  { a.layout = true; a.lcx = num(0); a.lcz = num(0); }
         else { fputs(usage, stderr); return 2; }
     }
 
@@ -107,8 +209,16 @@ int main(int argc, char **argv) {
     // The storey pitch does come from the table: it is what turns the stairs
     // and openings on, and a harness that left it at zero would describe a
     // one-floor Level 0 that the game no longer ships.
-    w.storeyH = (a.level >= 0 && a.level < NLEVELS) ? LEVELS[a.level].storeyH : 0.0f;
+    w.storeyH = (a.level >= 0 && a.level < NLEVELS) ? LEVEL_RULES[a.level].storeyH : 0.0f;
     w.setStorey(a.storey);
+
+    // A layout has heights in it, so it needs the level's real wall height.
+    if (a.layout) {
+        w.wallH = LEVEL_RULES[a.level].wallH;
+        printf("mapdump  level %d  seed %u  storey %d  visit %u\n", a.level, a.seed, a.storey, a.visit);
+        printLayout(w, a.lcx, a.lcz);
+        return 0;
+    }
 
     const int N = a.cells, half = N / 2;
     printf("mapdump  level %d  seed %u  storey %d  %dx%d cells (%.0f x %.0f m)\n",
@@ -406,8 +516,8 @@ int main(int argc, char **argv) {
                 // the shaft, facing up or down the first flight.
                 float v = rising ? (f.kind == VK_STAIRWELL ? 0.8f : 0.2f)
                                  : (f.kind == VK_STAIRWELL ? 0.8f : f.lv * CELL - 0.6f);
-                Vector3 at = w.featureWorld(f, cx, cz, u, 0, v);
-                Vector3 ahead = w.featureWorld(f, cx, cz, u, 0, v + (rising || f.kind == VK_STAIRWELL ? 1.0f : -1.0f));
+                Vec3 at = w.featureWorld(f, cx, cz, u, 0, v);
+                Vec3 ahead = w.featureWorld(f, cx, cz, u, 0, v + (rising || f.kind == VK_STAIRWELL ? 1.0f : -1.0f));
                 float yaw = atan2f(ahead.z - at.z, ahead.x - at.x);
                 printf("  %-9s %s  wu %d lv %d dir %d  %s%s  at %.1f,%.1f,%.2f\n", KIND[f.kind],
                        rising ? "up  " : "down", f.wu, f.lv, f.dir,

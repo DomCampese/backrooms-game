@@ -53,4 +53,3 @@ Wave makeGulpWave();               // deterministic PCM, also used by audio regr
 Sound makeGulp();                   // three soft swallows of almond water
 Sound makeTapeVoice();              // a voice off a worn cassette — garbled, hissing, and looping
 Sound makeFloorGroan();             // rotten subfloor taking your weight, and not liking it
-Sound makeNoclip();                 // passing through a wall that was not quite there

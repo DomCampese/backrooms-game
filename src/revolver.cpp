@@ -1,4 +1,5 @@
 #include "revolver.h"
+#include "sim/weapon_timing.h"
 #include "raymath.h"
 #include <algorithm>
 #include <cstring>
@@ -27,7 +28,7 @@ void Revolver::load() {
 }
 void Revolver::pose(float reloadTime,float cooldown,int ammo) {
     int clip=idle;float progress=0;
-    if(reloadTime>0) {clip=reload;progress=std::clamp(1-reloadTime/1.8f,0.0f,1.0f);}
+    if(reloadTime>0) {clip=reload;progress=std::clamp(1-reloadTime/RELOAD_TIME,0.0f,1.0f);}
     else if(cooldown>0) {clip=shoot;progress=std::clamp(1-cooldown/SHOT_INTERVAL,0.0f,1.0f);}
     if(clip==lastClip && progress==lastProgress && ammo==lastAmmo)return;
     lastClip=clip;lastProgress=progress;lastAmmo=ammo;
