@@ -44,8 +44,13 @@ Nothing there has been compiled by Unreal yet. What will bite:
   It now rounds up to odd; every documented command used odd sizes.
 - **The Unreal editor's enums mirror core's.** `EBackroomsProp` lists `PropKind`
   and `EBackroomsSurface` lists `GreySurface` in the same order
-  (unreal/.../BackroomsTypes.h); a new prop kind or greybox surface goes into
-  both, or a level look's meshes land on the wrong props.
+  (unreal/.../BackroomsTypes.h), and `EBackroomsItem` lists `SceneKind`
+  (src/port/scene.h); a new prop kind, greybox surface or scene kind goes into
+  both, or a level look's meshes land on the wrong things.
+- **`simScene` (src/port/scene.cpp) repeats render.cpp's placement** of
+  pickups, crates, balloons, chalk and the rest, for the Unreal build. Change
+  where render.cpp draws one of those and change it there too, until render.cpp
+  draws from `simScene` itself.
   BackroomsTypes.cpp static_asserts the ends of each list, not every entry.
 - **The layout golden (`tests/golden/layout.txt`) prints every field**, so an
   uninitialised field shows as a nondeterministic line: `Fixture::end` was

@@ -140,7 +140,7 @@ without one.
 | M1 core | ready to run: the automation tests `Backrooms.Core.Contract` and `Backrooms.Sim.Replay` compare with `tests/golden` and `tests/traces`. Without Unreal, the same shared files built the module's way (clang, C++20, `-Werror`, FMA enabled, no `-ffp-contract=off`) pass both |
 | M2 greybox | written, not run: `UBackroomsWorldSubsystem` streams `ABackroomsChunkActor`s built from `src/port/greybox.h` round a DefaultPawn free camera, storeys stacked. The greybox itself is checked against raylib frames (below). Frame time on the Mac not measured |
 | M3 layout | props (as their collision boxes), openings and light panels are in the greybox; a level look (below) can put a static mesh at every prop of a kind and at every light fitting, from `chunkLayout`. Fixtures are not placed yet. `tests/golden/layout.txt` holds every layout field |
-| M4 sim | written, not run: `ABackroomsPlayerController` fills an `InputFrame` from Enhanced Input actions it makes at start-up, `UBackroomsWorldSubsystem::TickRun` steps the sim as `Game::tick` does (title screen, pause, step), bullets trace against the chunk actors, and `ABackroomsPawn`'s camera follows `simView` (src/port/view.h, which the raylib renderer now draws from too). `-BackroomsRecord=path` writes a trace from Unreal for `./replay`. Sound, actors and the HUD are M6; the hunter and pack show as debug capsules |
+| M4 sim | written, not run: `ABackroomsPlayerController` fills an `InputFrame` from Enhanced Input actions it makes at start-up, `UBackroomsWorldSubsystem::TickRun` steps the sim as `Game::tick` does (title screen, pause, step), bullets trace against the chunk actors, and `ABackroomsPawn`'s camera follows `simView` (src/port/view.h, which the raylib renderer now draws from too). `-BackroomsRecord=path` writes a trace from Unreal for `./replay`. Sound is M6. What the sim puts in the world each frame (pickups, crates, the deck, flares, chalk, balloons, confetti, impacts, the hunter, the pack) comes from `simScene` (src/port/scene.h) and `ABackroomsSceneActor` draws it, as plain shapes until a level look gives meshes; `ABackroomsHUD` is a text HUD from `GetHud`. render.cpp still decides these for itself, and should move onto `simScene` |
 | M5, M6 | not started |
 
 **Editing in Unreal.** Placement stays in code; appearance, controls and
@@ -151,7 +151,8 @@ surface a material and each prop kind and the light fittings a mesh;
 holds the input assets, sensitivity and streaming reach; `ABackroomsPreviewActor`
 builds the maze in the editor viewport; the pawn, controller, chunk actor and
 game mode are Blueprintable; `GetHud` feeds a UMG HUD. The editor enums mirror
-core's (`EBackroomsSurface` = `GreySurface`, `EBackroomsProp` = `PropKind`), and
+core's (`EBackroomsSurface` = `GreySurface`, `EBackroomsProp` = `PropKind`,
+`EBackroomsItem` = `SceneKind`), and
 BackroomsTypes.cpp asserts they agree.
 
 **The greybox** (`src/port/greybox.{h,cpp}`, core and the standard library

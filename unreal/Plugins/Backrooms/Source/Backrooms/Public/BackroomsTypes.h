@@ -22,6 +22,15 @@ enum class EBackroomsProp : uint8
 	Count UMETA(Hidden)
 };
 
+// SceneKind (src/port/scene.h): what stands in the world besides its chunks.
+UENUM(BlueprintType)
+enum class EBackroomsItem : uint8
+{
+	AlmondWater, Doubloon, Battery, Tape, Key, Crate, CrateOpen, Deck, Coin, Flare, Chalk, Balloon, Confetti,
+	Impact, Hunter, Dog,
+	Count UMETA(Hidden)
+};
+
 // The sim's controls (InputFrame, src/sim/input_frame.h), one Enhanced Input
 // action each.
 UENUM(BlueprintType)

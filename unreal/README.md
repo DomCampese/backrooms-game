@@ -61,9 +61,11 @@ repository, not just this folder. On the Mac:
    editor asks to rebuild missing modules, say yes (step 3 already did).
 5. Press Play. The default map is the engine's empty Entry map; the game mode
    starts a run on Level 0 at seed 1337 and the sim drives the camera: WASD,
-   the mouse, the raylib build's keys (F3 for the debug keys). The hunter and
-   the pack show as debug capsules and the state as a line of text until the
-   actors and HUD are ported.
+   the mouse, the raylib build's keys (F3 for the debug keys). No level has a
+   look yet, so the maze is the greybox's flat colours, and the pickups,
+   crates, balloons, the hunter and the pack are plain shapes at their real
+   size (`ABackroomsSceneActor`). A text HUD (`ABackroomsHUD`) shows the meters,
+   inventory, notes and the death card.
 
 For an Xcode project (debugging, or browsing the code), run
 `"/Users/Shared/Epic Games/UE_5.8/Engine/Build/BatchFiles/Mac/GenerateProjectFiles.sh" -project="$PWD/unreal/BackroomsGame.uproject" -game`

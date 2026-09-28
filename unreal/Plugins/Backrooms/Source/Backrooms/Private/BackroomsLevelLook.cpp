@@ -26,8 +26,15 @@ FLinearColor UBackroomsLevelLook::DefaultColour(EBackroomsSurface Surface)
 	return FLinearColor(Colours[I]);
 }
 
+TArray<FLinearColor> UBackroomsLevelLook::DefaultPartyColours()
+{
+	return { FLinearColor(FColor(206, 64, 58)), FLinearColor(FColor(222, 172, 62)), FLinearColor(FColor(84, 142, 198)),
+		FLinearColor(FColor(106, 178, 92)), FLinearColor(FColor(182, 96, 178)) };
+}
+
 UBackroomsLevelLook::UBackroomsLevelLook()
 {
+	PartyColours = DefaultPartyColours();
 	for (int32 S = 0; S < (int32)EBackroomsSurface::Count; S++)
 	{
 		FBackroomsSurfaceLook Look;

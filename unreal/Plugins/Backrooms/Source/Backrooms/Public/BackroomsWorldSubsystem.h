@@ -11,6 +11,7 @@ struct SolidTracer;
 class ABackroomsChunkActor;
 class UBackroomsLevelLook;
 class APointLight;
+class ABackroomsSceneActor;
 
 // Owns the game: one Sim (the rules, and core's World inside it) for this
 // Unreal world. Streams the world's chunks round the player as greybox actors
@@ -69,7 +70,8 @@ private:
 	void BuildChunk(const FIntVector& Key);
 	void DropChunk(const FIntVector& Key);
 	void DropAll();
-	void DrawDebugState() const;
+	// Moves the pickups, crates, hunter and the rest to where the sim has them.
+	void ShowScene();
 	// The level's look from the project settings, loaded once per level.
 	const UBackroomsLevelLook* CurrentLook();
 
@@ -87,6 +89,8 @@ private:
 	// Follows the camera, so a greybox with no fittings lit is still visible.
 	UPROPERTY()
 	TObjectPtr<APointLight> CameraLight;
+	UPROPERTY()
+	TObjectPtr<ABackroomsSceneActor> Scene;
 	UPROPERTY()
 	TObjectPtr<UBackroomsLevelLook> Look;
 	int32 LookLevel = -1;

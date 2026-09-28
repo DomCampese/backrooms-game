@@ -2,11 +2,10 @@
 #include "BackroomsChunkActor.h"
 #include "BackroomsCoords.h"
 #include "BackroomsLevelLook.h"
+#include "BackroomsSceneActor.h"
 #include "BackroomsSettings.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/PointLightComponent.h"
-#include "DrawDebugHelpers.h"
-#include "Engine/Engine.h"
 #include "Engine/PointLight.h"
 #include "Engine/World.h"
 #include "Math/RotationMatrix.h"
@@ -17,6 +16,7 @@
 #include "Misc/Parse.h"
 #include "Stats/Stats.h"
 #include "core/level_rules.h"
+#include "port/scene.h"
 #include "port/view.h"
 #include "sim/start.h"
 #include "sim/trace.h"
@@ -202,6 +202,11 @@ FTransform UBackroomsWorldSubsystem::ViewTransform(float& OutFovY) const
 void UBackroomsWorldSubsystem::FreeSim()
 {
 	DropAll();
+	if (Scene)
+	{
+		Scene->Destroy();
+		Scene = nullptr;
+	}
 	delete Recorder;
 	Recorder = nullptr;
 	delete Trace;   // closes the file
@@ -264,7 +269,7 @@ void UBackroomsWorldSubsystem::Tick(float DeltaTime)
 	{
 		// The sim owns which storey is current (it rebases as you climb).
 		StreamAround(BackroomsCoords::ToUnreal({ Game->px, 0.0f, Game->pz }), Game->world.storey, DeltaTime);
-		DrawDebugState();
+		ShowScene();
 	}
 	else
 	{
@@ -440,37 +445,18 @@ void UBackroomsWorldSubsystem::DropAll()
 	Chunks.Reset();
 }
 
-// Until the actors and HUD are ported (M6): the hunter and the pack as
-// capsules, and the run's state as on-screen text.
-void UBackroomsWorldSubsystem::DrawDebugState() const
+// The raylib build draws pickups 7 cells out and balloons 9; 24 m covers both.
+void UBackroomsWorldSubsystem::ShowScene()
 {
-#if ENABLE_DRAW_DEBUG
-	const FVector Origin = StoreyOrigin();
-	UWorld* Scene = GetWorld();
-	if (Game->ent.st != EState::Hidden)
+	if (!Scene)
 	{
-		const FVector At = BackroomsCoords::ToUnreal({ Game->ent.x, Game->ent.dispY + 0.95f, Game->ent.z }) + Origin;
-		DrawDebugCapsule(Scene, At, 95.0f, 35.0f, FQuat::Identity, FColor::Red);
-	}
-	for (const Dog& D : Game->dogs)
-	{
-		if (D.st != DState::Gone)
+		FActorSpawnParameters Params;
+		Params.ObjectFlags |= RF_Transient;
+		Scene = GetWorld()->SpawnActor<ABackroomsSceneActor>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
+		if (!Scene)
 		{
-			const FVector At = BackroomsCoords::ToUnreal({ D.x, D.dispY + 0.45f, D.z }) + Origin;
-			DrawDebugCapsule(Scene, At, 45.0f, 30.0f, FQuat::Identity, FColor::Orange);
+			return;
 		}
 	}
-	if (GEngine)
-	{
-		const FString Line = FString::Printf(
-			TEXT("level %d  storey %d  health %.2f  sanity %.2f  ammo %d  flares %d  coins %d  hunter %d%s%s"),
-			Game->level, Game->world.storey, Game->health, Game->sanity, Game->ammo, Game->flares, Game->coins,
-			(int32)Game->ent.st, Game->paused ? TEXT("  PAUSED") : TEXT(""), Game->inMenu ? TEXT("  (title: any key)") : TEXT(""));
-		GEngine->AddOnScreenDebugMessage(0x42524D, 0.0f, FColor::Yellow, Line);
-		if (Game->deckNoteT > 0.0f)
-		{
-			GEngine->AddOnScreenDebugMessage(0x42524E, 0.0f, FColor::White, UTF8_TO_TCHAR(Game->deckNote));
-		}
-	}
-#endif
+	Scene->Show(simScene(*Game, 24.0f), CurrentLook(), StoreyOrigin());
 }

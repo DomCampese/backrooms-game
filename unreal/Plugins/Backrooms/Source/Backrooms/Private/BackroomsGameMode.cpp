@@ -1,4 +1,5 @@
 #include "BackroomsGameMode.h"
+#include "BackroomsHUD.h"
 #include "BackroomsPawn.h"
 #include "BackroomsPlayerController.h"
 #include "BackroomsSettings.h"
@@ -10,6 +11,7 @@ ABackroomsGameMode::ABackroomsGameMode()
 {
 	DefaultPawnClass = ABackroomsPawn::StaticClass();
 	PlayerControllerClass = ABackroomsPlayerController::StaticClass();
+	HUDClass = ABackroomsHUD::StaticClass();
 }
 
 void ABackroomsGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
