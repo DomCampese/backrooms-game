@@ -1,3 +1,4 @@
+#include "fp_strict.h"
 #include "hash.h"
 #include <cmath>
 

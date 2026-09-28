@@ -20,3 +20,4 @@ texdump
 web/dist/
 .raylib-web/
 regression
+/contract

@@ -20,6 +20,16 @@ will bite:
   -fno-rtti` and fails on any include outside the layer, raylib or GL. Run it
   after touching core. Platform code converts with `toRl`/`fromRl`
   (`src/vec_rl.h`).
+- **`./contract --check` is core's acceptance test** (`tools/sandbox-build.sh
+  contract`): generated chunks, query answers and wall mutations against
+  `tests/golden`, in under a second. Run it after touching core, alongside the
+  mapdump set. Regenerate with `--write` only for a deliberate generator change,
+  and say so in the commit (docs/migration.md, "Contract tests").
+- **No fused multiply-adds in core.** Every build passes `-ffp-contract=off`,
+  and each core .cpp includes `fp_strict.h` first, which sets the same by
+  pragma. Without them clang with FMA changed a `stairY` answer; a flipped noise
+  threshold would change the maze. Never build core with fast math
+  (docs/migration.md, "Floating point").
 - **`LevelCfg` extends `LevelRules`.** `LEVELS[lv].wallH` and
   `LEVEL_RULES[lv].wallH` are one number; add a rule field to `LevelRules`,
   a look field (colour, fog, gloss, light output) to `LevelCfg`.

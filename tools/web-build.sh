@@ -42,8 +42,10 @@ shopt -s nullglob
 SRCS=(src/*.cpp src/core/*.cpp src/sim/*.cpp)
 shopt -u nullglob
 
+# -ffp-contract=off: em++ is clang; core's results must not depend on fused
+# multiply-adds (src/core/fp_strict.h).
 em++ -std=c++17 -O2 -DPLATFORM_WEB \
-    -Wall -Wno-missing-field-initializers \
+    -Wall -Wno-missing-field-initializers -ffp-contract=off \
     -I"$RAYLIB_SRC" \
     "${SRCS[@]}" "$RAYLIB_SRC/libraylib.a" \
     -o "$OUT/index.html" \
