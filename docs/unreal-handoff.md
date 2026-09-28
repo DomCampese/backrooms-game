@@ -136,11 +136,11 @@ without one.
 
 | milestone | state |
 |---|---|
-| M0 project | `unreal/BackroomsGame.uproject` and the plugin exist; the code is MIT. Open: the target Mac's chip, memory and macOS, and the Unreal version |
+| M0 project | `unreal/BackroomsGame.uproject` (EngineAssociation 5.8) and the plugin exist; the code is MIT. Target: an Apple M4 Mac on the current macOS, Unreal Engine 5.8. Open: its memory, and what 5.8's Metal renderer supports on the M4 |
 | M1 core | ready to run: the automation tests `Backrooms.Core.Contract` and `Backrooms.Sim.Replay` compare with `tests/golden` and `tests/traces`. Without Unreal, the same shared files built the module's way (clang, C++20, `-Werror`, FMA enabled, no `-ffp-contract=off`) pass both |
 | M2 greybox | written, not run: `UBackroomsWorldSubsystem` streams `ABackroomsChunkActor`s built from `src/port/greybox.h` round a DefaultPawn free camera, storeys stacked. The greybox itself is checked against raylib frames (below). Frame time on the Mac not measured |
 | M3 layout | props (as their collision boxes), openings and light panels are in the greybox; fixtures are not. `tests/golden/layout.txt` holds every layout field |
-| M4 sim | the trace recorder and replay exist (below); the sim does not tick in Unreal yet |
+| M4 sim | written, not run: `ABackroomsPlayerController` fills an `InputFrame` from Enhanced Input actions it makes at start-up, `UBackroomsWorldSubsystem::TickRun` steps the sim as `Game::tick` does (title screen, pause, step), bullets trace against the chunk actors, and `ABackroomsPawn`'s camera follows `simView` (src/port/view.h, which the raylib renderer now draws from too). `-BackroomsRecord=path` writes a trace from Unreal for `./replay`. Sound, actors and the HUD are M6; the hunter and pack show as debug capsules |
 | M5, M6 | not started |
 
 **The greybox** (`src/port/greybox.{h,cpp}`, core and the standard library

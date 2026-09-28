@@ -3,69 +3,224 @@
 #include "BackroomsCoords.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/PointLightComponent.h"
+#include "DrawDebugHelpers.h"
+#include "Engine/Engine.h"
 #include "Engine/PointLight.h"
 #include "Engine/World.h"
+#include "Math/RotationMatrix.h"
 #include "GameFramework/PlayerController.h"
+#include "HAL/PlatformTime.h"
+#include "Misc/CommandLine.h"
+#include "Misc/DateTime.h"
+#include "Misc/Parse.h"
 #include "Stats/Stats.h"
 #include "core/level_rules.h"
-#include "core/world.h"
 #include "port/greybox.h"
-#include "sim/sim.h"
+#include "port/view.h"
+#include "sim/start.h"
+#include "sim/trace.h"
 
 namespace
 {
-// Chunks drawn round the camera: two rings on its storey, one on the storeys
+// Chunks drawn round the player: two rings on its storey, one on the storeys
 // above and below. The raylib build streams the same square on your storey.
 constexpr int32 ReachOwn = 2;
 constexpr int32 ReachOther = 1;
 // Chunk actors built per tick, so a level start does not stall a frame.
 constexpr int32 BuildsPerTick = 2;
-// How often core drops chunk data far from the camera, and how far is far.
+// How often core drops chunk data far from the player, and how far is far.
 constexpr float UnloadEvery = 2.0f;
 constexpr int32 UnloadRadius = 5;
-// The spawn yaw the raylib build opens a level with (Sim::beginDescent).
+// The yaw a descent opens with (Sim::beginDescent), for the free camera.
 constexpr float OpeningYaw = 0.8f;
+// The raylib build clamps a frame's time to this before stepping the sim.
+constexpr float MaxDt = 0.05f;
+
+// Bullets against level geometry: a line trace against the chunk actors, which
+// carry complex collision of the greybox. The ray is in the sim's frame, the
+// storey the player is on.
+struct FUnrealTracer final : SolidTracer
+{
+	UWorld* Scene = nullptr;
+	const Sim* Game = nullptr;
+
+	bool nearestSolid(const Ray3& Ray, float& Nearest, Vec3& Normal) override
+	{
+		const FVector Origin(0.0, 0.0, BackroomsCoords::StoreyZ(Game->world.storey, Game->world.storeyH));
+		const FVector Start = BackroomsCoords::ToUnreal(Ray.position) + Origin;
+		const FVector End = Start + BackroomsCoords::ToUnrealDirection(Ray.direction) * (Nearest * BackroomsCoords::CmPerM);
+		FHitResult Hit;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(BackroomsShot), true);
+		if (!Scene->LineTraceSingleByObjectType(Hit, Start, End, FCollisionObjectQueryParams(ECC_WorldStatic), Params))
+		{
+			return false;
+		}
+		Nearest *= Hit.Time;
+		Normal = BackroomsCoords::FromUnrealDirection(Hit.ImpactNormal);
+		return true;
+	}
+};
 }
 
-FTransform UBackroomsWorldSubsystem::StartLevel(int32 Level, uint32 Seed, uint32 Visit)
+void UBackroomsWorldSubsystem::NewSim()
 {
-	DropAll();
-	delete Maze;
-	Maze = new World();
-	const int32 Lv = FMath::Clamp(Level, 0, NLEVELS - 1);
-	Maze->seed = Seed;
-	Maze->level = Lv;
-	Maze->visit = Visit;
-	Maze->wallH = LEVEL_RULES[Lv].wallH;
-	Maze->storeyH = LEVEL_RULES[Lv].storeyH;
-
-	const Vec2 Spot = Maze->findOpenSpot(15, 15);
-	const Vec3 Eye = { Spot.x, Maze->floorY(cellOf(Spot.x), cellOf(Spot.y)) + Sim::EYE_H, Spot.y };
-	const FVector EyeUnreal = BackroomsCoords::ToUnreal(Eye);
-
-	if (!CameraLight)
+	FreeSim();
+	Game = new Sim();
+	FUnrealTracer* Shots = new FUnrealTracer();
+	Shots->Scene = GetWorld();
+	Shots->Game = Game;
+	Tracer = Shots;
+	Game->tracer = Tracer;
+	if (ClockZero < 0.0)
 	{
-		FActorSpawnParameters Params;
-		Params.ObjectFlags |= RF_Transient;
-		CameraLight = GetWorld()->SpawnActor<APointLight>(EyeUnreal, FRotator::ZeroRotator, Params);
-		if (CameraLight)
+		ClockZero = FPlatformTime::Seconds();
+	}
+}
+
+double UBackroomsWorldSubsystem::Now() const { return FPlatformTime::Seconds() - ClockZero; }
+
+void UBackroomsWorldSubsystem::StartRun(uint32 Seed, int32 Level)
+{
+	NewSim();
+	bRun = true;
+	SimStart Start;
+	Start.seed = Seed;
+	Start.level = Level > 0 ? FMath::Min(Level, NLEVELS - 1) : -1;
+	Start.menu = false;
+	// The records file is the raylib build's; this one keeps none yet.
+	Start.keepRecords = false;
+	Start.fov = windowFovY(1440, 850, 0.0f);
+
+	FString RecordPath;
+	if (FParse::Value(FCommandLine::Get(), TEXT("BackroomsRecord="), RecordPath))
+	{
+		Trace = new TraceWriter();
+		if (Trace->open(TCHAR_TO_UTF8(*RecordPath)))
 		{
-			CameraLight->SetMobility(EComponentMobility::Movable);
-			UPointLightComponent* Light = CameraLight->PointLightComponent;
-			Light->SetIntensityUnits(ELightUnits::Candelas);
-			Light->SetIntensity(60.0f);
-			Light->SetAttenuationRadius(4000.0f);
-			Light->SetCastShadows(false);
+			Recorder = new RecordingTracer(*Tracer, *Trace);
+			Game->tracer = Recorder;
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("BackroomsRecord: cannot write %s"), *RecordPath);
+			delete Trace;
+			Trace = nullptr;
 		}
 	}
-	return FTransform(BackroomsCoords::ToUnrealRotator(OpeningYaw, 0.0f), EyeUnreal);
+
+	// The order Game::init uses: grng's draws depend on it.
+	double T = Now();
+	if (Trace) Trace->start(Start, T);
+	simBegin(*Game, Start, T);
+	for (int32 Lv : { 0, Start.level })
+	{
+		if (Lv < 0)
+		{
+			continue;
+		}
+		T = Now();
+		if (Trace) Trace->level(Lv, T);
+		Game->applyLevel(Lv, T);
+	}
+	if (Trace) Trace->place();
+	simPlace(*Game, Start);
+	FinishFrame();
+}
+
+FTransform UBackroomsWorldSubsystem::StartFreeCamera(int32 Level, uint32 Seed, uint32 Visit)
+{
+	NewSim();
+	bRun = false;
+	World& Maze = Game->world;
+	const int32 Lv = FMath::Clamp(Level, 0, NLEVELS - 1);
+	Maze.seed = Seed;
+	Maze.level = Lv;
+	Maze.visit = Visit;
+	Maze.wallH = LEVEL_RULES[Lv].wallH;
+	Maze.storeyH = LEVEL_RULES[Lv].storeyH;
+	const Vec2 Spot = Maze.findOpenSpot(15, 15);
+	const Vec3 Eye = { Spot.x, Maze.floorY(cellOf(Spot.x), cellOf(Spot.y)) + Sim::EYE_H, Spot.y };
+	return FTransform(BackroomsCoords::ToUnrealRotator(OpeningYaw, 0.0f), BackroomsCoords::ToUnreal(Eye));
+}
+
+void UBackroomsWorldSubsystem::TickRun(const InputFrame& In, bool bPauseToggled, float Dt)
+{
+	if (!Game || !bRun)
+	{
+		return;
+	}
+	Dt = FMath::Min(Dt, MaxDt);
+	const double T = Now();
+	Game->clockSeed = (uint32_t)FDateTime::UtcNow().ToUnixTimestamp();
+
+	if (Game->inMenu)
+	{
+		if (Trace) Trace->menu(In, Dt, T, Game->clockSeed);
+		Game->menuDrift(Dt, T);
+		Game->menuBegin(In, T);
+		if (Trace) Trace->digest(*Game);
+		FinishFrame();
+		return;
+	}
+	if (bPauseToggled)
+	{
+		const bool bPause = !Game->paused;
+		if (Trace) Trace->pause(bPause, T);
+		Game->setPaused(bPause, T);
+		if (Trace && bPause) Trace->digest(*Game);
+	}
+	if (Game->paused)
+	{
+		FinishFrame();
+		return;
+	}
+	if (Trace) Trace->step(In, Dt, T, Game->clockSeed);
+	Game->step(In, Dt, T);
+	if (Trace) Trace->digest(*Game);
+	FinishFrame();
+}
+
+// What the raylib build's finishStep and updateOccupancy do with the sim's
+// outputs. Sound is M6: the events are dropped for now.
+void UBackroomsWorldSubsystem::FinishFrame()
+{
+	Game->audio.clear();
+	Game->dropAimLatch = false;
+	Game->shadowsStale = false;
+	Game->recordsChanged = false;
+}
+
+FVector UBackroomsWorldSubsystem::StoreyOrigin() const
+{
+	return FVector(0.0, 0.0, BackroomsCoords::StoreyZ(Game->world.storey, Game->world.storeyH));
+}
+
+FTransform UBackroomsWorldSubsystem::ViewTransform(float& OutFovY) const
+{
+	const SimView View = simView(*Game);
+	OutFovY = View.fovY;
+	const FMatrix Axes = FRotationMatrix::MakeFromXZ(BackroomsCoords::ToUnrealDirection(View.forward),
+		BackroomsCoords::ToUnrealDirection(View.up));
+	return FTransform(Axes.Rotator(), BackroomsCoords::ToUnreal(View.eye) + StoreyOrigin());
+}
+
+void UBackroomsWorldSubsystem::FreeSim()
+{
+	DropAll();
+	delete Recorder;
+	Recorder = nullptr;
+	delete Trace;   // closes the file
+	Trace = nullptr;
+	delete Game;
+	Game = nullptr;
+	delete Tracer;
+	Tracer = nullptr;
+	bRun = false;
 }
 
 void UBackroomsWorldSubsystem::Deinitialize()
 {
-	DropAll();
-	delete Maze;
-	Maze = nullptr;
+	FreeSim();
 	Super::Deinitialize();
 }
 
@@ -81,7 +236,7 @@ TStatId UBackroomsWorldSubsystem::GetStatId() const
 
 void UBackroomsWorldSubsystem::Tick(float DeltaTime)
 {
-	if (!Maze)
+	if (!Game)
 	{
 		return;
 	}
@@ -91,35 +246,63 @@ void UBackroomsWorldSubsystem::Tick(float DeltaTime)
 		return;
 	}
 	const FVector Camera = Controller->PlayerCameraManager->GetCameraLocation();
+	if (!CameraLight)
+	{
+		FActorSpawnParameters Params;
+		Params.ObjectFlags |= RF_Transient;
+		CameraLight = GetWorld()->SpawnActor<APointLight>(Camera, FRotator::ZeroRotator, Params);
+		if (CameraLight)
+		{
+			CameraLight->SetMobility(EComponentMobility::Movable);
+			UPointLightComponent* Light = CameraLight->PointLightComponent;
+			Light->SetIntensityUnits(ELightUnits::Candelas);
+			Light->SetIntensity(60.0f);
+			Light->SetAttenuationRadius(4000.0f);
+			Light->SetCastShadows(false);
+		}
+	}
 	if (CameraLight)
 	{
 		CameraLight->SetActorLocation(Camera);
 	}
-	StreamAround(Camera, DeltaTime);
+	if (bRun)
+	{
+		// The sim owns which storey is current (it rebases as you climb).
+		StreamAround(BackroomsCoords::ToUnreal({ Game->px, 0.0f, Game->pz }), Game->world.storey, DeltaTime);
+		DrawDebugState();
+	}
+	else
+	{
+		const World& Maze = Game->world;
+		const float Metres = float(Camera.Z / BackroomsCoords::CmPerM);
+		const int32 Storey = Maze.storeyH > 0.0f ? FMath::FloorToInt32(Metres / Maze.storeyH) : 0;
+		if (Storey != Maze.storey)
+		{
+			Game->world.setStorey(Storey);
+		}
+		StreamAround(Camera, Storey, DeltaTime);
+	}
 }
 
-void UBackroomsWorldSubsystem::StreamAround(const FVector& Camera, float DeltaTime)
+// Focus is in Unreal space; only its x and y (core's x and z) are read.
+void UBackroomsWorldSubsystem::StreamAround(const FVector& Focus, int32 Storey, float DeltaTime)
 {
-	const Vec3 At = BackroomsCoords::FromUnreal(Camera);
-	const int32 Storey = Maze->storeyH > 0.0f ? FMath::FloorToInt32(At.y / Maze->storeyH) : 0;
-	if (Storey != Maze->storey)
-	{
-		Maze->setStorey(Storey);
-	}
+	World& Maze = Game->world;
 	// What core has dropped or rebuilt goes first, before any actor is kept.
-	for (const ChunkRef& Ref : Maze->staleChunks)
+	for (const ChunkRef& Ref : Maze.staleChunks)
 	{
 		DropChunk(FIntVector(Ref.cx, Ref.cz, Ref.storey));
 	}
-	Maze->staleChunks.clear();
+	Maze.staleChunks.clear();
 
 	// Wanted chunks, nearest first: this storey ring by ring, then the others.
+	const Vec3 At = BackroomsCoords::FromUnreal(Focus);
 	const int32 Pcx = fdiv(cellOf(At.x), CCELLS), Pcz = fdiv(cellOf(At.z), CCELLS);
 	TArray<FIntVector> Wanted;
 	const int32 Rel[3] = { 0, -1, 1 };
 	for (int32 R : Rel)
 	{
-		if (R != 0 && Maze->storeyH <= 0.0f)
+		if (R != 0 && Maze.storeyH <= 0.0f)
 		{
 			continue;
 		}
@@ -164,17 +347,18 @@ void UBackroomsWorldSubsystem::StreamAround(const FVector& Camera, float DeltaTi
 	if (SinceUnload >= UnloadEvery)
 	{
 		SinceUnload = 0.0f;
-		Maze->unloadFar(Pcx, Pcz, UnloadRadius);
+		Maze.unloadFar(Pcx, Pcz, UnloadRadius);
 	}
 }
 
 void UBackroomsWorldSubsystem::BuildChunk(const FIntVector& Key)
 {
-	StoreyScope Scope(*Maze, Key.Z);
-	const GreyboxMesh Greybox = greyboxChunk(*Maze, Key.X, Key.Y);
+	World& Maze = Game->world;
+	StoreyScope Scope(Maze, Key.Z);
+	const GreyboxMesh Greybox = greyboxChunk(Maze, Key.X, Key.Y);
 	FActorSpawnParameters Params;
 	Params.ObjectFlags |= RF_Transient;
-	const FVector Origin(0.0, 0.0, BackroomsCoords::StoreyZ(Key.Z, Maze->storeyH));
+	const FVector Origin(0.0, 0.0, BackroomsCoords::StoreyZ(Key.Z, Maze.storeyH));
 	ABackroomsChunkActor* Actor = GetWorld()->SpawnActor<ABackroomsChunkActor>(Origin, FRotator::ZeroRotator, Params);
 	if (Actor)
 	{
@@ -202,4 +386,39 @@ void UBackroomsWorldSubsystem::DropAll()
 		}
 	}
 	Chunks.Reset();
+}
+
+// Until the actors and HUD are ported (M6): the hunter and the pack as
+// capsules, and the run's state as on-screen text.
+void UBackroomsWorldSubsystem::DrawDebugState() const
+{
+#if ENABLE_DRAW_DEBUG
+	const FVector Origin = StoreyOrigin();
+	UWorld* Scene = GetWorld();
+	if (Game->ent.st != EState::Hidden)
+	{
+		const FVector At = BackroomsCoords::ToUnreal({ Game->ent.x, Game->ent.dispY + 0.95f, Game->ent.z }) + Origin;
+		DrawDebugCapsule(Scene, At, 95.0f, 35.0f, FQuat::Identity, FColor::Red);
+	}
+	for (const Dog& D : Game->dogs)
+	{
+		if (D.st != DState::Gone)
+		{
+			const FVector At = BackroomsCoords::ToUnreal({ D.x, D.dispY + 0.45f, D.z }) + Origin;
+			DrawDebugCapsule(Scene, At, 45.0f, 30.0f, FQuat::Identity, FColor::Orange);
+		}
+	}
+	if (GEngine)
+	{
+		const FString Line = FString::Printf(
+			TEXT("level %d  storey %d  health %.2f  sanity %.2f  ammo %d  flares %d  coins %d  hunter %d%s%s"),
+			Game->level, Game->world.storey, Game->health, Game->sanity, Game->ammo, Game->flares, Game->coins,
+			(int32)Game->ent.st, Game->paused ? TEXT("  PAUSED") : TEXT(""), Game->inMenu ? TEXT("  (title: any key)") : TEXT(""));
+		GEngine->AddOnScreenDebugMessage(0x42524D, 0.0f, FColor::Yellow, Line);
+		if (Game->deckNoteT > 0.0f)
+		{
+			GEngine->AddOnScreenDebugMessage(0x42524E, 0.0f, FColor::White, UTF8_TO_TCHAR(Game->deckNote));
+		}
+	}
+#endif
 }

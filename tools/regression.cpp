@@ -162,13 +162,13 @@ int main() {
     // 70 made on a 0.46 screen.
     {
         auto fovX=[&](int w,int h,float aim){
-            return 2*atanf(tanf(Game::fovForWindow(w,h,aim)*DEG2RAD*0.5f)*(float)w/h)*RAD2DEG;};
-        CHECK_NEAR(Game::fovForWindow(1440,850,0),70,0.01f);    // authored window
+            return 2*atanf(tanf(windowFovY(w,h,aim)*DEG2RAD*0.5f)*(float)w/h)*RAD2DEG;};
+        CHECK_NEAR(windowFovY(1440,850,0),70,0.01f);    // authored window
         CHECK_NEAR(fovX(1440,850,0),fovX(390,844,0),0.01f);     // portrait locks fovX
         CHECK(fovX(390,844,0)>55);                              // was ~36 before
-        CHECK(Game::fovForWindow(1920,1080,0)==70);             // wide: untouched
-        CHECK(Game::fovForWindow(3440,1440,0)==70);             // ultrawide: untouched
-        CHECK(Game::fovForWindow(0,0,0)==70);                   // no window yet
+        CHECK(windowFovY(1920,1080,0)==70);             // wide: untouched
+        CHECK(windowFovY(3440,1440,0)==70);             // ultrawide: untouched
+        CHECK(windowFovY(0,0,0)==70);                   // no window yet
         // The action terms ride on top of the base, and the smoothing still
         // eases: at the authored window one dt step toward aim moves fov from
         // 70 down toward 62 (never instantly), and releasing walks it back up.

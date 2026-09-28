@@ -1,5 +1,6 @@
 #include "BackroomsChunkActor.h"
 #include "BackroomsCoords.h"
+#include "Engine/CollisionProfile.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "ProceduralMeshComponent.h"
 #include "port/greybox.h"
@@ -34,7 +35,11 @@ ABackroomsChunkActor::ABackroomsChunkActor()
 {
 	PrimaryActorTick.bCanEverTick = false;
 	Mesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("Mesh"));
-	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	// Queried by the sim's bullets (FUnrealTracer), against the triangles
+	// themselves. Nothing simulates physics against it: core does collision.
+	Mesh->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
+	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	Mesh->bUseComplexAsSimpleCollision = true;
 	RootComponent = Mesh;
 }
 
@@ -63,8 +68,10 @@ void ABackroomsChunkActor::Build(const GreyboxMesh& Greybox)
 		{
 			Triangles.Add((int32)I);
 		}
+		// Rounds pass through water, as in the raylib build's MeshTracer.
+		const bool bSolid = S != (int32)GreySurface::Water;
 		Mesh->CreateMeshSection_LinearColor(SectionIndex, Vertices, Triangles, Normals, TArray<FVector2D>(),
-			TArray<FLinearColor>(), TArray<FProcMeshTangent>(), false);
+			TArray<FLinearColor>(), TArray<FProcMeshTangent>(), bSolid);
 		if (Base)
 		{
 			UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(Base, this);

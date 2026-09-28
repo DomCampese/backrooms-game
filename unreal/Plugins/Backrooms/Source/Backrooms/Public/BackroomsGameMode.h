@@ -3,9 +3,12 @@
 #include "GameFramework/GameModeBase.h"
 #include "BackroomsGameMode.generated.h"
 
-// Starts a level from the map's options and puts a free camera in it:
-// ?level=N&seed=S&visit=V, defaults 0, 1337 and the visit a raylib capture of
-// that level shows (1 on Level 0, 0 elsewhere).
+// Starts the game from the map's options:
+//   ?seed=S&level=N            a run (the default): the sim plays from Level 0,
+//                              or from Level N as BACKROOMS_LEVEL does
+//   ?mode=free&level=N&visit=V a free camera over the greybox of one level
+// Defaults: seed 1337, level 0, and for the free camera the visit a raylib
+// capture of that level shows (1 on Level 0, 0 elsewhere).
 UCLASS()
 class BACKROOMS_API ABackroomsGameMode : public AGameModeBase
 {

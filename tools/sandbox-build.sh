@@ -20,7 +20,7 @@ LINK=("$SO" "-Wl,-rpath,$(dirname "$SO")" "-lpython$PYV" -lm -ldl -lpthread)
 # layers (docs/migration.md). sim may not exist yet.
 shopt -s nullglob
 CORE=(src/core/*.cpp)
-GAME=(src/*.cpp "${CORE[@]}" src/sim/*.cpp)
+GAME=(src/*.cpp "${CORE[@]}" src/sim/*.cpp src/port/*.cpp)
 shopt -u nullglob
 
 # Delete the target before compiling, so a failed build cannot leave a working

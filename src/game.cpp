@@ -468,22 +468,8 @@ InputFrame Game::readInput(bool captureClick) {
 // instead, clamped where a fixed horizontal would go fisheye (a square window)
 // or binoculars (a landscape phone). `aim` widens the top of the band so the
 // sights still narrow the view where the clamp pins the base.
-float Game::fovForWindow(int w, int h, float aim) {
-    if (w <= 0 || h <= 0) return 70.0f;   // no window yet: the authored number
-    const float refAspect = 1440.0f / 850.0f;
-    float anchorX = 2.0f * atanf(tanf(35.0f * DEG2RAD) * refAspect);   // radians across at 70 vertical
-    // raylib's own identity (render.cpp's culling cone uses it too), so the
-    // lock cannot drift from what the camera draws.
-    float fovy = 2.0f * atanf(tanf(anchorX * 0.5f) * h / w) * RAD2DEG;
-    if (w >= refAspect * h) {
-        // Wide: keep the authored 70 vertical, so ultrawides gain peripheral view.
-        fovy = clampf(fovy, 70.0f, fminf(100.0f, 78.0f + 8.0f * aim));
-    }
-    return fmaxf(fovy, 58.0f);   // portrait floor: ~69 deg horizontal at 0.46
-}
-
 float Game::baseFov() const {
-    return fovForWindow(GetScreenWidth(), GetScreenHeight(), 0);
+    return windowFovY(GetScreenWidth(), GetScreenHeight(), 0);
 }
 
 void Game::streamChunks() {

@@ -23,8 +23,8 @@ endif
 # No fused multiply-adds: core's results must not depend on the compiler
 # (src/core/fp_strict.h). Every command here compiles core with the rest.
 CXX_FLAGS := -std=c++17 -O2 -Wall -Wno-missing-field-initializers -ffp-contract=off
-SRCS := $(wildcard src/*.cpp src/core/*.cpp src/sim/*.cpp)
-HDRS := $(wildcard src/*.h src/core/*.h src/sim/*.h)
+SRCS := $(wildcard src/*.cpp src/core/*.cpp src/sim/*.cpp src/port/*.cpp)
+HDRS := $(wildcard src/*.h src/core/*.h src/sim/*.h src/port/*.h)
 
 src/object_materials.generated.h: tools/embed-materials.py $(wildcard assets/materials/*.jpg)
 	python3 tools/embed-materials.py objects
@@ -78,3 +78,8 @@ contract-check: contract
 SIM_SRCS := $(wildcard src/sim/*.cpp)
 replay: tools/replay.cpp $(SIM_SRCS) $(CORE_SRCS) $(wildcard src/sim/*.h src/core/*.h)
 	c++ $(CXX_FLAGS) tools/replay.cpp $(SIM_SRCS) $(CORE_SRCS) -o replay
+
+replay-check: replay
+	for t in tests/traces/*.trace; do ./replay "$$t" || exit 1; done
+
+.PHONY: replay-check

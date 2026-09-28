@@ -5,6 +5,7 @@
 #include "raylib.h"
 #include "sim/sim.h"
 #include "sim/trace.h"
+#include "port/view.h"
 #include "levels.h"
 #include "util.h"
 #include "vec_rl.h"
@@ -119,7 +120,6 @@ struct Game {
     // Base camera fovy for the window, locking the horizontal view so a
     // portrait phone does not play through a 34 deg keyhole.
     float baseFov() const;
-    static float fovForWindow(int w, int h, float aim);   // the same, pure, for the harness
     void streamChunks();
     void updateOccupancy();                   // recentre and re-upload the light-occlusion grid
 

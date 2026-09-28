@@ -22,6 +22,7 @@ inline Vec3 FromUnreal(const FVector& V)
 
 // A direction (a normal): the same swap, no scale.
 inline FVector ToUnrealDirection(const Vec3& V) { return FVector(V.x, V.z, V.y); }
+inline Vec3 FromUnrealDirection(const FVector& V) { return { float(V.X), float(V.Z), float(V.Y) }; }
 
 // Core's yaw and pitch, radians, pitch up positive.
 inline FRotator ToUnrealRotator(float Yaw, float Pitch)

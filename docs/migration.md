@@ -11,7 +11,7 @@ in docs/unreal-handoff.md.
 |---|---|---|---|
 | core | `src/core/` | the C++17 standard library only | math types, hashes and noise, per-level rules, chunk generation, storeys and features, collision, line of sight, pathfinding, the light-occlusion grid, the layout description |
 | sim | `src/sim/` | core | game state and rules: player, hunter, dogs, health, pickups, exits, blackouts, storey changes. Takes an input frame and a clock, emits events |
-| port | `src/port/` | core | engine-neutral code a port shares: the greybox mesher (docs/unreal-handoff.md, M2) |
+| port | `src/port/` | core, sim | engine-neutral code a port shares with the raylib build: the view the camera shows (`simView`, `windowFovY`) and the greybox mesher (docs/unreal-handoff.md, M2) |
 | platform | `src/` | everything | the raylib backend: window, input, mesher, textures, shaders, rendering, audio, the revolver model |
 
 Rules:
@@ -315,7 +315,7 @@ blackout and pickup line.
 | `reload throwFlare flashlight use drink chalk` | down edges |
 | `begin` | title screen: any key but F11, a click, a touch start gesture |
 | `dev` | F3-HUD keys (blackout, spawn, chase, banish, refill, storey up/down, next level), false unless the HUD is up |
-| `screenFov` | the window's base vertical FOV (`Game::fovForWindow`) |
+| `screenFov` | the window's base vertical FOV (`windowFovY`, src/port/view.h) |
 | `forceSpawn` | headless capture: put the hunter in view on this tick |
 
 **`AudioEvent`** (src/sim/audio_events.h), queued in `Sim::audio` and played in

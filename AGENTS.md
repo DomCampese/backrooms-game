@@ -663,7 +663,7 @@ time so the executable remains independent of its working directory.
 | `core/layout.{h,cpp}` | `ChunkLayout`: a chunk's props, fixtures, light fittings and openings, decided from the seed |
 | `core/hash.{h,cpp}`, `core/vec.h` | hashes, RNG, value noise; `Vec2`/`Vec3`, `TAU`, `clampf` |
 | `sim/start.{h,cpp}`, `sim/trace.{h,cpp}` | how a run starts (`SimStart`); recording and replaying the calls on the sim |
-| `port/greybox.{h,cpp}` | a chunk as plain boxes and quads for a port's first milestone; core only |
+| `port/view.{h,cpp}`, `port/greybox.{h,cpp}` | what the camera shows of the sim (both builds draw from it); a chunk as plain boxes and quads for a port's first milestone |
 | `world_mesh.{h,cpp}` | the chunk mesher (`bakeChunk`), `ChunkMesh` slots, `ChunkMeshCache` |
 | `mesh_builder.{h,cpp}` | `MB`, `addPropBox`, `addSolidBox`, `PLAIN_UV` |
 | `object_meshes.{h,cpp}` | can, tape deck, reels, flare, supply crate |
@@ -1496,7 +1496,7 @@ the number instead of reading it.
 `tests/fixtures` or it exits immediately on its first `CHECK` — which reads as
 a broken build rather than a missing variable. `tools/sandbox-build.sh` has no
 regression target, so nothing in the repo tells you that; build it by hand with
-`src/*.cpp` and `src/core/*.cpp` (and `src/sim/*.cpp` once it exists) minus
+`src/*.cpp`, `src/core/*.cpp`, `src/sim/*.cpp` and `src/port/*.cpp` minus
 `main.cpp`, plus `tools/regression.cpp`.
 
 **raylib 6.0 redefined `SetSoundPan`'s argument without renaming it.** 5.5 took
@@ -1594,11 +1594,11 @@ the aspect — so the authored 70 was only right at the 1440x850 window (about
 against. On a portrait phone (0.46:1) it became a 34 deg horizontal keyhole
 that read as "the game is fine, just narrow" rather than as a projection bug.
 `Game::baseFov()` now locks the horizontal view instead (pure
-`fovForWindow()` for the harness), exact at the authored shape so the sweep
+`windowFovY()` in src/port/view.h, which the harness and a port call), exact at the authored shape so the sweep
 stays pixel-clean, clamped 58-100 vertical so square windows don't go fisheye
 and phone-landscape doesn't go binoculars. Two rules to keep: the sprint/aim/
 slide terms stay constant *vertical* offsets on the base — they are action,
-not viewport — and `fovForWindow` must invert raylib's own cone identity
+not viewport — and `windowFovY` must invert raylib's own cone identity
 (`tan(fovy/2) = tan(fovX/2)·h/w`, the one render.cpp's culling uses), or the
 lock drifts from what the camera draws. The harness drives sprint through an
 `InputFrame` with `sprint` held, so the sprint pull is checked live.

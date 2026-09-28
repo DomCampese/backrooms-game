@@ -96,12 +96,11 @@ void Game::renderScene(double now) {
     int pcx = fdiv(cellOf(sim.px), CCELLS), pcz = fdiv(cellOf(sim.pz), CCELLS);
     int pci = cellOf(sim.px), pck = cellOf(sim.pz);
     Camera3D cam = {};
-    cam.position = { sim.px, sim.eyeY, sim.pz };
-    cam.target = Vector3Add(cam.position, toRl(sim.fwd));
-    // roll the up-vector a touch when strafing, so the camera leans into it
-    float roll = sim.leanCur * -0.035f + sim.squeezeBlend * 0.07f + sim.floatRoll;
-    cam.up = { sim.r2x * sinf(roll), cosf(roll), sim.r2z * sinf(roll) };
-    cam.fovy = sim.fov;
+    const SimView view = simView(sim);
+    cam.position = toRl(view.eye);
+    cam.target = Vector3Add(cam.position, toRl(view.forward));
+    cam.up = toRl(view.up);
+    cam.fovy = view.fovY;
     cam.projection = CAMERA_PERSPECTIVE;
 
     float timeF = (float)now;
