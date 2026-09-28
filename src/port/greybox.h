@@ -31,4 +31,6 @@ struct GreyboxMesh {
 };
 
 // Chunk (cx, cz) of storey w.qs, generating it and its neighbours as needed.
-GreyboxMesh greyboxChunk(World &w, int cx, int cz);
+// `meshedProps` has bit k set for each PropKind k the port draws with a mesh of
+// its own (from chunkLayout's props); those props get no box here.
+GreyboxMesh greyboxChunk(World &w, int cx, int cz, uint32_t meshedProps = 0);

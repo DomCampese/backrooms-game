@@ -17,9 +17,15 @@ side; the shared code compiles as it does for the raylib build.
 | `Plugins/Backrooms/` | one Runtime module, `Backrooms` |
 | `.../Private/Shared/*.cpp` | one file per source in `src/core`, `src/sim`, `src/port` and `tools/contract_lib.cpp`, each a single `#include`: the module compiles the repository's files, not copies |
 | `.../Public/BackroomsCoords.h` | the one conversion between core (metres, y up) and Unreal (centimetres, z up) |
-| `.../BackroomsWorldSubsystem` | owns core's `World`, streams greybox chunk actors round the camera |
-| `.../BackroomsChunkActor` | a chunk as a procedural mesh, one section per surface |
-| `.../BackroomsGameMode` | starts a level from `?level=&seed=&visit=` and spawns a free camera |
+| `.../BackroomsWorldSubsystem` | owns the `Sim` (and core's `World` in it); steps a run, streams chunk actors round the player, `GetHud` for a HUD |
+| `.../BackroomsPlayerController` | the sim's controls as Enhanced Input actions; fills an `InputFrame` each frame |
+| `.../BackroomsPawn` | the camera, placed where the sim's view is (src/port/view.h) |
+| `.../BackroomsChunkActor`, `BackroomsChunkBuild` | a chunk: the greybox drawn with the level's look, plus prop and fitting meshes |
+| `.../BackroomsLevelLook` | the data asset for a level's look: materials, prop meshes, fitting mesh |
+| `.../BackroomsSettings` | Project Settings > Game > Backrooms |
+| `.../BackroomsPreviewActor` | the generated maze in the editor viewport |
+| `.../BackroomsTypes` | Blueprint mirrors of core's surfaces, props and controls; the HUD snapshot |
+| `.../BackroomsGameMode` | starts a run (or a free camera with `?mode=free`) from the map's options |
 | `.../Private/Tests/BackroomsTests.cpp` | automation tests: contract, trace replay, coordinates, greybox |
 
 Why one module, not the core and sim modules the plan first described: core has
@@ -33,15 +39,35 @@ A new `.cpp` in `src/core`, `src/sim` or `src/port` needs a wrapper in
 
 ## Opening it
 
-1. Install Unreal Engine 5 (record the version in docs/unreal-handoff.md).
-2. Right-click `BackroomsGame.uproject` > Switch Unreal Engine version, or
-   generate project files, then build the `BackroomsGameEditor` target.
-3. Open the project and press Play. The default map is the engine's empty Entry
-   map; the game mode generates the level round the engine's DefaultPawn free
-   camera (WASD and the mouse). A point light follows the camera.
+1. Unreal Engine 5.8 (the project's EngineAssociation).
+2. Right-click `BackroomsGame.uproject` > Generate Xcode Project, or open it and
+   let the editor offer to build the modules.
+3. Press Play. The default map is the engine's empty Entry map; the game mode
+   starts a run on Level 0 at seed 1337 and the sim drives the camera: WASD,
+   the mouse, the raylib build's keys (F3 for the debug keys). The hunter and
+   the pack show as debug capsules and the state as a line of text until the
+   actors and HUD are ported.
 
-Other levels: open the Entry map with options, for example from the console,
-`open /Engine/Maps/Entry?level=1?seed=1337`.
+From the console: `open /Engine/Maps/Entry?level=1?seed=42` starts a run on
+Level 1; `open /Engine/Maps/Entry?mode=free?level=2` flies a free camera over
+the Poolrooms' greybox (WASD, Space up, Ctrl down, Shift faster).
+
+## Working in the editor
+
+Where things are is decided in code (core and the sim), so the maze, and every
+prop, light and door in it, is the same one the raylib build generates. How
+they look is set in the editor, and code has a default for everything, so the
+project runs before any of it exists.
+
+| to | do |
+|---|---|
+| see the maze without playing | make a new level, drop in a **Backrooms Preview Actor**, pick Level, Seed, Visit and Storey in its details. It builds the chunks round where it stands, at the height the game puts them, and removes itself when play starts |
+| style a level | Content Browser > Miscellaneous > Data Asset > **Backrooms Level Look**. Give surfaces materials (floor, walls, ceiling, stairs, ...), prop kinds static meshes, and the light fittings a mesh. Assign it in Project Settings > Game > Backrooms > Level Looks at the level's index. Empty entries keep the greybox. Set it on a preview actor's Look to try it without assigning it |
+| place a prop mesh | its origin is the middle of the prop's footprint on the floor; Offset moves and turns it from there. A prop with a mesh loses its greybox box |
+| change the controls | make your own Input Actions and a Mapping Context, and assign them in the settings (Input Context, Input Actions by control). Controls you leave empty keep the built-in keys |
+| change what a chunk or the player carries | Blueprint subclasses of Backrooms Chunk Actor (set it as the settings' Chunk Class), Backrooms Pawn and Backrooms Player Controller (set them on a Blueprint subclass of the game mode) |
+| build a HUD | a UMG widget that calls Get World Subsystem (Backrooms World Subsystem) > Get Hud each tick: health, sanity, ammo, notes, the death card |
+| tune | Project Settings > Game > Backrooms: look sensitivity, streaming reach, default seed and level, the camera light |
 
 ## Tests (M1)
 

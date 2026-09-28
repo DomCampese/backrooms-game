@@ -16,7 +16,7 @@ public class Backrooms : ModuleRules
 		PublicIncludePaths.Add(Path.Combine(Repo, "src"));
 		PrivateIncludePaths.Add(Path.Combine(Repo, "tools"));
 
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "ProceduralMeshComponent" });
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "DeveloperSettings", "InputCore", "EnhancedInput", "ProceduralMeshComponent" });
 
 		// A shared PCH is force-included into every file, core's included, and
 		// core must see nothing but itself and the standard library.

@@ -1,6 +1,7 @@
 #include "BackroomsPlayerController.h"
 #include "BackroomsCoords.h"
 #include "BackroomsPawn.h"
+#include "BackroomsSettings.h"
 #include "BackroomsWorldSubsystem.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
@@ -14,7 +15,7 @@
 
 namespace
 {
-using EControl = ABackroomsPlayerController::EControl;
+using EControl = EBackroomsControl;
 
 // Free camera speed, metres per second, and how much faster with sprint held.
 constexpr float FlySpeed = 6.0f;
@@ -79,10 +80,20 @@ void ABackroomsPlayerController::BeginPlay()
 
 void ABackroomsPlayerController::MakeControls()
 {
+	const UBackroomsSettings* Settings = GetDefault<UBackroomsSettings>();
 	Controls = NewObject<UInputMappingContext>(this);
+	ProjectControls = Settings->InputContext.LoadSynchronous();
 	Actions.SetNum((int32)EControl::Count);
 	for (const FControlKeys& Entry : ControlKeys())
 	{
+		if (const TSoftObjectPtr<UInputAction>* Own = Settings->InputActions.Find(Entry.Control))
+		{
+			if (UInputAction* Action = Own->LoadSynchronous())
+			{
+				Actions[(int32)Entry.Control] = Action;
+				continue;
+			}
+		}
 		UInputAction* Action = NewObject<UInputAction>(this);
 		Action->ValueType = Entry.Type;
 		for (const FKey& Key : Entry.Keys)
@@ -115,10 +126,10 @@ void ABackroomsPlayerController::SetupInputComponent()
 	{
 		UE_LOG(LogTemp, Error, TEXT("Backrooms: the input component is not Enhanced Input's; see Config/DefaultInput.ini"));
 	}
-	AddMappingContext();
+	AddMappingContexts();
 }
 
-void ABackroomsPlayerController::AddMappingContext()
+void ABackroomsPlayerController::AddMappingContexts()
 {
 	if (bContextAdded || !Controls)
 	{
@@ -127,6 +138,10 @@ void ABackroomsPlayerController::AddMappingContext()
 	if (UEnhancedInputLocalPlayerSubsystem* Input = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
 	{
 		Input->AddMappingContext(Controls, 0);
+		if (ProjectControls)
+		{
+			Input->AddMappingContext(ProjectControls, 1);
+		}
 		bContextAdded = true;
 	}
 }
@@ -167,8 +182,9 @@ void ABackroomsPlayerController::SetFreeCameraStart(const FTransform& Start)
 void ABackroomsPlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
-	AddMappingContext();
+	AddMappingContexts();
 	ReadControls();
+	const UBackroomsSettings* Settings = GetDefault<UBackroomsSettings>();
 	UBackroomsWorldSubsystem* Backrooms = GetWorld()->GetSubsystem<UBackroomsWorldSubsystem>();
 	ABackroomsPawn* Eye = GetPawn<ABackroomsPawn>();
 	if (!Backrooms || !Eye)
@@ -206,7 +222,8 @@ void ABackroomsPlayerController::PlayerTick(float DeltaTime)
 	In.jumpHeld = Down(EControl::Jump);
 	In.jumpPressed = Pressed(EControl::Jump);
 	// raylib's mouse delta is screen pixels, y down; Unreal's y is up.
-	In.look = { float(LookDelta.X) * LookScale, float(LookDelta.Y) * LookScale * (bInvertLookY ? 1.0f : -1.0f) };
+	In.look = { float(LookDelta.X) * Settings->LookScale,
+		float(LookDelta.Y) * Settings->LookScale * (Settings->bInvertLookY ? 1.0f : -1.0f) };
 	In.wheel = Wheel;
 	In.pickRevolver = Pressed(EControl::PickRevolver);
 	In.pickFlare = Pressed(EControl::PickFlare);
@@ -241,8 +258,9 @@ void ABackroomsPlayerController::PlayerTick(float DeltaTime)
 
 void ABackroomsPlayerController::FlyFreeCamera(float DeltaTime)
 {
-	FreeYaw += float(LookDelta.X) * LookScale * LookRadPerPx;
-	const float Up = float(LookDelta.Y) * LookScale * (bInvertLookY ? -1.0f : 1.0f);
+	const UBackroomsSettings* Settings = GetDefault<UBackroomsSettings>();
+	FreeYaw += float(LookDelta.X) * Settings->LookScale * LookRadPerPx;
+	const float Up = float(LookDelta.Y) * Settings->LookScale * (Settings->bInvertLookY ? -1.0f : 1.0f);
 	FreePitch = FMath::Clamp(FreePitch + Up * LookRadPerPx, -1.45f, 1.45f);
 	const float Forward = (Down(EControl::Forward) ? 1.0f : 0.0f) - (Down(EControl::Back) ? 1.0f : 0.0f);
 	const float Right = (Down(EControl::Right) ? 1.0f : 0.0f) - (Down(EControl::Left) ? 1.0f : 0.0f);

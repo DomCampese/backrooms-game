@@ -1,6 +1,8 @@
 #include "BackroomsWorldSubsystem.h"
 #include "BackroomsChunkActor.h"
 #include "BackroomsCoords.h"
+#include "BackroomsLevelLook.h"
+#include "BackroomsSettings.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/PointLightComponent.h"
 #include "DrawDebugHelpers.h"
@@ -15,19 +17,12 @@
 #include "Misc/Parse.h"
 #include "Stats/Stats.h"
 #include "core/level_rules.h"
-#include "port/greybox.h"
 #include "port/view.h"
 #include "sim/start.h"
 #include "sim/trace.h"
 
 namespace
 {
-// Chunks drawn round the player: two rings on its storey, one on the storeys
-// above and below. The raylib build streams the same square on your storey.
-constexpr int32 ReachOwn = 2;
-constexpr int32 ReachOther = 1;
-// Chunk actors built per tick, so a level start does not stall a frame.
-constexpr int32 BuildsPerTick = 2;
 // How often core drops chunk data far from the player, and how far is far.
 constexpr float UnloadEvery = 2.0f;
 constexpr int32 UnloadRadius = 5;
@@ -246,7 +241,7 @@ void UBackroomsWorldSubsystem::Tick(float DeltaTime)
 		return;
 	}
 	const FVector Camera = Controller->PlayerCameraManager->GetCameraLocation();
-	if (!CameraLight)
+	if (!CameraLight && GetDefault<UBackroomsSettings>()->bCameraLight)
 	{
 		FActorSpawnParameters Params;
 		Params.ObjectFlags |= RF_Transient;
@@ -298,6 +293,7 @@ void UBackroomsWorldSubsystem::StreamAround(const FVector& Focus, int32 Storey, 
 	// Wanted chunks, nearest first: this storey ring by ring, then the others.
 	const Vec3 At = BackroomsCoords::FromUnreal(Focus);
 	const int32 Pcx = fdiv(cellOf(At.x), CCELLS), Pcz = fdiv(cellOf(At.z), CCELLS);
+	const UBackroomsSettings* Settings = GetDefault<UBackroomsSettings>();
 	TArray<FIntVector> Wanted;
 	const int32 Rel[3] = { 0, -1, 1 };
 	for (int32 R : Rel)
@@ -306,7 +302,7 @@ void UBackroomsWorldSubsystem::StreamAround(const FVector& Focus, int32 Storey, 
 		{
 			continue;
 		}
-		const int32 Reach = R == 0 ? ReachOwn : ReachOther;
+		const int32 Reach = R == 0 ? Settings->ReachOwnStorey : Settings->ReachOtherStoreys;
 		for (int32 Ring = 0; Ring <= Reach; Ring++)
 		{
 			for (int32 Dz = -Ring; Dz <= Ring; Dz++)
@@ -321,7 +317,7 @@ void UBackroomsWorldSubsystem::StreamAround(const FVector& Focus, int32 Storey, 
 			}
 		}
 	}
-	int32 Budget = BuildsPerTick;
+	int32 Budget = Settings->BuildsPerFrame;
 	for (const FIntVector& Key : Wanted)
 	{
 		if (Budget > 0 && !Chunks.Contains(Key))
@@ -354,17 +350,73 @@ void UBackroomsWorldSubsystem::StreamAround(const FVector& Focus, int32 Storey, 
 void UBackroomsWorldSubsystem::BuildChunk(const FIntVector& Key)
 {
 	World& Maze = Game->world;
-	StoreyScope Scope(Maze, Key.Z);
-	const GreyboxMesh Greybox = greyboxChunk(Maze, Key.X, Key.Y);
+	const UBackroomsLevelLook* LevelLook = CurrentLook();
+	UClass* ChunkClass = GetDefault<UBackroomsSettings>()->ChunkClass.LoadSynchronous();
+	if (!ChunkClass)
+	{
+		ChunkClass = ABackroomsChunkActor::StaticClass();
+	}
 	FActorSpawnParameters Params;
 	Params.ObjectFlags |= RF_Transient;
 	const FVector Origin(0.0, 0.0, BackroomsCoords::StoreyZ(Key.Z, Maze.storeyH));
-	ABackroomsChunkActor* Actor = GetWorld()->SpawnActor<ABackroomsChunkActor>(Origin, FRotator::ZeroRotator, Params);
+	ABackroomsChunkActor* Actor =
+		GetWorld()->SpawnActor<ABackroomsChunkActor>(ChunkClass, Origin, FRotator::ZeroRotator, Params);
 	if (Actor)
 	{
-		Actor->Build(Greybox);
+		StoreyScope Scope(Maze, Key.Z);
+		Actor->Build(Maze, Key.X, Key.Y, LevelLook);
 		Chunks.Add(Key, Actor);
 	}
+}
+
+const UBackroomsLevelLook* UBackroomsWorldSubsystem::CurrentLook()
+{
+	if (LookLevel != Game->world.level)
+	{
+		LookLevel = Game->world.level;
+		Look = GetDefault<UBackroomsSettings>()->LookFor(LookLevel);
+	}
+	return Look;
+}
+
+FBackroomsHud UBackroomsWorldSubsystem::GetHud() const
+{
+	FBackroomsHud Hud;
+	if (!Game)
+	{
+		return Hud;
+	}
+	const Sim& S = *Game;
+	Hud.bRunning = bRun;
+	Hud.bTitleScreen = S.inMenu;
+	Hud.bPaused = S.paused;
+	Hud.Level = S.level;
+	Hud.LevelName = FText::FromString(UTF8_TO_TCHAR(LEVEL_RULES[S.level].name));
+	Hud.Storey = S.world.storey;
+	Hud.Health = S.health;
+	Hud.Sanity = S.sanity;
+	Hud.Stamina = S.stamina;
+	Hud.Battery = S.battery;
+	Hud.bFlashlightOn = S.flashOn;
+	Hud.Weapon = S.weapon;
+	Hud.Ammo = S.ammo;
+	Hud.Flares = S.flares;
+	Hud.Coins = S.coins;
+	Hud.AlmondWater = S.almond;
+	Hud.Tapes = S.tapes;
+	Hud.Keys = S.keys;
+	if (S.deckNoteT > 0.0f)
+	{
+		Hud.Note = FText::FromString(UTF8_TO_TCHAR(S.deckNote));
+	}
+	if (S.sanityWarnT > 0.0f)
+	{
+		Hud.SanityWarning = FText::FromString(UTF8_TO_TCHAR(S.sanityLine));
+	}
+	Hud.bDeathCard = S.inMenu && S.deathT > 0.0f;
+	Hud.DeathTitle = FText::FromString(UTF8_TO_TCHAR(S.deathTitle));
+	Hud.DeathBy = FText::FromString(UTF8_TO_TCHAR(S.deathBy));
+	return Hud;
 }
 
 void UBackroomsWorldSubsystem::DropChunk(const FIntVector& Key)

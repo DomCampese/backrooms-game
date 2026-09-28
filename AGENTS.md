@@ -42,6 +42,11 @@ Nothing there has been compiled by Unreal yet. What will bite:
 - **`mapdump --cells` with an even number overflowed a buffer** (the window is
   `-half..half`, one more than N) and aborted with "double free or corruption".
   It now rounds up to odd; every documented command used odd sizes.
+- **The Unreal editor's enums mirror core's.** `EBackroomsProp` lists `PropKind`
+  and `EBackroomsSurface` lists `GreySurface` in the same order
+  (unreal/.../BackroomsTypes.h); a new prop kind or greybox surface goes into
+  both, or a level look's meshes land on the wrong props.
+  BackroomsTypes.cpp static_asserts the ends of each list, not every entry.
 - **The layout golden (`tests/golden/layout.txt`) prints every field**, so an
   uninitialised field shows as a nondeterministic line: `Fixture::end` was
   garbage for most kinds until it was zeroed. A new field needs a value for

@@ -172,7 +172,7 @@ size_t GreyboxMesh::triangles() const {
     return n;
 }
 
-GreyboxMesh greyboxChunk(World &w, int cx, int cz) {
+GreyboxMesh greyboxChunk(World &w, int cx, int cz, uint32_t meshedProps) {
     GreyboxMesh m;
     m.storey = w.qs;
     m.cx = cx;
@@ -199,6 +199,7 @@ GreyboxMesh greyboxChunk(World &w, int cx, int cz) {
             AABB boxes[MAX_NEARBY_AABBS];
             int fixed = w.gatherCellAABBs(gi, gk, boxes, MAX_NEARBY_AABBS, 0, false);
             int all = w.gatherCellAABBs(gi, gk, boxes, MAX_NEARBY_AABBS, 0, true);
+            if (meshedProps & (1u << w.propAt(gi, gk))) all = fixed;
             for (int q = fixed; q < all; q++)
                 b.box(GreySurface::Prop, boxes[q].minx, fy, boxes[q].minz, boxes[q].maxx, boxes[q].top, boxes[q].maxz);
         }

@@ -1,6 +1,7 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
+#include "BackroomsTypes.h"
 #include "BackroomsWorldSubsystem.generated.h"
 
 struct Sim;
@@ -8,6 +9,7 @@ struct InputFrame;
 struct TraceWriter;
 struct SolidTracer;
 class ABackroomsChunkActor;
+class UBackroomsLevelLook;
 class APointLight;
 
 // Owns the game: one Sim (the rules, and core's World inside it) for this
@@ -29,6 +31,12 @@ public:
 	// With -BackroomsRecord=path on the command line, every call on the sim is
 	// recorded there for tools/replay (src/sim/trace.h).
 	void StartRun(uint32 Seed, int32 Level);
+	UFUNCTION(BlueprintCallable, Category = "Backrooms", meta = (DisplayName = "Start Run"))
+	void StartRunBP(int32 Seed, int32 Level) { StartRun((uint32)Seed, Level); }
+
+	// What a HUD shows, as of the last frame.
+	UFUNCTION(BlueprintPure, Category = "Backrooms")
+	FBackroomsHud GetHud() const;
 	// A level as the raylib build names it, for the free camera. Returns where
 	// to put the camera: beside (15, 15) at eye height.
 	FTransform StartFreeCamera(int32 Level, uint32 Seed, uint32 Visit);
@@ -62,6 +70,8 @@ private:
 	void DropChunk(const FIntVector& Key);
 	void DropAll();
 	void DrawDebugState() const;
+	// The level's look from the project settings, loaded once per level.
+	const UBackroomsLevelLook* CurrentLook();
 
 	// Not UObjects: owned here, freed by Deinitialize.
 	Sim* Game = nullptr;
@@ -77,5 +87,8 @@ private:
 	// Follows the camera, so a greybox with no fittings lit is still visible.
 	UPROPERTY()
 	TObjectPtr<APointLight> CameraLight;
+	UPROPERTY()
+	TObjectPtr<UBackroomsLevelLook> Look;
+	int32 LookLevel = -1;
 	float SinceUnload = 0.0f;
 };

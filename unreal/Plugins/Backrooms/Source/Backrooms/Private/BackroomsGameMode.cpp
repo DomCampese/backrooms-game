@@ -1,6 +1,7 @@
 #include "BackroomsGameMode.h"
 #include "BackroomsPawn.h"
 #include "BackroomsPlayerController.h"
+#include "BackroomsSettings.h"
 #include "BackroomsWorldSubsystem.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
@@ -19,8 +20,9 @@ void ABackroomsGameMode::InitGame(const FString& MapName, const FString& Options
 	{
 		return;
 	}
-	const int32 Level = UGameplayStatics::GetIntOption(Options, TEXT("level"), 0);
-	const int32 Seed = UGameplayStatics::GetIntOption(Options, TEXT("seed"), 1337);
+	const UBackroomsSettings* Settings = GetDefault<UBackroomsSettings>();
+	const int32 Level = UGameplayStatics::GetIntOption(Options, TEXT("level"), Settings->DefaultLevel);
+	const int32 Seed = UGameplayStatics::GetIntOption(Options, TEXT("seed"), Settings->DefaultSeed);
 	if (UGameplayStatics::ParseOption(Options, TEXT("mode")) == TEXT("free"))
 	{
 		const int32 Visit = UGameplayStatics::GetIntOption(Options, TEXT("visit"), Level == 0 ? 1 : 0);

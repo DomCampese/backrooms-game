@@ -7,8 +7,9 @@
 //   ?seed=S&level=N            a run (the default): the sim plays from Level 0,
 //                              or from Level N as BACKROOMS_LEVEL does
 //   ?mode=free&level=N&visit=V a free camera over the greybox of one level
-// Defaults: seed 1337, level 0, and for the free camera the visit a raylib
-// capture of that level shows (1 on Level 0, 0 elsewhere).
+// The seed and level default to Project Settings > Game > Backrooms; the free
+// camera's visit to the one a raylib capture of that level shows (1 on Level 0,
+// 0 elsewhere). A Blueprint subclass can swap the pawn and controller classes.
 UCLASS()
 class BACKROOMS_API ABackroomsGameMode : public AGameModeBase
 {
