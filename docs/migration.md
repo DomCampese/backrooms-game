@@ -259,14 +259,23 @@ level geometry; `MeshTracer` (game.cpp) answers from the chunk meshes of your
 storey and the ones above and below. Actor bodies use `rayBox`, which is
 raylib's `GetRayCollisionBox` step for step.
 
+**Math and colour types.** src/sim includes core and the standard library only
+(`tools/core-check.sh` checks it). Positions and directions are core's `Vec2`
+and `Vec3`. `sim_math.h` holds the vector functions the rules call (`add`,
+`sub`, `scale`, `negate`, `divide`, `lerp`, `normalize`), a ray (`Ray3`), a box
+(`Box3`), a hit record (`RayHit`) and `rayBox`. Each copies raymath's formula
+in raymath's operation order, so a build with `-ffp-contract=off` gets the same
+bits the raylib build got. Level numbers come from core's `LEVEL_RULES`.
+Balloon and confetti colours are indices below `PARTY_COLOURS`; the platform
+draws them from `PARTY` (src/util.h). The platform converts at the boundary
+with `toRl`/`fromRl` (src/vec_rl.h), including `Ray3` and `Box3` for
+`MeshTracer` and the harness.
+
 **Still coupled, and why.**
 
 | coupling | why | goes when |
 |---|---|---|
-| `sim_math.h` includes raylib.h and raymath.h | `Vector2/3`, `Color`, `Ray`, `BoundingBox`, `RayCollision` and the Vector3 functions | the lead swaps it to `src/core/vec.h` |
-| sim.h includes ../world.h, ../levels.h, ../util.h, which include raylib.h | `ChunkData` holds `Mesh` handles; `LevelCfg` uses `Vector3`; util's `PARTY` palette is `Color` | seams 1 and 2 (core) |
 | `applyLevel` calls `world.unloadAll()`; `unlockEdge`/`shiftEdge` rebake chunks | `World` still owns the meshes | the mesher leaves world.cpp |
-| confetti and balloon colours are `Color` | the palette the renderer draws | core's colour type |
 | HUD strings are `const char *` in sim state | text is content the rules choose | a port maps them to its own text type |
 
 **Behaviour that changed, knowingly.** Schedules set during a tick (applyLevel's
@@ -285,9 +294,10 @@ instead of inside `beginDescent`. The dead `noclipped` flag, its HUD branch and
 |---|---|
 | frames: `tools/proof-shots.sh`, `--diff` against the main build | 0 pixels differing >16 on all 11 world frames. menu.png 0.43%: its camera follows `GetTime()`, and the main binary recaptured under the same load differs from its own capture by 1.17% |
 | regression harness | exit 0, 59 captures; adds a live sprint check, the synth-feed check and rayBox against raylib |
-| layering: `grep` of src/sim | the only raylib include is sim_math.h; the only raylib calls are raymath's `Vector3*` |
+| layering: `tools/core-check.sh` | every src/sim file compiles alone with only core and the standard library |
 | web build | not compiled (no Emscripten here); the `PLATFORM_WEB` branches of every changed file pass `-fsyntax-only` against a stub emscripten.h |
 | rayBox against raylib | bit-identical over 4 million random rays, and 200k in the harness |
+| sim_math.h against raymath (the swap off raylib types) | 4 million inputs per function, floats of every shape including NaN, infinities and denormals: every non-NaN result bit-identical; a NaN result can carry the other input's payload when both inputs are NaN (x86 keeps the first operand's, and the compiler may swap a commutative operation's operands). `rayBox` bit-identical to the old raylib-typed one on 4 million rays. Against the library's compiled `GetRayCollisionBox`, the old and new versions both differ only in the sign of a zero distance, on boxes and rays with zero coordinates; none on actor-shaped boxes and shots |
 
 **For the Unreal port.** Mirror `Sim` as a plain C++ module the game mode owns;
 tick it from one place with the frame's input, clamped `dt` and a game clock,

@@ -31,7 +31,7 @@ does not move: the game runs smoothly on the owner's Mac.
 |---|---|---|
 | `src/core/` | as source | an Unreal plugin module, unchanged |
 | `tests/golden`, `tools/contract.cpp` | as the acceptance test | run the same checks from an Unreal automation test |
-| `src/sim/` | as source, after its math is on core types | a second module that depends on core |
+| `src/sim/` | as source | a second module that depends on core |
 | layout (`ChunkLayout`) | as data | drives instanced meshes, lights and doors |
 | mesher (`src/world_mesh.cpp`) | as reference only | its vertex arrays can feed a greybox (M2); art replaces it |
 | shader, occupancy texture, `lightAtCPU`, texture painters | no | Unreal's lighting and materials replace them |

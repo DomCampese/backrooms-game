@@ -75,6 +75,14 @@ contracts. What will bite:
   `dropAimLatch` and `recordsChanged` (`Game::finishStep`). `levelEntries`
   counts `applyLevel` calls; `Game::syncLevelLook` applies a new level's
   surfaces and uniforms when it moves, after the step and before a render.
+- **src/sim includes core and the standard library only.** Its math is core's
+  `Vec2`/`Vec3` and `sim_math.h` (`add`, `scale`, `normalize`, ..., `Ray3`,
+  `Box3`, `RayHit`, `rayBox`), each raymath's formula in raymath's order, so
+  results match the raylib build to the bit. Level numbers come from
+  `LEVEL_RULES`, never `LEVELS`. Colours are presentation: balloons and
+  confetti carry an index below `PARTY_COLOURS`, and render.cpp looks it up in
+  `PARTY`. Convert at the boundary with `toRl`/`fromRl`. `tools/core-check.sh`
+  fails on any other include.
 - **Bullets meet level geometry through `SolidTracer`** (`MeshTracer` in
   game.cpp tests the chunk meshes). Actor bodies use `rayBox`, raylib's
   `GetRayCollisionBox` step for step; the regression compares them on 200k rays.
@@ -584,7 +592,7 @@ time so the executable remains independent of its working directory.
 | `world_mesh.{h,cpp}` | the chunk mesher (`bakeChunk`), `ChunkMesh` slots, `ChunkMeshCache` |
 | `mesh_builder.{h,cpp}` | `MB`, `addPropBox`, `addSolidBox`, `PLAIN_UV` |
 | `object_meshes.{h,cpp}` | can, tape deck, reels, flare, supply crate |
-| `vec_rl.h` | `toRl` / `fromRl` between core and raylib vectors |
+| `vec_rl.h` | `toRl` / `fromRl` between core's and the sim's math types and raylib's |
 | `levels.{h,cpp}` | per-level look table (`LevelCfg` extends `LevelRules`); CPU mirror of the shader's lighting |
 | `shaders.cpp` | the world and post-process GLSL, as string literals |
 | `surfaces.cpp` | the world surfaces: colour, height (m) and gloss per level surface, wrapped and at real scale |
