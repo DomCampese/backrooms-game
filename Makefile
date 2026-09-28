@@ -59,3 +59,14 @@ benchmark-animation: $(GENERATED) tools/bench-animation.cpp $(filter-out src/mai
 	c++ -std=c++17 -O2 $(CFLAGS_RL) -Isrc tools/bench-animation.cpp $(filter-out src/main.cpp,$(SRCS)) -o /tmp/backrooms-animation-after $(LIBS_RL)
 
 .PHONY: benchmark-animation
+
+# Core's golden answers, linked against src/core alone (docs/migration.md,
+# "Contract tests").
+CORE_SRCS := $(wildcard src/core/*.cpp)
+contract: tools/contract.cpp $(CORE_SRCS) $(wildcard src/core/*.h)
+	c++ -std=c++17 -O2 -Wall -Wno-missing-field-initializers tools/contract.cpp $(CORE_SRCS) -o contract
+
+contract-check: contract
+	./contract --check
+
+.PHONY: contract-check
