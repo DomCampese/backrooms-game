@@ -12,7 +12,7 @@ revolver and compact texture assets embedded at build time.
 
 ## License and credits
 
-This unofficial hobby game is released under **GNU GPLv3**. See [LICENSE](LICENSE)
+This unofficial hobby game is released under the **MIT License**. See [LICENSE](LICENSE)
 and [Credits and third-party notices](CREDITS.md) for the full terms, Backrooms
 wiki author acknowledgments, and the separate licenses for adapted lore and assets.
 Thanks to the Backrooms community, especially 1000dumplings and the other authors

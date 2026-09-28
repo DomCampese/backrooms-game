@@ -9,14 +9,12 @@ does not move: the game runs smoothly on the owner's Mac.
 
 ## Before any code
 
-1. **Licence.** The game is GPL-3.0-only (LICENSE, CREDITS.md). Code linked into
-   an Unreal Engine binary is distributed under Epic's EULA, which is not
-   compatible with the GPL. The owner holds the copyright in the original code
-   and can license it differently for the Unreal version; third-party material
-   keeps its own terms (CREDITS.md lists each: CC0 textures and revolver, CC BY-SA
-   water recordings, CC BY-SA wiki lore). Get the owner's decision in writing
-   before porting code. This is a licensing question, not a technical one, and
-   it blocks M1.
+1. **Licence.** Decided (September 28, 2026): the owner relicensed the game's
+   code from GPL-3.0-only to MIT, which Epic's EULA allows beside the engine.
+   Third-party material keeps its own terms (CREDITS.md lists each: CC0 textures
+   and revolver, CC BY-SA water recordings, CC BY-SA wiki lore). An Unreal build
+   must not encrypt the files carrying CC BY-SA material (CREDITS.md, "How the
+   lore and software licenses fit together").
 2. **Target machine.** Record the Mac's chip, memory, macOS and the Unreal
    version you will use. Check that version's release notes for what its Metal
    renderer supports on that chip (Lumen, Nanite, virtual shadow maps, hardware
@@ -138,7 +136,7 @@ without one.
 
 | milestone | state |
 |---|---|
-| M0 project | `unreal/BackroomsGame.uproject` and the plugin exist. Open: the licence decision, the target Mac's chip, memory and macOS, and the Unreal version |
+| M0 project | `unreal/BackroomsGame.uproject` and the plugin exist; the code is MIT. Open: the target Mac's chip, memory and macOS, and the Unreal version |
 | M1 core | ready to run: the automation tests `Backrooms.Core.Contract` and `Backrooms.Sim.Replay` compare with `tests/golden` and `tests/traces`. Without Unreal, the same shared files built the module's way (clang, C++20, `-Werror`, FMA enabled, no `-ffp-contract=off`) pass both |
 | M2 greybox | written, not run: `UBackroomsWorldSubsystem` streams `ABackroomsChunkActor`s built from `src/port/greybox.h` round a DefaultPawn free camera, storeys stacked. The greybox itself is checked against raylib frames (below). Frame time on the Mac not measured |
 | M3 layout | props (as their collision boxes), openings and light panels are in the greybox; fixtures are not. `tests/golden/layout.txt` holds every layout field |
