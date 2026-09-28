@@ -11,7 +11,10 @@ SO=$(ls "$PWD"/.rlwheel/raylib/_raylib_cffi.cpython-*-linux-gnu.so 2>/dev/null |
 # from elsewhere — which tools/shot.sh does on every single screenshot.
 # the wheel's .so is a CPython extension, so link the matching libpython
 PYV=$(basename "$SO" | sed -n 's/.*cpython-\([0-9]\)\([0-9]*\)-.*/\1.\2/p')
-FLAGS=(-std=c++17 -O2 -Wall -Wno-missing-field-initializers -Irlshim)
+# -ffp-contract=off: no fused multiply-adds, so core's results do not depend on
+# the compiler (src/core/fp_strict.h). Every build here compiles core.
+CORE_FLAGS=(-std=c++17 -O2 -Wall -Wno-missing-field-initializers -ffp-contract=off)
+FLAGS=("${CORE_FLAGS[@]}" -Irlshim)
 LINK=("$SO" "-Wl,-rpath,$(dirname "$SO")" "-lpython$PYV" -lm -ldl -lpthread)
 # src/ is the raylib platform; src/core and src/sim are the engine-independent
 # layers (docs/migration.md). sim may not exist yet.
@@ -34,13 +37,13 @@ shopt -u nullglob
 # reads the tail.
 build_mapdump() {
     rm -f mapdump
-    c++ -std=c++17 -O2 -Wall -Wno-missing-field-initializers tools/mapdump.cpp "${CORE[@]}" -o mapdump
+    c++ "${CORE_FLAGS[@]}" tools/mapdump.cpp "${CORE[@]}" -o mapdump
     echo "built ./mapdump (core only)"
 }
 # contract: core's golden answers (docs/migration.md, "Contract tests").
 build_contract() {
     rm -f contract
-    c++ -std=c++17 -O2 -Wall -Wno-missing-field-initializers tools/contract.cpp "${CORE[@]}" -o contract
+    c++ "${CORE_FLAGS[@]}" tools/contract.cpp "${CORE[@]}" -o contract
     echo "built ./contract (core only)"
 }
 # texdump: every texture generator, run without a window, written to PNG with

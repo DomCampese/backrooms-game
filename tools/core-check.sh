@@ -11,7 +11,8 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 CXX=${CXX:-c++}
-FLAGS=(-std=c++17 -fno-exceptions -fno-rtti -Wall -Wno-missing-field-initializers -fsyntax-only -Isrc)
+# -ffp-contract=off as every real build of core (src/core/fp_strict.h).
+FLAGS=(-std=c++17 -fno-exceptions -fno-rtti -ffp-contract=off -Wall -Wno-missing-field-initializers -fsyntax-only -Isrc)
 FORBIDDEN='(^|/)(raylib|rlgl|raymath|rcamera|glfw3?|gl|glad|miniaudio)\.h$|/GL/|/GLES[0-9]*/'
 fail=0
 

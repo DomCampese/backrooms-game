@@ -1,3 +1,4 @@
+#include "fp_strict.h"
 #include "world.h"
 #include "hash.h"
 #include "level_rules.h"
