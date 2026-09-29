@@ -55,6 +55,10 @@ open)
     ;;
 play)
     build
+    # The game cannot import; the editor does it when it opens the project.
+    if ! ls "$ROOT/unreal/Content/Backrooms/Revolver/"*.uasset >/dev/null 2>&1; then
+        echo "unreal.sh: the revolver is not imported yet; run 'make unreal-open' once and let the editor import it" >&2
+    fi
     MAP="/Engine/Maps/Entry?level=${LEVEL:-0}?seed=${SEED:-1337}"
     "$EDITOR" "$PROJECT" "$MAP" -game -windowed -ResX=1440 -ResY=850 -log || true
     echo "--- Backrooms lines from $LOG:"

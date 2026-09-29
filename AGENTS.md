@@ -64,6 +64,10 @@ Nothing there has been compiled by Unreal yet. What will bite:
   near the top (nothing imported, a static mesh, missing clips, or shown and
   how big) until the gun is seen working on the Mac. If it faces the wrong
   way, `RevolverMeshRotation` in Project Settings > Game > Backrooms turns it.
+- **`init_unreal.py` also runs when the editor binary runs the game**
+  (`-game`, `make unreal-play`). There is no editor then, and its first
+  EditorAssetLibrary call crashed the game in `GetSubsystemInternal`; it now
+  skips the import under `-game`.
 - **The editor imports the repository's models itself.**
   `Plugins/Backrooms/Content/Python/init_unreal.py` runs when the editor opens
   the project and imports any missing ones to the paths the settings name;
