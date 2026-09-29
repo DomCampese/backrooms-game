@@ -23,6 +23,9 @@ Nothing there has been compiled by Unreal yet. What will bite:
   case**, and two with the same name fail UHT before anything compiles:
   `ABackroomsHUD` and a struct `FBackroomsHud` stopped the first build on the
   Mac ("shares engine name"). The struct is `FBackroomsHudState`.
+- **`AssetRegistryModule.h` no longer brings in `FAssetData` (5.8).** Include
+  `AssetRegistry/AssetData.h` and `AssetRegistry/IAssetRegistry.h` too, or a
+  `TArray<FAssetData>` fails as an incomplete type.
 - **Unreal defines `check()` as a macro.** A shared function named `check` is
   expanded by it in any file that also includes Unreal (`contract::compare`).
 - **The sim includes `fp_strict.h` now, like core.** Without it (or the flag)
