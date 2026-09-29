@@ -8,17 +8,16 @@ This is an unofficial hobby game, not an endorsed or official Backrooms release.
 THE BACKROOMS: a procedural horror game by Dominic Campese.
 Copyright (C) 2026 Dominic Campese, for the project's original copyrightable contributions.
 
-The game software is licensed under the GNU General Public License, version 3
-only (SPDX: GPL-3.0-only). See [LICENSE](LICENSE) for the full terms.
-Third-party material retains the licenses and notices identified below.
+The game software is licensed under the MIT License (SPDX: MIT). See
+[LICENSE](LICENSE) for the full terms. Third-party material retains the licenses
+and notices identified below, and lore adapted from the Backrooms Wiki is under
+CC BY-SA wherever it appears (below).
 
-This program is free software: you can redistribute it and/or modify it under
-the terms of the GNU General Public License as published by the Free Software
-Foundation, version 3 of the License.
-
-This program is distributed in the hope that it will be useful, but WITHOUT ANY
-WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-PARTICULAR PURPOSE. See the GNU General Public License for more details.
+Versions before September 28, 2026 were released under the GNU General Public
+License, version 3 only (GPL-3.0-only). Copies obtained under those terms keep
+them. The change was made so the game can be built on Unreal Engine, whose
+EULA does not allow engine code to be combined with a copyleft license; the
+MIT License has no such condition.
 
 ## Backrooms lore and acknowledgments
 
@@ -55,14 +54,30 @@ geometry, dialogue, survival rules and enemy behavior differ from the articles.
 
 ### How the lore and software licenses fit together
 
-The original wiki works remain under CC BY-SA 3.0. The project's contributions to
-adapted lore and its artistic presentation are additionally offered under
-[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
-Section 4(b) of [BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/legalcode)
-permits adaptations under a later BY-SA version. BY-SA 4.0 provides a one-way
-compatibility route to GPLv3 for contributions to adaptations integrated into
-software. The game's software contributions are offered under GPLv3; this does
-not erase the original authors' attribution or relicense their standalone works.
+The original wiki works remain under CC BY-SA 3.0. The project's adaptations of
+that lore (level and entity names and descriptions, the notes and warnings the
+game shows, designs that follow an article closely) are offered under
+[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), which Section
+4(b) of [BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/legalcode)
+permits for adaptations. That holds wherever the adapted material sits,
+including string literals in source files.
+
+The game's software is the project's own work and is under the MIT License.
+ShareAlike applies to adaptations of the licensed material, not to independent
+works distributed beside it, and ideas and game mechanics are not themselves
+covered by copyright. So the code does not take on CC BY-SA, and the adapted
+lore does not take on MIT. Two things follow for any distributed build,
+raylib or Unreal:
+
+- Credit the wiki authors and link the CC BY-SA licenses (this file, shipped with
+  the build, does both).
+- Do not put CC BY-SA material behind a technical measure that stops recipients
+  exercising the license. An Unreal build must not encrypt the files that carry
+  the adapted lore or the CC BY-SA water sounds.
+
+This reading has not been checked against the wiki's own guidance, which could
+not be reached from the development environment; confirm it there before a
+release.
 
 See the wiki's [game developer guidance](https://backrooms-wiki.wikidot.com/licensing-guide),
 CC's [compatibility list](https://creativecommons.org/compatible-licenses/), and
@@ -101,7 +116,7 @@ is the other half of why Level 0 has storeys.
   [Provenance and the creator's notice](assets/sounds/music/README.md).
 
 These assets retain their original licenses (CC0, or CC BY-SA for the water
-sounds). The project's GPL notice does not replace their original terms. The
+sounds). The project's MIT License does not replace their original terms. The
 CC BY-SA sounds are distributed unmodified; attribution and license links are
 above and in their README.
 
@@ -122,23 +137,25 @@ above and in their README.
   `.wasm`, so that notice is distributed too.
   [License](LICENSES/emscripten.txt).
 
+- **Unreal Engine 5**, by **Epic Games**, under the
+  [Unreal Engine EULA](https://www.unrealengine.com/eula) (not an open-source
+  license). Only the port in `unreal/` uses it, and no Unreal build has been
+  distributed. The EULA governs the engine and its redistribution, including its
+  royalty terms for a commercial release; the game's own code stays under MIT.
+
 The raylib notice above names the version the **desktop** release is built
 against. The web build pins its own raylib in `tools/web-build.sh`; keep that
 tag and the notice in `LICENSES/` in step, because the notice is what ships.
 
 ## Distributing a build
 
-Include LICENSE, CREDITS.md, LICENSES, and the asset provenance notices with native
-releases. On a web demo, provide visible License, Credits and Source links.
+Include LICENSE, CREDITS.md, LICENSES, and the asset provenance notices with every
+release. The MIT License asks for its copyright and permission notice; the CC BY-SA
+material asks for attribution, a link to its license and no technical measure that
+restricts it (above); the zlib and MIT notices of the dependencies ship with them. On
+a web demo, provide visible License, Credits and Source links.
 `tools/web-build.sh` copies LICENSE, CREDITS.md and LICENSES/ into the published
 directory, and `web/shell.html` carries the copyright, the warranty disclaimer
-and those three links on the page itself — which is also what GPLv3 section 5(d)
-asks of an interactive interface. A build that drops either is not distributable.
-Provide the complete corresponding source for the exact released version,
-including necessary build scripts and asset-generation inputs, at no extra charge.
+and those three links on the page itself.
 Tag the source revision used for a release and link that revision from its download
-or demo page; do not rely only on a moving default branch.
-
-Source repository: https://github.com/DomCampese/backrooms-game
-Web build: https://domcampese.github.io/backrooms-game/
-Build instructions: [README](README.md#build--run).
+or demo page, so a release can be matched to its source.

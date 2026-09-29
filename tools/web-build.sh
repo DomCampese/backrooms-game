@@ -39,7 +39,7 @@ rm -f "$OUT/index.html" "$OUT/index.js" "$OUT/index.wasm"
 
 # The game is src/ plus the engine-independent layers (docs/migration.md).
 shopt -s nullglob
-SRCS=(src/*.cpp src/core/*.cpp src/sim/*.cpp)
+SRCS=(src/*.cpp src/core/*.cpp src/sim/*.cpp src/port/*.cpp)
 shopt -u nullglob
 
 # -ffp-contract=off: em++ is clang; core's results must not depend on fused

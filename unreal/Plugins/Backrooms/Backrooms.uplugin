@@ -1,0 +1,26 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1",
+	"FriendlyName": "Backrooms",
+	"Description": "The game's core (generation, collision, layout) and rules (the sim), compiled from the repository's src/, and the Unreal side that streams and draws them.",
+	"Category": "Game",
+	"CanContainContent": true,
+	"Modules": [
+		{
+			"Name": "Backrooms",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "ProceduralMeshComponent",
+			"Enabled": true
+		},
+		{
+			"Name": "EnhancedInput",
+			"Enabled": true
+		}
+	]
+}

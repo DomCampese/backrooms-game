@@ -9,14 +9,12 @@ does not move: the game runs smoothly on the owner's Mac.
 
 ## Before any code
 
-1. **Licence.** The game is GPL-3.0-only (LICENSE, CREDITS.md). Code linked into
-   an Unreal Engine binary is distributed under Epic's EULA, which is not
-   compatible with the GPL. The owner holds the copyright in the original code
-   and can license it differently for the Unreal version; third-party material
-   keeps its own terms (CREDITS.md lists each: CC0 textures and revolver, CC BY-SA
-   water recordings, CC BY-SA wiki lore). Get the owner's decision in writing
-   before porting code. This is a licensing question, not a technical one, and
-   it blocks M1.
+1. **Licence.** Decided (September 28, 2026): the owner relicensed the game's
+   code from GPL-3.0-only to MIT, which Epic's EULA allows beside the engine.
+   Third-party material keeps its own terms (CREDITS.md lists each: CC0 textures
+   and revolver, CC BY-SA water recordings, CC BY-SA wiki lore). An Unreal build
+   must not encrypt the files carrying CC BY-SA material (CREDITS.md, "How the
+   lore and software licenses fit together").
 2. **Target machine.** Record the Mac's chip, memory, macOS and the Unreal
    version you will use. Check that version's release notes for what its Metal
    renderer supports on that chip (Lumen, Nanite, virtual shadow maps, hardware
@@ -29,33 +27,42 @@ does not move: the game runs smoothly on the owner's Mac.
 
 | part | carries over | how |
 |---|---|---|
-| `src/core/` | as source | an Unreal plugin module, unchanged |
-| `tests/golden`, `tools/contract.cpp` | as the acceptance test | run the same checks from an Unreal automation test |
-| `src/sim/` | as source | a second module, `BackroomsSim`, that depends on core |
+| `src/core/` | as source | compiled into the plugin module unchanged |
+| `tests/golden`, `tools/contract_lib.cpp` | as the acceptance test | the same checks, run by an Unreal automation test |
+| `src/sim/` | as source | compiled into the same module |
+| `tests/traces`, `src/sim/trace.h` | as the sim's acceptance test | recorded input replayed through the sim, every frame's state compared |
 | layout (`chunkLayout`, src/core/layout.h) | as data | drives instanced meshes, light fittings and doors; the per-level choice of decorations is the `DECOR` table in layout.cpp |
-| mesher (`src/world_mesh.cpp`) | as reference only | its vertex arrays can feed a greybox (M2); art replaces it |
+| mesher (`src/world_mesh.cpp`) | as reference only | the greybox (`src/port`) replaces it for M2; art replaces both |
 | shader, occupancy texture, `lightAtCPU`, texture painters | no | Unreal's lighting and materials replace them |
 | raylib audio, input, window | no | MetaSounds / Sound Cues, Enhanced Input, the engine |
 | sounds, revolver GLB, CC0 textures | as assets | import; keep provenance beside each |
 
 ## Module setup
 
-- One plugin, `Backrooms`, with a Runtime module `BackroomsCore` containing
-  `src/core` verbatim. Build.cs: C++17 or later, `bEnableExceptions = false`,
-  `bUseRTTI = false` (core already builds this way under tools/core-check.sh).
-- A second Runtime module, `BackroomsSim`, containing `src/sim` and depending
-  on `BackroomsCore`. The same settings as core.
+The project is in `unreal/` (its README has the layout and how to open it).
+
+- One plugin, `Backrooms`, with one Runtime module, also `Backrooms`, holding
+  core, the sim, `src/port` and the Unreal classes. Two modules (core, then sim)
+  do not link in an editor build: each module is a shared library with hidden
+  symbols, and core has no export annotations to add.
+- The module compiles the repository's files, not copies: each
+  `Private/Shared/*.cpp` is one `#include` of a file in `src/core`, `src/sim`,
+  `src/port` or `tools/contract_lib.cpp`. A new source file there needs a
+  wrapper; `tools/unreal-check.sh` fails until it has one.
+- No PCH (`PCHUsageMode.NoPCHs`): a shared PCH is force-included into every
+  file, core's included. No unity build, exceptions or RTTI.
 - Floating point: core's generation compares noise against thresholds, and a
   compiler that fuses multiply-adds can flip a comparison and build a different
-  maze. Core carries this in source (docs/migration.md, "Floating point"); do
-  not remove those pragmas, and do not enable fast math for either module. The
-  sim's vector functions (`src/sim/sim_math.h`) reproduce raymath bit for bit
-  only without contraction.
-- Unity builds merge .cpp files. Core has file-static helpers; if two collide,
-  exclude the module from unity builds rather than renaming things.
+  maze. Core and sim carry this in source (`src/core/fp_strict.h`, included
+  first by every core, sim and port .cpp; docs/migration.md, "Floating point").
+  Do not remove those pragmas, and do not enable fast math. The module sets
+  `FPSemantics = FPSemanticsMode.Precise` as well. The sim's vector functions
+  (`src/sim/sim_math.h`) reproduce raymath bit for bit only without contraction.
 - `World` is not thread-safe: `data()` generates on read and `StoreyScope`
   changes `World::qs`. Generate on one thread, or give a worker thread its own
   `World` with the same seed, level and visit.
+- Unreal defines `check()` as a macro, so no shared identifier may be named
+  `check` (the contract library's comparison is `contract::compare`).
 
 ## Entry points
 
@@ -117,9 +124,78 @@ Each ends with a check that can fail.
 | M1 core | `BackroomsCore` compiles in Unreal; an automation test runs every case in `tests/golden` and passes |
 | M2 greybox | chunks stream round a free camera on Level 0 and Level 1, walls and floors from core, storeys stacked; frame time measured on the Mac |
 | M3 layout | props, fixtures, doors and panel positions placed from `ChunkLayout`; a screenshot at the proof-shot positions (tools/proof-shots.sh) matches the raylib frame's layout |
-| M4 sim | the sim ticks in Unreal from Enhanced Input; replaying a recorded input trace from the raylib build reaches the same positions and events (the trace recorder does not exist yet: see below) |
+| M4 sim | the sim ticks in Unreal from Enhanced Input; replaying a recorded input trace from the raylib build reaches the same positions and events (`tests/traces`, `Backrooms.Sim.Replay`) |
 | M5 look | lighting, materials and post per level; performance budget met on the Mac |
 | M6 actors and sound | hunter, dogs, sound events, HUD |
+
+## Status (September 2026)
+
+`unreal/` builds and runs on the target: an M4 MacBook Pro, macOS 27, Unreal
+Engine 5.8.3, first on 29 September 2026. The shared code (core, sim, port)
+compiled there first time. The Unreal side needed four fixes, each now in
+AGENTS.md "Unreal port": a local `TestHyd.h` from the editor's New C++ Class
+menu, `FBackroomsHud` sharing UHT's name with `ABackroomsHUD`, `FAssetData`
+needing its own include, and `init_unreal.py` crashing the game under
+`-game`. `make unreal`, `unreal-open`, `unreal-play` and `unreal-test`
+(`tools/unreal.sh`) build and run it; `tools/unreal-check.sh` covers what can
+be checked without Unreal.
+
+| milestone | state |
+|---|---|
+| M0 project | `unreal/BackroomsGame.uproject` (EngineAssociation 5.8) and the plugin exist; the code is MIT. Target: an Apple M4 Mac on the current macOS, Unreal Engine 5.8. Open: its memory, and what 5.8's Metal renderer supports on the M4 |
+| M1 core | built on the Mac, not yet run there: the automation tests `Backrooms.Core.Contract` and `Backrooms.Sim.Replay` compare with `tests/golden` and `tests/traces`. Without Unreal, the same shared files built the module's way (clang, C++20, `-Werror`, FMA enabled, no `-ffp-contract=off`) pass both |
+| M2 greybox | runs on the Mac: `UBackroomsWorldSubsystem` streams `ABackroomsChunkActor`s built from `src/port/greybox.h` round a DefaultPawn free camera, storeys stacked. The greybox itself is checked against raylib frames (below). Frame time on the Mac not measured |
+| M3 layout | props (as their collision boxes), openings and light panels are in the greybox; a level look (below) can put a static mesh at every prop of a kind and at every light fitting, from `chunkLayout`. Fixtures are not placed yet. `tests/golden/layout.txt` holds every layout field |
+| M4 sim | runs on the Mac (a run on Level 0: walking, looking, the HUD, the revolver seen in hand): `ABackroomsPlayerController` fills an `InputFrame` from Enhanced Input actions it makes at start-up, `UBackroomsWorldSubsystem::TickRun` steps the sim as `Game::tick` does (title screen, pause, step), bullets trace against the chunk actors, and `ABackroomsPawn`'s camera follows `simView` (src/port/view.h, which the raylib renderer now draws from too). `-BackroomsRecord=path` writes a trace from Unreal for `./replay`. Sound is M6. What the sim puts in the world each frame (pickups, crates, the deck, flares, chalk, balloons, confetti, impacts, the hunter, the pack) comes from `simScene` (src/port/scene.h) and `ABackroomsSceneActor` draws it, as plain shapes until a level look gives meshes; `ABackroomsHUD` is a text HUD from `GetHud`. The revolver is `ABackroomsHeldActor`, placed and posed by `heldWeapon` and `revolverPose` (src/port/held.h, which render.cpp and revolver.cpp now draw from): the editor imports assets/models/revolver.glb on first open (Plugins/Backrooms/Content/Python). Firing and the reload start; the reload clip did not show on the first run, a bone-by-bone copy is pushed but not yet confirmed, and each reload logs how far the drum moved in the clip and on the gun. The can, deck and flare in hand are not ported. render.cpp still decides these for itself, and should move onto `simScene` |
+| M5, M6 | not started |
+
+**Editing in Unreal.** Placement stays in code; appearance, controls and
+tuning are editor data with code defaults (unreal/README.md, "Working in the
+editor"). `UBackroomsLevelLook` (a data asset per level) gives each greybox
+surface a material and each prop kind and the light fittings a mesh;
+`UBackroomsSettings` (Project Settings > Game > Backrooms) assigns the looks and
+holds the input assets, sensitivity and streaming reach; `ABackroomsPreviewActor`
+builds the maze in the editor viewport; the pawn, controller, chunk actor and
+game mode are Blueprintable; `GetHud` feeds a UMG HUD. The editor enums mirror
+core's (`EBackroomsSurface` = `GreySurface`, `EBackroomsProp` = `PropKind`,
+`EBackroomsItem` = `SceneKind`), and
+BackroomsTypes.cpp asserts they agree.
+
+**The greybox** (`src/port/greybox.{h,cpp}`, core and the standard library
+only) builds a chunk as flat-coloured boxes and quads from core's accessors and
+`chunkLayout`: floors, ceilings, steps and soffits, walls, doorways and their
+headers, windows, locked doors, exits, rails (sloped caps on flights), stairs as
+treads, pillars, props as the boxes collision gives them, water, and light
+panels (dead ones dark). Every face is emitted in both windings, so neither
+Unreal's front-face convention nor the handedness swap can hide one.
+`tools/greybox-view.cpp` draws it with raylib from the camera a capture uses;
+at the proof-shot positions (lv0 to lv4, vending, pool, stairwell) it lines up
+with the game's frames wall for wall. A capture's spawn spot is picked by
+`findOpenSpot` before any level is entered, in Level 0's maze at visit 0 on
+one storey, and the viewer does the same.
+
+**Traces** (`src/sim/trace.h`). `BACKROOMS_RECORD=path` writes every call the
+raylib build makes on the sim: the start (`SimStart`), level entries, pauses,
+each frame's `InputFrame`, `dt` and clock, each `SolidTracer` answer, and a
+digest of the state after the frame. `./replay path` (core and sim only) runs
+it through a fresh `Sim`, answering the tracer from the recording, and stops at
+the first digest that differs, naming the frame and the fields.
+`tools/record-trace.sh` drives the game with xdotool and wrote
+`tests/traces/walk-l0-l2.trace` (152 frames: a run begun, walking, sprinting,
+the hunter called up and shot at, a reload, a flare, a drink, a pause, Levels 0
+to 2). Replayed with gcc and clang, `-O2` and `-march=native`: every digest
+matches. Without `-ffp-contract=off` or the pragma, both compilers diverged at
+frame 31; the sim now includes `fp_strict.h` like core.
+
+What to expect on the Mac:
+
+- **Contract**: should pass. If only fitting lines of `layout.txt` fail, it is
+  `tubeHash`'s `sinf` (docs/migration.md, "Floating point").
+- **Replay**: may not. The sim calls `sinf`, `cosf`, `atan2f`, `expf` and
+  friends, and Apple's libm may round some last bits differently from glibc's.
+  A replay failure names the first frame and field that moved. If it is libm,
+  the fix is in the sim (a table or a portable implementation where the result
+  feeds a decision), not in the trace.
 
 ## Parity rules
 
@@ -143,14 +219,40 @@ Each ends with a check that can fail.
 - AGENTS.md "Things that will bite you" is written for the raylib build; most
   of it dies with the renderer, but the generator and storey entries still hold.
 
+## Next
+
+In order, as of the end of 29 September 2026:
+
+1. **Confirm the reload.** Fire a shot, press R, then `tools/unreal.sh log`:
+   the "reload clip ..." line says whether the drum moved in the clip (the
+   hidden animator) and on the gun. Both near zero: the imported clip is
+   empty or not evaluated. Only the gun's: the copy (BackroomsHeldActor.cpp).
+2. **Run the automation tests on the Mac** (`make unreal-test`). The contract
+   and the replay are the checks that the Mac's compiler and libm generate the
+   same maze and play the same run; nobody has run them there yet.
+3. **Real looks (M5).** Every level look is empty, so the world is flat greybox
+   colours and the pickups, crates and actors are plain shapes. The plan: an
+   editor Python script, like `backrooms_import.py`, that imports the game's own
+   surfaces (`./texdump`) and the CC0 tiles in `assets/materials`, builds a
+   material per surface and fills the five level looks; then lights at the
+   fittings `chunkLayout` places (dead and flickering tubes) and fog.
+4. **Sound (M6).** The sim's `AudioEvent`s are dropped in `FinishFrame`.
+5. **The rest in hand**: the can, the tape deck and the flare (src/port/held.h
+   has `heldItem`; only the revolver has a frame).
+
+A session on the Mac itself (`claude remote-control` in the repository) could
+build, run the tests and read the log directly; from the cloud each Unreal
+change has waited on a build and a pasted log.
+
 ## Not done yet
 
 What the seams leave for the port, or for the raylib build before it.
 
 | item | where | why it matters |
 |---|---|---|
-| floorplan geometry as data | walls, floors, ceilings, soffits, stairs, pools, arches, skirting are still built directly by `bakeChunk` | a port either reuses the mesher's arrays (M2) or needs core to describe the floorplan the way `chunkLayout` describes fixtures |
-| input trace recorder | nothing records `InputFrame`, `dt` and `now` per tick | M4's parity check needs it: record in the raylib build, replay in Unreal, compare positions and events per tick |
-| `vendFootprint`'s `cosf`/`sinf` | src/core/world.cpp | the only libm-dependent result in core; another libm may move a vending collision box by one ulp and fail a golden. A four-entry table of this build's values fixes it (docs/migration.md, "Floating point") |
+| floorplan geometry as data | walls, floors, ceilings, soffits, stairs, pools, arches, skirting are still built directly by `bakeChunk` | the greybox (`src/port`) derives them from core's accessors for M2; art needs core to describe the floorplan the way `chunkLayout` describes fixtures |
+| sound in Unreal | the subsystem drops the sim's `AudioEvent`s (`FinishFrame`); the rest of M4 runs | M6 |
+| libm in the sim | src/sim | replaying a Linux trace on a Mac may diverge (Status, above) |
+| `tubeHash`'s `sinf` | src/core/layout.cpp | the one libm call left in core; may flip a fitting's dead or faulty state on another libm |
 | lighting numbers mirrored by hand | panel half-size, light plane, tube hash in core, the mesher, the shader and `lightAtCPU` | a port reads them from core; the raylib build still has copies |
 | HUD strings are `const char *` sim state | src/sim | a port maps them to its own text type |

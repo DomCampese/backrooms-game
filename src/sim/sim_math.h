@@ -10,6 +10,9 @@ inline Vec3 add(Vec3 a, Vec3 b) { return { a.x + b.x, a.y + b.y, a.z + b.z }; }
 inline Vec3 sub(Vec3 a, Vec3 b) { return { a.x - b.x, a.y - b.y, a.z - b.z }; }
 inline Vec3 scale(Vec3 v, float s) { return { v.x * s, v.y * s, v.z * s }; }
 inline Vec3 negate(Vec3 v) { return { -v.x, -v.y, -v.z }; }
+inline Vec3 cross(Vec3 a, Vec3 b) {
+    return { a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x };
+}
 // Per component, as raymath's Vector3Divide.
 inline Vec3 divide(Vec3 a, Vec3 b) { return { a.x / b.x, a.y / b.y, a.z / b.z }; }
 inline Vec3 lerp(Vec3 a, Vec3 b, float t) {

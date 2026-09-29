@@ -39,6 +39,6 @@ struct InputFrame {
 
     bool begin = false;           // title screen: any key but F11, a click, or a touch start gesture
     DevKeys dev;
-    float screenFov = 70.0f;      // base vertical FOV for the window, deg (Game::fovForWindow)
+    float screenFov = 70.0f;      // base vertical FOV for the window, deg (windowFovY, src/port/view.h)
     bool forceSpawn = false;      // headless capture: put the hunter in view on this tick
 };

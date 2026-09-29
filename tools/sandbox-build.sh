@@ -20,7 +20,7 @@ LINK=("$SO" "-Wl,-rpath,$(dirname "$SO")" "-lpython$PYV" -lm -ldl -lpthread)
 # layers (docs/migration.md). sim may not exist yet.
 shopt -s nullglob
 CORE=(src/core/*.cpp)
-GAME=(src/*.cpp "${CORE[@]}" src/sim/*.cpp)
+GAME=(src/*.cpp "${CORE[@]}" src/sim/*.cpp src/port/*.cpp)
 shopt -u nullglob
 
 # Delete the target before compiling, so a failed build cannot leave a working
@@ -43,8 +43,20 @@ build_mapdump() {
 # contract: core's golden answers (docs/migration.md, "Contract tests").
 build_contract() {
     rm -f contract
-    c++ "${CORE_FLAGS[@]}" tools/contract.cpp "${CORE[@]}" -o contract
+    c++ "${CORE_FLAGS[@]}" tools/contract.cpp tools/contract_lib.cpp "${CORE[@]}" -o contract
     echo "built ./contract (core only)"
+}
+# replay: a recorded trace through the sim alone (src/sim/trace.h).
+build_replay() {
+    rm -f replay
+    c++ "${CORE_FLAGS[@]}" tools/replay.cpp src/sim/*.cpp "${CORE[@]}" -o replay
+    echo "built ./replay (core and sim only)"
+}
+# greybox-view: the port's greybox (src/port) round a spot, drawn with raylib.
+build_greybox_view() {
+    rm -f greybox-view
+    c++ "${FLAGS[@]}" tools/greybox-view.cpp src/port/*.cpp "${CORE[@]}" -o greybox-view "${LINK[@]}"
+    echo "built ./greybox-view (python$PYV)"
 }
 # texdump: every texture generator, run without a window, written to PNG with
 # its mean colour — see the top of tools/texdump.cpp.
@@ -67,6 +79,8 @@ case "${1:-game}" in
     mapdump) build_mapdump ;;
     texdump) build_texdump ;;
     contract) build_contract ;;
-    all)     build_game; build_mapdump; build_contract; build_texdump ;;
-    *)       echo "usage: $(basename "$0") [game|mapdump|contract|texdump|all]"; exit 2 ;;
+    replay)  build_replay ;;
+    greybox-view) build_greybox_view ;;
+    all)     build_game; build_mapdump; build_contract; build_replay; build_greybox_view; build_texdump ;;
+    *)       echo "usage: $(basename "$0") [game|mapdump|contract|replay|greybox-view|texdump|all]"; exit 2 ;;
 esac

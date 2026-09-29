@@ -12,7 +12,7 @@ revolver and compact texture assets embedded at build time.
 
 ## License and credits
 
-This unofficial hobby game is released under **GNU GPLv3**. See [LICENSE](LICENSE)
+This unofficial hobby game is released under the **MIT License**. See [LICENSE](LICENSE)
 and [Credits and third-party notices](CREDITS.md) for the full terms, Backrooms
 wiki author acknowledgments, and the separate licenses for adapted lore and assets.
 Thanks to the Backrooms community, especially 1000dumplings and the other authors
@@ -568,6 +568,7 @@ With the F3 debug HUD open, dev hotkeys are live: `B` force blackout,
 - `BACKROOMS_MENU=1` — hold on the title screen (skips the auto-start; visual testing).
 - `BACKROOMS_EXITS=1` — exit doors everywhere (visual testing).
 - `BACKROOMS_MANILA=1` — a Manila Room in the chunk east of spawn, centred at x 48, z 16 (visual testing).
+- `BACKROOMS_RECORD=path` — record every call on the sim to a trace; `./replay path` replays it without the game (src/sim/trace.h).
 - `BACKROOMS_POS="x,z,yaw[,pitch]"` — start at a specific spot and heading, optionally looking up (+) or down (-) by `pitch` radians (visual testing).
 - `BACKROOMS_LEVEL=n` — start on level n (visual testing).
 - `BACKROOMS_SEED=n` — fix the world seed (repeatable maze).

@@ -1,5 +1,6 @@
 #include "revolver.h"
-#include "sim/weapon_timing.h"
+#include "port/held.h"
+#include "vec_rl.h"
 #include "raymath.h"
 #include <algorithm>
 #include <cstring>
@@ -27,21 +28,19 @@ void Revolver::load() {
     pose(0,0,6);
 }
 void Revolver::pose(float reloadTime,float cooldown,int ammo) {
-    int clip=idle;float progress=0;
-    if(reloadTime>0) {clip=reload;progress=std::clamp(1-reloadTime/RELOAD_TIME,0.0f,1.0f);}
-    else if(cooldown>0) {clip=shoot;progress=std::clamp(1-cooldown/SHOT_INTERVAL,0.0f,1.0f);}
+    // Which clip and where the drum stands are src/port/held.cpp's, which the
+    // Unreal build reads too.
+    const RevolverPose p=revolverPose(reloadTime,cooldown,ammo);
+    const int clip=p.clip==RevolverClip::Reload?reload:p.clip==RevolverClip::Shoot?shoot:idle;
+    const float progress=p.progress;
     if(clip==lastClip && progress==lastProgress && ammo==lastAmmo)return;
     lastClip=clip;lastProgress=progress;lastAmmo=ammo;
     asset.sample(clip,progress);
     const Transform root=asset.sampledPose[handle];
-    muzzlePosition=transformPoint({0,.038805f,.237063f},root);
-    // The prepared Shoot clip is one cycle. Preserve the cumulative drum index
-    // across shots, and blend it back to the authored reload's starting index.
-    float turns=6-std::clamp(ammo,0,6)-(clip==shoot?1:0);
-    if(clip==reload)turns*=1-std::min(progress*(1.1666666f/.15f),1.0f);
-    Vector3 pivot=transformPoint({0,.038805f,.033062f},root);
+    muzzlePosition=transformPoint(toRl(REVOLVER_MUZZLE),root);
+    Vector3 pivot=transformPoint(toRl(REVOLVER_DRUM_PIVOT),root);
     Vector3 axis=Vector3RotateByQuaternion({0,0,1},root.rotation);
-    Quaternion rotation=QuaternionFromAxisAngle(axis,turns*PI/3);
+    Quaternion rotation=QuaternionFromAxisAngle(axis,p.drumTurns*PI/3);
     for(int bone:spinningBones) {
         Transform &t=asset.sampledPose[bone];
         t.translation=Vector3Add(pivot,Vector3RotateByQuaternion(Vector3Subtract(t.translation,pivot),rotation));

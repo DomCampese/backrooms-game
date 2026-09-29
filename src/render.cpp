@@ -1,5 +1,6 @@
 #include "game.h"
 #include "input.h"
+#include "port/held.h"
 #include "textures.h"   // ENT_FRAMES / ENT_ROWS / DOG_FRAMES: the sprite-sheet layout
 #include "raymath.h"
 #include "rlgl.h"
@@ -96,12 +97,11 @@ void Game::renderScene(double now) {
     int pcx = fdiv(cellOf(sim.px), CCELLS), pcz = fdiv(cellOf(sim.pz), CCELLS);
     int pci = cellOf(sim.px), pck = cellOf(sim.pz);
     Camera3D cam = {};
-    cam.position = { sim.px, sim.eyeY, sim.pz };
-    cam.target = Vector3Add(cam.position, toRl(sim.fwd));
-    // roll the up-vector a touch when strafing, so the camera leans into it
-    float roll = sim.leanCur * -0.035f + sim.squeezeBlend * 0.07f + sim.floatRoll;
-    cam.up = { sim.r2x * sinf(roll), cosf(roll), sim.r2z * sinf(roll) };
-    cam.fovy = sim.fov;
+    const SimView view = simView(sim);
+    cam.position = toRl(view.eye);
+    cam.target = Vector3Add(cam.position, toRl(view.forward));
+    cam.up = toRl(view.up);
+    cam.fovy = view.fovY;
     cam.projection = CAMERA_PERSPECTIVE;
 
     float timeF = (float)now;
@@ -710,8 +710,8 @@ void Game::renderScene(double now) {
             DrawSphere(p,0.009f,color);
         }
     }
-    if (!sim.inMenu && (sim.drinkT > 0 || (sim.weapon == WEAPON_DECK && sim.deck.carried) ||
-                    sim.weapon == WEAPON_REVOLVER || (sim.weapon == WEAPON_FLARE && sim.flares > 0))) {
+    const Held held = heldItem(sim);
+    if (held != Held::None) {
         // Held against a wall, the can falls inside that wall's shadow and goes
         // black in your hands. A viewmodel shouldn't be shadowed by the room it
         // is being held in, so switch the occlusion grid off for this one draw
@@ -725,8 +725,8 @@ void Game::renderScene(double now) {
         const Vector3 &la = LEVELS[sim.level].amb;
         Vector3 vmAmb = { fmaxf(la.x, 0.150f), fmaxf(la.y, 0.142f), fmaxf(la.z, 0.128f) };
         SetShaderValue(worldShader, locAmb, &vmAmb, SHADER_UNIFORM_VEC3);
-        if (sim.drinkT > 0) drawDrinkCan(cam);        // both hands are busy — the deck goes away
-        else if (sim.weapon == WEAPON_DECK) drawHeldDeck(cam);
+        if (held == Held::Can) drawDrinkCan(cam);        // both hands are busy — the deck goes away
+        else if (held == Held::Deck) drawHeldDeck(cam);
         else drawHeldWeapon(cam);
         SetShaderValue(worldShader, locOccN, &occN, SHADER_UNIFORM_FLOAT);   // both as they were
         SetShaderValue(worldShader, locAmb, &la, SHADER_UNIFORM_VEC3);
@@ -738,30 +738,15 @@ void Game::renderScene(double now) {
 // Held geometry belongs to the scene pass: perspective, room lighting and
 // post-processing all affect it just as they affect the can and the deck.
 void Game::drawHeldWeapon(const Camera3D &cam) {
+    // Where it is held is src/port/held.cpp's, which the Unreal build reads too.
+    const HeldFrame f = heldWeapon(sim, simView(sim));
     Vector3 right{sim.r2x, 0, sim.r2z};
     Vector3 up = Vector3Normalize(Vector3CrossProduct(right, toRl(sim.fwd)));
-    float dip = sim.weapon == WEAPON_REVOLVER && sim.reloadT > 0
-        ? sinf(clampf(1 - sim.reloadT / RELOAD_TIME, 0, 1) * PI) : 0;
-    float kick = sim.weapon == WEAPON_REVOLVER ? sim.recoil : 0;
-    float aim = sim.weapon == WEAPON_REVOLVER ? sim.aimBlend * sim.aimBlend * (3 - 2 * sim.aimBlend) : 0;
-    // The front blade is at GLB Z/Y (0.23706, 0.07560). Keep its tip on
-    // the camera ray, with the eye just clearing the rear frame rib. Aligning
-    // the rib top exactly with the blade hides the blade behind this model's solid rear face.
-    float tilt = sim.weapon == WEAPON_REVOLVER ? 0.06f - 0.063f * aim + kick * 0.30f - dip * 0.65f : 0.85f;
-    Vector3 forward = Vector3Normalize(Vector3Add(toRl(sim.fwd),
-        Vector3Add(Vector3Scale(right, -0.20f * (1 - aim)), Vector3Scale(up, tilt))));
-    Vector3 axisUp = Vector3Normalize(Vector3CrossProduct(right, forward));
-    Vector3 axisRight = Vector3Normalize(Vector3CrossProduct(forward, axisUp));
-    float sway = sinf(sim.bobPhase * PI) * 0.003f * sim.bobAmt * (1 - aim);
-    Vector3 pos = Vector3Add(cam.position, Vector3Add(Vector3Scale(toRl(sim.fwd), 0.155f-kick*0.012f),
-        Vector3Add(Vector3Scale(right, 0.077f*(1-aim)+sway), Vector3Scale(up, -0.072f+0.03605f*aim-dip*0.024f))));
-    // Farthest vertex is <0.33 m from the eye, even during recoil/reload.
-    float scale = sim.weapon == WEAPON_REVOLVER ? 0.48f : 0.64f;
     Matrix m{};
-    m.m0=axisRight.x*scale; m.m1=axisRight.y*scale; m.m2=axisRight.z*scale;
-    m.m4=axisUp.x*scale; m.m5=axisUp.y*scale; m.m6=axisUp.z*scale;
-    m.m8=forward.x*scale; m.m9=forward.y*scale; m.m10=forward.z*scale;
-    m.m12=pos.x; m.m13=pos.y; m.m14=pos.z; m.m15=1;
+    m.m0=f.right.x*f.scale; m.m1=f.right.y*f.scale; m.m2=f.right.z*f.scale;
+    m.m4=f.up.x*f.scale; m.m5=f.up.y*f.scale; m.m6=f.up.z*f.scale;
+    m.m8=f.forward.x*f.scale; m.m9=f.forward.y*f.scale; m.m10=f.forward.z*f.scale;
+    m.m12=f.pos.x; m.m13=f.pos.y; m.m14=f.pos.z; m.m15=1;
     float gloss = sim.weapon == WEAPON_REVOLVER ? 0.48f : 0.12f;
     SetShaderValue(worldShader, locGloss, &gloss, SHADER_UNIFORM_FLOAT);
     if (sim.weapon == WEAPON_REVOLVER) {

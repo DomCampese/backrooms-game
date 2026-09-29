@@ -1,4 +1,5 @@
 // What you hold: the revolver and its rounds, flares, the party balloons.
+#include "../core/fp_strict.h"
 #include "sim.h"
 #include <algorithm>
 #include <cmath>

@@ -23,8 +23,8 @@ endif
 # No fused multiply-adds: core's results must not depend on the compiler
 # (src/core/fp_strict.h). Every command here compiles core with the rest.
 CXX_FLAGS := -std=c++17 -O2 -Wall -Wno-missing-field-initializers -ffp-contract=off
-SRCS := $(wildcard src/*.cpp src/core/*.cpp src/sim/*.cpp)
-HDRS := $(wildcard src/*.h src/core/*.h src/sim/*.h)
+SRCS := $(wildcard src/*.cpp src/core/*.cpp src/sim/*.cpp src/port/*.cpp)
+HDRS := $(wildcard src/*.h src/core/*.h src/sim/*.h src/port/*.h)
 
 src/object_materials.generated.h: tools/embed-materials.py $(wildcard assets/materials/*.jpg)
 	python3 tools/embed-materials.py objects
@@ -66,10 +66,32 @@ benchmark-animation: $(GENERATED) tools/bench-animation.cpp $(filter-out src/mai
 # Core's golden answers, linked against src/core alone (docs/migration.md,
 # "Contract tests").
 CORE_SRCS := $(wildcard src/core/*.cpp)
-contract: tools/contract.cpp $(CORE_SRCS) $(wildcard src/core/*.h)
-	c++ $(CXX_FLAGS) tools/contract.cpp $(CORE_SRCS) -o contract
+contract: tools/contract.cpp tools/contract_lib.cpp tools/contract_lib.h $(CORE_SRCS) $(wildcard src/core/*.h)
+	c++ $(CXX_FLAGS) tools/contract.cpp tools/contract_lib.cpp $(CORE_SRCS) -o contract
 
 contract-check: contract
 	./contract --check
 
 .PHONY: contract-check
+
+# A recorded trace (BACKROOMS_RECORD) replayed through the sim alone.
+SIM_SRCS := $(wildcard src/sim/*.cpp)
+replay: tools/replay.cpp $(SIM_SRCS) $(CORE_SRCS) $(wildcard src/sim/*.h src/core/*.h)
+	c++ $(CXX_FLAGS) tools/replay.cpp $(SIM_SRCS) $(CORE_SRCS) -o replay
+
+replay-check: replay
+	for t in tests/traces/*.trace; do ./replay "$$t" || exit 1; done
+
+.PHONY: replay-check
+
+# The Unreal project (unreal/), on a Mac with Unreal Engine 5.8: tools/unreal.sh.
+# Build after every pull; opening the .uproject does not recompile.
+unreal:
+	tools/unreal.sh build
+unreal-open:
+	tools/unreal.sh open
+unreal-play:
+	tools/unreal.sh play
+unreal-test:
+	tools/unreal.sh test
+.PHONY: unreal unreal-open unreal-play unreal-test

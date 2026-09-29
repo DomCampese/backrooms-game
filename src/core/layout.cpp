@@ -75,8 +75,12 @@ void railOn(World &w, Opening &op, int a, int b, bool west) {
         base = std::min(base, w.floorY(ca, cb));
         return (f & VF_STAIR) ? w.stairY(x, z, true) : w.floorY(ca, cb);
     };
+    // The far side first, as statements: side() writes voidSide, and a
+    // function's arguments are evaluated in no fixed order (gcc and clang differ).
     auto topAt = [&](float x, float z) {
-        return std::max(side(a, b, x + inx, z + inz), side(oa, ob, x - inx, z - inz));
+        float across = side(oa, ob, x - inx, z - inz);
+        float own = side(a, b, x + inx, z + inz);
+        return std::max(own, across);
     };
     float t0 = topAt(ex0 + (ex1 - ex0) * 0.01f, ez0 + (ez1 - ez0) * 0.01f);
     float t1 = topAt(ex0 + (ex1 - ex0) * 0.99f, ez0 + (ez1 - ez0) * 0.99f);

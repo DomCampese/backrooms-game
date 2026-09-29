@@ -11,12 +11,13 @@ in docs/unreal-handoff.md.
 |---|---|---|---|
 | core | `src/core/` | the C++17 standard library only | math types, hashes and noise, per-level rules, chunk generation, storeys and features, collision, line of sight, pathfinding, the light-occlusion grid, the layout description |
 | sim | `src/sim/` | core | game state and rules: player, hunter, dogs, health, pickups, exits, blackouts, storey changes. Takes an input frame and a clock, emits events |
+| port | `src/port/` | core, sim | engine-neutral code a port shares with the raylib build: the view the camera shows (`simView`, `windowFovY`) and the greybox mesher (docs/unreal-handoff.md, M2) |
 | platform | `src/` | everything | the raylib backend: window, input, mesher, textures, shaders, rendering, audio, the revolver model |
 
 Rules:
 
-- core and sim do not include `raylib.h`, `rlgl.h` or any GL, audio or window
-  header. `tools/core-check.sh` compiles them alone and fails if one does.
+- core, sim and port do not include `raylib.h`, `rlgl.h` or any GL, audio or
+  window header. `tools/core-check.sh` compiles them alone and fails if one does.
 - core and sim never read the wall clock or a global random source. Time comes
   in as an argument; randomness comes from seeded `Rng`.
 - Nothing in core or sim knows about textures, atlases, UVs or meshes. Where the
@@ -47,9 +48,11 @@ done; done
 
 ## Contract tests
 
-`tools/contract.cpp` links src/core alone and compares its answers with the
-text files in `tests/golden`. A port running the same core must reproduce every
-line. It runs in under 0.1 s.
+`tools/contract_lib.cpp` generates core's answers and compares them with the
+text files in `tests/golden`; `tools/contract.cpp` is its command line, and the
+Unreal automation test (unreal/, docs/unreal-handoff.md) runs the same library.
+Both link src/core alone. A port running the same core must reproduce every
+line. It runs in under a second.
 
 ```bash
 tools/sandbox-build.sh contract    # or: make contract-check
@@ -63,6 +66,7 @@ tools/sandbox-build.sh contract    # or: make contract-check
 | `chunks_full.txt` | 18 of those chunks field by field, one row per z: the origin chunk of every level and visit, and the Level 0 visit 1 feature chunks |
 | `queries.txt` | `gatherCellAABBs`, `collideCircle`, `groundAt` (through a hole into the storey below, on flights, on a vending machine), `stairY` up each flight kind, `lineOfSight`, `canStep`, `pathStep`, `findOpenSpot`, `ceilY`, `buildOccupancy` over a 48-cell window, `vendFootprint` for each turn and flag. Probes are doors, a locked door, rails, a pillar, holes and vending machines found in the generated world, and seeded samples, each printed with the coordinates of the call |
 | `mutations.txt` | `shiftEdge` and `unlockEdge` on chosen edges: the walls read back through `wallNVal`/`wallWVal`, the `staleChunks` entries appended, and a repeat that appends nothing |
+| `layout.txt` | `chunkLayout` item by item, every field: the origin and far chunks of every level and visit, both storeys of each Level 0 feature kind at visit 1, and a Manila Room |
 
 A failure names the file, line, chunk and field: `FAIL chunks.txt:4 [chunk L0
 v0 s0 (0,-1)] fields elev`, or the field and row of a full dump. Floats are
@@ -81,9 +85,9 @@ Core's results must not depend on the compiler. Two mechanisms, both needed:
 | mechanism | where | covers |
 |---|---|---|
 | `-ffp-contract=off` | Makefile, `tools/sandbox-build.sh`, `tools/web-build.sh`, `tools/core-check.sh` | gcc, clang, em++ |
-| `src/core/fp_strict.h`, included first by every core .cpp | the source | clang (`#pragma clang fp contract(off)`), MSVC (`float_control(precise, on)` then `fp_contract(off)`), others (`STDC FP_CONTRACT OFF`); GCC ignores pragmas and needs the flag |
+| `src/core/fp_strict.h`, included first by every core, sim and port .cpp | the source | clang (`#pragma clang fp contract(off)`), MSVC (`float_control(precise, on)` then `fp_contract(off)`), others (`STDC FP_CONTRACT OFF`); GCC ignores pragmas and needs the flag |
 
-Rule: no fused multiply-adds in core. A fused multiply-add rounds once where
+Rule: no fused multiply-adds in core or the sim. A fused multiply-add rounds once where
 the source rounds twice, and the generator thresholds noise (`fbm2(...) >
 0.60f`), so contraction can flip a comparison and generate a different maze.
 clang contracts within an expression by default (the Mac arm64 build); gcc
@@ -102,16 +106,31 @@ defaults and run the contract tests under it.
 
 libm: generation uses no transcendental function. `sqrtf` (collision, sight)
 is correctly rounded by IEEE 754 on every platform, and `floorf`, `ceilf` and
-`fabsf` are exact. The one dependency is `vendFootprint` (world.cpp,
-`float yaw = (rotByte & 3) * PROP_TURN, ca = cosf(yaw), sa = sinf(yaw);`),
-which feeds the vending machine's collision box and the mesher. `PROP_TURN` is
-1.5708, not pi/2, so the results are tiny non-zero values (glibc: cos 1.5708 =
--0x1.e5ddeap-19) whose last bit another libm may round differently. That moves
-a corner by about 1e-13 m before rounding, enough to change a stored coordinate
-by one ulp. The contract prints these boxes, so a port on another
-libm would fail there first. Replacing the two calls with a four-entry table of
-glibc's values (hex float literals) is cheap and preserves every result on this
-build; it has not been done.
+`fabsf` are exact. `vendFootprint` used `cosf`/`sinf` of a quarter turn;
+`PROP_TURN` is 1.5708, not pi/2, so the results are tiny non-zero values whose
+last bit another libm may round differently. It now reads a four-entry table of
+glibc's values (hex float literals), so every result is unchanged here and the
+same everywhere.
+
+One libm dependency remains: `tubeHash` (layout.cpp) is `fract(sinf(...) *
+43758.5453)`, the GLSL hash the shader also uses, and decides which fittings
+are dead, dim or faulty. A `sinf` that rounds its last bit differently can flip
+one of those on a port. `layout.txt` prints every fitting's state, so a port
+fails there first, and only on fitting lines. Replacing the hash changes which
+tubes are dead in the raylib build too, so it waits for the port to need it.
+
+The sim needs the same. Replaying `tests/traces/walk-l0-l2.trace` built with
+gcc or clang at `-march=native` and no `-ffp-contract=off` diverged at frame 31
+(the audio mix first) until every sim .cpp included `fp_strict.h`; with it,
+clang passes without the flag. The sim also calls `sinf`, `cosf`, `atan2f` and
+`expf` freely, so a replay on another libm may still diverge
+(docs/unreal-handoff.md, "Status").
+
+Evaluation order: a function's arguments are evaluated in no fixed order, and
+gcc and clang differ. `railOn` passed two calls that both wrote `voidSide` to
+`std::max`; gcc and clang gave different `voidSide` for a rail with holes on
+both sides (one the mesher does not draw). The layout golden caught it on its
+first clang run. Call anything with a side effect as its own statement.
 
 ## Status
 
@@ -119,7 +138,7 @@ build; it has not been done.
 |---|---|---|
 | 1 core | done | `tools/core-check.sh`, `./contract --check`, the mapdump set |
 | 2 layout | props, fixtures, light fittings, openings done; floorplan geometry still built in the mesher | mesh-bake comparison (method below), `./contract --check` |
-| 3 sim | done; src/sim depends on core only | `tools/core-check.sh`, the regression harness |
+| 3 sim | done; src/sim depends on core only | `tools/core-check.sh`, the regression harness, `./replay tests/traces/*.trace` |
 
 Each seam was proved against a build of main from before any of them
 (374a84e): mapdump byte-identical, 0 differing pixels on every world frame of
@@ -252,8 +271,12 @@ input, assets, audio and rendering.
 | hunters.cpp | the hunter (Clark, the Smiler, the Partygoer) and the Red Halls pack |
 | place.cpp | blackouts, whispers, sanity and the slide, shifting walls, exits, the Manila Room |
 
-**Entry points.** `Sim::step(const InputFrame &, float dt, double now)` runs one
-tick of play. The title screen is `menuDrift(dt, now)`, then the platform
+**Entry points.** A run starts from a `SimStart` (src/sim/start.h): what the
+platform decides before the first tick (seed, spawn, level, storey, torch,
+title screen, records). `simBegin`, then `applyLevel(0)` (and the start level,
+if any) once each level's look is made, then `simPlace`, in that order, which
+keeps grng's draws where they were. `Sim::step(const InputFrame &, float dt,
+double now)` runs one tick of play. The title screen is `menuDrift(dt, now)`, then the platform
 streams chunks, then `menuBegin(in, now)`. `setPaused(on, now)` slides every
 schedule by the pause. `applyLevel` and `beginDescent` set a level or a descent
 up; `Game::init` calls them in the order that keeps grng's draws where they were.
@@ -292,7 +315,7 @@ blackout and pickup line.
 | `reload throwFlare flashlight use drink chalk` | down edges |
 | `begin` | title screen: any key but F11, a click, a touch start gesture |
 | `dev` | F3-HUD keys (blackout, spawn, chase, banish, refill, storey up/down, next level), false unless the HUD is up |
-| `screenFov` | the window's base vertical FOV (`Game::fovForWindow`) |
+| `screenFov` | the window's base vertical FOV (`windowFovY`, src/port/view.h) |
 | `forceSpawn` | headless capture: put the hunter in view on this tick |
 
 **`AudioEvent`** (src/sim/audio_events.h), queued in `Sim::audio` and played in
@@ -305,6 +328,16 @@ order by `GameAudio::play` after each tick:
 | `VOICE_STOP` | stop the tape voice if it is playing |
 | `LOOPS` | ease and feed the underwater loop and LEVEL FUN's music for `dt`, by `LoopCue` |
 | `AMBIENCE` | give the synth `mix` (an `AmbienceMix`) and let it fill its buffers |
+
+**Traces** (src/sim/trace.h). `BACKROOMS_RECORD=path` records every call the
+platform makes on the sim (start, level entries, pauses, each frame's input,
+`dt`, clock and `clockSeed`, each `SolidTracer` answer) and a digest of the
+state after each frame, one text line per record. `./replay path`
+(`tools/sandbox-build.sh replay`, core and sim only) replays it through a fresh
+`Sim` and stops at the first digest that differs. `tests/traces` holds one,
+recorded by `tools/record-trace.sh`. A new `InputFrame` field goes into
+`inputFields` in trace.cpp, or it is not recorded; a new state worth comparing
+goes into `simDigest`.
 
 **Other outputs**, each cleared by the platform when it acts: `shadowsStale`
 (rebuild the light-occlusion grid), `dropAimLatch` (release a latched touch

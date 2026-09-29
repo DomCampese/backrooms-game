@@ -220,7 +220,8 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    const int N = a.cells, half = N / 2;
+    // The window is -half..half on each axis, so N is odd: an even --cells rounds up.
+    const int half = a.cells / 2, N = 2 * half + 1;
     printf("mapdump  level %d  seed %u  storey %d  %dx%d cells (%.0f x %.0f m)\n",
            a.level, a.seed, a.storey, N, N, N * CELL, N * CELL);
     if (a.visit) printf("  (visit %u)\n", a.visit);

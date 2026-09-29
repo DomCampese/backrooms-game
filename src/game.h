@@ -4,6 +4,8 @@
 // plays its audio events and draws its state (docs/migration.md).
 #include "raylib.h"
 #include "sim/sim.h"
+#include "sim/trace.h"
+#include "port/view.h"
 #include "levels.h"
 #include "util.h"
 #include "vec_rl.h"
@@ -43,6 +45,9 @@ struct Game {
     Sim sim;
     ChunkMeshCache chunkMeshes;   // the world's chunks, baked
     MeshTracer tracer{ sim.world, chunkMeshes };
+    // BACKROOMS_RECORD: every call on the sim, for tools/replay (src/sim/trace.h).
+    TraceWriter trace;
+    RecordingTracer recordingTracer{ tracer, trace };
     Game() { sim.tracer = &tracer; }
     Game(const Game &) = delete;
     Game &operator=(const Game &) = delete;
@@ -109,12 +114,12 @@ struct Game {
     void playAudio();
     // Materials, shader uniforms and window title for level lv.
     void applyLevelLook(int lv);
+    void enterLevel(int lv);   // its look, then the rules
     void syncLevelLook();                     // applyLevelLook if the sim has entered a level since
     void saveRecords();
     // Base camera fovy for the window, locking the horizontal view so a
     // portrait phone does not play through a 34 deg keyhole.
     float baseFov() const;
-    static float fovForWindow(int w, int h, float aim);   // the same, pure, for the harness
     void streamChunks();
     void updateOccupancy();                   // recentre and re-upload the light-occlusion grid
 

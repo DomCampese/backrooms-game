@@ -5,6 +5,87 @@
 - docs/migration.md: the core / sim / platform layers and what may depend on
   what. docs/unreal-handoff.md: the planned move to Unreal Engine 5.
 
+# Unreal port, first slice (September 2026)
+
+The Unreal project is `unreal/` (its README, docs/unreal-handoff.md "Status").
+The raylib build stays the reference and nothing in it depends on `unreal/`.
+It builds and runs on the target Mac (UE 5.8.3); build it with `make unreal`
+after every pull, since opening the `.uproject` runs the last build.
+docs/unreal-handoff.md "Next" has what is open. What will bite:
+
+- **A new .cpp in src/core, src/sim or src/port needs a one-line wrapper** in
+  `unreal/Plugins/Backrooms/Source/Backrooms/Private/Shared`, or the Unreal
+  module does not compile it. `tools/unreal-check.sh` fails until it has one;
+  it also builds the wrappers the module's way (clang, C++20, `-Werror`,
+  `-Wshadow`, FMA on, no `-ffp-contract=off`) and runs the contract and traces.
+- **One module, not two.** Core has no export annotations and editor modules
+  are shared libraries with hidden symbols, so code in a second module cannot
+  call core. No PCH either: the shared PCH is force-included into core's files.
+- **Unreal names reflected types without their A/U/F/E prefix, ignoring
+  case**, and two with the same name fail UHT before anything compiles:
+  `ABackroomsHUD` and a struct `FBackroomsHud` stopped the first build on the
+  Mac ("shares engine name"). The struct is `FBackroomsHudState`.
+- **`AssetRegistryModule.h` no longer brings in `FAssetData` (5.8).** Include
+  `AssetRegistry/AssetData.h` and `AssetRegistry/IAssetRegistry.h` too, or a
+  `TArray<FAssetData>` fails as an incomplete type.
+- **Unreal defines `check()` as a macro.** A shared function named `check` is
+  expanded by it in any file that also includes Unreal (`contract::compare`).
+- **The sim includes `fp_strict.h` now, like core.** Without it (or the flag)
+  a trace replayed with gcc or clang at `-march=native` diverged at frame 31.
+- **Traces** (`BACKROOMS_RECORD=path`, `./replay path`, src/sim/trace.h): a new
+  `InputFrame` field goes into `inputFields` in trace.cpp or it is not recorded.
+  `tests/traces/walk-l0-l2.trace` is a golden for the sim; a change that moves
+  the sim on purpose re-records it with `tools/record-trace.sh` (needs
+  xdotool) and says so in the commit.
+- **xdotool taps are shorter than a frame.** At the sandbox's 2-3 fps a
+  `xdotool key` press and release land inside one poll and raylib never sees
+  the key. Hold every key across a frame (record-trace.sh's `key`).
+- **The game starts a run through `SimStart`** (src/sim/start.h): `Game::init`
+  fills it from the BACKROOMS_* knobs and calls `simBegin`, `enterLevel`,
+  `simPlace`. A replay and a port call the same three.
+- **A capture's spawn spot is chosen before any level is entered**: `simBegin`
+  runs `findOpenSpot` in Level 0's maze at visit 0 on one storey, and the
+  capture then stands at that spot in whatever level it enters.
+  `tools/greybox-view.cpp` repeats this; a tool that picks its spot in the
+  final level's maze photographs somewhere else (the stairwell shot did).
+- **`mapdump --cells` with an even number overflowed a buffer** (the window is
+  `-half..half`, one more than N) and aborted with "double free or corruption".
+  It now rounds up to odd; every documented command used odd sizes.
+- **The Unreal editor's enums mirror core's.** `EBackroomsProp` lists `PropKind`
+  and `EBackroomsSurface` lists `GreySurface` in the same order
+  (unreal/.../BackroomsTypes.h), and `EBackroomsItem` lists `SceneKind`
+  (src/port/scene.h); a new prop kind, greybox surface or scene kind goes into
+  both, or a level look's meshes land on the wrong things.
+- **The revolver's placement and pose are src/port/held.cpp's** (`heldWeapon`,
+  `revolverPose`), which render.cpp, revolver.cpp and the Unreal
+  `ABackroomsHeldActor` all read; the move was checked against a capture of
+  the old build (0 pixels over 16/255, none on the gun). The Unreal side
+  does not assume the glTF importer's axes or units: it reads them off the
+  mesh's bounds (the barrel is the longest axis, the thinnest is the GLB's x;
+  under 2 units long means metres). The gun's state (nothing imported, a
+  static mesh, missing clips, or shown and how big) is logged as
+  "Backrooms:" when it changes, and each reload logs how far the drum moved
+  in the clip and on the gun (`tools/unreal.sh log`). If it faces the wrong
+  way, `RevolverMeshRotation` in Project Settings > Game > Backrooms turns it.
+- **`init_unreal.py` also runs when the editor binary runs the game**
+  (`-game`, `make unreal-play`). There is no editor then, and its first
+  EditorAssetLibrary call crashed the game in `GetSubsystemInternal`; it now
+  skips the import under `-game`.
+- **The editor imports the repository's models itself.**
+  `Plugins/Backrooms/Content/Python/init_unreal.py` runs when the editor opens
+  the project and imports any missing ones to the paths the settings name;
+  `unreal/Content/Backrooms/Revolver/` is gitignored because of it. A game run
+  from a project the editor has never opened has no gun.
+- **`simScene` (src/port/scene.cpp) repeats render.cpp's placement** of
+  pickups, crates, balloons, chalk and the rest, for the Unreal build. Change
+  where render.cpp draws one of those and change it there too, until render.cpp
+  draws from `simScene` itself.
+  BackroomsTypes.cpp static_asserts the ends of each list, not every entry.
+- **The layout golden (`tests/golden/layout.txt`) prints every field**, so an
+  uninitialised field shows as a nondeterministic line: `Fixture::end` was
+  garbage for most kinds until it was zeroed. A new field needs a value for
+  every kind.
+
 # Core library (September 2026)
 
 The generator is a library with no raylib in it, so an engine port can reuse
@@ -620,6 +701,8 @@ time so the executable remains independent of its working directory.
 | `core/level_rules.h` | per-level rules: wall height, light pitch, storey pitch, name, which tubes work, exits |
 | `core/layout.{h,cpp}` | `ChunkLayout`: a chunk's props, fixtures, light fittings and openings, decided from the seed |
 | `core/hash.{h,cpp}`, `core/vec.h` | hashes, RNG, value noise; `Vec2`/`Vec3`, `TAU`, `clampf` |
+| `sim/start.{h,cpp}`, `sim/trace.{h,cpp}` | how a run starts (`SimStart`); recording and replaying the calls on the sim |
+| `port/view.{h,cpp}`, `port/greybox.{h,cpp}` | what the camera shows of the sim (both builds draw from it); a chunk as plain boxes and quads for a port's first milestone |
 | `world_mesh.{h,cpp}` | the chunk mesher (`bakeChunk`), `ChunkMesh` slots, `ChunkMeshCache` |
 | `mesh_builder.{h,cpp}` | `MB`, `addPropBox`, `addSolidBox`, `PLAIN_UV` |
 | `object_meshes.{h,cpp}` | can, tape deck, reels, flare, supply crate |
@@ -1020,6 +1103,7 @@ Environment variables, all read at startup:
 | `BACKROOMS_MENU=1` | hold on the title screen instead of starting the run |
 | `BACKROOMS_FLASH=1` | start with the flashlight on |
 | `BACKROOMS_MANILA=1` | put a Manila Room in the chunk east of spawn (centre x 48, z 16) |
+| `BACKROOMS_RECORD=path` | record every call on the sim, for `./replay` and the port (src/sim/trace.h) |
 
 **`BACKROOMS_NOENT` does not exist.** It appears in scratch scripts written
 during development and is silently ignored — it never suppressed the entity.
@@ -1451,7 +1535,7 @@ the number instead of reading it.
 `tests/fixtures` or it exits immediately on its first `CHECK` — which reads as
 a broken build rather than a missing variable. `tools/sandbox-build.sh` has no
 regression target, so nothing in the repo tells you that; build it by hand with
-`src/*.cpp` and `src/core/*.cpp` (and `src/sim/*.cpp` once it exists) minus
+`src/*.cpp`, `src/core/*.cpp`, `src/sim/*.cpp` and `src/port/*.cpp` minus
 `main.cpp`, plus `tools/regression.cpp`.
 
 **raylib 6.0 redefined `SetSoundPan`'s argument without renaming it.** 5.5 took
@@ -1549,11 +1633,11 @@ the aspect — so the authored 70 was only right at the 1440x850 window (about
 against. On a portrait phone (0.46:1) it became a 34 deg horizontal keyhole
 that read as "the game is fine, just narrow" rather than as a projection bug.
 `Game::baseFov()` now locks the horizontal view instead (pure
-`fovForWindow()` for the harness), exact at the authored shape so the sweep
+`windowFovY()` in src/port/view.h, which the harness and a port call), exact at the authored shape so the sweep
 stays pixel-clean, clamped 58-100 vertical so square windows don't go fisheye
 and phone-landscape doesn't go binoculars. Two rules to keep: the sprint/aim/
 slide terms stay constant *vertical* offsets on the base — they are action,
-not viewport — and `fovForWindow` must invert raylib's own cone identity
+not viewport — and `windowFovY` must invert raylib's own cone identity
 (`tan(fovy/2) = tan(fovX/2)·h/w`, the one render.cpp's culling uses), or the
 lock drifts from what the camera draws. The harness drives sprint through an
 `InputFrame` with `sprint` held, so the sprint pull is checked live.

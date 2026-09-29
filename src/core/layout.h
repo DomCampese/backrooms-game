@@ -84,7 +84,7 @@ enum class FixtureKind : uint8_t {
 struct Fixture {
     FixtureKind kind;
     int8_t i = -1, k = -1;   // chunk-local cell; -1 for one that belongs to the chunk
-    Vec3 pos, end, normal;
+    Vec3 pos{}, end{}, normal{};   // zero where a kind leaves them unused
     float w = 0, h = 0, angle = 0;
     uint32_t seed = 0;
     uint8_t variant = 0, tone = 0;
