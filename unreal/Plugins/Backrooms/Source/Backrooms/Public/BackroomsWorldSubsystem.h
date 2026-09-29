@@ -54,6 +54,7 @@ public:
 	FTransform ViewTransform(float& OutFovY) const;
 	const Sim* GetSim() const { return Game; }
 
+	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
 	virtual void Tick(float DeltaTime) override;
 	virtual TStatId GetStatId() const override;

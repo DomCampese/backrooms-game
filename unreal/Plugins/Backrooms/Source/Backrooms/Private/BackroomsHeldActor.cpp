@@ -164,6 +164,17 @@ bool ABackroomsHeldActor::Load()
 
 void ABackroomsHeldActor::Show(const Sim& Game, const FVector& Origin)
 {
+	const FString Before = Status;
+	ShowRevolver(Game, Origin);
+	// The "shown" line carries sizes that move every frame; log only its kind.
+	if (Status.Left(16) != Before.Left(16))
+	{
+		UE_LOG(LogTemp, Display, TEXT("Backrooms: %s"), *Status);
+	}
+}
+
+void ABackroomsHeldActor::ShowRevolver(const Sim& Game, const FVector& Origin)
+{
 	const bool bRevolver = heldItem(Game) == Held::Revolver;
 	if (!bRevolver || !Load())
 	{

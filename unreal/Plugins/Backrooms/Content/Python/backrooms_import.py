@@ -74,5 +74,9 @@ def import_revolver():
 
 
 def import_missing():
-    if missing():
+    left = missing()
+    if left:
+        unreal.log("Backrooms: importing the revolver; missing " + ", ".join(left))
         import_revolver()
+    else:
+        unreal.log("Backrooms: the revolver is already imported in " + REVOLVER_DIR)

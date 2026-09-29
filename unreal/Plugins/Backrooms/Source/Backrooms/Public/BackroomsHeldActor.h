@@ -31,6 +31,7 @@ public:
 	const FString& GetStatus() const { return Status; }
 
 private:
+	void ShowRevolver(const Sim& Game, const FVector& Origin);
 	bool Load();
 
 	// Plays the clip, hidden; the gun copies its pose and turns the drum.

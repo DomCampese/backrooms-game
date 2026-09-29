@@ -224,6 +224,14 @@ void UBackroomsWorldSubsystem::FreeSim()
 	bRun = false;
 }
 
+void UBackroomsWorldSubsystem::Initialize(FSubsystemCollectionBase& Collection)
+{
+	Super::Initialize(Collection);
+	// Opening the .uproject does not recompile changed source, so an old plugin
+	// binary runs without saying so. This line dates the one that is running.
+	UE_LOG(LogTemp, Display, TEXT("Backrooms: plugin compiled %s %s"), ANSI_TO_TCHAR(__DATE__), ANSI_TO_TCHAR(__TIME__));
+}
+
 void UBackroomsWorldSubsystem::Deinitialize()
 {
 	FreeSim();
