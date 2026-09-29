@@ -30,7 +30,7 @@ void ABackroomsHUD::DrawHUD()
 	{
 		return;
 	}
-	const FBackroomsHud Hud = Backrooms->GetHud();
+	const FBackroomsHudState Hud = Backrooms->GetHud();
 	if (!Hud.bRunning)
 	{
 		return;

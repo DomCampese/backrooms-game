@@ -38,7 +38,7 @@ public:
 
 	// What a HUD shows, as of the last frame.
 	UFUNCTION(BlueprintPure, Category = "Backrooms")
-	FBackroomsHud GetHud() const;
+	FBackroomsHudState GetHud() const;
 	// A level as the raylib build names it, for the free camera. Returns where
 	// to put the camera: beside (15, 15) at eye height.
 	FTransform StartFreeCamera(int32 Level, uint32 Seed, uint32 Visit);

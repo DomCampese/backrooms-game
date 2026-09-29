@@ -44,9 +44,11 @@ enum class EBackroomsControl : uint8
 };
 
 // What a HUD shows, read from the sim after each frame
-// (UBackroomsWorldSubsystem::GetHud). Meters run 0..1.
+// (UBackroomsWorldSubsystem::GetHud). Meters run 0..1. Not FBackroomsHud:
+// Unreal names types without their prefix, ignoring case, and that name is
+// ABackroomsHUD's.
 USTRUCT(BlueprintType)
-struct FBackroomsHud
+struct FBackroomsHudState
 {
 	GENERATED_BODY()
 

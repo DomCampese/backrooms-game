@@ -398,9 +398,9 @@ const UBackroomsLevelLook* UBackroomsWorldSubsystem::CurrentLook()
 	return Look;
 }
 
-FBackroomsHud UBackroomsWorldSubsystem::GetHud() const
+FBackroomsHudState UBackroomsWorldSubsystem::GetHud() const
 {
-	FBackroomsHud Hud;
+	FBackroomsHudState Hud;
 	if (!Game)
 	{
 		return Hud;

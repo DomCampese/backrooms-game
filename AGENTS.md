@@ -19,6 +19,10 @@ Nothing there has been compiled by Unreal yet. What will bite:
 - **One module, not two.** Core has no export annotations and editor modules
   are shared libraries with hidden symbols, so code in a second module cannot
   call core. No PCH either: the shared PCH is force-included into core's files.
+- **Unreal names reflected types without their A/U/F/E prefix, ignoring
+  case**, and two with the same name fail UHT before anything compiles:
+  `ABackroomsHUD` and a struct `FBackroomsHud` stopped the first build on the
+  Mac ("shares engine name"). The struct is `FBackroomsHudState`.
 - **Unreal defines `check()` as a macro.** A shared function named `check` is
   expanded by it in any file that also includes Unreal (`contract::compare`).
 - **The sim includes `fp_strict.h` now, like core.** Without it (or the flag)
