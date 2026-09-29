@@ -460,11 +460,6 @@ void UBackroomsWorldSubsystem::DropAll()
 }
 
 // The raylib build draws pickups 7 cells out and balloons 9; 24 m covers both.
-FString UBackroomsWorldSubsystem::RevolverStatus() const
-{
-	return Hand ? Hand->GetStatus() : FString(TEXT("revolver: no hand actor yet"));
-}
-
 void UBackroomsWorldSubsystem::ShowScene()
 {
 	FActorSpawnParameters Params;

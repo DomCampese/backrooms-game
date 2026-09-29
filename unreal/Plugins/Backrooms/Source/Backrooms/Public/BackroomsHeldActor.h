@@ -4,6 +4,7 @@
 #include "BackroomsHeldActor.generated.h"
 
 struct Sim;
+struct RevolverPose;
 class UAnimSequence;
 class UPointLightComponent;
 class UPoseableMeshComponent;
@@ -26,12 +27,9 @@ public:
 	// Origin places the sim's storey frame in the world.
 	void Show(const Sim& Game, const FVector& Origin);
 
-	// Where the revolver got to: not imported, imported wrong, or shown and
-	// how big. The HUD prints it until the gun is known to work on the Mac.
-	const FString& GetStatus() const { return Status; }
-
 private:
 	void ShowRevolver(const Sim& Game, const FVector& Origin);
+	void ReportReload(const RevolverPose& Pose, const UAnimSequence* Clip);
 	bool Load();
 
 	// Plays the clip, hidden; the gun copies its pose and turns the drum.
@@ -48,7 +46,13 @@ private:
 
 	TArray<FName> DrumBones;
 	FName Handle;
+	// Where the revolver got to (not imported, imported wrong, or shown and how
+	// big), logged as "Backrooms:" each time it changes.
 	FString Status = TEXT("revolver: not held yet");
+	// The drum's place when the current reload began, for ReportReload.
+	FVector DrumAtStart = FVector::ZeroVector;
+	bool bReloading = false;
+	bool bReported = false;
 	// Which GLB axis (0 x, 1 y, 2 z) each of the mesh's axes holds, its units
 	// per metre, and +1 or -1 as that mapping keeps or mirrors a rotation.
 	// Read from the mesh's bounds, so no importer convention is assumed.

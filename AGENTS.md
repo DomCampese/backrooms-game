@@ -60,9 +60,10 @@ Nothing there has been compiled by Unreal yet. What will bite:
   the old build (0 pixels over 16/255, none on the gun). The Unreal side
   does not assume the glTF importer's axes or units: it reads them off the
   mesh's bounds (the barrel is the longest axis, the thinnest is the GLB's x;
-  under 2 units long means metres). The HUD prints the gun's state in a line
-  near the top (nothing imported, a static mesh, missing clips, or shown and
-  how big) until the gun is seen working on the Mac. If it faces the wrong
+  under 2 units long means metres). The gun's state (nothing imported, a
+  static mesh, missing clips, or shown and how big) is logged as
+  "Backrooms:" when it changes, and each reload logs how far the drum moved
+  in the clip and on the gun (`tools/unreal.sh log`). If it faces the wrong
   way, `RevolverMeshRotation` in Project Settings > Game > Backrooms turns it.
 - **`init_unreal.py` also runs when the editor binary runs the game**
   (`-game`, `make unreal-play`). There is no editor then, and its first

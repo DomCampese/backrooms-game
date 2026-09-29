@@ -175,6 +175,35 @@ void ABackroomsHeldActor::Show(const Sim& Game, const FVector& Origin)
 	}
 }
 
+// Once per reload, halfway through, how far the drum has moved from where the
+// reload began: in the clip (the hidden animator) and on the gun you see. Both
+// near zero means the clip is empty or not evaluated; only the gun's, the copy
+// failed.
+void ABackroomsHeldActor::ReportReload(const RevolverPose& Pose, const UAnimSequence* Clip)
+{
+	const int32 Drum = Gun->GetBoneIndex(TEXT("DEF_Cylinder"));
+	if (Drum == INDEX_NONE)
+	{
+		return;
+	}
+	const bool bReload = Pose.clip == RevolverClip::Reload;
+	if (bReload && !bReloading)
+	{
+		DrumAtStart = Animator->GetBoneTransform(Drum, FTransform::Identity).GetLocation();
+		bReported = false;
+	}
+	bReloading = bReload;
+	if (bReload && !bReported && Pose.progress >= 0.5f)
+	{
+		bReported = true;
+		UE_LOG(LogTemp, Display,
+			TEXT("Backrooms: reload clip %s, %.2f s, %d keys; halfway the drum has moved %.1f units in the clip and %.1f on the gun"),
+			*Clip->GetName(), Clip->GetPlayLength(), Clip->GetNumberOfSampledKeys(),
+			FVector::Dist(Animator->GetBoneTransform(Drum, FTransform::Identity).GetLocation(), DrumAtStart),
+			FVector::Dist(Gun->GetBoneTransformByName(TEXT("DEF_Cylinder"), EBoneSpaces::ComponentSpace).GetLocation(), DrumAtStart));
+	}
+}
+
 void ABackroomsHeldActor::ShowRevolver(const Sim& Game, const FVector& Origin)
 {
 	const bool bRevolver = heldItem(Game) == Held::Revolver;
@@ -223,7 +252,16 @@ void ABackroomsHeldActor::ShowRevolver(const Sim& Game, const FVector& Origin)
 	}
 	Animator->TickAnimation(0.0f, false);
 	Animator->RefreshBoneTransforms();
-	Gun->CopyPoseFromSkeletalComponent(Animator);
+	// Bone by bone in component space, parents first. With
+	// CopyPoseFromSkeletalComponent the reload did not show on the Mac, and that
+	// call does nothing at all when the gun's required bones are not set up;
+	// ReportReload says whether the clip or the copy was at fault.
+	for (int32 Bone = 0; Bone < Gun->GetNumBones(); ++Bone)
+	{
+		Gun->SetBoneTransformByName(Gun->GetBoneName(Bone), Animator->GetBoneTransform(Bone, FTransform::Identity),
+			EBoneSpaces::ComponentSpace);
+	}
+	ReportReload(Pose, Clip);
 
 	// Turn the drum and its rounds about the handle's +z.
 	// Every target is read before any is set, so a round parented to the drum

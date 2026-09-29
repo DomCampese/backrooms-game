@@ -75,9 +75,6 @@ void ABackroomsHUD::DrawHUD()
 	{
 		Line(Hud.SanityWarning.ToString(), W * 0.5f, H * 0.2f, Warn, true, 1.2f * K);
 	}
-	// Until the gun is seen working on the Mac: a screenshot of this line says
-	// where it went wrong.
-	Line(Backrooms->RevolverStatus(), W * 0.5f, 60.0f * K, Warn, true, 0.8f * K);
 	if (Hud.bPaused)
 	{
 		Line(TEXT("PAUSED  ·  P to resume"), W * 0.5f, H * 0.45f, Pale, true, 1.8f * K);
