@@ -4,10 +4,22 @@ The port described in docs/unreal-handoff.md. The raylib build in the rest of
 this repository stays the reference until the port reaches M5; nothing here
 replaces it, and nothing in the raylib build depends on this folder.
 
-Nothing in this folder has been compiled by Unreal yet: it was written where no
-engine was available. `tools/unreal-check.sh` checks what can be checked without
-one (below). Expect the first build on a Mac to need small fixes to the Unreal
-side; the shared code compiles as it does for the raylib build.
+It builds and runs on an M4 Mac with Unreal Engine 5.8.3 (29 September 2026):
+a run on Level 0 streams the greybox, the sim moves the camera, the text HUD
+draws, and the revolver is in your hand. It was written where no engine was
+available, so each Mac build so far has turned up a fix or two on the Unreal
+side; the shared code compiled first time. `tools/unreal-check.sh` checks what
+can be checked without Unreal (below). docs/unreal-handoff.md, "Status", has
+what is open.
+
+The short version, on the Mac, from the repository's root:
+
+```bash
+make unreal-open    # build, open the editor (first time: imports the revolver)
+make unreal-play    # build, run the game in a window
+make unreal-test    # build, run the Backrooms automation tests
+tools/unreal.sh log # the "Backrooms:" lines from the last run
+```
 
 ## Layout
 
@@ -67,7 +79,11 @@ repository, not just this folder. On the Mac:
    "Backrooms:" lines from the last run.
 4. Open the project: double-click `unreal/BackroomsGame.uproject`, or in the
    Launcher, Unreal Engine > Library > Launch 5.8 > Browse, and pick it. If the
-   editor asks to rebuild missing modules, say yes (step 3 already did).
+   editor asks to rebuild missing modules, say yes (step 3 already did). The
+   first time, the editor imports `assets/models/revolver.glb` to
+   `Content/Backrooms/Revolver` (gitignored); the Output Log says "Backrooms:
+   imported the revolver". `make unreal-play` cannot import, since the game has
+   no editor, and warns if this has not happened yet.
 5. Press Play. The default map is the engine's empty Entry map; the game mode
    starts a run on Level 0 at seed 1337 and the sim drives the camera: WASD,
    the mouse, the raylib build's keys (F3 for the debug keys). No level has a

@@ -9,7 +9,9 @@
 
 The Unreal project is `unreal/` (its README, docs/unreal-handoff.md "Status").
 The raylib build stays the reference and nothing in it depends on `unreal/`.
-Nothing there has been compiled by Unreal yet. What will bite:
+It builds and runs on the target Mac (UE 5.8.3); build it with `make unreal`
+after every pull, since opening the `.uproject` runs the last build.
+docs/unreal-handoff.md "Next" has what is open. What will bite:
 
 - **A new .cpp in src/core, src/sim or src/port needs a one-line wrapper** in
   `unreal/Plugins/Backrooms/Source/Backrooms/Private/Shared`, or the Unreal

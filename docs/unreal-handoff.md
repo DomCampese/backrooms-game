@@ -130,17 +130,23 @@ Each ends with a check that can fail.
 
 ## Status (September 2026)
 
-Nothing in `unreal/` has been compiled by Unreal: it was written where no
-engine was available. `tools/unreal-check.sh` covers what can be checked
-without one.
+`unreal/` builds and runs on the target: an M4 MacBook Pro, macOS 27, Unreal
+Engine 5.8.3, first on 29 September 2026. The shared code (core, sim, port)
+compiled there first time. The Unreal side needed four fixes, each now in
+AGENTS.md "Unreal port": a local `TestHyd.h` from the editor's New C++ Class
+menu, `FBackroomsHud` sharing UHT's name with `ABackroomsHUD`, `FAssetData`
+needing its own include, and `init_unreal.py` crashing the game under
+`-game`. `make unreal`, `unreal-open`, `unreal-play` and `unreal-test`
+(`tools/unreal.sh`) build and run it; `tools/unreal-check.sh` covers what can
+be checked without Unreal.
 
 | milestone | state |
 |---|---|
 | M0 project | `unreal/BackroomsGame.uproject` (EngineAssociation 5.8) and the plugin exist; the code is MIT. Target: an Apple M4 Mac on the current macOS, Unreal Engine 5.8. Open: its memory, and what 5.8's Metal renderer supports on the M4 |
-| M1 core | ready to run: the automation tests `Backrooms.Core.Contract` and `Backrooms.Sim.Replay` compare with `tests/golden` and `tests/traces`. Without Unreal, the same shared files built the module's way (clang, C++20, `-Werror`, FMA enabled, no `-ffp-contract=off`) pass both |
-| M2 greybox | written, not run: `UBackroomsWorldSubsystem` streams `ABackroomsChunkActor`s built from `src/port/greybox.h` round a DefaultPawn free camera, storeys stacked. The greybox itself is checked against raylib frames (below). Frame time on the Mac not measured |
+| M1 core | built on the Mac, not yet run there: the automation tests `Backrooms.Core.Contract` and `Backrooms.Sim.Replay` compare with `tests/golden` and `tests/traces`. Without Unreal, the same shared files built the module's way (clang, C++20, `-Werror`, FMA enabled, no `-ffp-contract=off`) pass both |
+| M2 greybox | runs on the Mac: `UBackroomsWorldSubsystem` streams `ABackroomsChunkActor`s built from `src/port/greybox.h` round a DefaultPawn free camera, storeys stacked. The greybox itself is checked against raylib frames (below). Frame time on the Mac not measured |
 | M3 layout | props (as their collision boxes), openings and light panels are in the greybox; a level look (below) can put a static mesh at every prop of a kind and at every light fitting, from `chunkLayout`. Fixtures are not placed yet. `tests/golden/layout.txt` holds every layout field |
-| M4 sim | written, not run: `ABackroomsPlayerController` fills an `InputFrame` from Enhanced Input actions it makes at start-up, `UBackroomsWorldSubsystem::TickRun` steps the sim as `Game::tick` does (title screen, pause, step), bullets trace against the chunk actors, and `ABackroomsPawn`'s camera follows `simView` (src/port/view.h, which the raylib renderer now draws from too). `-BackroomsRecord=path` writes a trace from Unreal for `./replay`. Sound is M6. What the sim puts in the world each frame (pickups, crates, the deck, flares, chalk, balloons, confetti, impacts, the hunter, the pack) comes from `simScene` (src/port/scene.h) and `ABackroomsSceneActor` draws it, as plain shapes until a level look gives meshes; `ABackroomsHUD` is a text HUD from `GetHud`. The revolver is `ABackroomsHeldActor`, placed and posed by `heldWeapon` and `revolverPose` (src/port/held.h, which render.cpp and revolver.cpp now draw from): the editor imports assets/models/revolver.glb on first open (Plugins/Backrooms/Content/Python). The can, deck and flare in hand are not ported. render.cpp still decides these for itself, and should move onto `simScene` |
+| M4 sim | runs on the Mac (a run on Level 0: walking, looking, the HUD, the revolver seen in hand): `ABackroomsPlayerController` fills an `InputFrame` from Enhanced Input actions it makes at start-up, `UBackroomsWorldSubsystem::TickRun` steps the sim as `Game::tick` does (title screen, pause, step), bullets trace against the chunk actors, and `ABackroomsPawn`'s camera follows `simView` (src/port/view.h, which the raylib renderer now draws from too). `-BackroomsRecord=path` writes a trace from Unreal for `./replay`. Sound is M6. What the sim puts in the world each frame (pickups, crates, the deck, flares, chalk, balloons, confetti, impacts, the hunter, the pack) comes from `simScene` (src/port/scene.h) and `ABackroomsSceneActor` draws it, as plain shapes until a level look gives meshes; `ABackroomsHUD` is a text HUD from `GetHud`. The revolver is `ABackroomsHeldActor`, placed and posed by `heldWeapon` and `revolverPose` (src/port/held.h, which render.cpp and revolver.cpp now draw from): the editor imports assets/models/revolver.glb on first open (Plugins/Backrooms/Content/Python). Firing and the reload start; the reload clip did not show on the first run, a bone-by-bone copy is pushed but not yet confirmed, and each reload logs how far the drum moved in the clip and on the gun. The can, deck and flare in hand are not ported. render.cpp still decides these for itself, and should move onto `simScene` |
 | M5, M6 | not started |
 
 **Editing in Unreal.** Placement stays in code; appearance, controls and
@@ -213,6 +219,31 @@ What to expect on the Mac:
 - AGENTS.md "Things that will bite you" is written for the raylib build; most
   of it dies with the renderer, but the generator and storey entries still hold.
 
+## Next
+
+In order, as of the end of 29 September 2026:
+
+1. **Confirm the reload.** Fire a shot, press R, then `tools/unreal.sh log`:
+   the "reload clip ..." line says whether the drum moved in the clip (the
+   hidden animator) and on the gun. Both near zero: the imported clip is
+   empty or not evaluated. Only the gun's: the copy (BackroomsHeldActor.cpp).
+2. **Run the automation tests on the Mac** (`make unreal-test`). The contract
+   and the replay are the checks that the Mac's compiler and libm generate the
+   same maze and play the same run; nobody has run them there yet.
+3. **Real looks (M5).** Every level look is empty, so the world is flat greybox
+   colours and the pickups, crates and actors are plain shapes. The plan: an
+   editor Python script, like `backrooms_import.py`, that imports the game's own
+   surfaces (`./texdump`) and the CC0 tiles in `assets/materials`, builds a
+   material per surface and fills the five level looks; then lights at the
+   fittings `chunkLayout` places (dead and flickering tubes) and fog.
+4. **Sound (M6).** The sim's `AudioEvent`s are dropped in `FinishFrame`.
+5. **The rest in hand**: the can, the tape deck and the flare (src/port/held.h
+   has `heldItem`; only the revolver has a frame).
+
+A session on the Mac itself (`claude remote-control` in the repository) could
+build, run the tests and read the log directly; from the cloud each Unreal
+change has waited on a build and a pasted log.
+
 ## Not done yet
 
 What the seams leave for the port, or for the raylib build before it.
@@ -220,7 +251,7 @@ What the seams leave for the port, or for the raylib build before it.
 | item | where | why it matters |
 |---|---|---|
 | floorplan geometry as data | walls, floors, ceilings, soffits, stairs, pools, arches, skirting are still built directly by `bakeChunk` | the greybox (`src/port`) derives them from core's accessors for M2; art needs core to describe the floorplan the way `chunkLayout` describes fixtures |
-| the sim in Unreal | an actor or subsystem that fills `InputFrame` from Enhanced Input, calls `simBegin`/`applyLevel`/`simPlace` and `Sim::step`, supplies a `SolidTracer` (a line trace) and plays `AudioEvent`s | M4 |
+| sound in Unreal | the subsystem drops the sim's `AudioEvent`s (`FinishFrame`); the rest of M4 runs | M6 |
 | libm in the sim | src/sim | replaying a Linux trace on a Mac may diverge (Status, above) |
 | `tubeHash`'s `sinf` | src/core/layout.cpp | the one libm call left in core; may flip a fitting's dead or faulty state on another libm |
 | lighting numbers mirrored by hand | panel half-size, light plane, tube hash in core, the mesher, the shader and `lightAtCPU` | a port reads them from core; the raylib build still has copies |
