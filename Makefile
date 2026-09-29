@@ -83,3 +83,15 @@ replay-check: replay
 	for t in tests/traces/*.trace; do ./replay "$$t" || exit 1; done
 
 .PHONY: replay-check
+
+# The Unreal project (unreal/), on a Mac with Unreal Engine 5.8: tools/unreal.sh.
+# Build after every pull; opening the .uproject does not recompile.
+unreal:
+	tools/unreal.sh build
+unreal-open:
+	tools/unreal.sh open
+unreal-play:
+	tools/unreal.sh play
+unreal-test:
+	tools/unreal.sh test
+.PHONY: unreal unreal-open unreal-play unreal-test

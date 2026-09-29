@@ -56,6 +56,15 @@ repository, not just this folder. On the Mac:
 
    Run it from the repository's root. The path is the Launcher's default
    install; change it if the engine is elsewhere.
+
+   `make unreal` from the repository's root does the same through
+   `tools/unreal.sh`, and first refuses while the editor is open (it locks the
+   plugin) and lists files under `unreal/` source folders that the repository
+   does not have. Run it after every pull: opening the `.uproject` does not
+   recompile changed source, it runs the last build. `make unreal-open`,
+   `make unreal-play` (`LEVEL=1 SEED=42 make unreal-play`) and
+   `make unreal-test` build first; `tools/unreal.sh log` prints the
+   "Backrooms:" lines from the last run.
 4. Open the project: double-click `unreal/BackroomsGame.uproject`, or in the
    Launcher, Unreal Engine > Library > Launch 5.8 > Browse, and pick it. If the
    editor asks to rebuild missing modules, say yes (step 3 already did).
