@@ -26,8 +26,9 @@ public:
 	// Origin places the sim's storey frame in the world.
 	void Show(const Sim& Game, const FVector& Origin);
 
-	// False once the revolver's assets were looked for and not found.
-	bool HasRevolver() const { return !bMissing; }
+	// Where the revolver got to: not imported, imported wrong, or shown and
+	// how big. The HUD prints it until the gun is known to work on the Mac.
+	const FString& GetStatus() const { return Status; }
 
 private:
 	bool Load();
@@ -46,6 +47,13 @@ private:
 
 	TArray<FName> DrumBones;
 	FName Handle;
+	FString Status = TEXT("revolver: not held yet");
+	// Which GLB axis (0 x, 1 y, 2 z) each of the mesh's axes holds, its units
+	// per metre, and +1 or -1 as that mapping keeps or mirrors a rotation.
+	// Read from the mesh's bounds, so no importer convention is assumed.
+	int32 Perm[3] = { 0, 1, 2 };
+	float Units = 100.0f;
+	float Sense = 1.0f;
 	bool bLoaded = false;
 	bool bMissing = false;
 };

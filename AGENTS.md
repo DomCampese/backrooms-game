@@ -51,10 +51,12 @@ Nothing there has been compiled by Unreal yet. What will bite:
   `revolverPose`), which render.cpp, revolver.cpp and the Unreal
   `ABackroomsHeldActor` all read; the move was checked against a capture of
   the old build (0 pixels over 16/255, none on the gun). The Unreal side
-  assumes the glTF importer maps glTF (x, y, z) to Unreal (z, x, y) in
-  centimetres; if the gun faces the wrong way on import, set
-  `RevolverMeshRotation` in Project Settings > Game > Backrooms, and fix
-  `FromGlb` in BackroomsHeldActor.cpp to match.
+  does not assume the glTF importer's axes or units: it reads them off the
+  mesh's bounds (the barrel is the longest axis, the thinnest is the GLB's x;
+  under 2 units long means metres). The HUD prints the gun's state in a line
+  near the top (nothing imported, a static mesh, missing clips, or shown and
+  how big) until the gun is seen working on the Mac. If it faces the wrong
+  way, `RevolverMeshRotation` in Project Settings > Game > Backrooms turns it.
 - **The editor imports the repository's models itself.**
   `Plugins/Backrooms/Content/Python/init_unreal.py` runs when the editor opens
   the project and imports any missing ones to the paths the settings name;

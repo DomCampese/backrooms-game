@@ -44,8 +44,8 @@ public:
 	FTransform StartFreeCamera(int32 Level, uint32 Seed, uint32 Visit);
 
 	bool IsRunning() const { return bRun; }
-	// True once the revolver was looked for and its assets were not there.
-	bool IsRevolverMissing() const;
+	// What happened to the revolver (ABackroomsHeldActor::GetStatus).
+	FString RevolverStatus() const;
 	// One frame of a run: the title screen, a pause toggle, or a step, as
 	// Game::tick does them. Dt is the frame time; the clock is read here.
 	void TickRun(const InputFrame& In, bool bPauseToggled, float Dt);
