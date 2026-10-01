@@ -11,7 +11,7 @@ in docs/unreal-handoff.md.
 |---|---|---|---|
 | core | `src/core/` | the C++17 standard library only | math types, hashes and noise, per-level rules, chunk generation, storeys and features, collision, line of sight, pathfinding, the light-occlusion grid, the layout description |
 | sim | `src/sim/` | core | game state and rules: player, hunter, dogs, health, pickups, exits, blackouts, storey changes. Takes an input frame and a clock, emits events |
-| port | `src/port/` | core, sim | engine-neutral code a port shares with the raylib build: the view the camera shows (`simView`, `windowFovY`) and the greybox mesher (docs/unreal-handoff.md, M2) |
+| port | `src/port/` | core, sim | engine-neutral code a port shares with the raylib build: the view the camera shows (`simView`, `windowFovY`), the greybox mesher (docs/unreal-handoff.md, M2), the synthesized sound clips and ambience bed (`sounds.h`, `ambience.h`), and a software mixer for a port (`mixer.h`) |
 | platform | `src/` | everything | the raylib backend: window, input, mesher, textures, shaders, rendering, audio, the revolver model |
 
 Rules:
@@ -323,11 +323,17 @@ order by `GameAudio::play` after each tick:
 
 | kind | platform does |
 |---|---|
-| `PLAY` | set the flagged pitch, volume, pan (a bearing through `panFor`) on clip `sfx[variant]`, then play it. Unflagged properties keep the clip's last values, as raylib does. |
+| `PLAY` | set the flagged pitch, volume, pan (a bearing through `panFor`) on clip `sfx[variant]`, then play it. Unflagged properties keep the clip's last values, as raylib does. The clips, their variant counts and their load-time pitch and volume are `clipSpec`, `clipPcm` and `clipRecording` (src/port/sounds.h) |
 | `VOICE` | start the tape voice if it has ended, then set its pan and volume |
 | `VOICE_STOP` | stop the tape voice if it is playing |
 | `LOOPS` | ease and feed the underwater loop and LEVEL FUN's music for `dt`, by `LoopCue` |
-| `AMBIENCE` | give the synth `mix` (an `AmbienceMix`) and let it fill its buffers |
+| `AMBIENCE` | give the synth `mix` (an `AmbienceMix`) and let it fill its buffers (`Ambience::render`, src/port/ambience.h) |
+
+`SoundMixer` (src/port/mixer.h) does all of this in software into one stereo
+stream, with raylib's pan law (`MixAudioFrames` in raudio.c) and linear resampling
+for pitch, and hands the recordings' PLAYs
+and loop levels back to the engine to play. The Unreal build streams it
+(`UBackroomsSound`).
 
 **Traces** (src/sim/trace.h). `BACKROOMS_RECORD=path` records every call the
 platform makes on the sim (start, level entries, pauses, each frame's input,

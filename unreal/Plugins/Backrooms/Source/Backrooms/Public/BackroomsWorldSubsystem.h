@@ -13,6 +13,7 @@ class UBackroomsLevelLook;
 class APointLight;
 class ABackroomsSceneActor;
 class ABackroomsHeldActor;
+class UBackroomsSound;
 
 // Owns the game: one Sim (the rules, and core's World inside it) for this
 // Unreal world. Streams the world's chunks round the player as greybox actors
@@ -63,7 +64,9 @@ protected:
 private:
 	void NewSim();
 	void FreeSim();
-	void FinishFrame();
+	// Plays the frame's sound and clears the flags the platform owns. A paused
+	// frame also holds the ambience and the loops.
+	void FinishFrame(bool bPaused = false);
 	// Seconds since the subsystem started: the sim's clock, as GetTime() is the
 	// raylib build's.
 	double Now() const;
@@ -98,6 +101,9 @@ private:
 	TObjectPtr<ABackroomsHeldActor> Hand;
 	UPROPERTY()
 	TObjectPtr<UBackroomsLevelLook> Look;
+	// A run's sound; none in a free camera.
+	UPROPERTY()
+	TObjectPtr<UBackroomsSound> Sound;
 	int32 LookLevel = -1;
 	float SinceUnload = 0.0f;
 };

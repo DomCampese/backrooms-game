@@ -52,10 +52,11 @@ build_replay() {
     c++ "${CORE_FLAGS[@]}" tools/replay.cpp src/sim/*.cpp "${CORE[@]}" -o replay
     echo "built ./replay (core and sim only)"
 }
-# greybox-view: the port's greybox (src/port) round a spot, drawn with raylib.
+# greybox-view: the port's greybox (src/port) round a spot, drawn with raylib. Port
+# code calls the sim (scene.cpp), so the sim links in too.
 build_greybox_view() {
     rm -f greybox-view
-    c++ "${FLAGS[@]}" tools/greybox-view.cpp src/port/*.cpp "${CORE[@]}" -o greybox-view "${LINK[@]}"
+    c++ "${FLAGS[@]}" tools/greybox-view.cpp src/port/*.cpp src/sim/*.cpp "${CORE[@]}" -o greybox-view "${LINK[@]}"
     echo "built ./greybox-view (python$PYV)"
 }
 # texdump: every texture generator, run without a window, written to PNG with

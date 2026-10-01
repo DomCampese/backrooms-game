@@ -5,6 +5,7 @@
 #include "BackroomsLevelLook.h"
 #include "BackroomsSceneActor.h"
 #include "BackroomsSettings.h"
+#include "BackroomsSound.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/PointLightComponent.h"
 #include "Engine/PointLight.h"
@@ -79,6 +80,11 @@ void UBackroomsWorldSubsystem::StartRun(uint32 Seed, int32 Level)
 {
 	NewSim();
 	bRun = true;
+	if (!Sound)
+	{
+		Sound = NewObject<UBackroomsSound>(this);
+	}
+	Sound->Start(GetWorld());
 	SimStart Start;
 	Start.seed = Seed;
 	Start.level = Level > 0 ? FMath::Min(Level, NLEVELS - 1) : -1;
@@ -167,7 +173,7 @@ void UBackroomsWorldSubsystem::TickRun(const InputFrame& In, bool bPauseToggled,
 	}
 	if (Game->paused)
 	{
-		FinishFrame();
+		FinishFrame(true);
 		return;
 	}
 	if (Trace) Trace->step(In, Dt, T, Game->clockSeed);
@@ -176,10 +182,19 @@ void UBackroomsWorldSubsystem::TickRun(const InputFrame& In, bool bPauseToggled,
 	FinishFrame();
 }
 
-// What the raylib build's finishStep and updateOccupancy do with the sim's
-// outputs. Sound is M6: the events are dropped for now.
-void UBackroomsWorldSubsystem::FinishFrame()
+// What the raylib build's finishStep, its paused tick and updateOccupancy do
+// with the sim's outputs.
+void UBackroomsWorldSubsystem::FinishFrame(bool bPaused)
 {
+	if (Sound)
+	{
+		Sound->Play(Game->audio);
+		if (bPaused)
+		{
+			Sound->HoldPaused(Game->ambience, Game->loopCue());
+		}
+		Sound->Feed();
+	}
 	Game->audio.clear();
 	Game->dropAimLatch = false;
 	Game->shadowsStale = false;
@@ -212,6 +227,10 @@ void UBackroomsWorldSubsystem::FreeSim()
 	{
 		Hand->Destroy();
 		Hand = nullptr;
+	}
+	if (Sound)
+	{
+		Sound->Stop();
 	}
 	delete Recorder;
 	Recorder = nullptr;

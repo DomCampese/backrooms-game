@@ -36,6 +36,7 @@ tools/unreal.sh log # the "Backrooms:" lines from the last run
 | `.../BackroomsLevelLook` | the data asset for a level's look: materials, prop meshes, fitting mesh |
 | `.../BackroomsSettings` | Project Settings > Game > Backrooms |
 | `.../BackroomsPreviewActor` | the generated maze in the editor viewport |
+| `.../BackroomsSound` | the sim's sound: the game's own mix (src/port/mixer.h) streamed through a procedural wave, the imported recordings on components of their own |
 | `.../BackroomsTypes` | Blueprint mirrors of core's surfaces, props and controls; the HUD snapshot |
 | `.../BackroomsGameMode` | starts a run (or a free camera with `?mode=free`) from the map's options |
 | `.../Private/Tests/BackroomsTests.cpp` | automation tests: contract, trace replay, coordinates, greybox |
@@ -81,8 +82,9 @@ repository, not just this folder. On the Mac:
    Launcher, Unreal Engine > Library > Launch 5.8 > Browse, and pick it. If the
    editor asks to rebuild missing modules, say yes (step 3 already did). The
    first time, the editor imports `assets/models/revolver.glb` to
-   `Content/Backrooms/Revolver` (gitignored); the Output Log says "Backrooms:
-   imported the revolver". `make unreal-play` cannot import, since the game has
+   `Content/Backrooms/Revolver` and `assets/sounds` to `Content/Backrooms/Sounds`
+   (both gitignored); the Output Log says "Backrooms: imported the revolver" and
+   "imported 12 sounds". `make unreal-play` cannot import, since the game has
    no editor, and warns if this has not happened yet.
 5. Press Play. The default map is the engine's empty Entry map; the game mode
    starts a run on Level 0 at seed 1337 and the sim drives the camera: WASD,

@@ -1,5 +1,6 @@
-// Automation tests: core's contract, the sim's recorded traces and the
-// coordinate conversion, run by this engine's compiler and libm. Session
+// Automation tests: core's contract, the sim's recorded traces, the coordinate
+// conversion, the greybox and the sound mixer, run by this engine's compiler
+// and libm. Session
 // Frontend > Automation, filter "Backrooms", or from the command line:
 //   UnrealEditor-Cmd BackroomsGame.uproject -ExecCmds="Automation RunTests Backrooms; Quit" -unattended -nullrhi
 #include "CoreMinimal.h"
@@ -11,6 +12,7 @@
 #include "contract_lib.h"
 #include "core/level_rules.h"
 #include "port/greybox.h"
+#include "port/mixer.h"
 #include "sim/trace.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -132,6 +134,68 @@ bool FBackroomsGreyboxTest::RunTest(const FString& Parameters)
 			}
 		}
 	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBackroomsSoundTest, "Backrooms.Port.Sound",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+// The mixer the game streams (BackroomsSound.cpp), without an audio device:
+// silence with nothing playing, a clip that sounds and ends, the pan law's
+// sides, a recording handed back to the engine, the bed only once fed.
+bool FBackroomsSoundTest::RunTest(const FString& Parameters)
+{
+	TUniquePtr<SoundMixer> Mixer = MakeUnique<SoundMixer>();
+	Mixer->load();
+	constexpr int32 Frames = 4096;
+	TArray<int16> Out;
+	Out.SetNumZeroed(Frames * 2);
+	auto Loudness = [&Out](int32 Side) {
+		int64 Sum = 0;
+		for (int32 I = Side; I < Out.Num(); I += 2)
+		{
+			Sum += FMath::Abs((int32)Out[I]);
+		}
+		return Sum;
+	};
+	auto Event = [](AudioEvent::Kind Kind, Sfx Clip = Sfx::Click, int Variant = 0) {
+		AudioEvent E;
+		E.kind = Kind;
+		E.sfx = Clip;
+		E.variant = (uint8_t)Variant;
+		return E;
+	};
+
+	Mixer->apply({});
+	Mixer->render(Out.GetData(), Frames);
+	TestEqual(TEXT("silent with nothing playing"), Loudness(0) + Loudness(1), (int64)0);
+
+	std::vector<AudioEvent> Events = { Event(AudioEvent::PLAY, Sfx::Bark, 1) };
+	Events.back().atPan(-1.0f);
+	Mixer->apply(Events);
+	Mixer->render(Out.GetData(), Frames);
+	TestTrue(TEXT("a bark sounds"), Loudness(0) > 0);
+	TestEqual(TEXT("a bark hard left is silent on the right"), Loudness(1), (int64)0);
+	for (int32 I = 0; I < 10; I++)
+	{
+		Mixer->render(Out.GetData(), Frames);
+	}
+	TestFalse(TEXT("a bark ends"), Mixer->playing(Sfx::Bark, 1));
+
+	Events = { Event(AudioEvent::PLAY, Sfx::SplashIn, 2) };
+	Events.back().atPitch(1.25f);
+	Mixer->apply(Events);
+	Mixer->render(Out.GetData(), Frames);
+	TestEqual(TEXT("a recording makes no sound in the mix"), Loudness(0) + Loudness(1), (int64)0);
+	TestTrue(TEXT("a recording is handed back"), Mixer->recorded.size() == 1 && Mixer->recorded[0].sfx == Sfx::SplashIn
+		&& Mixer->recorded[0].variant == 2 && Mixer->recorded[0].pitch == 1.25f && Mixer->recorded[0].volume == 1.0f);
+
+	Mixer->apply({ Event(AudioEvent::AMBIENCE) });
+	Mixer->render(Out.GetData(), Frames);
+	TestTrue(TEXT("the bed sounds once fed"), Loudness(0) > 0 && Loudness(1) > 0);
+	Mixer->apply({});
+	Mixer->render(Out.GetData(), Frames);
+	TestEqual(TEXT("the bed is silent when not fed"), Loudness(0) + Loudness(1), (int64)0);
 	return true;
 }
 

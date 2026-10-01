@@ -557,16 +557,16 @@ int main() {
         p.sim.px=1; p.sim.updateSqueeze(false,0.1f); CHECK(!p.sim.squeezing);
     }
     {
-        Wave w=makeGulpWave();
-        const short *pcm=(const short *)w.data;
+        Pcm pcm=gulpPcm();
         int peak=0, jump=0;
-        for (unsigned i=1;i<w.frameCount;++i) {
+        for (size_t i=1;i<pcm.size();++i) {
             peak=std::max(peak,std::abs((int)pcm[i]));
             jump=std::max(jump,std::abs((int)pcm[i]-pcm[i-1]));
         }
         CHECK(peak>500 && peak<8000 && jump<1500);
-        CHECK(pcm[0]==0 && pcm[w.frameCount-1]==0);
-        ExportWave(w,"drinking.wav"); UnloadWave(w);
+        CHECK(pcm[0]==0 && pcm.back()==0);
+        Wave w={}; w.frameCount=(unsigned)pcm.size(); w.sampleRate=SAMPLE_RATE; w.sampleSize=16; w.channels=1;
+        w.data=pcm.data(); ExportWave(w,"drinking.wav");
     }
 
     // ---- the catch ends the run, and only out of a committed lunge. The bare

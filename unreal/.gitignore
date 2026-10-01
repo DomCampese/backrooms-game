@@ -12,5 +12,6 @@ Plugins/*/Intermediate/
 *.xcodeproj
 .vscode/
 
-# Imported from assets/models by Plugins/Backrooms/Content/Python on first open
+# Imported from assets/models and assets/sounds by Plugins/Backrooms/Content/Python on first open
 Content/Backrooms/Revolver/
+Content/Backrooms/Sounds/
