@@ -727,7 +727,7 @@ time so the executable remains independent of its working directory.
 | `sfx.cpp` | loads the clips (`port/sounds.h`) and the embedded recordings into raylib |
 | `audio.cpp` | feeds the ambience bed (`port/ambience.h`) to a raylib stream; recorded loops live in `GameAudio::feedLoops` |
 | `sim/entity.h` | `Entity` (Clark on Level 0, the Smiler on 1 and 3, the Partygoer on 4) and `Dog` state |
-| `util.{h,cpp}` | platform helpers (`cl8`, `SAMPLE_RATE`, `PARTY`); includes core's math and hashes |
+| `util.{h,cpp}` | platform helpers (`cl8`, `PARTY`); includes core's math and hashes. `SAMPLE_RATE` is port/sounds.h's |
 
 `Sim::step` calls the update functions in a fixed order: flashlight, look,
 movement, dev keys, weapons, bullets, flare, tape deck, interaction, drink,
@@ -2150,7 +2150,7 @@ pass, and both obey the same three rules, learned the hard way:
   Export those as hidden and retain full-size spent cases during ejection;
   omitting cases leaves tiny live bullets floating around the cylinder.
 - Drinking PCM uses smooth envelopes at the same swallow times as drawDrinkCan.
-  Test makeGulpWave directly for peaks and discontinuities; a loud white-noise
+  Test gulpPcm (port/sounds.h) directly for peaks and discontinuities; a loud white-noise
   attack sounds like a click rather than a swallow.
 
 - Shadow lookup bias uses the geometric surface normal, not the detail-map
