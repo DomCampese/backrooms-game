@@ -128,7 +128,5 @@ struct Game {
     void renderUI(double now);                // post pass, HUD, overlays
     void drawHeldWeapon(const Camera3D &cam);
     void drawCan(Matrix xf);
-    void drawDrinkCan(const Camera3D &cam);
     void drawDeck(Matrix xf, bool lamp);
-    void drawHeldDeck(const Camera3D &cam);
 };

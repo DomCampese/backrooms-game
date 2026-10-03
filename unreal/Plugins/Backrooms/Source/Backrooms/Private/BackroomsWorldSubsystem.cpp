@@ -478,7 +478,6 @@ void UBackroomsWorldSubsystem::DropAll()
 	Chunks.Reset();
 }
 
-// The raylib build draws pickups 7 cells out and balloons 9; 24 m covers both.
 void UBackroomsWorldSubsystem::ShowScene()
 {
 	FActorSpawnParameters Params;
@@ -493,10 +492,10 @@ void UBackroomsWorldSubsystem::ShowScene()
 	}
 	if (Scene)
 	{
-		Scene->Show(simScene(*Game, 24.0f), CurrentLook(), StoreyOrigin());
+		Scene->Show(simScene(*Game), CurrentLook(), StoreyOrigin());
 	}
 	if (Hand)
 	{
-		Hand->Show(*Game, StoreyOrigin());
+		Hand->Show(*Game, CurrentLook(), StoreyOrigin());
 	}
 }
