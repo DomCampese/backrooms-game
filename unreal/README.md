@@ -33,7 +33,9 @@ tools/unreal.sh log # the "Backrooms:" lines from the last run
 | `.../BackroomsPlayerController` | the sim's controls as Enhanced Input actions; fills an `InputFrame` each frame |
 | `.../BackroomsPawn` | the camera, placed where the sim's view is (src/port/view.h) |
 | `.../BackroomsChunkActor`, `BackroomsChunkBuild` | a chunk: the greybox drawn with the level's look, plus prop and fitting meshes |
-| `.../BackroomsLevelLook` | the data asset for a level's look: materials, prop meshes, fitting mesh |
+| `.../BackroomsLevelLook` | the data asset for a level's look: materials, prop meshes, fitting mesh, the tubes' colour and output, fog |
+| `.../BackroomsLightsActor` | rect lights at the live fittings nearest the player (dead ones dark, faulty ones stuttering, all out in a blackout), and the level's fog |
+| `Plugins/Backrooms/Content/Python` | run by the editor on open: imports the revolver and the recorded sounds, and builds the level looks from the game's surfaces (`backrooms_looks.py`) |
 | `.../BackroomsSettings` | Project Settings > Game > Backrooms |
 | `.../BackroomsPreviewActor` | the generated maze in the editor viewport |
 | `.../BackroomsSound` | the sim's sound: the game's own mix (src/port/mixer.h) streamed through a procedural wave, the imported recordings on components of their own |
@@ -84,14 +86,16 @@ repository, not just this folder. On the Mac:
    first time, the editor imports `assets/models/revolver.glb` to
    `Content/Backrooms/Revolver` and `assets/sounds` to `Content/Backrooms/Sounds`
    (both gitignored); the Output Log says "Backrooms: imported the revolver" and
-   "imported 12 sounds". `make unreal-play` cannot import, since the game has
-   no editor, and warns if this has not happened yet.
+   "imported 12 sounds". It also builds the five level looks (below), which
+   says "built 5 level looks". `make unreal-play` cannot import, since the game
+   has no editor, and warns if this has not happened yet.
 5. Press Play. The default map is the engine's empty Entry map; the game mode
    starts a run on Level 0 at seed 1337 and the sim drives the camera: WASD,
-   the mouse, the raylib build's keys (F3 for the debug keys). No level has a
-   look yet, so the maze is the greybox's flat colours, and the pickups,
-   crates, balloons, the hunter and the pack are plain shapes at their real
-   size (`ABackroomsSceneActor`). A text HUD (`ABackroomsHUD`) shows the meters,
+   the mouse, the raylib build's keys (F3 for the debug keys). Floors, walls
+   and ceilings wear the game's own surfaces, lit by the fittings; the rest of
+   the greybox keeps its flat colours, and the pickups, crates, balloons, the
+   hunter and the pack are plain shapes at their real size
+   (`ABackroomsSceneActor`). A text HUD (`ABackroomsHUD`) shows the meters,
    inventory, notes and the death card. The revolver is in your hand
    (`ABackroomsHeldActor`): the editor imports `assets/models/revolver.glb` the
    first time it opens the project (the Output Log says "imported the
@@ -104,6 +108,40 @@ and open the `.xcworkspace` it writes into `unreal/`.
 From the console: `open /Engine/Maps/Entry?level=1?seed=42` starts a run on
 Level 1; `open /Engine/Maps/Entry?mode=free?level=2` flies a free camera over
 the Poolrooms' greybox (WASD, Space up, Ctrl down, Shift faster).
+
+## The level looks
+
+`make unreal-open` runs `tools/unreal.sh surfaces` before it opens the editor:
+`texdump --unreal` writes every world surface the raylib build generates
+(`src/surfaces.cpp`) to `Saved/Surfaces`, each as a colour PNG and a detail PNG
+(slopes in red and green, gloss in blue), and `looks.json`, which names each
+level's floor, ceiling and wall surface and gives its tile sizes, gloss, tube
+colour and output and fog, from `LEVEL_SURFACES` and `LEVELS`. The editor then
+runs `backrooms_looks.py`, which, when those files changed:
+
+- imports the PNGs to `/Game/Backrooms/Surfaces`, the detail maps linear and
+  uncompressed;
+- builds `M_BackroomsSurface`: the greybox's texture coordinates are metres
+  (src/port/greybox.h), so `TileU`/`TileV` are the metres one repeat covers
+  (2 m on floors and ceilings, 3 m across walls, 3 m or Level 1's 4.2 m down);
+  the detail map's slopes make the normal, scaled by `ReliefU` and `ReliefV`
+  (across and down the texture), and its gloss
+  mask picks the roughness between `RoughMatte` and `RoughGloss` as far as
+  `Shine` (from the level's gloss) allows;
+- makes an instance per level and surface (`MI_L0_Floor`, ...) and the looks
+  `DA_Level0` to `DA_Level4` in `/Game/Backrooms/Looks`, which the settings
+  name by default. Floors and stairs take the floor, walls, steps and pillars
+  the walls. A material you assign to a look in the editor is kept; the
+  light and fog are rewritten from `src/levels.cpp`.
+
+The tangents' handedness is worked out in code (`Tangent` in
+BackroomsChunkBuild.cpp) and has not been seen on the Mac yet. If horizontal
+relief looks lit from below (the skirting's bullnose dark on top, grout lines
+across the pool tile standing proud), set `ReliefV` to -1 on
+`M_BackroomsSurface`; for vertical relief, `ReliefU`. Then fix the sign in
+`Tangent` and set it back.
+`BACKROOMS_TEXTURED=1 ./greybox-view` (tools/greybox-view.cpp) draws the same
+mapping with raylib, to hold against a capture of the game.
 
 ## Working in the editor
 
@@ -120,7 +158,7 @@ project runs before any of it exists.
 | change the controls | make your own Input Actions and a Mapping Context, and assign them in the settings (Input Context, Input Actions by control). Controls you leave empty keep the built-in keys |
 | change what a chunk or the player carries | Blueprint subclasses of Backrooms Chunk Actor (set it as the settings' Chunk Class), Backrooms Pawn and Backrooms Player Controller (set them on a Blueprint subclass of the game mode) |
 | build a HUD | a UMG widget that calls Get World Subsystem (Backrooms World Subsystem) > Get Hud each tick: health, sanity, ammo, notes, the death card |
-| tune | Project Settings > Game > Backrooms: look sensitivity, streaming reach, default seed and level, the camera light |
+| tune | Project Settings > Game > Backrooms: look sensitivity, streaming reach, default seed and level, how many fittings get lights (`FittingLights`, `FittingShadows`), their output (`FittingLumens`) and reach, the camera light |
 
 ## Tests (M1)
 

@@ -279,21 +279,7 @@ void Game::finishStep(bool wasInMenu) {
 
 const Surface &Game::surface(int slot) {
     Surface &sf = surfaces[slot];
-    if (sf.albedo.id) return sf;
-    switch (slot) {
-        case SURF_CARPET:    sf = makeCarpetSurface(); break;
-        case SURF_BOARDS:    sf = makeCeilingSurface(); break;
-        case SURF_PAPER:     sf = makeWallpaperSurface(); break;
-        case SURF_SLAB:      sf = makeConcreteFloorSurface(); break;
-        case SURF_SOFFIT:    sf = makeConcreteCeilSurface(); break;
-        case SURF_CONCWALL:  sf = makeConcreteWallSurface(); break;
-        case SURF_POOLFLOOR: sf = makeTileSurface(false); break;
-        case SURF_POOLWALL:  sf = makeTileSurface(true); break;
-        case SURF_BRICK:     sf = makeRedBrickSurface(); break;
-        case SURF_BANQUET:   sf = makePartyCarpetSurface(); break;
-        case SURF_PARTYCEIL: sf = makePartyCeilSurface(); break;
-        case SURF_PARTYWALL: sf = makePartyWallSurface(); break;
-    }
+    if (!sf.albedo.id) sf = makeSurface((SurfSlot)slot);
     return sf;
 }
 
@@ -302,16 +288,11 @@ const Surface &Game::surface(int slot) {
 void Game::applyLevelLook(int lv) {
     const LevelCfg &c = LEVELS[lv];
     SetShaderValue(worldShader, locStoreyH, &c.storeyH, SHADER_UNIFORM_FLOAT);
-    static const int SETS[NLEVELS][3] = {   // [floor, ceiling, walls]
-        { SURF_CARPET, SURF_BOARDS, SURF_PAPER },
-        { SURF_SLAB, SURF_SOFFIT, SURF_CONCWALL },
-        { SURF_POOLFLOOR, SURF_POOLFLOOR, SURF_POOLWALL },   // floor tile on the ceiling: both map 2 m
-        { SURF_SLAB, SURF_SOFFIT, SURF_BRICK },              // Level 1's slab, in red light
-        { SURF_BANQUET, SURF_PARTYCEIL, SURF_PARTYWALL },
-    };
+    const LevelSurfaces &set = LEVEL_SURFACES[lv];
+    const SurfSlot slots[3] = { set.floor, set.ceiling, set.walls };
     const int mat[3] = { MAT_FLOOR, MAT_CEILING, MAT_WALLS };
     for (int k = 0; k < 3; k++) {
-        const Surface &sf = surface(SETS[lv][k]);
+        const Surface &sf = surface(slots[k]);
         mats[mat[k]].maps[MATERIAL_MAP_DIFFUSE].texture = sf.albedo;
         mats[mat[k]].maps[MATERIAL_MAP_SPECULAR].texture = sf.detail;
     }

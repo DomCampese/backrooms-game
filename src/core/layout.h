@@ -110,6 +110,7 @@ struct LightFitting {
     bool dead;               // hash below LevelRules::dead: never lit
     float output;            // 1 - vary * fract(hash * 53.7): part output
     bool faulty;             // hash above 1 - LevelRules::faulty: stutters
+    float stutterSeed;       // fract(hash * 97.31): when a faulty tube stutters (tubeStutter)
 };
 
 enum class OpeningKind : uint8_t { Doorway, LockedDoor, Exit, CursedExit, Window, Rail };
@@ -186,3 +187,7 @@ float tubeHash(float gx, float gz);
 // storey. Bounded, because the shader's sin() loses the hash at large
 // arguments. Storey 0 is offset 0. Must match storeyOffset() in shaders.cpp.
 float storeyHashOffset(int s);
+// A faulty fitting's output at time t, seconds, as the shader's lightState
+// stutters it: 1, or 0.62 for the moments its gate is open and its noise low.
+// Change one, change both.
+float tubeStutter(float stutterSeed, float t);

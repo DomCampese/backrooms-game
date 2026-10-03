@@ -10,9 +10,15 @@
 // capture of that level shows), BACKROOMS_STOREY and BACKROOMS_POS as the game
 // does, and writes BACKROOMS_SHOT into the working directory, as the game's
 // TakeScreenshot does. Prints each chunk's triangle count.
+//
+// BACKROOMS_TEXTURED=1 puts the level's surfaces on floors, ceilings and walls
+// through the greybox's texture coordinates, at the tile sizes the Unreal
+// material uses (unreal/Plugins/Backrooms/Content/Python/backrooms_looks.py),
+// so the mapping can be held against a capture of the game.
 #include "raylib.h"
 #include "raymath.h"
 #include "../src/port/greybox.h"
+#include "../src/textures.h"
 #include "../src/core/level_rules.h"
 #include <cmath>
 #include <cstdio>
@@ -40,20 +46,34 @@ const Color SURFACE_COLOUR[(int)GreySurface::Count] = {
     { 60, 60, 60, 255 },      // DeadLight
 };
 
+// Which of a level's surfaces a section takes when textured: 0 floor,
+// 1 ceiling, 2 walls, -1 none. The Python's PARTS, as indices.
+int partOf(GreySurface s) {
+    switch (s) {
+        case GreySurface::Floor: case GreySurface::Stair: return 0;
+        case GreySurface::Ceiling: return 1;
+        case GreySurface::Wall: case GreySurface::Step: case GreySurface::Pillar: return 2;
+        default: return -1;
+    }
+}
+
 // One raylib mesh per section, lit by a fixed direction baked into the colours.
-Mesh toMesh(const GreyboxMesh::Section &s, Color c, float storeyY) {
+// Texture coordinates are the section's metres over `tile`.
+Mesh toMesh(const GreyboxMesh::Section &s, Color c, float storeyY, Vector2 tile) {
     Mesh m = {};
     m.vertexCount = (int)s.pos.size();
     m.triangleCount = (int)s.index.size() / 3;
     m.vertices = (float *)MemAlloc(m.vertexCount * 3 * sizeof(float));
     m.normals = (float *)MemAlloc(m.vertexCount * 3 * sizeof(float));
     m.colors = (unsigned char *)MemAlloc(m.vertexCount * 4);
+    m.texcoords = (float *)MemAlloc(m.vertexCount * 2 * sizeof(float));
     m.indices = (unsigned short *)MemAlloc(s.index.size() * sizeof(unsigned short));
     const float L[3] = { 0.35f, 0.8f, 0.48f };
     for (int v = 0; v < m.vertexCount; v++) {
         Vec3 p = s.pos[v], n = s.normal[v];
         m.vertices[v * 3] = p.x; m.vertices[v * 3 + 1] = p.y + storeyY; m.vertices[v * 3 + 2] = p.z;
         m.normals[v * 3] = n.x; m.normals[v * 3 + 1] = n.y; m.normals[v * 3 + 2] = n.z;
+        m.texcoords[v * 2] = s.uv[v].x / tile.x; m.texcoords[v * 2 + 1] = s.uv[v].y / tile.y;
         float k = 0.55f + 0.45f * fabsf(n.x * L[0] + n.y * L[1] + n.z * L[2]);
         m.colors[v * 4] = (unsigned char)(c.r * k); m.colors[v * 4 + 1] = (unsigned char)(c.g * k);
         m.colors[v * 4 + 2] = (unsigned char)(c.b * k); m.colors[v * 4 + 3] = 255;
@@ -98,7 +118,18 @@ int main() {
     SetTraceLogLevel(LOG_WARNING);
     InitWindow(1440, 850, "greybox");
     std::vector<Mesh> meshes;
-    Material mat = LoadMaterialDefault();
+    std::vector<int> meshMat;
+    // 0 flat colour, then the level's floor, ceiling and walls.
+    Material mats[4] = { LoadMaterialDefault(), LoadMaterialDefault(), LoadMaterialDefault(), LoadMaterialDefault() };
+    const bool textured = getenv("BACKROOMS_TEXTURED") && atoi(getenv("BACKROOMS_TEXTURED"));
+    const Vector2 tiles[3] = { { FLOOR_TILE_M, FLOOR_TILE_M }, { FLOOR_TILE_M, FLOOR_TILE_M },
+                               { WALL_TILE_M, wallTileV(level) } };
+    if (textured) {
+        const LevelSurfaces &set = LEVEL_SURFACES[level];
+        const SurfSlot slots[3] = { set.floor, set.ceiling, set.walls };
+        for (int k = 0; k < 3; k++)
+            mats[k + 1].maps[MATERIAL_MAP_DIFFUSE].texture = makeSurface(slots[k]).albedo;
+    }
     int pcx = fdiv(cellOf(x), CCELLS), pcz = fdiv(cellOf(z), CCELLS);
     for (int rel = (w.storeyH > 0 ? -1 : 0); rel <= (w.storeyH > 0 ? 1 : 0); rel++) {
         StoreyScope sc(w, w.storey + rel);
@@ -112,7 +143,10 @@ int main() {
                     if (sec.index.empty()) continue;
                     // 16-bit indices: split a section that outgrows them.
                     if (sec.pos.size() > 65535) { fprintf(stderr, "section too large\n"); return 1; }
-                    meshes.push_back(toMesh(sec, SURFACE_COLOUR[s], rel * w.storeyH));
+                    int part = textured ? partOf((GreySurface)s) : -1;
+                    meshes.push_back(toMesh(sec, part >= 0 ? WHITE : SURFACE_COLOUR[s], rel * w.storeyH,
+                                            part >= 0 ? tiles[part] : Vector2{ 1, 1 }));
+                    meshMat.push_back(part + 1);
                 }
             }
     }
@@ -128,7 +162,7 @@ int main() {
         BeginDrawing();
         ClearBackground({ 20, 20, 24, 255 });
         BeginMode3D(cam);
-        for (const Mesh &m : meshes) DrawMesh(m, mat, MatrixIdentity());
+        for (size_t i = 0; i < meshes.size(); i++) DrawMesh(meshes[i], mats[meshMat[i]], MatrixIdentity());
         EndMode3D();
         EndDrawing();
     }

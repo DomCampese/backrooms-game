@@ -100,6 +100,19 @@ docs/unreal-handoff.md "Next" has what is open. What will bite:
   and a flare, with the level look's item mesh or the plain shape
   (Private/BackroomsItemShapes.h) the scene actor uses on the floor.
   BackroomsTypes.cpp static_asserts the ends of each list, not every entry.
+- **The level looks are built from the raylib build's own surfaces.**
+  `tools/unreal.sh surfaces` (run by `make unreal-open`) writes them with
+  `texdump --unreal` to `unreal/Saved/Surfaces`, with `looks.json` from
+  `LEVEL_SURFACES` (src/textures.h, which `Game::applyLevelLook` reads too)
+  and `LEVELS`; the editor's `backrooms_looks.py` rebuilds the material and
+  the looks when those files change. The greybox's texture coordinates are
+  metres, so tile sizes live in the material (`FLOOR_TILE_M`, `WALL_TILE_M`,
+  `wallTileV`). `BACKROOMS_TEXTURED=1 ./greybox-view` shows the mapping
+  with raylib before anything reaches the Mac.
+- **Unreal's lights follow `chunkLayout`'s fittings** (`ABackroomsLightsActor`):
+  dead, part output and faulty come from the layout, and a faulty tube
+  stutters by core's `tubeStutter`, the shader's `lightState` formula. Change
+  one, change both.
 - **The layout golden (`tests/golden/layout.txt`) prints every field**, so an
   uninitialised field shows as a nondeterministic line: `Fixture::end` was
   garbage for most kinds until it was zeroed. A new field needs a value for

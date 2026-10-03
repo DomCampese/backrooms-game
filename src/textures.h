@@ -2,6 +2,7 @@
 // Procedural textures — surfaces are composed at startup, including embedded CC0 object tiles.
 #include "raylib.h"
 #include "core/world.h"   // VEND_HW, VEND_Y1: the vending machine's body
+#include "core/level_rules.h"
 
 // A world surface: its colour, and the detail map the shader reads beside it
 // (texture1: packed tangent slopes in RG, gloss mask in B, alpha 255). Both
@@ -98,6 +99,23 @@ Surface makeTileSurface(bool wall);
 Surface makePartyWallSurface();      // LEVEL FUN =): party-print vinyl, bunting, smileys
 Surface makePartyCarpetSurface();    // LEVEL FUN =): patterned banquet-hall carpet
 Surface makePartyCeilSurface();      // LEVEL FUN =): black acoustic board on black grid
+
+// Every world surface, by slot. Levels share slots (the Red Halls reuse Level 1's
+// slab; the pool ceiling is its floor tile), so a slot is generated once.
+enum SurfSlot { SURF_CARPET, SURF_BOARDS, SURF_PAPER, SURF_SLAB, SURF_SOFFIT, SURF_CONCWALL,
+                SURF_POOLFLOOR, SURF_POOLWALL, SURF_BRICK, SURF_BANQUET, SURF_PARTYCEIL,
+                SURF_PARTYWALL, SURF_COUNT };
+// texdump's file names, and the Unreal import's.
+extern const char *const SURF_NAMES[SURF_COUNT];
+Surface makeSurface(SurfSlot slot);
+// What each level puts on its floors, ceilings and walls.
+struct LevelSurfaces { SurfSlot floor, ceiling, walls; };
+extern const LevelSurfaces LEVEL_SURFACES[NLEVELS];
+// Metres per texture repeat. Floors and ceilings map (x, z) / FLOOR_TILE_M;
+// walls run WALL_TILE_M across and wallTileV(level) down, which is the wall
+// height on Level 1, whose concrete carries a tide line at a real height.
+constexpr float FLOOR_TILE_M = 2.0f, WALL_TILE_M = 3.0f;
+float wallTileV(int level);
 Texture2D makeAOStripTex();        // gradient strip for baked contact-shadow decals
 Texture2D makeDogTex();            // THE RED HALLS: whatever the pack is, seen side-on
 Texture2D makeAlmondWrapTex();     // almond water can, unwrapped: label strip + lid + base

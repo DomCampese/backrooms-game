@@ -4,6 +4,7 @@
 //   tools/sandbox-build.sh texdump
 //   ./texdump out/                # every texture
 //   ./texdump out/ carpet ceiling # only the ones whose name contains a filter
+//   ./texdump --unreal dir/       # the surfaces and looks.json, for the Unreal import
 //
 // Why it exists: a capture shows you a texture through the lighting, the tone
 // curve, the fog and the post pass, which is the wrong place to look for a seam
@@ -20,6 +21,7 @@
 // B the gloss mask. A "_wrap" copy tiles each surface 2x2 so a seam at the
 // repeat is in the middle of the picture instead of at its edges.
 #include "raylib.h"
+#include "../src/levels.h"
 #include "../src/textures.h"
 #include <chrono>
 #include <cstdio>
@@ -105,8 +107,49 @@ static void sprite(const char *name, Texture2D (*make)()) {
     dump(name, make(), false);
 }
 
+static void putVec(FILE *f, const char *key, Vector3 v) {
+    fprintf(f, "\"%s\": [%.4f, %.4f, %.4f], ", key, v.x, v.y, v.z);
+}
+
+// What the Unreal editor imports (unreal/Plugins/Backrooms/Content/Python/
+// backrooms_looks.py): each surface and its detail map, and looks.json, which
+// says which surfaces each level uses, at what scale, under what light and fog.
+// The numbers are LEVELS' and LEVEL_SURFACES', so the two builds read one table.
+static int dumpForUnreal() {
+    for (int k = 0; k < SURF_COUNT; k++) {
+        Surface sf = timed([k] { return makeSurface((SurfSlot)k); });
+        printf("%-16s generated in %.0f ms\n", SURF_NAMES[k], gGenMs);
+        dump(SURF_NAMES[k], sf.albedo, false);
+        dump((std::string(SURF_NAMES[k]) + "_detail").c_str(), sf.detail, false);
+    }
+    std::string path = gOut + "/looks.json";
+    FILE *f = fopen(path.c_str(), "w");
+    if (!f) { fprintf(stderr, "texdump: cannot write %s\n", path.c_str()); return 1; }
+    fprintf(f, "{\"floorTileM\": %.4f, \"wallTileM\": %.4f, \"levels\": [\n", FLOOR_TILE_M, WALL_TILE_M);
+    for (int lv = 0; lv < NLEVELS; lv++) {
+        const LevelCfg &c = LEVELS[lv];
+        const LevelSurfaces &set = LEVEL_SURFACES[lv];
+        fprintf(f, "  {\"name\": \"%s\", \"floor\": \"%s\", \"ceiling\": \"%s\", \"walls\": \"%s\", ", c.name,
+                SURF_NAMES[set.floor], SURF_NAMES[set.ceiling], SURF_NAMES[set.walls]);
+        fprintf(f, "\"wallTileV\": %.4f, \"wallH\": %.4f, \"lightPitch\": %.4f, ", wallTileV(lv), c.wallH, c.ls);
+        putVec(f, "lightColour", c.lightCol);
+        putVec(f, "ambient", c.amb);
+        putVec(f, "fogColour", c.fogCol);
+        fprintf(f, "\"lightMul\": %.4f, \"fogDensity\": %.4f, \"gloss\": %.4f}%s\n", c.lightMul, c.fogDen, c.gloss,
+                lv + 1 < NLEVELS ? "," : "");
+    }
+    fprintf(f, "]}\n");
+    fclose(f);
+    printf("wrote %s\n", path.c_str());
+    return 0;
+}
+
 int main(int argc, char **argv) {
     SetTraceLogLevel(LOG_WARNING);
+    if (argc > 2 && strcmp(argv[1], "--unreal") == 0) {
+        gOut = argv[2];
+        return dumpForUnreal();
+    }
     if (argc > 1) gOut = argv[1];
     for (int i = 2; i < argc; i++) gFilters.push_back(argv[i]);
     // Surfaces are generated only when asked for: several take a second each.

@@ -30,6 +30,18 @@ UMaterialInterface* SurfaceMaterial(const UBackroomsLevelLook* Look, EBackroomsS
 	return Flat;
 }
 
+// The tangent along +u. Unreal derives the bitangent as Normal x Tangent and
+// flips it on request; a normal map's green follows +v (down the texture), so it
+// is flipped wherever that cross product points the other way. The handedness
+// swap in BackroomsCoords flips cross products, so this is decided in Unreal's
+// space.
+FProcMeshTangent Tangent(const FVector& Normal, const Vec3& UAxis, const Vec3& VAxis)
+{
+	const FVector U = BackroomsCoords::ToUnrealDirection(UAxis);
+	const FVector V = BackroomsCoords::ToUnrealDirection(VAxis);
+	return FProcMeshTangent(U, FVector::DotProduct(FVector::CrossProduct(Normal, U), V) < 0.0);
+}
+
 UInstancedStaticMeshComponent* NewInstances(UProceduralMeshComponent& Parent, UStaticMesh* Mesh,
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>>& Instances)
 {
@@ -108,15 +120,22 @@ void BackroomsChunkBuild::Build(World& W, int32 Cx, int32 Cz, const UBackroomsLe
 		{
 			continue;
 		}
+		const int32 Count = (int32)Section.pos.size();
 		TArray<FVector> Vertices, Normals;
+		TArray<FVector2D> UVs;
+		TArray<FProcMeshTangent> Tangents;
 		TArray<int32> Triangles;
-		Vertices.Reserve((int32)Section.pos.size());
-		Normals.Reserve((int32)Section.normal.size());
+		Vertices.Reserve(Count);
+		Normals.Reserve(Count);
+		UVs.Reserve(Count);
+		Tangents.Reserve(Count);
 		Triangles.Reserve((int32)Section.index.size());
-		for (size_t V = 0; V < Section.pos.size(); V++)
+		for (int32 V = 0; V < Count; V++)
 		{
 			Vertices.Add(BackroomsCoords::ToUnreal(Section.pos[V]));
 			Normals.Add(BackroomsCoords::ToUnrealDirection(Section.normal[V]));
+			UVs.Add(FVector2D(Section.uv[V].x, Section.uv[V].y));
+			Tangents.Add(Tangent(Normals.Last(), Section.uAxis[V], Section.vAxis[V]));
 		}
 		for (uint32_t I : Section.index)
 		{
@@ -124,8 +143,8 @@ void BackroomsChunkBuild::Build(World& W, int32 Cx, int32 Cz, const UBackroomsLe
 		}
 		// Rounds pass through water, as in the raylib build's MeshTracer.
 		const bool bSolid = bCollision && S != (int32)GreySurface::Water;
-		Mesh.CreateMeshSection_LinearColor(SectionIndex, Vertices, Triangles, Normals, TArray<FVector2D>(),
-			TArray<FLinearColor>(), TArray<FProcMeshTangent>(), bSolid);
+		Mesh.CreateMeshSection_LinearColor(SectionIndex, Vertices, Triangles, Normals, UVs,
+			TArray<FLinearColor>(), Tangents, bSolid);
 		if (UMaterialInterface* Material = SurfaceMaterial(Look, (EBackroomsSurface)S, Mesh.GetOwner()))
 		{
 			Mesh.SetMaterial(SectionIndex, Material);

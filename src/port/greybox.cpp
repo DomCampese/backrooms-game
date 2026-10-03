@@ -27,10 +27,20 @@ struct Builder {
         GreyboxMesh::Section &sec = m.sections[(int)s];
         Vec3 n = unit3(cross3(sub3(b, a), sub3(c, a)));
         if (n.x == 0 && n.y == 0 && n.z == 0) return;   // degenerate
+        // Projected on the plane the face is nearest: the floor's (x, z), or a
+        // wall's horizontal axis and -y.
+        float ax = fabsf(n.x), ay = fabsf(n.y), az = fabsf(n.z);
+        bool flat = ay >= ax && ay >= az, alongZ = !flat && ax > az;
+        Vec3 ua = alongZ ? Vec3{ 0, 0, 1 } : Vec3{ 1, 0, 0 };
+        Vec3 va = flat ? Vec3{ 0, 0, 1 } : Vec3{ 0, -1, 0 };
+        auto uvOf = [&](Vec3 p) { return flat ? Vec2{ p.x, p.z } : Vec2{ alongZ ? p.z : p.x, -p.y }; };
         for (int side = 0; side < 2; side++) {
             uint32_t base = (uint32_t)sec.pos.size();
             Vec3 sn = side ? Vec3{ -n.x, -n.y, -n.z } : n;
-            for (Vec3 p : { a, b, c, d }) { sec.pos.push_back(p); sec.normal.push_back(sn); }
+            for (Vec3 p : { a, b, c, d }) {
+                sec.pos.push_back(p); sec.normal.push_back(sn);
+                sec.uv.push_back(uvOf(p)); sec.uAxis.push_back(ua); sec.vAxis.push_back(va);
+            }
             const uint32_t FRONT[6] = { 0, 1, 2, 0, 2, 3 }, BACK[6] = { 0, 2, 1, 0, 3, 2 };
             const uint32_t *tri = side ? BACK : FRONT;
             for (int t = 0; t < 6; t++) sec.index.push_back(base + tri[t]);

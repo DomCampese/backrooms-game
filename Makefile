@@ -84,6 +84,12 @@ replay-check: replay
 
 .PHONY: replay-check
 
+# Every texture generator without a window (tools/texdump.cpp); `--unreal DIR`
+# writes what the Unreal editor imports.
+TEXDUMP_SRCS := tools/texdump.cpp src/textures.cpp src/surfaces.cpp src/levels.cpp src/util.cpp $(CORE_SRCS)
+texdump: $(TEXDUMP_SRCS) $(HDRS) $(GENERATED)
+	c++ $(CXX_FLAGS) $(CFLAGS_RL) $(TEXDUMP_SRCS) -o texdump $(LIBS_RL)
+
 # The Unreal project (unreal/), on a Mac with Unreal Engine 5.8: tools/unreal.sh.
 # Build after every pull; opening the .uproject does not recompile.
 unreal:
@@ -94,4 +100,6 @@ unreal-play:
 	tools/unreal.sh play
 unreal-test:
 	tools/unreal.sh test
-.PHONY: unreal unreal-open unreal-play unreal-test
+unreal-surfaces:
+	tools/unreal.sh surfaces
+.PHONY: unreal unreal-open unreal-play unreal-test unreal-surfaces

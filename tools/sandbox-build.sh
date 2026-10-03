@@ -56,7 +56,9 @@ build_replay() {
 # code calls the sim (scene.cpp), so the sim links in too.
 build_greybox_view() {
     rm -f greybox-view
-    c++ "${FLAGS[@]}" tools/greybox-view.cpp src/port/*.cpp src/sim/*.cpp "${CORE[@]}" -o greybox-view "${LINK[@]}"
+    python3 tools/embed-materials.py
+    c++ "${FLAGS[@]}" tools/greybox-view.cpp src/textures.cpp src/surfaces.cpp src/util.cpp src/port/*.cpp src/sim/*.cpp \
+        "${CORE[@]}" -o greybox-view "${LINK[@]}"
     echo "built ./greybox-view (python$PYV)"
 }
 # texdump: every texture generator, run without a window, written to PNG with
@@ -64,7 +66,7 @@ build_greybox_view() {
 build_texdump() {
     rm -f texdump
     python3 tools/embed-materials.py
-    c++ "${FLAGS[@]}" tools/texdump.cpp src/textures.cpp src/surfaces.cpp src/util.cpp \
+    c++ "${FLAGS[@]}" tools/texdump.cpp src/textures.cpp src/surfaces.cpp src/levels.cpp src/util.cpp \
         "${CORE[@]}" -o texdump "${LINK[@]}"
     echo "built ./texdump (python$PYV)"
 }
