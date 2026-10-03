@@ -1,21 +1,25 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "BackroomsTypes.h"
 #include "BackroomsHeldActor.generated.h"
 
 struct Sim;
 struct RevolverPose;
 class UAnimSequence;
+class UBackroomsLevelLook;
 class UPointLightComponent;
 class UPoseableMeshComponent;
 class USkeletalMeshComponent;
+class UStaticMeshComponent;
 
-// The revolver in the player's hand, placed and posed as the raylib build
-// draws it (src/port/held.h): the clip and how far through it, the drum's turn
-// across shots, the muzzle flash. The model is the repository's
+// What the player holds, placed as the raylib build draws it (src/port/held.h).
+// The revolver is posed too: the clip and how far through it, the drum's turn
+// across shots, the muzzle flash. Its model is the repository's
 // assets/models/revolver.glb, which the editor imports on first open
 // (Plugins/Backrooms/Content/Python); Project Settings > Game > Backrooms names
-// the assets.
+// the assets. The can, the tape deck and a flare take the level look's mesh for
+// that item, or its plain shape, as the scene actor draws them on the floor.
 UCLASS(Blueprintable, Transient)
 class BACKROOMS_API ABackroomsHeldActor : public AActor
 {
@@ -25,10 +29,11 @@ public:
 	ABackroomsHeldActor();
 
 	// Origin places the sim's storey frame in the world.
-	void Show(const Sim& Game, const FVector& Origin);
+	void Show(const Sim& Game, const UBackroomsLevelLook* Look, const FVector& Origin);
 
 private:
 	void ShowRevolver(const Sim& Game, const FVector& Origin);
+	void ShowItem(const Sim& Game, const UBackroomsLevelLook* Look, const FVector& Origin);
 	void ReportReload(const RevolverPose& Pose, const UAnimSequence* Clip);
 	bool Load();
 
@@ -39,6 +44,12 @@ private:
 	TObjectPtr<UPoseableMeshComponent> Gun;
 	UPROPERTY(VisibleAnywhere, Category = "Backrooms")
 	TObjectPtr<UPointLightComponent> Flash;
+	// The can, the deck or a flare.
+	UPROPERTY(VisibleAnywhere, Category = "Backrooms")
+	TObjectPtr<UStaticMeshComponent> Item;
+	UPROPERTY(Transient)
+	TObjectPtr<const UBackroomsLevelLook> ItemLook;
+	EBackroomsItem ItemKind = EBackroomsItem::Count;
 
 	// Idle, Reload, Shoot: RevolverClip's order.
 	UPROPERTY(Transient)

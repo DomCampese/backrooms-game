@@ -327,7 +327,7 @@ Pcm makeFloorGroan() {
 
 } // namespace
 
-// Soft liquid movement and three short swallows, synchronized with drawDrinkCan.
+// Soft liquid movement and three short swallows, synchronized with heldCan (port/held.h).
 // Smooth attacks avoid the old full-amplitude noise discontinuity; integrating
 // frequency keeps the bubble pitch from reversing into an electronic bass chirp.
 Pcm gulpPcm() {

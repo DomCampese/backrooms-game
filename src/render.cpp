@@ -1,6 +1,7 @@
 #include "game.h"
 #include "input.h"
 #include "port/held.h"
+#include "port/scene.h"
 #include "textures.h"   // ENT_FRAMES / ENT_ROWS / DOG_FRAMES: the sprite-sheet layout
 #include "raymath.h"
 #include "rlgl.h"
@@ -8,6 +9,16 @@
 #include <algorithm>
 
 static_assert(sizeof(PARTY) / sizeof(PARTY[0]) == PARTY_COLOURS, "the sim draws balloon colours from PARTY_COLOURS");
+
+// A held model's transform: its axes along the frame's, scaled, at its origin.
+static Matrix heldMatrix(const HeldFrame &f) {
+    Matrix m{};
+    m.m0=f.right.x*f.scale; m.m1=f.right.y*f.scale; m.m2=f.right.z*f.scale;
+    m.m4=f.up.x*f.scale; m.m5=f.up.y*f.scale; m.m6=f.up.z*f.scale;
+    m.m8=f.forward.x*f.scale; m.m9=f.forward.y*f.scale; m.m10=f.forward.z*f.scale;
+    m.m12=f.pos.x; m.m13=f.pos.y; m.m14=f.pos.z; m.m15=1;
+    return m;
+}
 
 // How hard one flare is burning right now: a fast flare-up as the cap comes
 // off, a fade over the last second and a half, and the flicker on top. Both
@@ -374,145 +385,109 @@ void Game::renderScene(double now) {
     auto lit = [](Color c, float f) {
         return Color{ cl8(c.r * f), cl8(c.g * f), cl8(c.b * f), c.a };
     };
-    if (sim.level == 1) {   // this epoch's supply crates (Sim::crateAt)
-        for (int dx = -9; dx <= 9; dx++) for (int dz = -9; dz <= 9; dz++) {
-            int a = pci + dx, b = pck + dz;
-            if (!sim.crateAt(a, b)) continue;
-            float cxw = a * CELL + 1.0f, czw = b * CELL + 1.0f, gy = sim.world.floorY(a, b);
-            float spin = (float)(ih(a, b, 0xC2A7u) & 3) * 1.5707963f + (((ih(a, b, 0xC2A8u) & 255) / 255.0f) - 0.5f) * 0.4f;
-            Matrix xf = MatrixMultiply(MatrixRotateY(spin), MatrixTranslate(cxw, gy, czw));
+    // What stands in the world, placed by the same rules the sim tests
+    // (simScene); only the look, the bob and the sway are decided here.
+    for (const SceneItem &it : simScene(sim)) {
+        const int a = it.gi, b = it.gk;
+        const float x = it.pos.x, gy = it.pos.y, z = it.pos.z;
+        switch (it.kind) {
+        case SceneKind::Crate:
+        case SceneKind::CrateOpen: {
+            Matrix xf = MatrixMultiply(MatrixRotateY(-it.yaw), MatrixTranslate(x, gy, z));
             DrawMesh(crateMesh, mats[MAT_PROPS], xf);
-            if (!sim.cratesOpened.count(Sim::cellKey2(a, b)))
+            if (it.kind == SceneKind::Crate)
                 DrawMesh(crateLidMesh, mats[MAT_PROPS], MatrixMultiply(MatrixTranslate(0, 0.564f, 0), xf));
             else   // prised off and leaned against the side
                 DrawMesh(crateLidMesh, mats[MAT_PROPS],
                          MatrixMultiply(MatrixMultiply(MatrixRotateX(1.35f), MatrixTranslate(0, 0.02f, 0.42f)), xf));
-        }
-    }
-    for (int dx = -7; dx <= 7; dx++) for (int dz = -7; dz <= 7; dz++) {   // world pickups nearby
-        int a = pci + dx, b = pck + dz;
-        if (sim.taken.count(sim.cellKey(a, b))) continue;
-        Pickup kind = sim.pickupAt(a, b);            // the same call the pickup test makes
-        if (kind == Pickup::None) continue;
-        Vec2 spot = sim.pickupSpot(a, b);
-        float bxx = spot.x, bzz = spot.y;
-        float gy = sim.world.floorY(a, b);
-        float pl = propLum(bxx, gy + 0.15f, bzz);
-        switch (kind) {
-        case Pickup::AlmondWater: {   // the can itself, on the floor or up on the furniture
-            float shelf = sim.bottleShelfY(a, b);
-            float sy = gy + (shelf >= 0 ? shelf : 0.0f);
-            // the mesh is built with its base on y=0, so this just puts the base
-            // where it belongs. Spin each one by its cell so they aren't clones.
-            float spin = (float)(ih(a, b, 0x0CA9u) & 1023) / 1023.0f * TAU;
-            drawCan(MatrixMultiply(MatrixRotateY(spin), MatrixTranslate(bxx, sy, bzz)));
             break;
         }
-        case Pickup::Doubloon: {
+        case SceneKind::AlmondWater:   // the mesh's base is at y = 0, and pos is on the floor or the shelf
+            drawCan(MatrixMultiply(MatrixRotateY(-it.yaw), MatrixTranslate(x, gy, z)));
+            break;
+        case SceneKind::Doubloon: {
             float bob = sinf((float)now * 2.0f + a * 1.7f + b) * 0.03f;
-            DrawCylinder({ bxx, gy + 0.06f + bob, bzz }, 0.085f, 0.085f, 0.024f, 12, lit({ 234, 188, 74, 255 }, pl));
+            DrawCylinder({ x, gy + 0.06f + bob, z }, 0.085f, 0.085f, 0.024f, 12,
+                         lit({ 234, 188, 74, 255 }, propLum(x, gy + 0.15f, z)));
             break;
         }
-        case Pickup::Battery:   // standing on end
-            DrawCube({ bxx, gy + 0.05f, bzz }, 0.06f, 0.10f, 0.06f, lit({ 70, 150, 90, 255 }, pl));
-            DrawCylinder({ bxx, gy + 0.10f, bzz }, 0.018f, 0.018f, 0.02f, 8, lit({ 200, 180, 90, 255 }, pl));
+        case SceneKind::Battery: {   // standing on end
+            float pl = propLum(x, gy + 0.15f, z);
+            DrawCube({ x, gy + 0.05f, z }, 0.06f, 0.10f, 0.06f, lit({ 70, 150, 90, 255 }, pl));
+            DrawCylinder({ x, gy + 0.10f, z }, 0.018f, 0.018f, 0.02f, 8, lit({ 200, 180, 90, 255 }, pl));
             break;
-        case Pickup::Tape: {   // a cassette, label up, two hubs showing
+        }
+        case SceneKind::Tape: {   // a cassette, label up, two hubs showing
+            float pl = propLum(x, gy + 0.15f, z);
             float bob = sinf((float)now * 1.6f + a * 2.1f + b) * 0.02f;
-            DrawCube({ bxx, gy + 0.02f + bob, bzz }, 0.11f, 0.04f, 0.07f, lit({ 40, 38, 42, 255 }, pl));
-            DrawCube({ bxx, gy + 0.041f + bob, bzz }, 0.075f, 0.001f, 0.05f, lit({ 210, 202, 182, 255 }, pl));
-            DrawCylinder({ bxx - 0.028f, gy + 0.041f + bob, bzz }, 0.014f, 0.014f, 0.002f, 8, lit({ 30, 28, 30, 255 }, pl));
-            DrawCylinder({ bxx + 0.028f, gy + 0.041f + bob, bzz }, 0.014f, 0.014f, 0.002f, 8, lit({ 30, 28, 30, 255 }, pl));
+            DrawCube({ x, gy + 0.02f + bob, z }, 0.11f, 0.04f, 0.07f, lit({ 40, 38, 42, 255 }, pl));
+            DrawCube({ x, gy + 0.041f + bob, z }, 0.075f, 0.001f, 0.05f, lit({ 210, 202, 182, 255 }, pl));
+            DrawCylinder({ x - 0.028f, gy + 0.041f + bob, z }, 0.014f, 0.014f, 0.002f, 8, lit({ 30, 28, 30, 255 }, pl));
+            DrawCylinder({ x + 0.028f, gy + 0.041f + bob, z }, 0.014f, 0.014f, 0.002f, 8, lit({ 30, 28, 30, 255 }, pl));
             break;
         }
-        case Pickup::Key: {   // a brass mortice key, bit up, turning slowly
+        case SceneKind::Key: {   // a brass mortice key, bit up, turning slowly
             float bob = sinf((float)now * 1.9f + a * 1.3f + b) * 0.025f;
             float spin = (float)now * 0.8f + a;
-            Color brass = lit({ 214, 172, 86, 255 }, pl);
+            Color brass = lit({ 214, 172, 86, 255 }, propLum(x, gy + 0.15f, z));
             float y = gy + 0.055f + bob;
             // bow, shank, bit — small, so it reads by its glint and its turn
             // rather than by its outline at four metres.
-            DrawCylinderEx({ bxx, y, bzz }, { bxx, y + 0.012f, bzz }, 0.035f, 0.035f, 10, brass);
-            DrawCube({ bxx + cosf(spin) * 0.045f, y, bzz + sinf(spin) * 0.045f },
-                     0.09f, 0.012f, 0.012f, brass);
-            DrawCube({ bxx + cosf(spin) * 0.082f, y + 0.014f, bzz + sinf(spin) * 0.082f },
-                     0.022f, 0.028f, 0.012f, brass);
+            DrawCylinderEx({ x, y, z }, { x, y + 0.012f, z }, 0.035f, 0.035f, 10, brass);
+            DrawCube({ x + cosf(spin) * 0.045f, y, z + sinf(spin) * 0.045f }, 0.09f, 0.012f, 0.012f, brass);
+            DrawCube({ x + cosf(spin) * 0.082f, y + 0.014f, z + sinf(spin) * 0.082f }, 0.022f, 0.028f, 0.012f, brass);
             break;
         }
-        case Pickup::None:
+        case SceneKind::Deck:   // wherever you set it down, facing the way you threw it
+            drawDeck(MatrixMultiply(MatrixRotateY(-it.yaw), MatrixTranslate(x, gy, z)), it.variant != 0);
+            break;
+        case SceneKind::Coin: {   // gy is the floor they fell on, in this storey's frame
+            float bob = sinf((float)now * 2.4f + x) * 0.03f;
+            DrawCylinder({ x, gy + 0.06f + bob, z }, 0.085f, 0.085f, 0.024f, 12,
+                         lit({ 234, 188, 74, 255 }, propLum(x, gy + 0.1f, z)));
             break;
         }
-    }
-    if (!sim.deck.carried)   // the deck, wherever you set it down, facing the way you threw it
-        drawDeck(MatrixMultiply(MatrixRotateY(sim.deck.yaw), MatrixTranslate(sim.deck.x, sim.deck.y, sim.deck.z)),
-                 sim.deck.playing);
-    for (auto &cw : sim.coinsWorld) {
-        float gy = cw.y;   // the floor they fell on, in this storey's frame
-        float bob = sinf((float)now * 2.4f + cw.x) * 0.03f;
-        DrawCylinder({ cw.x, gy + 0.06f + bob, cw.z }, 0.085f, 0.085f, 0.024f, 12,
-                     lit({ 234, 188, 74, 255 }, propLum(cw.x, gy + 0.1f, cw.z)));
-    }
-    if (sim.level == 4) {   // balloons nose against the ceiling, strings hanging down
-        for (int dx = -7; dx <= 7; dx++) for (int dz = -7; dz <= 7; dz++) {
-            int a = pci + dx, b = pck + dz;
-            // Placement comes from balloonAt, the same function the bullets test
-            // against. A copy of its hash here kept the old world.seed salt after
-            // levels began reseeding per visit, so the balloons you could see were
-            // never the ones a round could hit.
-            Vec3 bp;
-            if (!sim.balloonAt(a, b, bp)) continue;   // none here, or already shot
-            uint32_t h = ih(a, b, sim.pickupSalt() ^ 0xBA11u);
-            float bxx = bp.x, bzz = bp.z;
-            float bob = sinf((float)now * 0.8f + a * 1.3f + b * 2.1f) * 0.05f;
-            float by = bp.y + bob;
-            float pl = propLum(bxx, by, bzz) * 0.85f;
-            DrawSphere({ bxx, by, bzz }, 0.17f, lit(PARTY[(h >> 10) % PARTY_COLOURS], pl));
-            DrawCylinderEx({ bxx, by - 0.15f, bzz }, { bxx + 0.04f, by - 0.95f, bzz + 0.02f },
-                           0.005f, 0.005f, 4, lit({ 190, 185, 175, 150 }, pl));
-        }
-        for (int dx = -6; dx <= 6; dx++) for (int dz = -6; dz <= 6; dz++) {   // balloon bunches tied to party tables
-            int a = pci + dx, b = pck + dz;
-            if (sim.poppedTableBunches.count(Sim::cellKey2(a, b))) continue;   // this bunch has been shot
-            Vec3 bpos[4], tie; uint8_t bcol[4];
-            int nb = sim.tableBalloonBunch(a, b, bpos, bcol, tie);        // same positions the aim uses
-            for (int k = 0; k < nb; k++) {
-                float sway = sinf((float)now * 0.9f + a * 1.7f + k * 2.3f) * 0.04f;
-                float bxx = bpos[k].x + sway, by = bpos[k].y, bzz = bpos[k].z;
-                float pl = propLum(bxx, by, bzz) * 0.9f;
-                DrawSphere({ bxx, by, bzz }, 0.15f, lit(PARTY[bcol[k]], pl));
-                DrawCylinderEx({ bxx, by - 0.13f, bzz }, { tie.x + 0.02f, tie.y + 0.02f, tie.z },
+        case SceneKind::Balloon:
+            if (it.index == 0) {   // nosing against the ceiling, string hanging down
+                float by = gy + sinf((float)now * 0.8f + a * 1.3f + b * 2.1f) * 0.05f;
+                float pl = propLum(x, by, z) * 0.85f;
+                DrawSphere({ x, by, z }, 0.17f, lit(PARTY[it.variant], pl));
+                DrawCylinderEx({ x, by - 0.15f, z }, { x + 0.04f, by - 0.95f, z + 0.02f },
+                               0.005f, 0.005f, 4, lit({ 190, 185, 175, 150 }, pl));
+            } else {   // one of a bunch tied to a party table
+                float bx = x + sinf((float)now * 0.9f + a * 1.7f + (it.index - 1) * 2.3f) * 0.04f;
+                float pl = propLum(bx, gy, z) * 0.9f;
+                DrawSphere({ bx, gy, z }, 0.15f, lit(PARTY[it.variant], pl));
+                DrawCylinderEx({ bx, gy - 0.13f, z }, { it.anchor.x + 0.02f, it.anchor.y + 0.02f, it.anchor.z },
                                0.004f, 0.004f, 4, lit({ 200, 195, 185, 150 }, pl));
             }
+            break;
+        case SceneKind::Confetti: {   // bursts still tumbling to the carpet
+            float fade = clampf(it.amount * 1.6f, 0, 1);
+            Color base = PARTY[it.variant];
+            DrawCube({ x, gy, z }, 0.05f, 0.05f, 0.05f,
+                     lit({ base.r, base.g, base.b, (unsigned char)(255 * fade) }, propLum(x, gy, z)));
+            break;
         }
-        for (auto &c : sim.confetti) {   // bursts still tumbling to the carpet
-            float pl = propLum(c.pos.x, c.pos.y, c.pos.z);
-            float fade = clampf(c.life * 1.6f, 0, 1);
-            Color base = PARTY[c.colour];
-            Color cc = lit({ base.r, base.g, base.b, (unsigned char)(255 * fade) }, pl);
-            DrawCube(toRl(c.pos), 0.05f, 0.05f, 0.05f, cc);
+        case SceneKind::Chalk: {
+            // The stranger's chalk has been down longer than yours: duller, yellower,
+            // further gone. Same arrow, so it reads as a mark first and as somebody
+            // else's a moment later, which is the order that lands.
+            const Vector3 cm = toRl(it.pos);
+            Color cc = it.variant ? lit({228,228,218,210}, propLum(cm.x,cm.y+0.1f,cm.z))
+                                  : lit({186,180,156,150}, propLum(cm.x,cm.y+0.1f,cm.z));
+            Vector3 along{cosf(it.yaw),0,sinf(it.yaw)}, side{-along.z,0,along.x};
+            Vector3 tip = Vector3Add(cm,Vector3Scale(along,0.25f));
+            Vector3 tail = Vector3Subtract(cm,Vector3Scale(along,0.25f));
+            Vector3 shoulder = Vector3Add(cm,Vector3Scale(along,0.04f));
+            DrawCylinderEx(tail,tip,0.011f,0.011f,4,cc);
+            DrawCylinderEx(tip,Vector3Add(shoulder,Vector3Scale(side,0.17f)),0.011f,0.011f,4,cc);
+            DrawCylinderEx(tip,Vector3Subtract(shoulder,Vector3Scale(side,0.17f)),0.011f,0.011f,4,cc);
+            break;
         }
-    }
-    for (const auto &m0 : sim.chalk[sim.level]) {
-        // Chalk stays on the floor it was drawn on: a storey away it is drawn
-        // where it lies (seen down a stairwell, if you can), further not at all.
-        int ds = m0.storey - sim.world.storey;
-        if (ds < -1 || ds > 1) continue;
-        ChalkMark mark = m0;
-        mark.pos.y += ds * sim.world.storeyH;
-        const Vector3 cm = toRl(mark.pos);
-        if (fabsf(cm.x-sim.px) > 30 || fabsf(cm.z-sim.pz) > 30) continue;
-        // The stranger's chalk has been down longer than yours: duller, yellower,
-        // further gone. Same arrow, so it reads as a mark first and as somebody
-        // else's a moment later, which is the order that lands.
-        Color cc = mark.mine ? lit({228,228,218,210}, propLum(cm.x,cm.y+0.1f,cm.z))
-                             : lit({186,180,156,150}, propLum(cm.x,cm.y+0.1f,cm.z));
-        Vector3 along{cosf(mark.yaw),0,sinf(mark.yaw)}, side{-along.z,0,along.x};
-        Vector3 tip = Vector3Add(cm,Vector3Scale(along,0.25f));
-        Vector3 tail = Vector3Subtract(cm,Vector3Scale(along,0.25f));
-        Vector3 shoulder = Vector3Add(cm,Vector3Scale(along,0.04f));
-        DrawCylinderEx(tail,tip,0.011f,0.011f,4,cc);
-        DrawCylinderEx(tip,Vector3Add(shoulder,Vector3Scale(side,0.17f)),0.011f,0.011f,4,cc);
-        DrawCylinderEx(tip,Vector3Subtract(shoulder,Vector3Scale(side,0.17f)),0.011f,0.011f,4,cc);
+        default:   // flares, impacts and the actors are drawn below, from the sim
+            break;
+        }
     }
     if (sim.wayOpen()) {   // enough doubloons: real exits burn green — the way out
         float pulse = 0.7f + 0.3f * sinf((float)now * 3.0f);
@@ -725,8 +700,9 @@ void Game::renderScene(double now) {
         const Vector3 &la = LEVELS[sim.level].amb;
         Vector3 vmAmb = { fmaxf(la.x, 0.150f), fmaxf(la.y, 0.142f), fmaxf(la.z, 0.128f) };
         SetShaderValue(worldShader, locAmb, &vmAmb, SHADER_UNIFORM_VEC3);
-        if (held == Held::Can) drawDrinkCan(cam);        // both hands are busy — the deck goes away
-        else if (held == Held::Deck) drawHeldDeck(cam);
+        // Where each is held is src/port/held.cpp's, which the Unreal build reads too.
+        if (held == Held::Can) drawCan(heldMatrix(heldCan(sim, view)));   // both hands are busy: the deck goes away
+        else if (held == Held::Deck) drawDeck(heldMatrix(heldDeck(sim, view)), sim.deck.playing);
         else drawHeldWeapon(cam);
         SetShaderValue(worldShader, locOccN, &occN, SHADER_UNIFORM_FLOAT);   // both as they were
         SetShaderValue(worldShader, locAmb, &la, SHADER_UNIFORM_VEC3);
@@ -738,15 +714,9 @@ void Game::renderScene(double now) {
 // Held geometry belongs to the scene pass: perspective, room lighting and
 // post-processing all affect it just as they affect the can and the deck.
 void Game::drawHeldWeapon(const Camera3D &cam) {
-    // Where it is held is src/port/held.cpp's, which the Unreal build reads too.
-    const HeldFrame f = heldWeapon(sim, simView(sim));
     Vector3 right{sim.r2x, 0, sim.r2z};
     Vector3 up = Vector3Normalize(Vector3CrossProduct(right, toRl(sim.fwd)));
-    Matrix m{};
-    m.m0=f.right.x*f.scale; m.m1=f.right.y*f.scale; m.m2=f.right.z*f.scale;
-    m.m4=f.up.x*f.scale; m.m5=f.up.y*f.scale; m.m6=f.up.z*f.scale;
-    m.m8=f.forward.x*f.scale; m.m9=f.forward.y*f.scale; m.m10=f.forward.z*f.scale;
-    m.m12=f.pos.x; m.m13=f.pos.y; m.m14=f.pos.z; m.m15=1;
+    const Matrix m = heldMatrix(heldWeapon(sim, simView(sim)));
     float gloss = sim.weapon == WEAPON_REVOLVER ? 0.48f : 0.12f;
     SetShaderValue(worldShader, locGloss, &gloss, SHADER_UNIFORM_FLOAT);
     if (sim.weapon == WEAPON_REVOLVER) {
@@ -1165,110 +1135,3 @@ void Game::drawDeck(Matrix xf, bool lamp) {
     }
 }
 
-// The deck in your hand. Same three rules the drink can had to learn: held
-// inside 0.34 m so no corridor can cut through it, depth testing left alone,
-// and the caller lifts the world shadowing off it before this runs.
-void Game::drawHeldDeck(const Camera3D &cam) {
-    Vector3 F = toRl(sim.fwd);
-    Vector3 Rt = { sim.r2x, 0, sim.r2z };
-    Vector3 Up = Vector3Normalize(Vector3CrossProduct(Rt, F));
-
-    float sway = sinf(sim.bobPhase * 3.14159f) * 0.007f * sim.bobAmt;
-    float rise = sinf(sim.bobPhase * 1.57079f) * 0.004f * sim.bobAmt;
-    // Down in the corner of the view, and — the rule the drink can had to learn
-    // — the whole offset kept inside 0.34 m of the eye. Collision never lets you
-    // that close to anything solid, so nothing in the world can cut into it.
-    // Held further out, corridor walls slice straight through it.
-    Vector3 pos = Vector3Add(cam.position,
-                  Vector3Add(Vector3Scale(F, 0.220f),
-                  Vector3Add(Vector3Scale(Rt, 0.125f + sway), Vector3Scale(Up, -0.128f + rise))));
-
-    // held this close, life size reads as a toy: the usual viewmodel cheat
-    const float SCALE = 0.62f;
-    // Tip the top face up toward the eye so the bay and the reels are the part
-    // you see — held flat, all you get is the front edge and it reads as a brick.
-    const float pitch2 = 52.0f * DEG2RAD, yaw2 = -26.0f * DEG2RAD;
-    Vector3 x0 = Rt, y0 = Up, z0 = Vector3Negate(F);      // front face toward you
-    Vector3 y1 = Vector3Add(Vector3Scale(y0, cosf(pitch2)), Vector3Scale(z0, sinf(pitch2)));
-    Vector3 z1 = Vector3Add(Vector3Scale(y0, -sinf(pitch2)), Vector3Scale(z0, cosf(pitch2)));
-    Vector3 ax = Vector3Add(Vector3Scale(x0, cosf(yaw2)), Vector3Scale(z1, -sinf(yaw2)));
-    Vector3 az = Vector3Add(Vector3Scale(x0, sinf(yaw2)), Vector3Scale(z1, cosf(yaw2)));
-
-    // the mesh sits underside-on-origin, so drop back down its own up axis to
-    // turn it about its middle rather than about its base
-    pos = Vector3Subtract(pos, Vector3Scale(y1, 0.029f * SCALE));
-
-    Matrix m = { 0 };
-    m.m0 = ax.x * SCALE; m.m1 = ax.y * SCALE; m.m2 = ax.z * SCALE;
-    m.m4 = y1.x * SCALE; m.m5 = y1.y * SCALE; m.m6 = y1.z * SCALE;
-    m.m8 = az.x * SCALE; m.m9 = az.y * SCALE; m.m10 = az.z * SCALE;
-    m.m12 = pos.x;       m.m13 = pos.y;       m.m14 = pos.z;
-    m.m15 = 1.0f;
-    drawDeck(m, sim.deck.playing);
-}
-
-// The drink, in three dimensions. The 2D version faked foreshortening by
-// squashing a sprite; here the can is real geometry held in front of the camera,
-// so the projection does it properly — it grows as it closes on your face, the
-// barrel shortens as it comes over, and the lid opens toward you on its own.
-void Game::drawDrinkCan(const Camera3D &cam) {
-    float el = Sim::DRINK_TIME - sim.drinkT;
-    auto ease = [](float t) { t = clampf(t, 0, 1); return t * t * (3.0f - 2.0f * t); };
-    float up  = ease(el / 0.42f) * (1.0f - ease((el - 1.36f) / 0.39f));   // in, then away
-    float tip = ease((el - 0.34f) / 0.34f) * (1.0f - ease((el - 1.30f) / 0.34f));
-    float bob = 0;                                    // three swallows, timed to the sound
-    for (int g = 0; g < 3; g++) {
-        float gt = el - (0.40f + g * 0.36f);
-        if (gt > 0 && gt < 0.26f) bob += sinf(gt / 0.26f * 3.14159f);
-    }
-
-    // camera basis, matching the convention the rest of the game uses
-    Vector3 F = toRl(sim.fwd);
-    Vector3 Rt = { sim.r2x, 0, sim.r2z };
-    Vector3 Up = Vector3Normalize(Vector3CrossProduct(Rt, F));
-
-    // Keep the can below the centre of the view and bring the lid toward the
-    // mouth, rather than lifting the entire label up across the player's eyes.
-    // Its horizontal reach remains within the player's wall clearance.
-    float dist = 0.265f - tip * 0.055f;
-    float side = 0.112f - tip * 0.028f;
-    float vert = -0.255f + up * 0.145f + tip * 0.018f + bob * 0.003f;
-    float bx4 = sinf(sim.bobPhase * 3.14159f) * 0.008f * sim.bobAmt;
-    Vector3 pos = Vector3Add(cam.position,
-                  Vector3Add(Vector3Scale(F, dist),
-                  Vector3Add(Vector3Scale(Rt, side + bx4), Vector3Scale(Up, vert))));
-
-    // Held items are drawn bigger than life or they read as toys at arm's
-    // length; this is the usual viewmodel cheat, not a modelling error.
-    const float SCALE = 0.70f;
-    // Pitch is the main move: the can's axis swings over toward the camera so the
-    // lid comes to your mouth, which is what drinking actually looks like from
-    // behind your own eyes. Rolling it in the screen plane instead just reads as
-    // tipping it out sideways. A little roll on top keeps it off dead-centre so
-    // some of the barrel and the label stay in view.
-    // 38 degrees is the ceiling worth using: enough that the lid is clearly
-    // swinging toward your mouth, not so much that the barrel disappears behind
-    // it and you are left looking at a metal disc.
-    float pitch2 = (32.0f * DEG2RAD) * tip + (4.0f * DEG2RAD) * bob;
-    float roll2  = (8.0f * DEG2RAD) * tip + (2.0f * DEG2RAD) * bob;
-    Vector3 x0 = Rt, y0 = Up, z0 = Vector3Negate(F);  // label faces the camera
-    // pitch about the can's own right axis: the lid comes toward you
-    Vector3 y1 = Vector3Add(Vector3Scale(y0, cosf(pitch2)), Vector3Scale(z0, sinf(pitch2)));
-    Vector3 z1 = Vector3Add(Vector3Scale(y0, -sinf(pitch2)), Vector3Scale(z0, cosf(pitch2)));
-    // roll about that: the top leans away to the left, toward your mouth
-    Vector3 tiltX = Vector3Add(Vector3Scale(x0, cosf(roll2)), Vector3Scale(y1, sinf(roll2)));
-    Vector3 tiltY = Vector3Add(Vector3Scale(x0, -sinf(roll2)), Vector3Scale(y1, cosf(roll2)));
-    Vector3 tiltZ = z1;
-
-    // the mesh sits base-on-origin, so step back down its own axis to put the
-    // middle of the can at pos and let it turn about its centre
-    pos = Vector3Subtract(pos, Vector3Scale(tiltY, 0.061f * SCALE));   // 0.061 = half the can
-
-    Matrix m = { 0 };
-    m.m0 = tiltX.x * SCALE; m.m1 = tiltX.y * SCALE; m.m2 = tiltX.z * SCALE;
-    m.m4 = tiltY.x * SCALE; m.m5 = tiltY.y * SCALE; m.m6 = tiltY.z * SCALE;
-    m.m8 = tiltZ.x * SCALE; m.m9 = tiltZ.y * SCALE; m.m10 = tiltZ.z * SCALE;
-    m.m12 = pos.x;          m.m13 = pos.y;          m.m14 = pos.z;
-    m.m15 = 1.0f;
-    drawCan(m);
-}

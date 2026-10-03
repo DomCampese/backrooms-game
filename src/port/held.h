@@ -1,8 +1,8 @@
 #pragma once
-// What the player holds and where: the revolver or a flare in the corner of the
-// view, and the revolver's pose. render.cpp draws from this, and so does a
-// port, so the gun sits in the same place in both. Metres, the sim's storey
-// frame.
+// What the player holds and where: the revolver, a flare, the tape deck or the
+// can in the corner of the view, and the revolver's pose. render.cpp draws
+// from this, and so does a port, so each sits in the same place in both.
+// Metres, the sim's storey frame.
 #include "../sim/sim.h"
 #include "view.h"
 
@@ -13,9 +13,10 @@ enum class Held { None, Can, Deck, Revolver, Flare };
 Held heldItem(const Sim &sim);
 
 // A model's own axes in the world: its +x along `right`, +y along `up`, +z
-// along `forward`, each times `scale`, its origin at `pos`. The three are a
-// left-handed set in the sim's right-handed frame, as render.cpp has always
-// drawn the gun: the reload was reversed at import to open left for this.
+// along `forward`, each times `scale`, its origin at `pos`. For the revolver
+// the three are a left-handed set in the sim's right-handed frame, as
+// render.cpp has always drawn the gun: the reload was reversed at import to
+// open left for this. The can and the deck are right-handed.
 struct HeldFrame {
     Vec3 pos, right, up, forward;
     float scale;
@@ -24,6 +25,14 @@ struct HeldFrame {
 // The revolver or a flare in hand. The revolver's farthest vertex stays inside
 // 0.33 m of the eye, through recoil and reload, so no wall can cut it.
 HeldFrame heldWeapon(const Sim &sim, const SimView &view);
+
+// The can while drinking, brought up to the mouth and tipped, three swallows
+// timed to the sound; its mesh has its base at the origin, label toward -z.
+HeldFrame heldCan(const Sim &sim, const SimView &view);
+
+// The deck while carried, its top tipped toward the eye; its mesh stands
+// underside on the origin, front toward -z.
+HeldFrame heldDeck(const Sim &sim, const SimView &view);
 
 enum class RevolverClip { Idle, Reload, Shoot };
 

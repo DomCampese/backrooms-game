@@ -1,16 +1,20 @@
 #include "BackroomsHeldActor.h"
 #include "BackroomsCoords.h"
+#include "BackroomsItemShapes.h"
+#include "BackroomsLevelLook.h"
 #include "BackroomsSettings.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimSingleNodeInstance.h"
 #include "Components/PointLightComponent.h"
 #include "Components/PoseableMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "AssetRegistry/AssetData.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
+#include "Materials/MaterialInterface.h"
 #include "Misc/PackageName.h"
 #include "Algo/Sort.h"
 #include "port/held.h"
@@ -51,6 +55,12 @@ ABackroomsHeldActor::ABackroomsHeldActor()
 	Flash->SetAttenuationRadius(800.0f);
 	Flash->SetCastShadows(false);
 	Flash->SetVisibility(false);
+
+	Item = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Item"));
+	Item->SetupAttachment(RootComponent);
+	Item->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Item->SetCastShadow(false);
+	Item->SetVisibility(false);
 }
 
 bool ABackroomsHeldActor::Load()
@@ -164,10 +174,11 @@ bool ABackroomsHeldActor::Load()
 	return true;
 }
 
-void ABackroomsHeldActor::Show(const Sim& Game, const FVector& Origin)
+void ABackroomsHeldActor::Show(const Sim& Game, const UBackroomsLevelLook* Look, const FVector& Origin)
 {
 	const FString Before = Status;
 	ShowRevolver(Game, Origin);
+	ShowItem(Game, Look, Origin);
 	// The "shown" line carries sizes that move every frame; log only its kind.
 	if (Status.Left(16) != Before.Left(16))
 	{
@@ -301,4 +312,42 @@ void ABackroomsHeldActor::ShowRevolver(const Sim& Game, const FVector& Origin)
 	{
 		Flash->SetVisibility(false);
 	}
+}
+
+void ABackroomsHeldActor::ShowItem(const Sim& Game, const UBackroomsLevelLook* Look, const FVector& Origin)
+{
+	const Held What = heldItem(Game);
+	if (What != Held::Can && What != Held::Deck && What != Held::Flare)
+	{
+		Item->SetVisibility(false);
+		return;
+	}
+	const SimView View = simView(Game);
+	const HeldFrame Frame = What == Held::Can ? heldCan(Game, View) : What == Held::Deck ? heldDeck(Game, View) : heldWeapon(Game, View);
+	const EBackroomsItem Kind = What == Held::Can ? EBackroomsItem::AlmondWater
+		: What == Held::Deck ? EBackroomsItem::Deck : EBackroomsItem::Flare;
+	const FBackroomsItemLook* Own = Look ? Look->Items.Find(Kind) : nullptr;
+	const bool bOwnMesh = Own && Own->Mesh;
+	if (Kind != ItemKind || Look != ItemLook)
+	{
+		ItemKind = Kind;
+		ItemLook = Look;
+		Item->SetStaticMesh(bOwnMesh ? Own->Mesh.Get() : Kind == EBackroomsItem::Flare
+			? LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube")) : BackroomsItemShapes::Mesh(Kind));
+		Item->SetMaterial(0, Own && Own->Material ? Own->Material.Get()
+			: bOwnMesh ? nullptr : BackroomsItemShapes::Material(Kind, this));
+	}
+
+	// The model's x, z and y on the frame's X, Y and Z, as BackroomsCoords swaps
+	// a position, so a mesh that stands right on the floor is right in hand.
+	const FTransform Hold(FMatrix(BackroomsCoords::ToUnrealDirection(Frame.right) * Frame.scale,
+		BackroomsCoords::ToUnrealDirection(Frame.forward) * Frame.scale,
+		BackroomsCoords::ToUnrealDirection(Frame.up) * Frame.scale, BackroomsCoords::ToUnreal(Frame.pos) + Origin));
+	// The flare's plain shape on the floor is its burning glow; unlit in hand it
+	// is the tube raylib draws, 0.2 m along the model's z from z = -0.075 m.
+	const FTransform Fit = bOwnMesh ? Own->Offset
+		: Kind == EBackroomsItem::Flare ? FTransform(FQuat::Identity, FVector(0.0, 2.5, 0.0), FVector(0.034, 0.2, 0.034))
+		: BackroomsItemShapes::Fit(Kind);
+	Item->SetWorldTransform(Fit * Hold);
+	Item->SetVisibility(true);
 }

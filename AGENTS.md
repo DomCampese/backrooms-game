@@ -87,10 +87,18 @@ docs/unreal-handoff.md "Next" has what is open. What will bite:
   the project and imports any missing ones to the paths the settings name;
   `unreal/Content/Backrooms/Revolver/` is gitignored because of it. A game run
   from a project the editor has never opened has no gun.
-- **`simScene` (src/port/scene.cpp) repeats render.cpp's placement** of
-  pickups, crates, balloons, chalk and the rest, for the Unreal build. Change
-  where render.cpp draws one of those and change it there too, until render.cpp
-  draws from `simScene` itself.
+- **render.cpp draws loose things from `simScene`** (src/port/scene.cpp):
+  pickups, crates, the set-down deck, coins, balloons, confetti and chalk, in
+  the order and at the reaches (`SCENE_*`) it always drew them. Flares,
+  impacts and the actors are still drawn from sim state. A `SceneItem`'s yaw
+  turns +x toward +z, and raylib's `MatrixRotateY` the other way, so the
+  spins of cans, crates and the deck are stored negated and render.cpp undoes
+  it; the Unreal scene had them all turned backwards until this was found.
+- **The can and the deck in hand are `heldCan`/`heldDeck`** (src/port/held.cpp),
+  moved from render.cpp's `drawDrinkCan`/`drawHeldDeck` and checked bit for bit
+  against the old code over 200k states. `ABackroomsHeldActor` places them,
+  and a flare, with the level look's item mesh or the plain shape
+  (Private/BackroomsItemShapes.h) the scene actor uses on the floor.
   BackroomsTypes.cpp static_asserts the ends of each list, not every entry.
 - **The layout golden (`tests/golden/layout.txt`) prints every field**, so an
   uninitialised field shows as a nondeterministic line: `Fixture::end` was
@@ -2149,7 +2157,7 @@ pass, and both obey the same three rules, learned the hard way:
 - The source reload uses quarter-size live rounds as a visibility switch.
   Export those as hidden and retain full-size spent cases during ejection;
   omitting cases leaves tiny live bullets floating around the cylinder.
-- Drinking PCM uses smooth envelopes at the same swallow times as drawDrinkCan.
+- Drinking PCM uses smooth envelopes at the same swallow times as heldCan (port/held.h).
   Test gulpPcm (port/sounds.h) directly for peaks and discontinuities; a loud white-noise
   attack sounds like a click rather than a swallow.
 
