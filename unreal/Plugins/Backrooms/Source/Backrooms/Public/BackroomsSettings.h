@@ -81,6 +81,15 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Held")
 	FRotator RevolverMeshRotation = FRotator::ZeroRotator;
 
+	// Where the editor imports assets/sounds (backrooms_import.py), keeping its
+	// folders: sounds/water/swim_1.ogg is <SoundFolder>/water/swim_1.
+	UPROPERTY(Config, EditAnywhere, Category = "Sound")
+	FString SoundFolder = TEXT("/Game/Backrooms/Sounds");
+	// How far ahead of the speakers the game's mix is generated, in seconds. A
+	// frame longer than this leaves a gap in the sound.
+	UPROPERTY(Config, EditAnywhere, Category = "Sound", meta = (ClampMin = 0.03, ClampMax = 0.5))
+	float SoundLatency = 0.1f;
+
 	// The look for a level, loaded, or null.
 	UBackroomsLevelLook* LookFor(int32 Level) const;
 

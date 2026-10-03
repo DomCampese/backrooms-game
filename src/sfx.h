@@ -1,6 +1,7 @@
 #pragma once
-// One-shot sound effects, all synthesized at startup — no audio assets.
+// raylib handles for the game's sound (port/sounds.h).
 #include "raylib.h"
+#include "port/sounds.h"
 #include <cstdint>
 
 // Where a sound sits across the stereo field, as a bearing the game can reason
@@ -28,28 +29,8 @@ static inline float panFor(float bearing) {
 #endif
 }
 
-// `through` builds the same one-shot as heard through geometry: two poles of
-// low-pass, a softened transient and a level drop. Every positional sound in
-// the game was pitch, volume and pan only, so a footfall 20 m away through two
-// walls sounded exactly like one 20 m away down an open corridor — and on
-// Level 0 a point 20 m out is occluded 83% of the time, so that was most of
-// what the player ever heard. Two sample sets pick up most of what a real
-// filter bus would, and fit the synthesize-everything-at-startup design.
-Sound makeFootstep(uint32_t seed, bool through = false);
-Sound makeJumpscare();
+// The clips themselves are synthesized in port/sounds.cpp; these load them,
+// and the recordings embedded from assets/sounds, into raylib.
+Sound loadPcmSound(const Pcm &pcm);
 Sound loadEmbeddedSound(const char *key);   // a recording from assets/sounds, e.g. "sounds/water/swim_1.ogg"
 Music loadEmbeddedMusic(const char *key);   // the same, streamed and looping
-Sound makeClick();
-Sound makeBalloonPop();
-Sound makeFlareStrike();
-Sound makeGunshot();
-Sound makeWinChime();
-Sound makeHeartbeat();
-Sound makeTapeChime();
-Sound makeValveTurn();             // seized iron giving way, then the clunk of it seating
-Sound makeDogBark(uint32_t seed, bool through = false);  // the pack, somewhere in the red dark
-Sound makeDogHowl();
-Wave makeGulpWave();               // deterministic PCM, also used by audio regression
-Sound makeGulp();                   // three soft swallows of almond water
-Sound makeTapeVoice();              // a voice off a worn cassette — garbled, hissing, and looping
-Sound makeFloorGroan();             // rotten subfloor taking your weight, and not liking it

@@ -34,7 +34,7 @@ does not move: the game runs smoothly on the owner's Mac.
 | layout (`chunkLayout`, src/core/layout.h) | as data | drives instanced meshes, light fittings and doors; the per-level choice of decorations is the `DECOR` table in layout.cpp |
 | mesher (`src/world_mesh.cpp`) | as reference only | the greybox (`src/port`) replaces it for M2; art replaces both |
 | shader, occupancy texture, `lightAtCPU`, texture painters | no | Unreal's lighting and materials replace them |
-| raylib audio, input, window | no | MetaSounds / Sound Cues, Enhanced Input, the engine |
+| raylib audio, input, window | no | the game's own mix streamed through a procedural sound wave (src/port/mixer.h), Enhanced Input, the engine |
 | sounds, revolver GLB, CC0 textures | as assets | import; keep provenance beside each |
 
 ## Module setup
@@ -110,7 +110,7 @@ palette of `PARTY_COLOURS` entries; the port owns the colours.
 | player movement and collision | the sim stays authoritative (it uses core's `collideCircle`/`groundAt`), and the pawn follows it, until parity is proven; Unreal collision is for the camera and effects |
 | hunter, dogs (billboard sheets) | skeletal meshes driven by sim state; the sim's gait phase counts footfalls and can drive animation and footstep notifies together |
 | `InputFrame` | filled from Enhanced Input actions |
-| sound events | a component that plays each event with attenuation at its position |
+| sound events | M6: `SoundMixer` (src/port/mixer.h) mixes the synthesized clips, the tape voice and the ambience as raylib does, and `UBackroomsSound` streams it through one `USoundWaveProcedural`; the recordings play as imported sound waves. Later, positional sounds could move to Unreal attenuation at the emitter, replacing the sim's bearing pan |
 | tone curve, migraine, blackout post | post-process volume and materials |
 | coordinates | core: metres, y up, +z south; Unreal: centimetres, z up, left-handed. Convert in one function and test it with the contract probes |
 
@@ -146,8 +146,9 @@ be checked without Unreal.
 | M1 core | built on the Mac, not yet run there: the automation tests `Backrooms.Core.Contract` and `Backrooms.Sim.Replay` compare with `tests/golden` and `tests/traces`. Without Unreal, the same shared files built the module's way (clang, C++20, `-Werror`, FMA enabled, no `-ffp-contract=off`) pass both |
 | M2 greybox | runs on the Mac: `UBackroomsWorldSubsystem` streams `ABackroomsChunkActor`s built from `src/port/greybox.h` round a DefaultPawn free camera, storeys stacked. The greybox itself is checked against raylib frames (below). Frame time on the Mac not measured |
 | M3 layout | props (as their collision boxes), openings and light panels are in the greybox; a level look (below) can put a static mesh at every prop of a kind and at every light fitting, from `chunkLayout`. Fixtures are not placed yet. `tests/golden/layout.txt` holds every layout field |
-| M4 sim | runs on the Mac (a run on Level 0: walking, looking, the HUD, the revolver seen in hand): `ABackroomsPlayerController` fills an `InputFrame` from Enhanced Input actions it makes at start-up, `UBackroomsWorldSubsystem::TickRun` steps the sim as `Game::tick` does (title screen, pause, step), bullets trace against the chunk actors, and `ABackroomsPawn`'s camera follows `simView` (src/port/view.h, which the raylib renderer now draws from too). `-BackroomsRecord=path` writes a trace from Unreal for `./replay`. Sound is M6. What the sim puts in the world each frame (pickups, crates, the deck, flares, chalk, balloons, confetti, impacts, the hunter, the pack) comes from `simScene` (src/port/scene.h) and `ABackroomsSceneActor` draws it, as plain shapes until a level look gives meshes; `ABackroomsHUD` is a text HUD from `GetHud`. The revolver is `ABackroomsHeldActor`, placed and posed by `heldWeapon` and `revolverPose` (src/port/held.h, which render.cpp and revolver.cpp now draw from): the editor imports assets/models/revolver.glb on first open (Plugins/Backrooms/Content/Python). Firing and the reload start; the reload clip did not show on the first run, a bone-by-bone copy is pushed but not yet confirmed, and each reload logs how far the drum moved in the clip and on the gun. The can, deck and flare in hand are not ported. render.cpp still decides these for itself, and should move onto `simScene` |
-| M5, M6 | not started |
+| M4 sim | runs on the Mac (a run on Level 0: walking, looking, the HUD, the revolver seen in hand): `ABackroomsPlayerController` fills an `InputFrame` from Enhanced Input actions it makes at start-up, `UBackroomsWorldSubsystem::TickRun` steps the sim as `Game::tick` does (title screen, pause, step), bullets trace against the chunk actors, and `ABackroomsPawn`'s camera follows `simView` (src/port/view.h, which the raylib renderer now draws from too). `-BackroomsRecord=path` writes a trace from Unreal for `./replay`. Sound is M6 (below). What the sim puts in the world each frame (pickups, crates, the deck, flares, chalk, balloons, confetti, impacts, the hunter, the pack) comes from `simScene` (src/port/scene.h) and `ABackroomsSceneActor` draws it, as plain shapes until a level look gives meshes; `ABackroomsHUD` is a text HUD from `GetHud`. The revolver is `ABackroomsHeldActor`, placed and posed by `heldWeapon` and `revolverPose` (src/port/held.h, which render.cpp and revolver.cpp now draw from): the editor imports assets/models/revolver.glb on first open (Plugins/Backrooms/Content/Python). Firing and the reload start; the reload clip did not show on the first run, a bone-by-bone copy is pushed but not yet confirmed, and each reload logs how far the drum moved in the clip and on the gun. The can, deck and flare in hand are not ported. render.cpp still decides these for itself, and should move onto `simScene` |
+| M5 look | not started |
+| M6 sound | written, not yet built on the Mac (1 October 2026). The clips and the ambience bed moved out of the raylib files into `src/port/sounds.{h,cpp}` and `src/port/ambience.{h,cpp}`, byte-identical (below); `SoundMixer` (src/port/mixer.h) plays the sim's `AudioEvent`s into one stereo stream with raylib's pan law and linear resampling for pitch, and `UBackroomsSound` streams it through a `USoundWaveProcedural`, `SoundLatency` seconds ahead (Project Settings > Game > Backrooms > Sound). The recordings in assets/sounds are imported by the editor (`backrooms_import.import_sounds`) to `/Game/Backrooms/Sounds` and play on components of their own. `Backrooms.Port.Sound` tests the mixer. The actors part of M6 (meshes for the hunter and the pack) is not started |
 
 **Editing in Unreal.** Placement stays in code; appearance, controls and
 tuning are editor data with code defaults (unreal/README.md, "Working in the
@@ -186,6 +187,17 @@ the hunter called up and shot at, a reload, a flare, a drink, a pause, Levels 0
 to 2). Replayed with gcc and clang, `-O2` and `-march=native`: every digest
 matches. Without `-ffp-contract=off` or the pragma, both compilers diverged at
 frame 31; the sim now includes `fp_strict.h` like core.
+
+**Sound** (`src/port/sounds.h`, `ambience.h`, `mixer.h`). The clip
+generators and the ambience synth moved out of sfx.cpp and audio.cpp with
+their arithmetic untouched. Proof: the old sfx.cpp, with each
+`LoadSoundFromWave` replaced by a dump, and `clipPcm` wrote the same 2,289,228
+bytes for every synthesized clip and the tape voice; the old
+`AudioSynth::update` and `Ambience::render` wrote the same 1,474,560 bytes over
+60 changes of `AmbienceMix` touching every field. raylib keeps playing them as
+before (`GameAudio` now loads from `clipSpec`). `SoundMixer` is new and has no
+raylib counterpart to compare against; `Backrooms.Port.Sound` checks what it
+must do.
 
 What to expect on the Mac:
 
@@ -236,7 +248,13 @@ In order, as of the end of 29 September 2026:
    surfaces (`./texdump`) and the CC0 tiles in `assets/materials`, builds a
    material per surface and fills the five level looks; then lights at the
    fittings `chunkLayout` places (dead and flickering tubes) and fog.
-4. **Sound (M6).** The sim's `AudioEvent`s are dropped in `FinishFrame`.
+4. **Hear it (M6).** `make unreal-open` once, so the editor imports
+   assets/sounds (the log says "imported 12 sounds"), then `make unreal-play`
+   and `make unreal-test`. If the import fails on .ogg, convert those files to
+   .wav and import them to the same paths. Listen for: the hum on Level 0
+   swelling under a live fitting, footsteps, the shot, a splash in the
+   Poolrooms. Silence with no "Backrooms: no sound at" line points at the
+   stream (`UBackroomsSound::Feed`); a crackle, at `SoundLatency`.
 5. **The rest in hand**: the can, the tape deck and the flare (src/port/held.h
    has `heldItem`; only the revolver has a frame).
 
@@ -251,7 +269,7 @@ What the seams leave for the port, or for the raylib build before it.
 | item | where | why it matters |
 |---|---|---|
 | floorplan geometry as data | walls, floors, ceilings, soffits, stairs, pools, arches, skirting are still built directly by `bakeChunk` | the greybox (`src/port`) derives them from core's accessors for M2; art needs core to describe the floorplan the way `chunkLayout` describes fixtures |
-| sound in Unreal | the subsystem drops the sim's `AudioEvent`s (`FinishFrame`); the rest of M4 runs | M6 |
+| sound in Unreal | written (`UBackroomsSound`), not yet heard on the Mac | M6 |
 | libm in the sim | src/sim | replaying a Linux trace on a Mac may diverge (Status, above) |
 | `tubeHash`'s `sinf` | src/core/layout.cpp | the one libm call left in core; may flip a fitting's dead or faulty state on another libm |
 | lighting numbers mirrored by hand | panel half-size, light plane, tube hash in core, the mesher, the shader and `lightAtCPU` | a port reads them from core; the raylib build still has copies |

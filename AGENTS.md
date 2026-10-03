@@ -67,6 +67,17 @@ docs/unreal-handoff.md "Next" has what is open. What will bite:
   "Backrooms:" when it changes, and each reload logs how far the drum moved
   in the clip and on the gun (`tools/unreal.sh log`). If it faces the wrong
   way, `RevolverMeshRotation` in Project Settings > Game > Backrooms turns it.
+- **Sound is the raylib build's mix, streamed.** The clips are PCM from
+  src/port/sounds.cpp and the bed is src/port/ambience.cpp, which sfx.cpp,
+  audio.cpp and `GameAudio` now only load into raylib; `SoundMixer`
+  (src/port/mixer.h) plays the events into one stereo stream, which
+  `UBackroomsSound` queues on a `USoundWaveProcedural` `SoundLatency` ahead.
+  A new `Sfx` gets its row in `clipSpec`/`clipPcm` (or `clipRecording`) and
+  both builds play it. The mixer uses raylib's pan law (centre is 0.6875 a
+  side, on streams too); the recordings are imported by the editor and play on
+  their own components at `volume * CENTRE_GAIN`. Unreal defines `TWO_PI` as
+  a macro, so ambience.h's phase constant is `TURN`. The move was proved
+  byte-identical (docs/unreal-handoff.md, "Sound").
 - **`init_unreal.py` also runs when the editor binary runs the game**
   (`-game`, `make unreal-play`). There is no editor then, and its first
   EditorAssetLibrary call crashed the game in `GetSubsystemInternal`; it now
@@ -703,6 +714,7 @@ time so the executable remains independent of its working directory.
 | `core/hash.{h,cpp}`, `core/vec.h` | hashes, RNG, value noise; `Vec2`/`Vec3`, `TAU`, `clampf` |
 | `sim/start.{h,cpp}`, `sim/trace.{h,cpp}` | how a run starts (`SimStart`); recording and replaying the calls on the sim |
 | `port/view.{h,cpp}`, `port/greybox.{h,cpp}` | what the camera shows of the sim (both builds draw from it); a chunk as plain boxes and quads for a port's first milestone |
+| `port/sounds.{h,cpp}`, `port/ambience.{h,cpp}`, `port/mixer.{h,cpp}` | the synthesized clips and which are recordings; the ambience synth; a software mix of the sim's `AudioEvent`s for a port |
 | `world_mesh.{h,cpp}` | the chunk mesher (`bakeChunk`), `ChunkMesh` slots, `ChunkMeshCache` |
 | `mesh_builder.{h,cpp}` | `MB`, `addPropBox`, `addSolidBox`, `PLAIN_UV` |
 | `object_meshes.{h,cpp}` | can, tape deck, reels, flare, supply crate |
@@ -712,10 +724,10 @@ time so the executable remains independent of its working directory.
 | `surfaces.cpp` | the world surfaces: colour, height (m) and gloss per level surface, wrapped and at real scale |
 | `textures.cpp` | sprites, decals, fixtures, props atlas (with the CC0 material tiles), can, deck |
 | `revolver.{h,cpp}` | embedded authored revolver, pose interpolation, two material batches |
-| `sfx.cpp` | one-shot sounds synthesized into `Wave` buffers, plus the loaders for embedded recordings |
-| `audio.cpp` | the streaming ambience synth (hum, drone); recorded loops live in `GameAudio::feedLoops` |
+| `sfx.cpp` | loads the clips (`port/sounds.h`) and the embedded recordings into raylib |
+| `audio.cpp` | feeds the ambience bed (`port/ambience.h`) to a raylib stream; recorded loops live in `GameAudio::feedLoops` |
 | `sim/entity.h` | `Entity` (Clark on Level 0, the Smiler on 1 and 3, the Partygoer on 4) and `Dog` state |
-| `util.{h,cpp}` | platform helpers (`cl8`, `SAMPLE_RATE`, `PARTY`); includes core's math and hashes |
+| `util.{h,cpp}` | platform helpers (`cl8`, `PARTY`); includes core's math and hashes. `SAMPLE_RATE` is port/sounds.h's |
 
 `Sim::step` calls the update functions in a fixed order: flashlight, look,
 movement, dev keys, weapons, bullets, flare, tape deck, interaction, drink,
@@ -1706,7 +1718,7 @@ dead-level shot goes over a dog's back at any range — you have to put the
 crosshair on it, which is the point. `popBalloonsAlongAim` had no sight test at
 all and popped the party through walls; it gates on `lineOfSight` per balloon.
 
-**An `osc()` index is an ownership claim, not a scratch slot.** `AudioSynth::ph[]`
+**An `osc()` index is an ownership claim, not a scratch slot.** `Ambience::ph[]` (src/port/ambience.h)
 is one running phase per oscillator, and two signals sharing an index advance it
 at *both* their frequencies — so each one gets the other's detune folded in and
 both come out subtly wrong rather than obviously broken. The hum's new beat
@@ -2138,7 +2150,7 @@ pass, and both obey the same three rules, learned the hard way:
   Export those as hidden and retain full-size spent cases during ejection;
   omitting cases leaves tiny live bullets floating around the cylinder.
 - Drinking PCM uses smooth envelopes at the same swallow times as drawDrinkCan.
-  Test makeGulpWave directly for peaks and discontinuities; a loud white-noise
+  Test gulpPcm (port/sounds.h) directly for peaks and discontinuities; a loud white-noise
   attack sounds like a click rather than a swallow.
 
 - Shadow lookup bias uses the geometric surface normal, not the detail-map

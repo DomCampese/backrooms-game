@@ -5,7 +5,7 @@
 #   tools/unreal.sh open      build, then open the project in the editor
 #   tools/unreal.sh play      build, then run the game in its own window
 #   tools/unreal.sh test      build, then run the Backrooms automation tests
-#   tools/unreal.sh import    import assets/models into the project again
+#   tools/unreal.sh import    import assets/models and assets/sounds into the project again
 #   tools/unreal.sh log       the "Backrooms:" lines from the last run's log
 #
 # `make unreal`, `make unreal-open`, `make unreal-play` and `make unreal-test`
@@ -59,6 +59,9 @@ play)
     if ! ls "$ROOT/unreal/Content/Backrooms/Revolver/"*.uasset >/dev/null 2>&1; then
         echo "unreal.sh: the revolver is not imported yet; run 'make unreal-open' once and let the editor import it" >&2
     fi
+    if ! ls "$ROOT/unreal/Content/Backrooms/Sounds/water/"*.uasset >/dev/null 2>&1; then
+        echo "unreal.sh: the recorded sounds are not imported yet; run 'make unreal-open' once and let the editor import them" >&2
+    fi
     MAP="/Engine/Maps/Entry?level=${LEVEL:-0}?seed=${SEED:-1337}"
     "$EDITOR" "$PROJECT" "$MAP" -game -windowed -ResX=1440 -ResY=850 -log || true
     echo "--- Backrooms lines from $LOG:"
@@ -73,7 +76,7 @@ test)
     ;;
 import)
     "$EDITOR_CMD" "$PROJECT" -run=pythonscript \
-        -script="import backrooms_import; backrooms_import.import_revolver()" -unattended -log
+        -script="import backrooms_import; backrooms_import.import_revolver(); backrooms_import.import_sounds()" -unattended -log
     grep "Backrooms:" "$LOG" || echo "(no Backrooms lines in $LOG)"
     ;;
 log)
