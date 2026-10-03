@@ -597,8 +597,8 @@ void layoutChunk(Golden &g, World &w, int level, unsigned visit, int storey, int
     for (const LightFitting &f : L.fittings) {
         g.put("fitting grid %d,%d", f.gx, f.gz);
         putVec(g, "pos", f.pos);
-        g.put(" ceiling %.9g gap %d turned %d dead %d output %.9g faulty %d\n", f.ceilingY, (int)f.gap,
-              f.turned ? 1 : 0, f.dead ? 1 : 0, f.output, f.faulty ? 1 : 0);
+        g.put(" ceiling %.9g gap %d turned %d dead %d output %.9g faulty %d stutter %.9g\n", f.ceilingY, (int)f.gap,
+              f.turned ? 1 : 0, f.dead ? 1 : 0, f.output, f.faulty ? 1 : 0, f.stutterSeed);
     }
     for (const Opening &o : L.openings) {
         g.put("opening kind %d cell %d,%d west %d line %.9g e0 %.9g a %.9g..%.9g wall %.9g..%.9g head %.9g sill %.9g"
@@ -615,7 +615,7 @@ void layoutChunk(Golden &g, World &w, int level, unsigned visit, int storey, int
 void writeLayouts(Golden &g) {
     g.put("# chunkLayout, seed %u, wallH and storeyH from LEVEL_RULES. One line per item in the\n"
           "# layout's order. Kinds are the enums' values (PropKind, FixtureKind, FittingGap,\n"
-          "# OpeningKind). Fitting dead/output/faulty follow tubeHash, which calls sinf.\n", SEED);
+          "# OpeningKind). Fitting dead/output/faulty/stutter follow tubeHash, which calls sinf.\n", SEED);
     for (int lv = 0; lv < NLEVELS; lv++)
         for (unsigned v = 0; v < NVISITS; v++) {
             World w;

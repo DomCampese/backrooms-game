@@ -20,8 +20,13 @@ enum class GreySurface : uint8_t {
 
 struct GreyboxMesh {
     // One section per surface, so a port can give each its own material.
+    // Texture coordinates are metres along the face, so a port's material sets
+    // the tile size: floors and ceilings take (x, z), walls their horizontal
+    // axis and -y, so v grows down the wall from v = 0 at the storey's floor.
+    // uAxis and vAxis are the directions u and v grow in, for tangents.
     struct Section {
-        std::vector<Vec3> pos, normal;
+        std::vector<Vec3> pos, normal, uAxis, vAxis;
+        std::vector<Vec2> uv;
         std::vector<uint32_t> index;   // triangles
     };
     Section sections[(int)GreySurface::Count];

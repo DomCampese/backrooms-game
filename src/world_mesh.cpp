@@ -1162,7 +1162,7 @@ void bakeChunk(World &w, int cx, int cz, ChunkMeshes &out) {
     MB fl, ce, pr, wt, scr, gl, ao, fx;
     WallBuilder wa;
     float wx = cx * CHUNK, wz = cz * CHUNK;
-    wa.tileV = w.level == 1 ? w.wallH : 3.0f;
+    wa.tileV = wallTileV(w.level);
     wa.tallPaper = w.storeyH > 0.0f;
     Color wcol = WHITE;
     // The ceiling takes relief (alpha 255). It is lit edge-on by every fitting, so

@@ -84,6 +84,22 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lights")
 	TObjectPtr<UMaterialInterface> DeadFittingMaterial;
 
+	// The tubes' colour, and their output as a multiple of FittingLumens in the
+	// project settings: the raylib build's LevelCfg::lightCol and lightMul.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lights")
+	FLinearColor LightColour = FLinearColor::White;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lights", meta = (ClampMin = 0))
+	float LightOutput = 1.0f;
+
+	// The raylib build's fog (LevelCfg::fogCol, fogDen): what the air fades to,
+	// and its density per metre, as in exp(-density * metres).
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Air")
+	bool bFog = false;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Air")
+	FLinearColor FogColour = FLinearColor::Black;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Air", meta = (ClampMin = 0))
+	float FogDensity = 0.05f;
+
 	// Pickups, crates, the hunter, the pack and the rest the sim places each
 	// frame (src/port/scene.h). The hunter is Pirate Clark on Level 0, a Smiler
 	// on Levels 1 and 3 and the Partygoer on 4, so each level's look gives its own.

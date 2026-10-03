@@ -18,8 +18,12 @@ class BACKROOMS_API UBackroomsSettings : public UDeveloperSettings
 	GENERATED_BODY()
 
 public:
-	// The look of each level, by index (0 Level 0 .. 4 LEVEL FUN). An empty slot
-	// is drawn as the greybox.
+	UBackroomsSettings();
+
+	// The look of each level, by index (0 Level 0 .. 4 LEVEL FUN). An empty slot,
+	// or one naming an asset that does not exist, is drawn as the greybox. The
+	// defaults are where the editor builds them on first open
+	// (Plugins/Backrooms/Content/Python/backrooms_looks.py).
 	UPROPERTY(Config, EditAnywhere, Category = "Look")
 	TArray<TSoftObjectPtr<UBackroomsLevelLook>> LevelLooks;
 
@@ -43,9 +47,24 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Streaming")
 	TSoftClassPtr<ABackroomsChunkActor> ChunkClass;
 
-	// A light that follows the camera, until the level's lighting is built (M5).
+	// A light that follows the camera, for looking round a greybox with the
+	// fitting lights turned off.
 	UPROPERTY(Config, EditAnywhere, Category = "Look")
-	bool bCameraLight = true;
+	bool bCameraLight = false;
+
+	// Rect lights at the live fittings nearest the player, and how many of the
+	// nearest cast shadows. The raylib shader sums the 3x3 fittings round each
+	// point, nine on a level's own grid; more cover a fall-off it does not have.
+	UPROPERTY(Config, EditAnywhere, Category = "Look", meta = (ClampMin = 0, ClampMax = 64))
+	int32 FittingLights = 16;
+	UPROPERTY(Config, EditAnywhere, Category = "Look", meta = (ClampMin = 0, ClampMax = 64))
+	int32 FittingShadows = 4;
+	// A live fitting at a look's LightOutput of 1, and how far its light reaches,
+	// metres.
+	UPROPERTY(Config, EditAnywhere, Category = "Look", meta = (ClampMin = 0))
+	float FittingLumens = 3000.0f;
+	UPROPERTY(Config, EditAnywhere, Category = "Look", meta = (ClampMin = 1))
+	float FittingReach = 16.0f;
 
 	// The sim turns 0.0030 rad per raylib mouse pixel, and this multiplies
 	// Unreal's mouse delta before it gets there. At 1 the first run on a Mac

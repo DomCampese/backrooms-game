@@ -3,6 +3,7 @@
 #include "BackroomsCoords.h"
 #include "BackroomsHeldActor.h"
 #include "BackroomsLevelLook.h"
+#include "BackroomsLightsActor.h"
 #include "BackroomsSceneActor.h"
 #include "BackroomsSettings.h"
 #include "BackroomsSound.h"
@@ -228,6 +229,11 @@ void UBackroomsWorldSubsystem::FreeSim()
 		Hand->Destroy();
 		Hand = nullptr;
 	}
+	if (Lights)
+	{
+		Lights->Destroy();
+		Lights = nullptr;
+	}
 	if (Sound)
 	{
 		Sound->Stop();
@@ -303,6 +309,7 @@ void UBackroomsWorldSubsystem::Tick(float DeltaTime)
 		// The sim owns which storey is current (it rebases as you climb).
 		StreamAround(BackroomsCoords::ToUnreal({ Game->px, 0.0f, Game->pz }), Game->world.storey, DeltaTime);
 		ShowScene();
+		ShowLights(simView(*Game).eye);
 	}
 	else
 	{
@@ -314,6 +321,7 @@ void UBackroomsWorldSubsystem::Tick(float DeltaTime)
 			Game->world.setStorey(Storey);
 		}
 		StreamAround(Camera, Storey, DeltaTime);
+		ShowLights(BackroomsCoords::FromUnreal(Camera - StoreyOrigin()));
 	}
 }
 
@@ -464,6 +472,10 @@ void UBackroomsWorldSubsystem::DropChunk(const FIntVector& Key)
 	{
 		Actor->Destroy();
 	}
+	if (Lights)
+	{
+		Lights->Forget(Key);
+	}
 }
 
 void UBackroomsWorldSubsystem::DropAll()
@@ -476,6 +488,10 @@ void UBackroomsWorldSubsystem::DropAll()
 		}
 	}
 	Chunks.Reset();
+	if (Lights)
+	{
+		Lights->ForgetAll();
+	}
 }
 
 void UBackroomsWorldSubsystem::ShowScene()
@@ -497,5 +513,21 @@ void UBackroomsWorldSubsystem::ShowScene()
 	if (Hand)
 	{
 		Hand->Show(*Game, CurrentLook(), StoreyOrigin());
+	}
+}
+
+void UBackroomsWorldSubsystem::ShowLights(const Vec3& At)
+{
+	if (!Lights)
+	{
+		FActorSpawnParameters Params;
+		Params.ObjectFlags |= RF_Transient;
+		Lights = GetWorld()->SpawnActor<ABackroomsLightsActor>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
+	}
+	if (Lights)
+	{
+		// A free camera has no blackouts.
+		const float Blackout = bRun ? Game->blackoutCur : 1.0f;
+		Lights->Show(Game->world, At, CurrentLook(), Blackout, (float)Now(), StoreyOrigin());
 	}
 }

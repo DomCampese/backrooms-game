@@ -82,9 +82,6 @@ struct Game {
     // is entered: a level's set takes a few hundred milliseconds, and only
     // Level 0's is paid before the first frame. Levels share some, so they are
     // slots rather than a per-level array.
-    enum SurfSlot { SURF_CARPET, SURF_BOARDS, SURF_PAPER, SURF_SLAB, SURF_SOFFIT, SURF_CONCWALL,
-                    SURF_POOLFLOOR, SURF_POOLWALL, SURF_BRICK, SURF_BANQUET, SURF_PARTYCEIL,
-                    SURF_PARTYWALL, SURF_COUNT };
     Surface surfaces[SURF_COUNT]{};
     const Surface &surface(int slot);
     unsigned lookEntries = 0;                 // sim.levelEntries when the level's look was last applied

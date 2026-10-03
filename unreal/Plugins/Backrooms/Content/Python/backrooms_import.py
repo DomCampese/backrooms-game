@@ -1,4 +1,5 @@
-"""Imports the repository's models and recorded sounds into the Unreal project.
+"""Imports the repository's models and recorded sounds into the Unreal project,
+and has backrooms_looks.py build the level looks.
 
 The raylib build embeds assets/models/*.glb and assets/sounds/**/*.ogg; the
 Unreal build imports the same files, so there is one copy of each. The editor
@@ -14,6 +15,8 @@ The paths here are the defaults in Project Settings > Game > Backrooms.
 import os
 
 import unreal
+
+import backrooms_looks
 
 REVOLVER_DIR = "/Game/Backrooms/Revolver"
 REVOLVER_MESH = REVOLVER_DIR + "/SK_Revolver"
@@ -139,3 +142,9 @@ def import_missing():
         import_sounds()
     else:
         unreal.log("Backrooms: the sounds are already imported in " + SOUND_DIR)
+    why = backrooms_looks.stale()
+    if why:
+        unreal.log("Backrooms: building the level looks; " + why)
+        backrooms_looks.build_looks()
+    elif backrooms_looks.read_looks():
+        unreal.log("Backrooms: the level looks are up to date in " + backrooms_looks.LOOK_DIR)

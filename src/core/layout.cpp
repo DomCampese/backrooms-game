@@ -383,6 +383,7 @@ void fittings(World &w, const ChunkData &d, int cx, int cz, std::vector<LightFit
             f.dead = h < rules.dead;
             f.output = 1.0f - rules.vary * (h * 53.7f - floorf(h * 53.7f));
             f.faulty = h > 1.0f - rules.faulty;
+            f.stutterSeed = h * 97.31f - floorf(h * 97.31f);
             out.push_back(f);
         }
 }
@@ -400,6 +401,13 @@ bool cellHasCeiling(World &w, int gi, int gk) {
 float tubeHash(float gx, float gz) {
     float v = sinf(gx * 127.1f + gz * 311.7f) * 43758.5453f;
     return v - floorf(v);
+}
+
+float tubeStutter(float seed, float t) {
+    auto fract = [](float v) { return v - floorf(v); };
+    float gate = fract(sinf(floorf(t * 0.45f + seed * 37.0f) * 12.9898f) * 43758.5453f);
+    float noise = fract(sinf(t * (7.0f + seed * 10.0f) + seed * 211.0f) * 43758.5453f);
+    return gate > 0.74f && noise < 0.5f ? 0.62f : 1.0f;
 }
 
 float storeyHashOffset(int s) {

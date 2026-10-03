@@ -979,3 +979,37 @@ Surface makePartyCarpetSurface() {
 Surface makePartyCeilSurface() {
     return boardCeiling(512, 4, 2.0f, 22, 20, 25, 30, 29, 33, 120, 0xFA27u, 19.3f);
 }
+
+const char *const SURF_NAMES[SURF_COUNT] = {
+    "carpet", "ceiling", "wallpaper", "concfloor", "concceil", "concwall",
+    "poolfloor", "poolwall", "brick", "partycarpet", "partyceil", "partywall",
+};
+
+Surface makeSurface(SurfSlot slot) {
+    switch (slot) {
+        case SURF_CARPET:    return makeCarpetSurface();
+        case SURF_BOARDS:    return makeCeilingSurface();
+        case SURF_PAPER:     return makeWallpaperSurface();
+        case SURF_SLAB:      return makeConcreteFloorSurface();
+        case SURF_SOFFIT:    return makeConcreteCeilSurface();
+        case SURF_CONCWALL:  return makeConcreteWallSurface();
+        case SURF_POOLFLOOR: return makeTileSurface(false);
+        case SURF_POOLWALL:  return makeTileSurface(true);
+        case SURF_BRICK:     return makeRedBrickSurface();
+        case SURF_BANQUET:   return makePartyCarpetSurface();
+        case SURF_PARTYCEIL: return makePartyCeilSurface();
+        case SURF_PARTYWALL: return makePartyWallSurface();
+        case SURF_COUNT:     break;
+    }
+    return {};
+}
+
+const LevelSurfaces LEVEL_SURFACES[NLEVELS] = {
+    { SURF_CARPET, SURF_BOARDS, SURF_PAPER },
+    { SURF_SLAB, SURF_SOFFIT, SURF_CONCWALL },
+    { SURF_POOLFLOOR, SURF_POOLFLOOR, SURF_POOLWALL },   // floor tile on the ceiling: both map 2 m
+    { SURF_SLAB, SURF_SOFFIT, SURF_BRICK },              // Level 1's slab, in red light
+    { SURF_BANQUET, SURF_PARTYCEIL, SURF_PARTYWALL },
+};
+
+float wallTileV(int level) { return level == 1 ? LEVEL_RULES[1].wallH : WALL_TILE_M; }
