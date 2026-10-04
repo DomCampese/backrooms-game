@@ -349,7 +349,7 @@
   window.Module = Module;
 
   // ---- touch controls --------------------------------------------------
-  // The bits here are duplicated in src/input_web.cpp. Nothing checks that the
+  // The bits here are duplicated in web/src/input_web.cpp. Nothing checks that the
   // two agree; change one and a button quietly starts doing another button's
   // job, which reads as a game bug rather than a mapping bug.
   var BTN = { FIRE:1, AIM:2, RELOAD:4, FLASH:8, INTERACT:16, JUMP:32,
@@ -410,7 +410,7 @@
   // they are a fraction *of*.
   var BUTTONS = [
     { t:'FIRE',  bit:BTN.FIRE,     r:.04,  b:.10,  size:.19 },
-    // AIM latches: the game owns the state (src/input_web.cpp) and tells us how
+    // AIM latches: the game owns the state (web/src/input_web.cpp) and tells us how
     // to draw it, so this button must not light itself up under the finger.
     { t:'AIM',   bit:BTN.AIM,      r:.25,  b:.11,  size:.14, latch:1 },
     { t:'JUMP',  bit:BTN.JUMP,     r:.05,  b:.31,  size:.13 },
@@ -514,7 +514,7 @@
     if (!stickOrigin) homeStick();
   }
 
-  // Called from src/input_web.cpp for a latching button. Its lit state is the
+  // Called from web/src/input_web.cpp for a latching button. Its lit state is the
   // game's answer — whether the sights are actually up — and not where a finger
   // happens to be, so only the game may set it.
   touch.setHeld = function (bit, on) {

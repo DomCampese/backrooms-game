@@ -3,7 +3,7 @@
 // docs/unreal-handoff.md): floors, ceilings, walls with their openings, steps,
 // stairs, pillars, props as their collision boxes, water and light panels.
 // Built from core's accessors and chunkLayout, so it shows the world collision
-// and the rules see, and nothing of how the raylib build dresses it.
+// and the rules see, and nothing of how the Web build dresses it.
 //
 // Engine-neutral: core and the standard library only. Positions are metres in
 // the storey's own frame (y up, y = 0 its floor), as everywhere in core. Every

@@ -28,7 +28,7 @@ void Revolver::load() {
     pose(0,0,6);
 }
 void Revolver::pose(float reloadTime,float cooldown,int ammo) {
-    // Which clip and where the drum stands are src/port/held.cpp's, which the
+    // Which clip and where the drum stands are shared/port/held.cpp's, which the
     // Unreal build reads too.
     const RevolverPose p=revolverPose(reloadTime,cooldown,ammo);
     const int clip=p.clip==RevolverClip::Reload?reload:p.clip==RevolverClip::Shoot?shoot:idle;

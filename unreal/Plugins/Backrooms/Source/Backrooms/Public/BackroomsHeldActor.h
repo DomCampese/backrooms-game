@@ -13,7 +13,7 @@ class UPoseableMeshComponent;
 class USkeletalMeshComponent;
 class UStaticMeshComponent;
 
-// What the player holds, placed as the raylib build draws it (src/port/held.h).
+// What the player holds, placed as the Web build draws it (shared/port/held.h).
 // The revolver is posed too: the clip and how far through it, the drum's turn
 // across shots, the muzzle flash. Its model is the repository's
 // assets/models/revolver.glb, which the editor imports on first open

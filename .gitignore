@@ -7,12 +7,12 @@
 /.rlwheel/
 /shots/
 
-/src/object_materials.generated.h
+/web/src/object_materials.generated.h
 
-src/revolver.generated.h
+web/src/revolver.generated.h
 
-src/models.generated.h
-src/sounds.generated.h
+web/src/models.generated.h
+web/src/sounds.generated.h
 mapdump
 texdump
 

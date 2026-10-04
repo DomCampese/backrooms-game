@@ -34,7 +34,7 @@ constexpr float UnloadEvery = 2.0f;
 constexpr int32 UnloadRadius = 5;
 // The yaw a descent opens with (Sim::beginDescent), for the free camera.
 constexpr float OpeningYaw = 0.8f;
-// The raylib build clamps a frame's time to this before stepping the sim.
+// The Web build clamps a frame's time to this before stepping the sim.
 constexpr float MaxDt = 0.05f;
 
 // Bullets against level geometry: a line trace against the chunk actors, which
@@ -93,7 +93,7 @@ void UBackroomsWorldSubsystem::StartRun(uint32 Seed, int32 Level)
 	Start.seed = Seed;
 	Start.level = Level > 0 ? FMath::Min(Level, NLEVELS - 1) : -1;
 	Start.menu = false;
-	// The records file is the raylib build's; this one keeps none yet.
+	// The records file is the Web build's; this one keeps none yet.
 	Start.keepRecords = false;
 	Start.fov = windowFovY(1440, 850, 0.0f);
 
@@ -186,7 +186,7 @@ void UBackroomsWorldSubsystem::TickRun(const InputFrame& In, bool bPauseToggled,
 	FinishFrame();
 }
 
-// What the raylib build's finishStep, its paused tick and updateOccupancy do
+// What the Web build's finishStep, its paused tick and updateOccupancy do
 // with the sim's outputs.
 void UBackroomsWorldSubsystem::FinishFrame(bool bPaused)
 {

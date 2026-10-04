@@ -12,15 +12,15 @@ SO=$(ls "$PWD"/.rlwheel/raylib/_raylib_cffi.cpython-*-linux-gnu.so 2>/dev/null |
 # the wheel's .so is a CPython extension, so link the matching libpython
 PYV=$(basename "$SO" | sed -n 's/.*cpython-\([0-9]\)\([0-9]*\)-.*/\1.\2/p')
 # -ffp-contract=off: no fused multiply-adds, so core's results do not depend on
-# the compiler (src/core/fp_strict.h). Every build here compiles core.
-CORE_FLAGS=(-std=c++17 -O2 -Wall -Wno-missing-field-initializers -ffp-contract=off)
+# the compiler (shared/core/fp_strict.h). Every build here compiles core.
+CORE_FLAGS=(-std=c++17 -O2 -Wall -Wno-missing-field-initializers -ffp-contract=off -Ishared)
 FLAGS=("${CORE_FLAGS[@]}" -Irlshim)
 LINK=("$SO" "-Wl,-rpath,$(dirname "$SO")" "-lpython$PYV" -lm -ldl -lpthread)
-# src/ is the raylib platform; src/core and src/sim are the engine-independent
-# layers (docs/migration.md). sim may not exist yet.
+# web/src is the raylib platform (the Web build); shared/ holds core, sim and
+# port, the engine-independent layers both builds compile (docs/migration.md).
 shopt -s nullglob
-CORE=(src/core/*.cpp)
-GAME=(src/*.cpp "${CORE[@]}" src/sim/*.cpp src/port/*.cpp)
+CORE=(shared/core/*.cpp)
+GAME=(web/src/*.cpp "${CORE[@]}" shared/sim/*.cpp shared/port/*.cpp)
 shopt -u nullglob
 
 # Delete the target before compiling, so a failed build cannot leave a working
@@ -46,18 +46,18 @@ build_contract() {
     c++ "${CORE_FLAGS[@]}" tools/contract.cpp tools/contract_lib.cpp "${CORE[@]}" -o contract
     echo "built ./contract (core only)"
 }
-# replay: a recorded trace through the sim alone (src/sim/trace.h).
+# replay: a recorded trace through the sim alone (shared/sim/trace.h).
 build_replay() {
     rm -f replay
-    c++ "${CORE_FLAGS[@]}" tools/replay.cpp src/sim/*.cpp "${CORE[@]}" -o replay
+    c++ "${CORE_FLAGS[@]}" tools/replay.cpp shared/sim/*.cpp "${CORE[@]}" -o replay
     echo "built ./replay (core and sim only)"
 }
-# greybox-view: the port's greybox (src/port) round a spot, drawn with raylib. Port
+# greybox-view: the port's greybox (shared/port) round a spot, drawn with raylib. Port
 # code calls the sim (scene.cpp), so the sim links in too.
 build_greybox_view() {
     rm -f greybox-view
     python3 tools/embed-materials.py
-    c++ "${FLAGS[@]}" tools/greybox-view.cpp src/textures.cpp src/surfaces.cpp src/util.cpp src/port/*.cpp src/sim/*.cpp \
+    c++ "${FLAGS[@]}" tools/greybox-view.cpp web/src/textures.cpp web/src/surfaces.cpp web/src/util.cpp shared/port/*.cpp shared/sim/*.cpp \
         "${CORE[@]}" -o greybox-view "${LINK[@]}"
     echo "built ./greybox-view (python$PYV)"
 }
@@ -66,7 +66,7 @@ build_greybox_view() {
 build_texdump() {
     rm -f texdump
     python3 tools/embed-materials.py
-    c++ "${FLAGS[@]}" tools/texdump.cpp src/textures.cpp src/surfaces.cpp src/levels.cpp src/util.cpp \
+    c++ "${FLAGS[@]}" tools/texdump.cpp web/src/textures.cpp web/src/surfaces.cpp web/src/levels.cpp web/src/util.cpp \
         "${CORE[@]}" -o texdump "${LINK[@]}"
     echo "built ./texdump (python$PYV)"
 }

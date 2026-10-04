@@ -1,7 +1,7 @@
 #pragma once
 // What a renderer shows of the sim: where the eye is, where it looks, which way
 // is up (the camera leans into a strafe and rolls with a swimmer's swell), and
-// the vertical field of view. The raylib build and a port both draw from this,
+// the vertical field of view. The Web build and a port both draw from this,
 // so the camera cannot drift between them. Metres, the sim's storey frame.
 #include "../sim/sim.h"
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Compile the engine-independent layers alone, the way an Unreal module would:
-# C++17, no exceptions, no RTTI, and nothing on the include path but src/.
+# C++17, no exceptions, no RTTI, and nothing on the include path but shared/.
 # Fails if a file does not compile that way, or if it includes anything outside
 # its allowed layers (docs/migration.md): core may include core; sim may include
 # core and sim; port may include core, sim and port. A raylib, GL or platform header anywhere in the chain fails too,
@@ -11,8 +11,8 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 CXX=${CXX:-c++}
-# -ffp-contract=off as every real build of core (src/core/fp_strict.h).
-FLAGS=(-std=c++17 -fno-exceptions -fno-rtti -ffp-contract=off -Wall -Wno-missing-field-initializers -fsyntax-only -Isrc)
+# -ffp-contract=off as every real build of core (shared/core/fp_strict.h).
+FLAGS=(-std=c++17 -fno-exceptions -fno-rtti -ffp-contract=off -Wall -Wno-missing-field-initializers -fsyntax-only -Ishared)
 FORBIDDEN='(^|/)(raylib|rlgl|raymath|rcamera|glfw3?|gl|glad|miniaudio)\.h$|/GL/|/GLES[0-9]*/'
 fail=0
 
@@ -48,8 +48,8 @@ check() {
     done
 }
 
-check core src/core src/core
-check sim src/sim src/core src/sim
-check port src/port src/core src/sim src/port
+check core shared/core shared/core
+check sim shared/sim shared/core shared/sim
+check port shared/port shared/core shared/sim shared/port
 
 [ $fail = 0 ] && echo "core-check: passed" || { echo "core-check: FAILED"; exit 1; }

@@ -32,10 +32,10 @@ class BACKROOMS_API UBackroomsWorldSubsystem : public UTickableWorldSubsystem
 	GENERATED_BODY()
 
 public:
-	// A run, as the raylib build starts one with BACKROOMS_SEED and
+	// A run, as the Web build starts one with BACKROOMS_SEED and
 	// BACKROOMS_LEVEL: Level 0 first, then Level (if not 0), no title screen.
 	// With -BackroomsRecord=path on the command line, every call on the sim is
-	// recorded there for tools/replay (src/sim/trace.h).
+	// recorded there for tools/replay (shared/sim/trace.h).
 	void StartRun(uint32 Seed, int32 Level);
 	UFUNCTION(BlueprintCallable, Category = "Backrooms", meta = (DisplayName = "Start Run"))
 	void StartRunBP(int32 Seed, int32 Level) { StartRun((uint32)Seed, Level); }
@@ -43,7 +43,7 @@ public:
 	// What a HUD shows, as of the last frame.
 	UFUNCTION(BlueprintPure, Category = "Backrooms")
 	FBackroomsHudState GetHud() const;
-	// A level as the raylib build names it, for the free camera. Returns where
+	// A level as the Web build names it, for the free camera. Returns where
 	// to put the camera: beside (15, 15) at eye height.
 	FTransform StartFreeCamera(int32 Level, uint32 Seed, uint32 Visit);
 
@@ -71,7 +71,7 @@ private:
 	// frame also holds the ambience and the loops.
 	void FinishFrame(bool bPaused = false);
 	// Seconds since the subsystem started: the sim's clock, as GetTime() is the
-	// raylib build's.
+	// Web build's.
 	double Now() const;
 	FVector StoreyOrigin() const;
 	void StreamAround(const FVector& Focus, int32 Storey, float DeltaTime);

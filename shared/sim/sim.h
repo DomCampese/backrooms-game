@@ -1,6 +1,6 @@
 #pragma once
 // The game's state and rules, apart from how they are drawn and heard. The
-// platform (Game, src/game.cpp) owns one Sim: each tick it fills an
+// platform (Game, web/src/game.cpp) owns one Sim: each tick it fills an
 // InputFrame, calls step() with the clamped frame time and the clock, plays
 // `audio` in order, and draws from the state here. See docs/migration.md.
 #include "sim_math.h"
@@ -48,7 +48,7 @@ enum Weapon {
 enum class Pickup { None, AlmondWater, Doubloon, Battery, Tape, Key };
 
 // Balloon and confetti colours are indices into Level 4's palette, which the
-// platform draws with (PARTY, src/util.h, must have this many entries).
+// platform draws with (PARTY, web/src/util.h, must have this many entries).
 constexpr int PARTY_COLOURS = 5;
 
 // The Manila Room's notes: pages of up to four lines.

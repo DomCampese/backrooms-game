@@ -18,26 +18,26 @@ ifeq ($(UNAME_S),Linux)
   LIBS_RL += -lm -ldl -lpthread
 endif
 
-# src/ is the raylib platform; src/core and src/sim are the engine-independent
-# layers (docs/migration.md).
+# web/src is the raylib platform (the Web build); shared/ holds core, sim and
+# port, the engine-independent layers both builds compile (docs/migration.md).
 # No fused multiply-adds: core's results must not depend on the compiler
-# (src/core/fp_strict.h). Every command here compiles core with the rest.
-CXX_FLAGS := -std=c++17 -O2 -Wall -Wno-missing-field-initializers -ffp-contract=off
-SRCS := $(wildcard src/*.cpp src/core/*.cpp src/sim/*.cpp src/port/*.cpp)
-HDRS := $(wildcard src/*.h src/core/*.h src/sim/*.h src/port/*.h)
+# (shared/core/fp_strict.h). Every command here compiles core with the rest.
+CXX_FLAGS := -std=c++17 -O2 -Wall -Wno-missing-field-initializers -ffp-contract=off -Ishared
+SRCS := $(wildcard web/src/*.cpp shared/core/*.cpp shared/sim/*.cpp shared/port/*.cpp)
+HDRS := $(wildcard web/src/*.h shared/core/*.h shared/sim/*.h shared/port/*.h)
 
-src/object_materials.generated.h: tools/embed-materials.py $(wildcard assets/materials/*.jpg)
+web/src/object_materials.generated.h: tools/embed-materials.py $(wildcard assets/materials/*.jpg)
 	python3 tools/embed-materials.py objects
 
-src/models.generated.h: tools/embed-materials.py $(shell find assets/models -name "*.glb")
+web/src/models.generated.h: tools/embed-materials.py $(shell find assets/models -name "*.glb")
 	python3 tools/embed-materials.py models
 
 # The directories are listed too: deleting a clip changes its folder's mtime but
 # no remaining .ogg, and the header would otherwise keep embedding the dead file.
-src/sounds.generated.h: tools/embed-materials.py $(shell find assets/sounds -name "*.ogg" -o -type d)
+web/src/sounds.generated.h: tools/embed-materials.py $(shell find assets/sounds -name "*.ogg" -o -type d)
 	python3 tools/embed-materials.py sounds
 
-GENERATED := src/object_materials.generated.h src/models.generated.h src/sounds.generated.h
+GENERATED := web/src/object_materials.generated.h web/src/models.generated.h web/src/sounds.generated.h
 
 backrooms: $(SRCS) $(HDRS) $(GENERATED)
 	c++ $(CXX_FLAGS) $(CFLAGS_RL) $(SRCS) -o backrooms $(LIBS_RL)
@@ -51,22 +51,22 @@ clean:
 .PHONY: run clean
 
 # Uses the same native renderer as the game; run from shots/regression for captures.
-regression: $(GENERATED) tools/regression.cpp $(filter-out src/main.cpp,$(SRCS)) $(HDRS)
-	c++ $(CXX_FLAGS) $(CFLAGS_RL) -Isrc tools/regression.cpp $(filter-out src/main.cpp,$(SRCS)) -o /tmp/backrooms-regression $(LIBS_RL)
+regression: $(GENERATED) tools/regression.cpp $(filter-out web/src/main.cpp,$(SRCS)) $(HDRS)
+	c++ $(CXX_FLAGS) $(CFLAGS_RL) -Iweb/src tools/regression.cpp $(filter-out web/src/main.cpp,$(SRCS)) -o /tmp/backrooms-regression $(LIBS_RL)
 	mkdir -p shots/regression
 	cd shots/regression && BACKROOMS_TEST_ASSET_DIR="$(CURDIR)/tests/fixtures" /tmp/backrooms-regression
 
 .PHONY: regression
 
-benchmark-animation: $(GENERATED) tools/bench-animation.cpp $(filter-out src/main.cpp,$(SRCS)) $(HDRS)
-	c++ -std=c++17 -O2 -ffp-contract=off $(CFLAGS_RL) -Isrc tools/bench-animation.cpp $(filter-out src/main.cpp,$(SRCS)) -o /tmp/backrooms-animation-after $(LIBS_RL)
+benchmark-animation: $(GENERATED) tools/bench-animation.cpp $(filter-out web/src/main.cpp,$(SRCS)) $(HDRS)
+	c++ -std=c++17 -O2 -ffp-contract=off -Ishared $(CFLAGS_RL) -Iweb/src tools/bench-animation.cpp $(filter-out web/src/main.cpp,$(SRCS)) -o /tmp/backrooms-animation-after $(LIBS_RL)
 
 .PHONY: benchmark-animation
 
-# Core's golden answers, linked against src/core alone (docs/migration.md,
+# Core's golden answers, linked against shared/core alone (docs/migration.md,
 # "Contract tests").
-CORE_SRCS := $(wildcard src/core/*.cpp)
-contract: tools/contract.cpp tools/contract_lib.cpp tools/contract_lib.h $(CORE_SRCS) $(wildcard src/core/*.h)
+CORE_SRCS := $(wildcard shared/core/*.cpp)
+contract: tools/contract.cpp tools/contract_lib.cpp tools/contract_lib.h $(CORE_SRCS) $(wildcard shared/core/*.h)
 	c++ $(CXX_FLAGS) tools/contract.cpp tools/contract_lib.cpp $(CORE_SRCS) -o contract
 
 contract-check: contract
@@ -75,8 +75,8 @@ contract-check: contract
 .PHONY: contract-check
 
 # A recorded trace (BACKROOMS_RECORD) replayed through the sim alone.
-SIM_SRCS := $(wildcard src/sim/*.cpp)
-replay: tools/replay.cpp $(SIM_SRCS) $(CORE_SRCS) $(wildcard src/sim/*.h src/core/*.h)
+SIM_SRCS := $(wildcard shared/sim/*.cpp)
+replay: tools/replay.cpp $(SIM_SRCS) $(CORE_SRCS) $(wildcard shared/sim/*.h shared/core/*.h)
 	c++ $(CXX_FLAGS) tools/replay.cpp $(SIM_SRCS) $(CORE_SRCS) -o replay
 
 replay-check: replay
@@ -86,7 +86,7 @@ replay-check: replay
 
 # Every texture generator without a window (tools/texdump.cpp); `--unreal DIR`
 # writes what the Unreal editor imports.
-TEXDUMP_SRCS := tools/texdump.cpp src/textures.cpp src/surfaces.cpp src/levels.cpp src/util.cpp $(CORE_SRCS)
+TEXDUMP_SRCS := tools/texdump.cpp web/src/textures.cpp web/src/surfaces.cpp web/src/levels.cpp web/src/util.cpp $(CORE_SRCS)
 texdump: $(TEXDUMP_SRCS) $(HDRS) $(GENERATED)
 	c++ $(CXX_FLAGS) $(CFLAGS_RL) $(TEXDUMP_SRCS) -o texdump $(LIBS_RL)
 

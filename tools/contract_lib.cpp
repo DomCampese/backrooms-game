@@ -1,11 +1,11 @@
-// Contract tests for src/core: the fixed set of chunks and questions, and the
-// comparison with tests/golden. Links src/core alone, so any engine that
+// Contract tests for shared/core: the fixed set of chunks and questions, and the
+// comparison with tests/golden. Links shared/core alone, so any engine that
 // compiles core can run it (tools/contract.cpp natively, the Unreal
 // automation test in unreal/). See tools/contract_lib.h.
-#include "../src/core/world.h"
-#include "../src/core/hash.h"
-#include "../src/core/level_rules.h"
-#include "../src/core/layout.h"
+#include "../shared/core/world.h"
+#include "../shared/core/hash.h"
+#include "../shared/core/level_rules.h"
+#include "../shared/core/layout.h"
 #include "contract_lib.h"
 
 #include <algorithm>

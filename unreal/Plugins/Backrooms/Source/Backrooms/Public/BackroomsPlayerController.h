@@ -9,7 +9,7 @@ class UInputMappingContext;
 
 // The sim's controls. Each is an Enhanced Input action: the one assigned in
 // Project Settings > Game > Backrooms, with the keys your mapping context gives
-// it, or else one made here with the raylib build's keys, so the project runs
+// it, or else one made here with the Web build's keys, so the project runs
 // with no input assets at all. Each frame the controller reads every action
 // once, fills the sim's InputFrame as Game::readInput does (held keys, down
 // edges, the mouse delta), steps the run and points the camera at the sim's

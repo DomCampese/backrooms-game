@@ -80,7 +80,7 @@ void AddProps(const ChunkLayout& Layout, const UBackroomsLevelLook& Look, UProce
 }
 
 // Every fixture: the look's mesh for its kind in the fixture's frame, or a
-// plain box. Fixtures have no collision, as in the raylib build.
+// plain box. Fixtures have no collision, as in the Web build.
 void AddFixtures(const ChunkLayout& Layout, const UBackroomsLevelLook* Look, UProceduralMeshComponent& Parent,
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>>& Instances)
 {
@@ -177,7 +177,7 @@ void BackroomsChunkBuild::Build(World& W, int32 Cx, int32 Cz, const UBackroomsLe
 		{
 			Triangles.Add((int32)I);
 		}
-		// Rounds pass through water, as in the raylib build's MeshTracer.
+		// Rounds pass through water, as in the Web build's MeshTracer.
 		const bool bSolid = bCollision && S != (int32)GreySurface::Water;
 		Mesh.CreateMeshSection_LinearColor(SectionIndex, Vertices, Triangles, Normals, UVs,
 			TArray<FLinearColor>(), Tangents, bSolid);

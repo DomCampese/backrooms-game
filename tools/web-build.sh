@@ -37,16 +37,17 @@ python3 tools/embed-materials.py
 mkdir -p "$OUT"
 rm -f "$OUT/index.html" "$OUT/index.js" "$OUT/index.wasm"
 
-# The game is src/ plus the engine-independent layers (docs/migration.md).
+# The Web build is web/src plus shared/, the engine-independent layers
+# (docs/migration.md).
 shopt -s nullglob
-SRCS=(src/*.cpp src/core/*.cpp src/sim/*.cpp src/port/*.cpp)
+SRCS=(web/src/*.cpp shared/core/*.cpp shared/sim/*.cpp shared/port/*.cpp)
 shopt -u nullglob
 
 # -ffp-contract=off: em++ is clang; core's results must not depend on fused
-# multiply-adds (src/core/fp_strict.h).
+# multiply-adds (shared/core/fp_strict.h).
 em++ -std=c++17 -O2 -DPLATFORM_WEB \
     -Wall -Wno-missing-field-initializers -ffp-contract=off \
-    -I"$RAYLIB_SRC" \
+    -Ishared -I"$RAYLIB_SRC" \
     "${SRCS[@]}" "$RAYLIB_SRC/libraylib.a" \
     -o "$OUT/index.html" \
     --shell-file web/shell.html \

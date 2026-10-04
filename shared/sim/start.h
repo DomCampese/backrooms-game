@@ -1,6 +1,6 @@
 #pragma once
 // How a run begins. The platform decides a SimStart before the first tick
-// (the raylib build from its BACKROOMS_* knobs, a replay from a trace) and
+// (the Web build from its BACKROOMS_* knobs, a replay from a trace) and
 // sets the sim up in this order:
 //
 //   simBegin(sim, start, now);

@@ -652,7 +652,7 @@ void Game::renderScene(double now) {
         const Vector3 &la = LEVELS[sim.level].amb;
         Vector3 vmAmb = { fmaxf(la.x, 0.150f), fmaxf(la.y, 0.142f), fmaxf(la.z, 0.128f) };
         SetShaderValue(worldShader, locAmb, &vmAmb, SHADER_UNIFORM_VEC3);
-        // Where each is held is src/port/held.cpp's, which the Unreal build reads too.
+        // Where each is held is shared/port/held.cpp's, which the Unreal build reads too.
         if (held == Held::Can) drawCan(heldMatrix(heldCan(sim, view)));   // both hands are busy: the deck goes away
         else if (held == Held::Deck) drawDeck(heldMatrix(heldDeck(sim, view)), sim.deck.playing);
         else drawHeldWeapon(cam);

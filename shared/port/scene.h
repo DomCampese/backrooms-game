@@ -6,7 +6,7 @@
 // (pickupAt, crateAt, balloonAt, ...), so what a port draws is what the sim
 // tests. How each looks, and any bob or flicker, is the renderer's.
 // render.cpp draws these from here too, so the reaches below are what the
-// raylib build has always drawn.
+// Web build has always drawn.
 //
 // Metres in the sim's frame: the storey the player is on, y = 0 its floor.
 #include "../sim/sim.h"

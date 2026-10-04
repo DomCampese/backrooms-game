@@ -14,7 +14,7 @@ struct DevKeys {
 };
 
 // What the player asked for on one tick. The platform fills it once from
-// src/input.h before stepping the sim, and the sim reads input through nothing
+// web/src/input.h before stepping the sim, and the sim reads input through nothing
 // else. `...Pressed` fields and the single actions are down edges; the rest
 // are held state.
 struct InputFrame {
@@ -39,6 +39,6 @@ struct InputFrame {
 
     bool begin = false;           // title screen: any key but F11, a click, or a touch start gesture
     DevKeys dev;
-    float screenFov = 70.0f;      // base vertical FOV for the window, deg (windowFovY, src/port/view.h)
+    float screenFov = 70.0f;      // base vertical FOV for the window, deg (windowFovY, shared/port/view.h)
     bool forceSpawn = false;      // headless capture: put the hunter in view on this tick
 };

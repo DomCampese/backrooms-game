@@ -31,7 +31,7 @@ for group in ([args.group] if args.group else groups):
             key=path.relative_to(root/'assets').as_posix()
             parts.append(f'{{"{key}",{symbol},sizeof({symbol})}},\n')
         parts.append('};\n')
-    out = root/'src'/filename
+    out = root/'web'/'src'/filename
     text = ''.join(parts)
     if not out.exists() or out.read_text() != text:
         out.write_text(text)

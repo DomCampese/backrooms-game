@@ -1,7 +1,7 @@
 #pragma once
 // The game's sound, without an audio API: the one-shot clips synthesized as
 // PCM, which clips are recordings instead, and the levels the looping
-// recordings are eased to. The raylib build (sfx.cpp, game_audio.cpp) and a
+// recordings are eased to. The Web build (sfx.cpp, game_audio.cpp) and a
 // port's mixer (mixer.h) both load from here, so a clip sounds the same in
 // either.
 #include "../sim/audio_events.h"

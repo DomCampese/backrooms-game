@@ -9,7 +9,7 @@ struct SceneItem;
 class UBackroomsLevelLook;
 class UInstancedStaticMeshComponent;
 
-// Draws what the sim puts in the world each frame (src/port/scene.h): pickups,
+// Draws what the sim puts in the world each frame (shared/port/scene.h): pickups,
 // crates, the tape deck, flares, chalk, balloons, the hunter and the pack. One
 // instanced mesh per kind (and per colour for balloons and confetti), with the
 // level look's mesh or a plain shape at the thing's real size. The subsystem

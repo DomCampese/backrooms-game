@@ -1,7 +1,7 @@
 """Imports the repository's models and recorded sounds into the Unreal project,
 and has backrooms_looks.py build the level looks.
 
-The raylib build embeds assets/models/*.glb and assets/sounds/**/*.ogg; the
+The Web build embeds assets/models/*.glb and assets/sounds/**/*.ogg; the
 Unreal build imports the same files, so there is one copy of each. The editor
 runs init_unreal.py when it opens the project, and that imports anything
 missing. To import again after a file changes, run in the editor's Python
@@ -30,7 +30,7 @@ REVOLVER_CLIPS = {
 
 SOUND_DIR = "/Game/Backrooms/Sounds"
 # The recordings the game loops (UNDERWATER_RECORDING and PARTY_RECORDING in
-# src/port/sounds.h).
+# shared/port/sounds.h).
 SOUND_LOOPS = {"underwater", "level_fun"}
 
 

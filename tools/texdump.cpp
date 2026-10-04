@@ -1,4 +1,4 @@
-// texdump: run every texture generator in src/textures.cpp without a window or
+// texdump: run every texture generator in web/src/textures.cpp without a window or
 // a GL context, write each result to PNG and print its mean colour.
 //
 //   tools/sandbox-build.sh texdump
@@ -21,8 +21,8 @@
 // B the gloss mask. A "_wrap" copy tiles each surface 2x2 so a seam at the
 // repeat is in the middle of the picture instead of at its edges.
 #include "raylib.h"
-#include "../src/levels.h"
-#include "../src/textures.h"
+#include "../web/src/levels.h"
+#include "../web/src/textures.h"
 #include <chrono>
 #include <cstdio>
 #include <cstring>

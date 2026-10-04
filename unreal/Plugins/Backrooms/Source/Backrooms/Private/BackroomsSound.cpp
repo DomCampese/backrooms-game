@@ -164,7 +164,7 @@ UAudioComponent* UBackroomsSound::Player(const char* Path)
 	return Comp;
 }
 
-// The raylib build plays a loop while its level is above 0.005 and stops it
+// The Web build plays a loop while its level is above 0.005 and stops it
 // below, so a stopped loop starts again from the top.
 void UBackroomsSound::FeedLoop(const char* Path, float Volume, float Pitch)
 {

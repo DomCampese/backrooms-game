@@ -10,6 +10,17 @@ A procedurally-infinite backrooms horror game in a small C++ codebase, running
 natively and on WebAssembly. Procedural worlds and sound, with an animated CC0
 revolver and compact texture assets embedded at build time.
 
+The game comes in two builds from one repository:
+
+| build | what it is | where it runs |
+|---|---|---|
+| **Web** (`web/`) | the game on raylib: light, quick to load, playable from a link | any browser, phones (touch controls), and natively on desktop |
+| **Unreal** (`unreal/`) | the same game in Unreal Engine 5: real lighting, materials and meshes | desktop (Mac first); see [unreal/README.md](unreal/README.md) |
+
+Both compile the same game from `shared/`: the generator (`core`), the rules
+(`sim`) and what a renderer needs from them (`port`). A seed is the same maze,
+the same pickups and the same hunter in both.
+
 ## License and credits
 
 This unofficial hobby game is released under the **MIT License**. See [LICENSE](LICENSE)
@@ -82,7 +93,7 @@ latch belongs to the game, not to the button, so anything that makes the aim
 illegal drops it, and tapping LOAD lowers the sights first (a reload cannot
 start while they are up).
 
-They are drawn by the page, not the game; `src/input.h` folds them into the same
+They are drawn by the page, not the game; `web/src/input.h` folds them into the same
 input questions the desktop build asks, so the game itself does not know which
 it is running on.
 
@@ -192,7 +203,7 @@ in LEVEL FUN — stalks out of the fog, and gives chase if you stare too long.
 
 ## Build & run
 
-Requires [raylib](https://www.raylib.com) 5.x (`brew install raylib` on macOS;
+The Web build natively on desktop. Requires [raylib](https://www.raylib.com) 5.x (`brew install raylib` on macOS;
 any distro package or pkg-config install works on Linux).
 
 ```sh
@@ -201,20 +212,18 @@ make run
 
 ## Code layout
 
-| module | what lives there |
+| path | what lives there |
 |---|---|
-| `src/main.cpp` | entry point: init, frame loop, shutdown |
-| `src/game.*` | run state (`Game` struct) + per-frame update logic, in frame order |
-| `src/render.cpp` | 3D scene pass, weapon viewmodel, HUD, overlays |
-| `src/world.*` | infinite maze: chunk generation, storeys and the stairs between them, mesh baking, collision, line of sight |
-| `src/levels.*` | per-level look/feel tables (fog, lights, palette) + exit rotation |
-| `src/entity.h` | the hunter's state — Clark, the Smiler or the Partygoer by level (the state machine runs in `Game::updateEntity`) |
-| `src/surfaces.cpp` | the floors, walls and ceilings: colour, height and gloss per surface, generated per level on first visit |
-| `src/textures.*` | sprites, decals, fixtures, props, the can and the tape deck, synthesized at startup |
-| `src/sfx.*` | one-shot sounds (footsteps, gunshot, splash, ...) |
-| `src/audio.*` | streaming ambience synth (hum, drone, room); water and LEVEL FUN music are recordings |
-| `src/shaders.*` | world + post-process GLSL |
-| `src/util.*` | hashes, RNG, value noise, shared palette |
+| `shared/core/` | the infinite maze: generation, storeys, collision, line of sight, pathfinding, chunk layout. No engine |
+| `shared/sim/` | the rules (`Sim`): the player, weapons, pickups, the hunter and the pack, levels, blackouts. No engine |
+| `shared/port/` | what any renderer needs from the sim: the camera, the greybox, what is held and loose, sprite poses, the sound mix |
+| `web/src/` | the Web build: window, input, mesher, textures, shaders, rendering and audio on raylib |
+| `web/shell.html` | the browser page around the WebAssembly build, with the touch controls |
+| `unreal/` | the Unreal build: a project and one plugin that compiles `shared/` |
+| `tools/` | build scripts, the contract and replay checks, mapdump, texdump, captures |
+| `tests/` | the goldens and recorded traces both builds are checked against |
+
+AGENTS.md has the module map file by file.
 
 ## How it works
 
@@ -568,7 +577,7 @@ With the F3 debug HUD open, dev hotkeys are live: `B` force blackout,
 - `BACKROOMS_MENU=1` — hold on the title screen (skips the auto-start; visual testing).
 - `BACKROOMS_EXITS=1` — exit doors everywhere (visual testing).
 - `BACKROOMS_MANILA=1` — a Manila Room in the chunk east of spawn, centred at x 48, z 16 (visual testing).
-- `BACKROOMS_RECORD=path` — record every call on the sim to a trace; `./replay path` replays it without the game (src/sim/trace.h).
+- `BACKROOMS_RECORD=path` — record every call on the sim to a trace; `./replay path` replays it without the game (shared/sim/trace.h).
 - `BACKROOMS_POS="x,z,yaw[,pitch]"` — start at a specific spot and heading, optionally looking up (+) or down (-) by `pitch` radians (visual testing).
 - `BACKROOMS_LEVEL=n` — start on level n (visual testing).
 - `BACKROOMS_SEED=n` — fix the world seed (repeatable maze).

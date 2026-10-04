@@ -10,7 +10,7 @@ namespace
 const TCHAR* BaseMaterial = TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial");
 
 // A plain box: across the face, up it and out of it, metres; or for a run, its
-// thickness. Sizes follow the raylib build's fittings (FIXTURES in textures.cpp,
+// thickness. Sizes follow the Web build's fittings (FIXTURES in textures.cpp,
 // the mesher's builders).
 struct FPlainFixture
 {

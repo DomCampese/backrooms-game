@@ -10,7 +10,7 @@ class UPostProcessComponent;
 class URectLightComponent;
 
 // A level's light, air and camera (M5): rect lights at the live fittings
-// nearest the player, the raylib build's fog, and a post-process volume with
+// nearest the player, the Web build's fog, and a post-process volume with
 // the look's fixed exposure and the post pass's colour split. Where the
 // fittings are, and which are dead, part output or faulty, is core's
 // (chunkLayout); the look gives the tubes' colour and output, the fog and the

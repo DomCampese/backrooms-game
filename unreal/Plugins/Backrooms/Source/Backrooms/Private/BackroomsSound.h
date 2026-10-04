@@ -13,8 +13,8 @@ class USoundWave;
 class USoundWaveProcedural;
 
 // The sim's sound in Unreal (M6). The synthesized clips, the tape voice and
-// the ambience bed are mixed in software (src/port/mixer.h) and streamed
-// through one procedural wave, so they sound as the raylib build plays them.
+// the ambience bed are mixed in software (shared/port/mixer.h) and streamed
+// through one procedural wave, so they sound as the Web build plays them.
 // The recordings in assets/sounds, which the editor imports
 // (backrooms_import.py), play as sound waves on components of their own.
 UCLASS()

@@ -45,7 +45,7 @@ struct Game {
     Sim sim;
     ChunkMeshCache chunkMeshes;   // the world's chunks, baked
     MeshTracer tracer{ sim.world, chunkMeshes };
-    // BACKROOMS_RECORD: every call on the sim, for tools/replay (src/sim/trace.h).
+    // BACKROOMS_RECORD: every call on the sim, for tools/replay (shared/sim/trace.h).
     TraceWriter trace;
     RecordingTracer recordingTracer{ tracer, trace };
     Game() { sim.tracer = &tracer; }

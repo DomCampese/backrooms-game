@@ -1,4 +1,4 @@
-// Draws the greybox (src/port/greybox.h) round a spot with raylib and saves one
+// Draws the greybox (shared/port/greybox.h) round a spot with raylib and saves one
 // frame, with the game's camera at the same spot, so a greybox frame can be laid
 // over a capture of the game. What a port's first milestone should show,
 // checked before any engine is involved.
@@ -17,9 +17,9 @@
 // so the mapping can be held against a capture of the game.
 #include "raylib.h"
 #include "raymath.h"
-#include "../src/port/greybox.h"
-#include "../src/textures.h"
-#include "../src/core/level_rules.h"
+#include "../shared/port/greybox.h"
+#include "../web/src/textures.h"
+#include "../shared/core/level_rules.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>

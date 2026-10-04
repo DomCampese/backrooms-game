@@ -2,7 +2,7 @@
 // The infinite maze: deterministic chunk generation, storeys, collision, line
 // of sight, pathfinding and the light-occlusion grid. Chunks are generated on
 // demand and unloaded behind the player. Standard library only: the raylib
-// mesher is src/world_mesh.cpp.
+// mesher is web/src/world_mesh.cpp.
 #include "vec.h"
 #include <cstdint>
 #include <cmath>

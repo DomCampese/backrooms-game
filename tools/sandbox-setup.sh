@@ -1,5 +1,5 @@
 #!/bin/bash
-# Reconstruct a raylib build environment where the system has no raylib.
+# Reconstruct a Web build environment where the system has no raylib.
 #
 # There is no raylib package in the Claude Code web sandbox, but the Python
 # wheel ships a complete raylib shared object plus cffi-preprocessed headers,
