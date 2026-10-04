@@ -3,7 +3,9 @@
 #include "BackroomsLevelLook.h"
 #include "BackroomsSettings.h"
 #include "Components/ExponentialHeightFogComponent.h"
+#include "Components/PostProcessComponent.h"
 #include "Components/RectLightComponent.h"
+#include "port/view.h"
 
 namespace
 {
@@ -15,6 +17,10 @@ constexpr float FogPerMetre = 10.0f;
 // The fog's height falloff, as near to none as Unreal allows: the raylib fog
 // does not thin with height.
 constexpr float FogFlat = 0.001f;
+// Unreal's fringe is in percent of the screen, the post pass's split a fraction.
+constexpr float FringePerSplit = 100.0f;
+// The exposure without a look, EV100.
+constexpr float DefaultEV100 = 6.0f;
 }
 
 ABackroomsLightsActor::ABackroomsLightsActor()
@@ -27,6 +33,16 @@ ABackroomsLightsActor::ABackroomsLightsActor()
 	Fog->SetFogHeightFalloff(FogFlat);
 	Fog->SetStartDistance(0.0f);
 	Fog->SetFogMaxOpacity(1.0f);
+
+	Post = CreateDefaultSubobject<UPostProcessComponent>(TEXT("Post"));
+	Post->SetupAttachment(RootComponent);
+	Post->bUnbound = true;
+	FPostProcessSettings& Pinned = Post->Settings;
+	// Eye adaptation pinned: the minimum and maximum are one EV100 (the
+	// project extends the luminance range, so these are EV100).
+	Pinned.bOverride_AutoExposureMinBrightness = true;
+	Pinned.bOverride_AutoExposureMaxBrightness = true;
+	Pinned.bOverride_SceneFringeIntensity = true;
 }
 
 const TArray<LightFitting>& ABackroomsLightsActor::FittingsOf(World& W, int32 Cx, int32 Cz)
@@ -47,10 +63,15 @@ const TArray<LightFitting>& ABackroomsLightsActor::FittingsOf(World& W, int32 Cx
 	return Live;
 }
 
-void ABackroomsLightsActor::Show(World& W, const Vec3& At, const UBackroomsLevelLook* Look, float Blackout,
-	float Now, const FVector& Origin)
+void ABackroomsLightsActor::Show(World& W, const Vec3& At, const UBackroomsLevelLook* Look, const FMoment& Moment,
+	const FVector& Origin)
 {
 	const UBackroomsSettings* Settings = GetDefault<UBackroomsSettings>();
+
+	FPostProcessSettings& Camera = Post->Settings;
+	Camera.AutoExposureMinBrightness = Camera.AutoExposureMaxBrightness = Look ? Look->ExposureEV100 : DefaultEV100;
+	Camera.SceneFringeIntensity =
+		colourSplit(Moment.Fear, migraineThrob(Moment.Migraine, Moment.Now)) * FringePerSplit;
 
 	const bool bFog = Look && Look->bFog;
 	Fog->SetVisibility(bFog);
@@ -100,7 +121,7 @@ void ABackroomsLightsActor::Show(World& W, const Vec3& At, const UBackroomsLevel
 	}
 
 	const FLinearColor Colour = Look ? Look->LightColour : FLinearColor::White;
-	const float Output = (Look ? Look->LightOutput : 1.0f) * Settings->FittingLumens * Blackout;
+	const float Output = (Look ? Look->LightOutput : 1.0f) * Settings->FittingLumens * Moment.Blackout;
 	for (int32 I = 0; I < Pool.Num(); I++)
 	{
 		URectLightComponent* Light = Pool[I];
@@ -110,7 +131,7 @@ void ABackroomsLightsActor::Show(World& W, const Vec3& At, const UBackroomsLevel
 			continue;
 		}
 		const LightFitting& Fitting = Near[I].Fitting;
-		const float Stutter = Fitting.faulty ? tubeStutter(Fitting.stutterSeed, Now) : 1.0f;
+		const float Stutter = Fitting.faulty ? tubeStutter(Fitting.stutterSeed, Moment.Now) : 1.0f;
 		Light->SetVisibility(true);
 		Light->SetWorldLocation(BackroomsCoords::ToUnreal(Fitting.pos) + Origin);
 		Light->SetLightColor(Colour);

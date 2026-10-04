@@ -1,5 +1,6 @@
 #include "BackroomsChunkBuild.h"
 #include "BackroomsCoords.h"
+#include "BackroomsFixtureShapes.h"
 #include "BackroomsLevelLook.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -78,6 +79,41 @@ void AddProps(const ChunkLayout& Layout, const UBackroomsLevelLook& Look, UProce
 	}
 }
 
+// Every fixture: the look's mesh for its kind in the fixture's frame, or a
+// plain box. Fixtures have no collision, as in the raylib build.
+void AddFixtures(const ChunkLayout& Layout, const UBackroomsLevelLook* Look, UProceduralMeshComponent& Parent,
+	TArray<TObjectPtr<UInstancedStaticMeshComponent>>& Instances)
+{
+	TMap<EBackroomsFixture, UInstancedStaticMeshComponent*> ByKind;
+	for (const Fixture& Item : Layout.fixtures)
+	{
+		const EBackroomsFixture Kind = (EBackroomsFixture)Item.kind;
+		const FBackroomsFixtureLook* Own = Look ? Look->Fixtures.Find(Kind) : nullptr;
+		const bool bMeshed = Own && Own->Mesh;
+		FTransform Placed;
+		if (bMeshed)
+		{
+			Placed = Own->Offset * BackroomsFixtureShapes::Frame(Item);
+		}
+		else if (!BackroomsFixtureShapes::Plain(Item, Placed))
+		{
+			continue;
+		}
+		UInstancedStaticMeshComponent*& Component = ByKind.FindOrAdd(Kind);
+		if (!Component)
+		{
+			Component = NewInstances(Parent, bMeshed ? Own->Mesh.Get() : BackroomsFixtureShapes::Mesh(), Instances);
+			UMaterialInterface* Material = Own && Own->Material ? Own->Material.Get()
+				: bMeshed ? nullptr : BackroomsFixtureShapes::Material(Kind, Parent.GetOwner());
+			if (Material)
+			{
+				Component->SetMaterial(0, Material);
+			}
+		}
+		Component->AddInstance(Placed);
+	}
+}
+
 void AddFittings(const ChunkLayout& Layout, const UBackroomsLevelLook& Look, UProceduralMeshComponent& Parent,
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>>& Instances)
 {
@@ -151,16 +187,14 @@ void BackroomsChunkBuild::Build(World& W, int32 Cx, int32 Cz, const UBackroomsLe
 		}
 		SectionIndex++;
 	}
-	if (Look && (MeshedProps || bMeshedFittings))
+	const ChunkLayout Layout = chunkLayout(W, Cx, Cz);
+	AddFixtures(Layout, Look, Mesh, Instances);
+	if (MeshedProps)
 	{
-		const ChunkLayout Layout = chunkLayout(W, Cx, Cz);
-		if (MeshedProps)
-		{
-			AddProps(Layout, *Look, Mesh, Instances);
-		}
-		if (bMeshedFittings)
-		{
-			AddFittings(Layout, *Look, Mesh, Instances);
-		}
+		AddProps(Layout, *Look, Mesh, Instances);
+	}
+	if (bMeshedFittings)
+	{
+		AddFittings(Layout, *Look, Mesh, Instances);
 	}
 }

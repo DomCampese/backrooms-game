@@ -35,7 +35,7 @@ Texture2D finishTexture(Image img, bool tiled) {
 // the whole of the creature. Frames churn the fog rather than stride; the
 // shared gait still drives them, so the smoke boils faster as it closes.
 Texture2D makeSmilerTex(bool glow) {
-    const int FW = 128, FH = 256, W = FW * ENT_FRAMES, H = FH * ENT_ROWS;
+    const int FW = ENT_FRAME_W, FH = ENT_FRAME_H, W = FW * ENT_FRAMES, H = FH * ENT_ROWS;
     Image img = GenImageColor(W, H, BLANK);
     Color *p = (Color *)img.data;
     for (int hr = 0; hr < ENT_ROWS; hr++)
@@ -134,7 +134,7 @@ static void legPose(float ph, float &x, float &lift) {
 // not stride — it is planted and swung stiffly from the hip. Giving the real leg
 // a longer throw than the peg is what turns a walk into his walk.
 Texture2D makeClarkTex() {
-    const int FW = 128, FH = 256, W = FW * ENT_FRAMES, H = FH * ENT_ROWS;
+    const int FW = ENT_FRAME_W, FH = ENT_FRAME_H, W = FW * ENT_FRAMES, H = FH * ENT_ROWS;
     Image img = GenImageColor(W, H, BLANK);
     Color *p = (Color *)img.data;
     int fx = 0, fy = 0;   // origin of the cell being drawn; every write goes through it
@@ -286,7 +286,7 @@ Texture2D makeClarkTex() {
 // THE PARTYGOER =): pale yellow, painted-on smile, striped party hat. It was
 // here before the bunting went up. It will be here after.
 Texture2D makePartygoerTex() {
-    const int FW = 128, FH = 256, W = FW * ENT_FRAMES, H = FH * ENT_ROWS;
+    const int FW = ENT_FRAME_W, FH = ENT_FRAME_H, W = FW * ENT_FRAMES, H = FH * ENT_ROWS;
     Image img = GenImageColor(W, H, BLANK);
     Color *p = (Color *)img.data;
     int fx = 0, fy = 0;
@@ -1559,7 +1559,7 @@ Texture2D makeAOStripTex() {
 // animal has two sides. The coat is ragged at the edge and thin enough over the
 // flank that the ribs show.
 Texture2D makeDogTex() {
-    const int FW = 192, H = 128, W = FW * DOG_FRAMES;
+    const int FW = DOG_FRAME_W, H = DOG_FRAME_H, W = FW * DOG_FRAMES;
     Image img = GenImageColor(W, H, BLANK);
     Color *p = (Color *)img.data;
     const float GROUND = 116.0f;

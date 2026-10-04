@@ -33,3 +33,11 @@ float windowFovY(int w, int h, float aim) {
     }
     return fmaxf(fovy, 58.0f);   // portrait floor: ~69 deg horizontal at 0.46
 }
+
+float migraineThrob(float migraine, float t) {
+    if (migraine <= 0.0f) return 0.0f;
+    float ph = t * 1.05f - floorf(t * 1.05f);
+    return migraine * (expf(-ph * ph * 90.0f) + 0.6f * expf(-(ph - 0.22f) * (ph - 0.22f) * 120.0f));
+}
+
+float colourSplit(float fear, float throb) { return 0.00015f + fear * 0.0025f + throb * 0.0035f; }

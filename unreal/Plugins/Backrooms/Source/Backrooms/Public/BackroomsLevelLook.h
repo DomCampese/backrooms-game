@@ -36,6 +36,28 @@ struct FBackroomsPropLook
 	FTransform Offset;
 };
 
+// A mesh for a wall or ceiling fixture. Its frame's origin is the layout's
+// point (src/core/layout.h, Fixture: on the wall face, the ceiling, or a run's
+// first end), X out of the face, Z up (on a ceiling, Z along the world's X). A
+// run (conduit, pipe, valve, streamer) has X along it instead, scaled to its
+// length in metres: a mesh 100 units long along X spans the run. Offset is in
+// that frame, in Unreal units. Empty keeps a plain box at the fixture's size,
+// or nothing for a scrawl, a spall or the Manila Room.
+USTRUCT(BlueprintType)
+struct FBackroomsFixtureLook
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Backrooms")
+	TObjectPtr<UStaticMesh> Mesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Backrooms")
+	TObjectPtr<UMaterialInterface> Material;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Backrooms")
+	FTransform Offset;
+};
+
 // A mesh for something the sim puts in the world (a pickup, the hunter, a
 // flare, ...). Its origin is where the sim puts the thing: the base of it on
 // the floor, or the centre for balloons, confetti and flares, facing the
@@ -57,7 +79,7 @@ struct FBackroomsItemLook
 };
 
 // How a level looks: materials for the greybox's surfaces, meshes for its
-// props and light fittings. Where the generator puts each thing is core's
+// props, fixtures and light fittings. Where the generator puts each thing is core's
 // (chunkLayout); only its appearance is set here. Anything left empty is drawn
 // as the greybox draws it. Assign one per level in Project Settings > Game >
 // Backrooms.
@@ -75,6 +97,11 @@ public:
 	// A prop with a mesh here is drawn with it instead of its collision box.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Props")
 	TMap<EBackroomsProp, FBackroomsPropLook> Props;
+
+	// Outlets, switches, signs, diffusers, conduit, pipes and the rest of what
+	// chunkLayout fixes to walls and ceilings.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fixtures")
+	TMap<EBackroomsFixture, FBackroomsFixtureLook> Fixtures;
 
 	// Placed at every light fitting in place of the greybox panel, centred on the
 	// luminous plane. Dead fittings take DeadFittingMaterial when it is set.
@@ -99,6 +126,12 @@ public:
 	FLinearColor FogColour = FLinearColor::Black;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Air", meta = (ClampMin = 0))
 	float FogDensity = 0.05f;
+
+	// The camera's exposure, fixed: EV100, lower is brighter. Unreal's eye
+	// adaptation would lift the dark levels to mid grey, and the raylib build's
+	// levels are tuned to be as dark as they are.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera")
+	float ExposureEV100 = 6.0f;
 
 	// Pickups, crates, the hunter, the pack and the rest the sim places each
 	// frame (src/port/scene.h). The hunter is Pirate Clark on Level 0, a Smiler

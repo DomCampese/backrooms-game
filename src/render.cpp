@@ -2,7 +2,8 @@
 #include "input.h"
 #include "port/held.h"
 #include "port/scene.h"
-#include "textures.h"   // ENT_FRAMES / ENT_ROWS / DOG_FRAMES: the sprite-sheet layout
+#include "textures.h"
+#include "port/sprites.h"
 #include "raymath.h"
 #include "rlgl.h"
 #include <cmath>
@@ -28,19 +29,11 @@ static float flareGlow(const FlareProj &f, float flick) {
     return clampf((Sim::FLAREBURN - f.burn) * 6.0f, 0, 1) * clampf(f.burn / Sim::FLAREFADE, 0, 1) * flick;
 }
 
-// Which two frames of a walk sheet a gait phase falls between, and how far.
-//
-// Cross-fading rather than snapping matters at this frame count: six frames over
-// two steps is about one frame every 0.35 m, and a hard cut at that rate reads as
-// a strobe. Faded, the overlap reads as motion blur — the frames differ by a few
-// pixels at the ankle, so the ghost is exactly where a fast-moving limb should be
-// smeared anyway.
-static void gaitFrames(float phase, int frames, int &f0, int &f1, float &t) {
-    phase -= floorf(phase);
-    float u = phase * frames;
-    f0 = (int)u % frames;
-    f1 = (f0 + 1) % frames;
-    t = u - floorf(u);
+// Where a sprite's frame sits on its sheet, pixels.
+static Rectangle spriteRect(const ActorSprite &sp, int frame) {
+    if (sp.sheet == SpriteSheet::Dog)
+        return { (float)frame * DOG_FRAME_W, 0, (float)DOG_FRAME_W, (float)DOG_FRAME_H };
+    return { (float)frame * ENT_FRAME_W, (float)sp.row * ENT_FRAME_H, (float)ENT_FRAME_W, (float)ENT_FRAME_H };
 }
 
 // Every size and offset on the HUD was authored against the 1440x850 window the
@@ -522,14 +515,13 @@ void Game::renderScene(double now) {
         }
     }
     for (int i = 0; i < Sim::MAXDOGS; i++) {   // the pack, low and wide against the red
-        const Dog &d = sim.dogs[i];
-        if (d.st == DState::Gone) continue;
-        float ddx = d.x - sim.px, ddz = d.z - sim.pz;
+        ActorSprite sp;
+        if (!dogSprite(sim, i, sp)) continue;
+        float ddx = sp.litAt.x - sim.px, ddz = sp.litAt.z - sim.pz;
         float dd = sqrtf(ddx * ddx + ddz * ddz);
-        if (dd > 42) continue;
         const LevelCfg &c = LEVELS[sim.level];
         float ambLum = (c.amb.x + c.amb.y + c.amb.z) / 3.0f;
-        float lum = lightAtCPU(d.x, d.dispY + 0.5f, d.z, sim.blackoutCur,
+        float lum = lightAtCPU(sp.litAt.x, sp.litAt.y, sp.litAt.z, sim.blackoutCur,
                                c.ls, c.wallH - 0.12f, c.dead, c.lightMul, ambLum, 0, 0, 0, c.vary);
         if (sim.flashCur > 0.05f) {
             float d2 = dd * dd + 1e-4f;
@@ -537,20 +529,15 @@ void Game::renderScene(double now) {
             lum = clampf(lum + sim.flashCur * cone * 7.5f / (1.0f + 0.10f * d2), 0.0f, 1.0f);
         }
         if (flareInt > 0.01f) {
-            float fx = d.x - flarePos.x, fz = d.z - flarePos.z;
+            float fx = sp.litAt.x - flarePos.x, fz = sp.litAt.z - flarePos.z;
             lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fx * fx + fz * fz)), 0.0f, 1.0f);
         }
-        float fade = d.st == DState::Yelp ? clampf(1.0f - d.life / 2.6f, 0, 1) : 1.0f;
         unsigned char l8 = cl8(40 + 215 * lum);
-        unsigned char al = cl8(255 * clampf(expf(-dd * c.fogDen) * 1.6f, 0, 1) * fade);
-        // shoulder height ~0.75 m, and a long body — drawn wide, not tall
-        int df0, df1; float dt2;
-        gaitFrames(d.gait / (Sim::DOG_STRIDE * 2.0f), DOG_FRAMES, df0, df1, dt2);
-        Vector3 dpos = { d.x, d.dispY + 0.46f, d.z };
-        DrawBillboardRec(cam, texDog, { (float)df0 * 192, 0, 192, 128 }, dpos, { 1.45f, 0.97f },
-                         { l8, l8, l8, cl8(al * (1.0f - dt2)) });
-        DrawBillboardRec(cam, texDog, { (float)df1 * 192, 0, 192, 128 }, dpos, { 1.45f, 0.97f },
-                         { l8, l8, l8, cl8(al * dt2) });
+        unsigned char al = cl8(255 * clampf(expf(-dd * c.fogDen) * 1.6f, 0, 1) * sp.fade);
+        DrawBillboardRec(cam, texDog, spriteRect(sp, sp.frame0), toRl(sp.centre), { sp.w, sp.h },
+                         { l8, l8, l8, cl8(al * (1.0f - sp.blend)) });
+        DrawBillboardRec(cam, texDog, spriteRect(sp, sp.frame1), toRl(sp.centre), { sp.w, sp.h },
+                         { l8, l8, l8, cl8(al * sp.blend) });
     }
     for (const FlareProj &f : sim.litFlares) {   // each flare: hot core, orange halo, stub of a body
         if (!f.active) continue;
@@ -563,11 +550,10 @@ void Game::renderScene(double now) {
         DrawSphere(fp, 0.13f, { 255, 120, 40, (unsigned char)(90 * glow) });
         DrawSphere(fp, 0.30f, { 255, 70, 20, (unsigned char)(28 * glow) });
     }
-    if (sim.ent.st != EState::Hidden && sim.entDist < 45) {
+    if (ActorSprite sp; hunterSprite(sim, sp)) {
         const LevelCfg &c = LEVELS[sim.level];
         float ambLum = (c.amb.x + c.amb.y + c.amb.z) / 3.0f;
-        float eg = sim.ent.dispY;
-        float lum = lightAtCPU(sim.ent.x, eg + 0.95f, sim.ent.z, sim.blackoutCur,
+        float lum = lightAtCPU(sp.litAt.x, sp.litAt.y, sp.litAt.z, sim.blackoutCur,
                                c.ls, c.wallH - 0.12f, c.dead, c.lightMul, ambLum,
                                sim.ent.x, sim.ent.z, sim.entDarkCur, c.vary);   // it stands in its own pool of dead light
         if (sim.flashCur > 0.05f) {   // flashlight picks him out of the dark
@@ -580,56 +566,22 @@ void Game::renderScene(double now) {
             float fvx = sim.ent.x - flarePos.x, fvz = sim.ent.z - flarePos.z;
             lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fvx * fvx + fvz * fvz)), 0.0f, 1.0f);
         }
-        float sink = 0, dieA = 1;
-        if (sim.ent.st == EState::Die) {   // crumples into the carpet
-            float t = clampf(sim.ent.life / 1.2f, 0, 1);
-            sink = 1.1f * t * t; dieA = 1.0f - t;
-        }
         float fogf = expf(-sim.entDist * c.fogDen);
         unsigned char lum8 = cl8(40 + 215 * lum);
-        unsigned char al = cl8(255 * clampf(fogf * 1.6f, 0, 1) * dieA);
-        // LEVEL FUN has its own resident, Level 0 is Pirate Clark's, the rest are a Smiler's
-        Texture2D &spr = (sim.level == 4) ? texPartygoer : sim.clarkLevel() ? texClark : texEntity;
-        // The gait rides ent.gait, which is also what fires his footfalls, so
-        // the foot plants on the sound rather than near it — by construction,
-        // off one number, rather than by two accumulators agreeing.
-        //
-        // ent.gait counts strides (an integer is a foot landing) and a walk
-        // cycle is two of them, hence the halving. It counts distance actually
-        // covered, in every state, so a Clark grinding against a wall no longer
-        // walks on the spot and a fleeing one has legs at all.
-        int ef0, ef1; float et;
-        float gph = sim.ent.gait * 0.5f;
-        gaitFrames(gph, ENT_FRAMES, ef0, ef1, et);
-        // A walk rises and falls twice a cycle, once per step, highest at
-        // mid-stance and lowest as a foot lands — so the bob is |sin| of the
-        // same phase the legs run on, and his head dips exactly when the
-        // footfall plays.
-        float bob = 0.032f * fabsf(sinf(gph * TAU));
-        // Which way his head is round. While stalking it follows ent.gaze, the
-        // same timer that tips him into a chase at 1.6 s, so his head coming
-        // round *is* the warning rather than a decoration beside it. In any
-        // other state he is already looking at you.
-        float look = (sim.ent.st == EState::Stalk) ? clampf((float)sim.ent.gaze / 1.45f, 0, 1) : 1.0f;
-        int headRow = look < 0.34f ? ENT_ROW_AWAY : (look < 0.72f ? ENT_ROW_HALF : ENT_ROW_FACE);
-        // And he tips into where he is going. Only the part of his velocity that
-        // runs across your view can show on a billboard, which is exactly the
-        // part a lean would be visible for. Below a walking pace it stays
-        // upright, so he does not twitch between rows while shuffling.
-        float side = sim.ent.vx * sim.r2x + sim.ent.vz * sim.r2z;
-        if (sim.ent.st == EState::Chase && fabsf(side) > 1.4f)
-            headRow = (side < 0) ? ENT_ROW_LEAN_L : ENT_ROW_LEAN_R;
-        Vector3 epos = { sim.ent.x, eg + 0.98f - sink + bob, sim.ent.z };
-        DrawBillboardRec(cam, spr, { (float)ef0 * 128, (float)headRow * 256, 128, 256 }, epos,
-                         { 0.98f, 1.96f }, { lum8, lum8, lum8, cl8(al * (1.0f - et)) });
-        DrawBillboardRec(cam, spr, { (float)ef1 * 128, (float)headRow * 256, 128, 256 }, epos,
-                         { 0.98f, 1.96f }, { lum8, lum8, lum8, cl8(al * et) });
-        if (sim.level != 4 && !sim.clarkLevel()) {   // the Smiler's eyes and grin carry their own light
-            unsigned char ga = cl8(255 * clampf(fogf * 2.2f, 0, 1) * dieA);
-            DrawBillboardRec(cam, texEntityGlow, { (float)ef0 * 128, (float)headRow * 256, 128, 256 }, epos,
-                             { 0.98f, 1.96f }, { 255, 255, 255, cl8(ga * (1.0f - et)) });
-            DrawBillboardRec(cam, texEntityGlow, { (float)ef1 * 128, (float)headRow * 256, 128, 256 }, epos,
-                             { 0.98f, 1.96f }, { 255, 255, 255, cl8(ga * et) });
+        unsigned char al = cl8(255 * clampf(fogf * 1.6f, 0, 1) * sp.fade);
+        Texture2D &spr = sp.sheet == SpriteSheet::Partygoer ? texPartygoer
+                       : sp.sheet == SpriteSheet::Clark ? texClark : texEntity;
+        Vector3 epos = toRl(sp.centre);
+        DrawBillboardRec(cam, spr, spriteRect(sp, sp.frame0), epos, { sp.w, sp.h },
+                         { lum8, lum8, lum8, cl8(al * (1.0f - sp.blend)) });
+        DrawBillboardRec(cam, spr, spriteRect(sp, sp.frame1), epos, { sp.w, sp.h },
+                         { lum8, lum8, lum8, cl8(al * sp.blend) });
+        if (sp.glow) {   // the Smiler's eyes and grin carry their own light
+            unsigned char ga = cl8(255 * clampf(fogf * 2.2f, 0, 1) * sp.fade);
+            DrawBillboardRec(cam, texEntityGlow, spriteRect(sp, sp.frame0), epos, { sp.w, sp.h },
+                             { 255, 255, 255, cl8(ga * (1.0f - sp.blend)) });
+            DrawBillboardRec(cam, texEntityGlow, spriteRect(sp, sp.frame1), epos, { sp.w, sp.h },
+                             { 255, 255, 255, cl8(ga * sp.blend) });
         }
     }
     for (const Sim::Bullet &b : sim.bullets) {

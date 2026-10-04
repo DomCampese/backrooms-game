@@ -113,6 +113,19 @@ docs/unreal-handoff.md "Next" has what is open. What will bite:
   dead, part output and faulty come from the layout, and a faulty tube
   stutters by core's `tubeStutter`, the shader's `lightState` formula. Change
   one, change both.
+- **The hunter's and the pack's poses are src/port/sprites.h's**
+  (`hunterSprite`, `dogSprite`): sheet, walk frames, row, size, fade. render.cpp
+  and `ABackroomsSpriteActor` both read them; the move was checked against the
+  old inline code over 169k poses. The sheets' layout (`ENT_FRAMES`,
+  `ENT_FRAME_W`, `EntRow`, ...) is port/sheets.h, which textures.cpp paints to.
+  Lighting and fog stay each renderer's.
+- **`EBackroomsFixture` lists `FixtureKind`** (BackroomsTypes.h), as the other
+  editor enums list theirs; a new fixture kind goes into both, and gets a row
+  in `PlainOf` (BackroomsFixtureShapes.cpp) or none if it waits for a mesh.
+- **Unreal's exposure is pinned per look** (`ExposureEV100`, a post-process
+  volume in `ABackroomsLightsActor`). Without it eye adaptation lifts the Red
+  Halls to mid grey. The colour split reads `colourSplit` and `migraineThrob`
+  (src/port/view.h), the post shader's terms; change one, change both.
 - **The layout golden (`tests/golden/layout.txt`) prints every field**, so an
   uninitialised field shows as a nondeterministic line: `Fixture::end` was
   garbage for most kinds until it was zeroed. A new field needs a value for
@@ -735,6 +748,7 @@ time so the executable remains independent of its working directory.
 | `core/hash.{h,cpp}`, `core/vec.h` | hashes, RNG, value noise; `Vec2`/`Vec3`, `TAU`, `clampf` |
 | `sim/start.{h,cpp}`, `sim/trace.{h,cpp}` | how a run starts (`SimStart`); recording and replaying the calls on the sim |
 | `port/view.{h,cpp}`, `port/greybox.{h,cpp}` | what the camera shows of the sim (both builds draw from it); a chunk as plain boxes and quads for a port's first milestone |
+| `port/held.{h,cpp}`, `port/scene.{h,cpp}`, `port/sprites.{h,cpp}`, `port/sheets.h` | what is in hand, what stands loose in the world, and the actors' billboard poses and sheet layout, which both builds draw from |
 | `port/sounds.{h,cpp}`, `port/ambience.{h,cpp}`, `port/mixer.{h,cpp}` | the synthesized clips and which are recordings; the ambience synth; a software mix of the sim's `AudioEvent`s for a port |
 | `world_mesh.{h,cpp}` | the chunk mesher (`bakeChunk`), `ChunkMesh` slots, `ChunkMeshCache` |
 | `mesh_builder.{h,cpp}` | `MB`, `addPropBox`, `addSolidBox`, `PLAIN_UV` |
