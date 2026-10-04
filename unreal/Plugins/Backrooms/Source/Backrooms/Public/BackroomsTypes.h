@@ -22,6 +22,15 @@ enum class EBackroomsProp : uint8
 	Count UMETA(Hidden)
 };
 
+// FixtureKind (src/core/layout.h): what is fixed to a wall or a ceiling.
+UENUM(BlueprintType)
+enum class EBackroomsFixture : uint8
+{
+	Outlet, BrokenOutlet, Switch, Grille, ExitSign, Diffuser, Sprinkler, Conduit, Scrawl, LiftDoor, Spall,
+	PillarSpall, Pipe, Valve, Streamer, ManilaRoom,
+	Count UMETA(Hidden)
+};
+
 // SceneKind (src/port/scene.h): what stands in the world besides its chunks.
 UENUM(BlueprintType)
 enum class EBackroomsItem : uint8

@@ -18,3 +18,11 @@ SimView simView(const Sim &sim);
 // (0..1) lets an ultrawide narrow while aiming. The sim eases toward it
 // (InputFrame::screenFov).
 float windowFovY(int w, int h, float aim);
+
+// The post pass's migraine throb at time t, seconds: a slow double pulse, like
+// a heartbeat behind the eyes, from 0 to about `migraine`. The post shader
+// (shaders.cpp) keeps its own GLSL copy; change both.
+float migraineThrob(float migraine, float t);
+// The post pass's colour split at the frame's edge, as a fraction of the
+// distance from the centre: fear and the throb widen it.
+float colourSplit(float fear, float throb);

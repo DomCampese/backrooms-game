@@ -10,6 +10,8 @@ class USkeletalMesh;
 class UBackroomsLevelLook;
 class UInputAction;
 class UInputMappingContext;
+class UMaterialInterface;
+class UTexture2D;
 
 // Project Settings > Game > Backrooms. Saved to Config/DefaultGame.ini.
 UCLASS(Config = Game, DefaultConfig, meta = (DisplayName = "Backrooms"))
@@ -99,6 +101,27 @@ public:
 	// change.
 	UPROPERTY(Config, EditAnywhere, Category = "Held")
 	FRotator RevolverMeshRotation = FRotator::ZeroRotator;
+
+	// The actors' sprite sheets and the materials that draw them
+	// (ABackroomsSpriteActor). The editor builds them from the raylib build's
+	// own sheets to these paths (backrooms_looks.py); until it has, the hunter
+	// and the pack are plain shapes.
+	UPROPERTY(Config, EditAnywhere, Category = "Actors")
+	TSoftObjectPtr<UTexture2D> ClarkSheet{ FSoftObjectPath(TEXT("/Game/Backrooms/Sprites/T_clark.T_clark")) };
+	UPROPERTY(Config, EditAnywhere, Category = "Actors")
+	TSoftObjectPtr<UTexture2D> SmilerSheet{ FSoftObjectPath(TEXT("/Game/Backrooms/Sprites/T_smiler.T_smiler")) };
+	UPROPERTY(Config, EditAnywhere, Category = "Actors")
+	TSoftObjectPtr<UTexture2D> SmilerGlowSheet{ FSoftObjectPath(TEXT("/Game/Backrooms/Sprites/T_smiler_glow.T_smiler_glow")) };
+	UPROPERTY(Config, EditAnywhere, Category = "Actors")
+	TSoftObjectPtr<UTexture2D> PartygoerSheet{ FSoftObjectPath(TEXT("/Game/Backrooms/Sprites/T_partygoer.T_partygoer")) };
+	UPROPERTY(Config, EditAnywhere, Category = "Actors")
+	TSoftObjectPtr<UTexture2D> DogSheet{ FSoftObjectPath(TEXT("/Game/Backrooms/Sprites/T_dog.T_dog")) };
+	// Lit and translucent, its texture parameter "Sheet", opacity the sheet's
+	// alpha times the vertex alpha; the glow material the same, unlit.
+	UPROPERTY(Config, EditAnywhere, Category = "Actors")
+	TSoftObjectPtr<UMaterialInterface> SpriteMaterial{ FSoftObjectPath(TEXT("/Game/Backrooms/Sprites/M_BackroomsSprite.M_BackroomsSprite")) };
+	UPROPERTY(Config, EditAnywhere, Category = "Actors")
+	TSoftObjectPtr<UMaterialInterface> SpriteGlowMaterial{ FSoftObjectPath(TEXT("/Game/Backrooms/Sprites/M_BackroomsSpriteGlow.M_BackroomsSpriteGlow")) };
 
 	// Where the editor imports assets/sounds (backrooms_import.py), keeping its
 	// folders: sounds/water/swim_1.ogg is <SoundFolder>/water/swim_1.

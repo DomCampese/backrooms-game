@@ -34,7 +34,9 @@ tools/unreal.sh log # the "Backrooms:" lines from the last run
 | `.../BackroomsPawn` | the camera, placed where the sim's view is (src/port/view.h) |
 | `.../BackroomsChunkActor`, `BackroomsChunkBuild` | a chunk: the greybox drawn with the level's look, plus prop and fitting meshes |
 | `.../BackroomsLevelLook` | the data asset for a level's look: materials, prop meshes, fitting mesh, the tubes' colour and output, fog |
-| `.../BackroomsLightsActor` | rect lights at the live fittings nearest the player (dead ones dark, faulty ones stuttering, all out in a blackout), and the level's fog |
+| `.../BackroomsLightsActor` | rect lights at the live fittings nearest the player (dead ones dark, faulty ones stuttering, all out in a blackout), the level's fog, and a post-process volume: fixed exposure, the colour split |
+| `.../BackroomsSpriteActor` | the hunter and the pack as billboards from the game's sprite sheets, frames and rows from `src/port/sprites.h` |
+| `.../Private/BackroomsFixtureShapes` | where a `chunkLayout` fixture stands, and its plain box until a look gives the kind a mesh |
 | `Plugins/Backrooms/Content/Python` | run by the editor on open: imports the revolver and the recorded sounds, and builds the level looks from the game's surfaces (`backrooms_looks.py`) |
 | `.../BackroomsSettings` | Project Settings > Game > Backrooms |
 | `.../BackroomsPreviewActor` | the generated maze in the editor viewport |
@@ -92,9 +94,10 @@ repository, not just this folder. On the Mac:
 5. Press Play. The default map is the engine's empty Entry map; the game mode
    starts a run on Level 0 at seed 1337 and the sim drives the camera: WASD,
    the mouse, the raylib build's keys (F3 for the debug keys). Floors, walls
-   and ceilings wear the game's own surfaces, lit by the fittings; the rest of
-   the greybox keeps its flat colours, and the pickups, crates, balloons, the
-   hunter and the pack are plain shapes at their real size
+   and ceilings wear the game's own surfaces, lit by the fittings; fixtures
+   are plain boxes and the rest of the greybox keeps its flat colours; the
+   hunter and the pack are the game's own sprites (`ABackroomsSpriteActor`),
+   and the pickups, crates and balloons plain shapes at their real size
    (`ABackroomsSceneActor`). A text HUD (`ABackroomsHUD`) shows the meters,
    inventory, notes and the death card. The revolver is in your hand
    (`ABackroomsHeldActor`): the editor imports `assets/models/revolver.glb` the
@@ -128,6 +131,12 @@ runs `backrooms_looks.py`, which, when those files changed:
   (across and down the texture), and its gloss
   mask picks the roughness between `RoughMatte` and `RoughGloss` as far as
   `Shine` (from the level's gloss) allows;
+- adds the level's ambient floor (`LevelCfg::amb`, times `AMBIENT_GAIN`) as
+  emissive, `Ambient` on each instance, so an unlit corner keeps a little of
+  its colour;
+- imports the actors' sheets to `/Game/Backrooms/Sprites` with
+  `M_BackroomsSprite` (lit, translucent) and `M_BackroomsSpriteGlow` (unlit,
+  the Smiler's eyes and grin), which the settings name by default;
 - makes an instance per level and surface (`MI_L0_Floor`, ...) and the looks
   `DA_Level0` to `DA_Level4` in `/Game/Backrooms/Looks`, which the settings
   name by default. Floors and stairs take the floor, walls, steps and pillars
@@ -158,7 +167,8 @@ project runs before any of it exists.
 | change the controls | make your own Input Actions and a Mapping Context, and assign them in the settings (Input Context, Input Actions by control). Controls you leave empty keep the built-in keys |
 | change what a chunk or the player carries | Blueprint subclasses of Backrooms Chunk Actor (set it as the settings' Chunk Class), Backrooms Pawn and Backrooms Player Controller (set them on a Blueprint subclass of the game mode) |
 | build a HUD | a UMG widget that calls Get World Subsystem (Backrooms World Subsystem) > Get Hud each tick: health, sanity, ammo, notes, the death card |
-| tune | Project Settings > Game > Backrooms: look sensitivity, streaming reach, default seed and level, how many fittings get lights (`FittingLights`, `FittingShadows`), their output (`FittingLumens`) and reach, the camera light |
+| give a fixture a mesh | a look's Fixtures, by kind. Its origin is the layout's point on the wall face or ceiling, X out of the face; a run (conduit, pipe, valve, streamer) has X along it, scaled so a mesh 100 units long spans it |
+| tune | Project Settings > Game > Backrooms: look sensitivity, streaming reach, default seed and level, how many fittings get lights (`FittingLights`, `FittingShadows`), their output (`FittingLumens`) and reach, the camera light, the sprite sheets and materials. A look's `ExposureEV100` sets its brightness (lower is brighter) |
 
 ## Tests (M1)
 

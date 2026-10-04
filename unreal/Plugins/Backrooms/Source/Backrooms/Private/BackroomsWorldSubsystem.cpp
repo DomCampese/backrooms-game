@@ -6,6 +6,7 @@
 #include "BackroomsLightsActor.h"
 #include "BackroomsSceneActor.h"
 #include "BackroomsSettings.h"
+#include "BackroomsSpriteActor.h"
 #include "BackroomsSound.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/PointLightComponent.h"
@@ -20,9 +21,11 @@
 #include "Stats/Stats.h"
 #include "core/level_rules.h"
 #include "port/scene.h"
+#include "port/sprites.h"
 #include "port/view.h"
 #include "sim/start.h"
 #include "sim/trace.h"
+#include <algorithm>
 
 namespace
 {
@@ -234,6 +237,11 @@ void UBackroomsWorldSubsystem::FreeSim()
 		Lights->Destroy();
 		Lights = nullptr;
 	}
+	if (Sprites)
+	{
+		Sprites->Destroy();
+		Sprites = nullptr;
+	}
 	if (Sound)
 	{
 		Sound->Stop();
@@ -308,7 +316,7 @@ void UBackroomsWorldSubsystem::Tick(float DeltaTime)
 	{
 		// The sim owns which storey is current (it rebases as you climb).
 		StreamAround(BackroomsCoords::ToUnreal({ Game->px, 0.0f, Game->pz }), Game->world.storey, DeltaTime);
-		ShowScene();
+		ShowScene(Camera);
 		ShowLights(simView(*Game).eye);
 	}
 	else
@@ -494,7 +502,7 @@ void UBackroomsWorldSubsystem::DropAll()
 	}
 }
 
-void UBackroomsWorldSubsystem::ShowScene()
+void UBackroomsWorldSubsystem::ShowScene(const FVector& Camera)
 {
 	FActorSpawnParameters Params;
 	Params.ObjectFlags |= RF_Transient;
@@ -506,9 +514,23 @@ void UBackroomsWorldSubsystem::ShowScene()
 	{
 		Hand = GetWorld()->SpawnActor<ABackroomsHeldActor>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
 	}
+	if (!Sprites)
+	{
+		Sprites = GetWorld()->SpawnActor<ABackroomsSpriteActor>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
+	}
+	const UBackroomsLevelLook* LevelLook = CurrentLook();
+	std::vector<SceneItem> Items = simScene(*Game);
+	if (Sprites)
+	{
+		// What the sprites draw, the scene actor does not.
+		Items.erase(std::remove_if(Items.begin(), Items.end(),
+			[this, LevelLook](const SceneItem& Item) { return Sprites->Draws((EBackroomsItem)Item.kind, LevelLook); }),
+			Items.end());
+		Sprites->Show(actorSprites(*Game), LevelLook, Camera, StoreyOrigin());
+	}
 	if (Scene)
 	{
-		Scene->Show(simScene(*Game), CurrentLook(), StoreyOrigin());
+		Scene->Show(Items, LevelLook, StoreyOrigin());
 	}
 	if (Hand)
 	{
@@ -526,8 +548,15 @@ void UBackroomsWorldSubsystem::ShowLights(const Vec3& At)
 	}
 	if (Lights)
 	{
-		// A free camera has no blackouts.
-		const float Blackout = bRun ? Game->blackoutCur : 1.0f;
-		Lights->Show(Game->world, At, CurrentLook(), Blackout, (float)Now(), StoreyOrigin());
+		// A free camera has no blackouts and no nerves.
+		ABackroomsLightsActor::FMoment Moment;
+		Moment.Now = (float)Now();
+		if (bRun)
+		{
+			Moment.Blackout = Game->blackoutCur;
+			Moment.Fear = Game->fear;
+			Moment.Migraine = Game->migraine;
+		}
+		Lights->Show(Game->world, At, CurrentLook(), Moment, StoreyOrigin());
 	}
 }

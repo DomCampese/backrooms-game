@@ -6,13 +6,15 @@
 
 class UBackroomsLevelLook;
 class UExponentialHeightFogComponent;
+class UPostProcessComponent;
 class URectLightComponent;
 
-// A level's light and air (M5): rect lights at the live fittings nearest the
-// player, and the raylib build's fog. Where the fittings are, and which are
-// dead, part output or faulty, is core's (chunkLayout); the look gives the
-// tubes' colour and output and the fog. The subsystem spawns one for a run and
-// updates it after every step.
+// A level's light, air and camera (M5): rect lights at the live fittings
+// nearest the player, the raylib build's fog, and a post-process volume with
+// the look's fixed exposure and the post pass's colour split. Where the
+// fittings are, and which are dead, part output or faulty, is core's
+// (chunkLayout); the look gives the tubes' colour and output, the fog and the
+// exposure. The subsystem spawns one and updates it every frame.
 UCLASS(Transient)
 class BACKROOMS_API ABackroomsLightsActor : public AActor
 {
@@ -21,10 +23,18 @@ class BACKROOMS_API ABackroomsLightsActor : public AActor
 public:
 	ABackroomsLightsActor();
 
+	// What the sim says about the moment, for the lights and the post.
+	struct FMoment
+	{
+		float Blackout = 1.0f;   // Sim::blackoutCur: 1 lit, near 0 out
+		float Now = 0.0f;        // the sim's clock, which faulty tubes stutter on
+		float Fear = 0.0f;       // Sim::fear and Sim::migraine, for the colour split
+		float Migraine = 0.0f;
+	};
+
 	// Lights the fittings round At (metres, in the frame of W's current storey),
-	// which Origin places in the world. Blackout is the sim's blackoutCur
-	// (1 lit, near 0 out) and Now its clock, which faulty tubes stutter on.
-	void Show(World& W, const Vec3& At, const UBackroomsLevelLook* Look, float Blackout, float Now,
+	// which Origin places in the world.
+	void Show(World& W, const Vec3& At, const UBackroomsLevelLook* Look, const FMoment& Moment,
 		const FVector& Origin);
 	// Chunk (x, y) of storey z was dropped or rebuilt: read its fittings again.
 	void Forget(const FIntVector& Key) { Fittings.Remove(Key); }
@@ -40,4 +50,6 @@ private:
 	TArray<TObjectPtr<URectLightComponent>> Pool;
 	UPROPERTY(Transient)
 	TObjectPtr<UExponentialHeightFogComponent> Fog;
+	UPROPERTY(Transient)
+	TObjectPtr<UPostProcessComponent> Post;
 };

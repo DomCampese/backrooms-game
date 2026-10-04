@@ -4,7 +4,8 @@
 surface and looks.json to Saved/Surfaces with texdump. This imports them,
 builds one material that reads a surface at its real size, an instance per
 level surface, and a level look per level (UBackroomsLevelLook) with those, the
-tubes' colour and output and the fog. init_unreal.py runs it when the files in
+tubes' colour and output and the fog; and the actors' sprite sheets with the
+two materials that draw them. init_unreal.py runs it when the files in
 Saved/Surfaces differ from the ones the looks were built from. To build them
 again by hand, in the editor's Python console:
 
@@ -22,6 +23,12 @@ import os
 import unreal
 
 SURFACE_DIR = "/Game/Backrooms/Surfaces"
+SPRITE_DIR = "/Game/Backrooms/Sprites"
+# The actors' sheets texdump writes, and UBackroomsSettings' default paths for
+# them and the two materials.
+SPRITES = ["clark", "smiler", "smiler_glow", "partygoer", "dog"]
+SPRITE_MATERIAL = "M_BackroomsSprite"
+SPRITE_GLOW_MATERIAL = "M_BackroomsSpriteGlow"
 LOOK_DIR = "/Game/Backrooms/Looks"
 MATERIAL_NAME = "M_BackroomsSurface"
 # UBackroomsSettings' default LevelLooks.
@@ -40,6 +47,10 @@ SLOPE_SCALE = 255.0 / 127.0
 # and the Poolrooms' 0.55 is the glossiest level.
 GLOSS_CUT = 0.10
 GLOSS_FULL = 0.55
+# The raylib build's ambient floor (LevelCfg::amb) as the surfaces' emissive
+# albedo multiple. Its shader lifts that ambient through its tone curve's toe
+# (AGENTS.md, "Lighting"); this is the starting point to tune from.
+AMBIENT_GAIN = 1.0
 # Recorded on the material: the digest of the files it was built from.
 DIGEST_TAG = "BackroomsSurfaces"
 
@@ -201,15 +212,95 @@ def build_material(albedo, detail):
     _link(glossy, "", rough, "Alpha")
     mel().connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
 
+    # The ambient floor: unlit corners keep a little of their own colour.
+    ambient = mel().create_material_expression(mat, unreal.MaterialExpressionVectorParameter, -500, -400)
+    ambient.set_editor_property("parameter_name", "Ambient")
+    ambient.set_editor_property("default_value", unreal.LinearColor(0.0, 0.0, 0.0, 1.0))
+    floor = mel().create_material_expression(mat, unreal.MaterialExpressionMultiply, -200, -300)
+    _link(colour, "RGB", floor, "A")
+    _link(ambient, "", floor, "B")
+    mel().connect_material_property(floor, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+
     mel().recompile_material(mat)
     return mat
+
+
+def import_sprites():
+    """Imports each sheet in SPRITES; returns {name: texture} or None."""
+    folder = surfaces_dir()
+    tasks = []
+    for name in SPRITES:
+        task = unreal.AssetImportTask()
+        task.filename = os.path.join(folder, name + ".png")
+        task.destination_path = SPRITE_DIR
+        task.destination_name = "T_" + name
+        task.automated = True
+        task.replace_existing = True
+        task.save = False
+        tasks.append(task)
+    unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks(tasks)
+    sheets = {}
+    for name in SPRITES:
+        sheet = eal().load_asset(SPRITE_DIR + "/T_" + name)
+        if not isinstance(sheet, unreal.Texture2D):
+            unreal.log_error("Backrooms: the sprite import did not make T_" + name)
+            return None
+        # Frames sit edge to edge on the sheet: a clamp keeps the last column
+        # from sampling the first.
+        sheet.set_editor_property("address_x", unreal.TextureAddress.TA_CLAMP)
+        sheet.set_editor_property("address_y", unreal.TextureAddress.TA_CLAMP)
+        sheets[name] = sheet
+    eal().save_directory(SPRITE_DIR, only_if_is_dirty=False, recursive=True)
+    return sheets
+
+
+def build_sprite_material(name, sheet, glow):
+    """A billboard's material (ABackroomsSpriteActor): translucent and
+    two-sided, the texture parameter Sheet, opacity the sheet's alpha times the
+    vertex alpha the cross-fade writes. The body is lit; the glow (the
+    Smiler's eyes and grin) is unlit, as in the raylib build."""
+    path = SPRITE_DIR + "/" + name
+    if eal().does_asset_exist(path):
+        mat = eal().load_asset(path)
+        mel().delete_all_material_expressions(mat)
+    else:
+        mat = unreal.AssetToolsHelpers.get_asset_tools().create_asset(
+            name, SPRITE_DIR, unreal.Material, unreal.MaterialFactoryNew())
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    mat.set_editor_property("two_sided", True)
+    if glow:
+        mat.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    else:
+        mat.set_editor_property("translucency_lighting_mode",
+                                unreal.TranslucencyLightingMode.TLM_SURFACE_PER_PIXEL_LIGHTING)
+    texel = _texture(mat, "Sheet", sheet, unreal.MaterialSamplerType.SAMPLERTYPE_COLOR, -600, 0)
+    vertex = mel().create_material_expression(mat, unreal.MaterialExpressionVertexColor, -600, 300)
+    opacity = mel().create_material_expression(mat, unreal.MaterialExpressionMultiply, -300, 200)
+    _link(texel, "A", opacity, "A")
+    _link(vertex, "A", opacity, "B")
+    mel().connect_material_property(opacity, "", unreal.MaterialProperty.MP_OPACITY)
+    target = unreal.MaterialProperty.MP_EMISSIVE_COLOR if glow else unreal.MaterialProperty.MP_BASE_COLOR
+    mel().connect_material_property(texel, "RGB", target)
+    mel().recompile_material(mat)
+    return mat
+
+
+def build_sprites():
+    sheets = import_sprites()
+    if sheets is None:
+        return False
+    build_sprite_material(SPRITE_MATERIAL, sheets["clark"], False)
+    build_sprite_material(SPRITE_GLOW_MATERIAL, sheets["smiler_glow"], True)
+    eal().save_directory(SPRITE_DIR, only_if_is_dirty=False, recursive=True)
+    unreal.log("Backrooms: built the actors' sprites in " + SPRITE_DIR)
+    return True
 
 
 def shine_of(gloss):
     return 0.0 if gloss < GLOSS_CUT else min(1.0, gloss / GLOSS_FULL)
 
 
-def build_instance(mat, name, textures, tile_u, tile_v, gloss):
+def build_instance(mat, name, textures, tile_u, tile_v, gloss, ambient):
     path = LOOK_DIR + "/" + name
     if eal().does_asset_exist(path):
         mi = eal().load_asset(path)
@@ -222,6 +313,8 @@ def build_instance(mat, name, textures, tile_u, tile_v, gloss):
     mel().set_material_instance_scalar_parameter_value(mi, "TileU", tile_u)
     mel().set_material_instance_scalar_parameter_value(mi, "TileV", tile_v)
     mel().set_material_instance_scalar_parameter_value(mi, "Shine", shine_of(gloss))
+    mel().set_material_instance_vector_parameter_value(
+        mi, "Ambient", unreal.LinearColor(*[c * AMBIENT_GAIN for c in ambient], 1.0))
     mel().update_material_instance(mi)
     return mi
 
@@ -247,7 +340,7 @@ def build_look(index, level, looks, mat, textures):
         tile_u = looks["wallTileM"] if walls else looks["floorTileM"]
         tile_v = level["wallTileV"] if walls else looks["floorTileM"]
         mi = build_instance(mat, "MI_L%d_%s" % (index, label), textures[level[part]], tile_u, tile_v,
-                            level["gloss"])
+                            level["gloss"], level["ambient"])
         for kind in kinds:
             key = getattr(unreal.BackroomsSurface, kind)
             entry = surfaces[key] if key in surfaces else unreal.BackroomsSurfaceLook()
@@ -276,6 +369,9 @@ def build_looks():
     mat = build_material(*textures[names[0]])
     for index, level in enumerate(looks["levels"]):
         build_look(index, level, looks, mat, textures)
+    # The looks stand without the sprites: the hunter and the pack fall back
+    # to plain shapes.
+    build_sprites()
     eal().set_metadata_tag(mat, DIGEST_TAG, digest())
     eal().save_directory(LOOK_DIR, only_if_is_dirty=False, recursive=True)
     unreal.log("Backrooms: built %d level looks in %s from %d surfaces" % (len(looks["levels"]), LOOK_DIR, len(names)))
@@ -292,6 +388,8 @@ def stale():
     path = LOOK_DIR + "/" + MATERIAL_NAME
     if not eal().does_asset_exist(path):
         return "the material is missing"
+    if not eal().does_asset_exist(SPRITE_DIR + "/" + SPRITE_GLOW_MATERIAL):
+        return "the sprites are missing"
     if eal().get_metadata_tag(eal().load_asset(path), DIGEST_TAG) != digest():
         return "the surfaces in Saved/Surfaces have changed"
     return None

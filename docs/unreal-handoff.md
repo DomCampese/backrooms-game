@@ -145,10 +145,10 @@ be checked without Unreal.
 | M0 project | `unreal/BackroomsGame.uproject` (EngineAssociation 5.8) and the plugin exist; the code is MIT. Target: an Apple M4 Mac on the current macOS, Unreal Engine 5.8. Open: its memory, and what 5.8's Metal renderer supports on the M4 |
 | M1 core | built on the Mac, not yet run there: the automation tests `Backrooms.Core.Contract` and `Backrooms.Sim.Replay` compare with `tests/golden` and `tests/traces`. Without Unreal, the same shared files built the module's way (clang, C++20, `-Werror`, FMA enabled, no `-ffp-contract=off`) pass both |
 | M2 greybox | runs on the Mac: `UBackroomsWorldSubsystem` streams `ABackroomsChunkActor`s built from `src/port/greybox.h` round a DefaultPawn free camera, storeys stacked. The greybox itself is checked against raylib frames (below). Frame time on the Mac not measured |
-| M3 layout | props (as their collision boxes), openings and light panels are in the greybox; a level look (below) can put a static mesh at every prop of a kind and at every light fitting, from `chunkLayout`. Fixtures are not placed yet. `tests/golden/layout.txt` holds every layout field |
+| M3 layout | props (as their collision boxes), openings and light panels are in the greybox; a level look (below) can put a static mesh at every prop of a kind and at every light fitting, from `chunkLayout`. Fixtures (outlets, switches, grilles, exit signs, diffusers, sprinklers, conduit, lift doors, pipes, valves, streamers) are placed from `chunkLayout` as plain boxes at their real size, or a look's mesh per kind (`EBackroomsFixture` = `FixtureKind`), written 4 October 2026 and not yet built on the Mac; scrawl, spalls and the Manila Room's furnishings wait for meshes. `tests/golden/layout.txt` holds every layout field |
 | M4 sim | runs on the Mac (a run on Level 0: walking, looking, the HUD, the revolver seen in hand): `ABackroomsPlayerController` fills an `InputFrame` from Enhanced Input actions it makes at start-up, `UBackroomsWorldSubsystem::TickRun` steps the sim as `Game::tick` does (title screen, pause, step), bullets trace against the chunk actors, and `ABackroomsPawn`'s camera follows `simView` (src/port/view.h, which the raylib renderer now draws from too). `-BackroomsRecord=path` writes a trace from Unreal for `./replay`. Sound is M6 (below). What the sim puts in the world each frame (pickups, crates, the deck, flares, chalk, balloons, confetti, impacts, the hunter, the pack) comes from `simScene` (src/port/scene.h) and `ABackroomsSceneActor` draws it, as plain shapes until a level look gives meshes; `ABackroomsHUD` is a text HUD from `GetHud`. The revolver is `ABackroomsHeldActor`, placed and posed by `heldWeapon` and `revolverPose` (src/port/held.h, which render.cpp and revolver.cpp now draw from): the editor imports assets/models/revolver.glb on first open (Plugins/Backrooms/Content/Python). Firing and the reload start; the reload clip did not show on the first run, a bone-by-bone copy is pushed but not yet confirmed, and each reload logs how far the drum moved in the clip and on the gun. The can, the deck and a flare in hand are placed by `heldCan`, `heldDeck` and `heldWeapon` and shown with the level look's item mesh (written 3 October 2026, not yet built on the Mac). render.cpp now draws pickups, crates, the deck, coins, balloons, confetti and chalk from `simScene` too, so the two builds cannot place them differently |
-| M5 look | written, not yet built on the Mac (3 October 2026). Floors, walls and ceilings wear the raylib build's own surfaces: the greybox carries texture coordinates in metres and tangent axes, `texdump --unreal` writes the surfaces and `looks.json` (`LEVEL_SURFACES`, `LEVELS`), and the editor's `backrooms_looks.py` builds one material, an instance per level surface and the five level looks (unreal/README.md, "The level looks"). `BACKROOMS_TEXTURED=1 ./greybox-view` draws that mapping with raylib and lines up with the game's captures on Levels 0 to 2. `ABackroomsLightsActor` puts rect lights at the 16 live fittings nearest the player (4 with shadows), dead tubes dark, part-output tubes dimmer, faulty ones stuttering by `tubeStutter` (core, the shader's formula), all fading with the sim's blackout; and an exponential height fog with the level's colour and density. Not yet: the tone curve and post, the props', fixtures' and actors' meshes, the Manila Room's chandelier and masked tubes, lights on the storey above an opening |
-| M6 sound | written, not yet built on the Mac (1 October 2026). The clips and the ambience bed moved out of the raylib files into `src/port/sounds.{h,cpp}` and `src/port/ambience.{h,cpp}`, byte-identical (below); `SoundMixer` (src/port/mixer.h) plays the sim's `AudioEvent`s into one stereo stream with raylib's pan law and linear resampling for pitch, and `UBackroomsSound` streams it through a `USoundWaveProcedural`, `SoundLatency` seconds ahead (Project Settings > Game > Backrooms > Sound). The recordings in assets/sounds are imported by the editor (`backrooms_import.import_sounds`) to `/Game/Backrooms/Sounds` and play on components of their own. `Backrooms.Port.Sound` tests the mixer. The actors part of M6 (meshes for the hunter and the pack) is not started |
+| M5 look | written, not yet built on the Mac (3 October 2026). Floors, walls and ceilings wear the raylib build's own surfaces: the greybox carries texture coordinates in metres and tangent axes, `texdump --unreal` writes the surfaces and `looks.json` (`LEVEL_SURFACES`, `LEVELS`), and the editor's `backrooms_looks.py` builds one material, an instance per level surface and the five level looks (unreal/README.md, "The level looks"). `BACKROOMS_TEXTURED=1 ./greybox-view` draws that mapping with raylib and lines up with the game's captures on Levels 0 to 2. `ABackroomsLightsActor` puts rect lights at the 16 live fittings nearest the player (4 with shadows), dead tubes dark, part-output tubes dimmer, faulty ones stuttering by `tubeStutter` (core, the shader's formula), all fading with the sim's blackout; and an exponential height fog with the level's colour and density. Written 4 October 2026: a post-process volume pins the exposure at the look's `ExposureEV100` (eye adaptation would lift the dark levels to mid grey) and splits colour with the post pass's fear and migraine terms (`colourSplit`, `migraineThrob` in src/port/view.h); the surfaces add the level's ambient floor as emissive (`Ambient`, from `LevelCfg::amb`). Not yet: the props' and fixtures' own meshes, the Manila Room's chandelier and masked tubes, the hunter's pool of dead light, lights on the storey above an opening, the water and fear warps of the post pass |
+| M6 sound | written, not yet built on the Mac (1 October 2026). The clips and the ambience bed moved out of the raylib files into `src/port/sounds.{h,cpp}` and `src/port/ambience.{h,cpp}`, byte-identical (below); `SoundMixer` (src/port/mixer.h) plays the sim's `AudioEvent`s into one stereo stream with raylib's pan law and linear resampling for pitch, and `UBackroomsSound` streams it through a `USoundWaveProcedural`, `SoundLatency` seconds ahead (Project Settings > Game > Backrooms > Sound). The recordings in assets/sounds are imported by the editor (`backrooms_import.import_sounds`) to `/Game/Backrooms/Sounds` and play on components of their own. `Backrooms.Port.Sound` tests the mixer. The hunter and the pack (written 4 October 2026, not yet built on the Mac) are billboards cut from the raylib build's own sheets: `texdump --unreal` exports them, the editor imports them with two materials (lit body, unlit glow), and `ABackroomsSpriteActor` draws the frames and rows `src/port/sprites.h` picks, which render.cpp now reads too (checked against the old code over 169k poses, no difference). A look's mesh for the hunter or the dog replaces them |
 
 **Editing in Unreal.** Placement stays in code; appearance, controls and
 tuning are editor data with code defaults (unreal/README.md, "Working in the
@@ -233,8 +233,15 @@ What to expect on the Mac:
 
 ## Next
 
-In order, as of 3 October 2026:
+The first pass is written; what is left is seeing it on the Mac. In order, as
+of 4 October 2026:
 
+0. **Build and open.** `make unreal`, then `make unreal-open`. The Output Log
+   should say "imported the revolver", "imported 12 sounds", "built 5 level
+   looks ..." and "built the actors' sprites". A compile error in the new
+   classes (`ABackroomsLightsActor`, `ABackroomsSpriteActor`,
+   `BackroomsFixtureShapes`) is the likeliest first failure: none of the
+   Unreal C++ written since 3 October has been compiled.
 1. **Confirm the reload.** Fire a shot, press R, then `tools/unreal.sh log`:
    the "reload clip ..." line says whether the drum moved in the clip (the
    hidden animator) and on the gun. Both near zero: the imported clip is
@@ -250,9 +257,9 @@ In order, as of 3 October 2026:
    a dead panel dark (the lights); the relief lit from above (the tangents,
    unreal/README.md says what to turn if not); the fog's colour at the end of
    a long hall against a capture of the raylib build. Then tune: `FittingLumens`
-   and auto-exposure for brightness, `FittingLights` against the frame time.
-   What M5 still lacks: the tone curve, migraine and blackout post; meshes for
-   props, fixtures and actors; the Manila Room's chandelier.
+   and each look's `ExposureEV100` for brightness, `AMBIENT_GAIN` in
+   backrooms_looks.py for the unlit corners, `FittingLights` against the frame
+   time; and measure the frame time (M2's open item).
 4. **Hear it (M6).** `make unreal-open` once, so the editor imports
    assets/sounds (the log says "imported 12 sounds"), then `make unreal-play`
    and `make unreal-test`. If the import fails on .ogg, convert those files to
@@ -265,6 +272,17 @@ In order, as of 3 October 2026:
    a plain shape until a look gives it a mesh. A thrown deck on the floor
    should face the way it does in the raylib build (its yaw was mirrored in
    Unreal before 3 October 2026).
+6. **See the hunter and the pack.** F3 then E calls the hunter up 12 m ahead:
+   Clark on Level 0, a Smiler on 1 and 3 (its eyes and grin glowing), the
+   Partygoer on 4; Level 3's dogs come on their own. Each should face you, walk
+   with its legs in step with its footfalls, and turn its head as it stalks. A
+   sprite mirrored left to right points at `Right` in
+   BackroomsSpriteActor.cpp. "plain shapes" in the log means the sheets or
+   materials did not load.
+7. **See the fixtures.** Outlets low on the walls, switches by doors, exit
+   signs high, diffusers and sprinklers in the ceilings, conduit along wall
+   tops; on Level 1 lift doors and pipes, on Level 3 valves. A box sunk into
+   its wall, or standing off it, is `BackroomsFixtureShapes::Plain`.
 
 A session on the Mac itself (`claude remote-control` in the repository) could
 build, run the tests and read the log directly; from the cloud each Unreal
@@ -276,7 +294,8 @@ What the seams leave for the port, or for the raylib build before it.
 
 | item | where | why it matters |
 |---|---|---|
-| post-process | the tone curve, the migraine, the blackout fade | the raylib build's ambients are tuned against its filmic curve and its toe compensation (AGENTS.md, "Lighting"); Unreal's auto-exposure will fight the dark levels until a post-process volume pins it |
+| post-process | the water warp, the fear vignette, the raylib build's own tone curve | Unreal's filmic curve stands in for the raylib build's ACES fit, and the ambients were tuned against that fit's toe (AGENTS.md, "Lighting"); the exposure and ambient numbers are starting points until held against captures |
+| real meshes | props, fixtures, items and actors | the looks can take a mesh for every kind; none is authored yet, so props are their collision boxes, fixtures and items plain shapes, and actors billboards |
 | floorplan geometry as data | walls, floors, ceilings, soffits, stairs, pools, arches, skirting are still built directly by `bakeChunk` | the greybox (`src/port`) derives them from core's accessors for M2; art needs core to describe the floorplan the way `chunkLayout` describes fixtures |
 | sound in Unreal | written (`UBackroomsSound`), not yet heard on the Mac | M6 |
 | libm in the sim | src/sim | replaying a Linux trace on a Mac may diverge (Status, above) |

@@ -112,7 +112,8 @@ static void putVec(FILE *f, const char *key, Vector3 v) {
 }
 
 // What the Unreal editor imports (unreal/Plugins/Backrooms/Content/Python/
-// backrooms_looks.py): each surface and its detail map, and looks.json, which
+// backrooms_looks.py): each surface and its detail map, the actors' sprite
+// sheets, and looks.json, which
 // says which surfaces each level uses, at what scale, under what light and fog.
 // The numbers are LEVELS' and LEVEL_SURFACES', so the two builds read one table.
 static int dumpForUnreal() {
@@ -122,6 +123,12 @@ static int dumpForUnreal() {
         dump(SURF_NAMES[k], sf.albedo, false);
         dump((std::string(SURF_NAMES[k]) + "_detail").c_str(), sf.detail, false);
     }
+    // The actors' sheets (port/sheets.h has their layout).
+    dump("clark", makeClarkTex(), false);
+    dump("smiler", makeSmilerTex(false), false);
+    dump("smiler_glow", makeSmilerTex(true), false);
+    dump("partygoer", makePartygoerTex(), false);
+    dump("dog", makeDogTex(), false);
     std::string path = gOut + "/looks.json";
     FILE *f = fopen(path.c_str(), "w");
     if (!f) { fprintf(stderr, "texdump: cannot write %s\n", path.c_str()); return 1; }

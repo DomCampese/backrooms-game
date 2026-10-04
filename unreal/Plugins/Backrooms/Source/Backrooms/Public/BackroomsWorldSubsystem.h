@@ -15,6 +15,7 @@ class APointLight;
 class ABackroomsSceneActor;
 class ABackroomsHeldActor;
 class ABackroomsLightsActor;
+class ABackroomsSpriteActor;
 class UBackroomsSound;
 
 // Owns the game: one Sim (the rules, and core's World inside it) for this
@@ -78,8 +79,9 @@ private:
 	void DropChunk(const FIntVector& Key);
 	void DropAll();
 	// Moves the pickups, crates, hunter and the rest to where the sim has them,
-	// and the revolver in hand.
-	void ShowScene();
+	// and the revolver in hand. Camera is where the camera is, which the
+	// actors' billboards face.
+	void ShowScene(const FVector& Camera);
 	// Lights the fittings round At (metres, in the current storey's frame) and
 	// sets the level's fog.
 	void ShowLights(const Vec3& At);
@@ -106,6 +108,8 @@ private:
 	TObjectPtr<ABackroomsHeldActor> Hand;
 	UPROPERTY()
 	TObjectPtr<ABackroomsLightsActor> Lights;
+	UPROPERTY()
+	TObjectPtr<ABackroomsSpriteActor> Sprites;
 	UPROPERTY()
 	TObjectPtr<UBackroomsLevelLook> Look;
 	// A run's sound; none in a free camera.

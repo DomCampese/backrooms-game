@@ -3,6 +3,7 @@
 #include "raylib.h"
 #include "core/world.h"   // VEND_HW, VEND_Y1: the vending machine's body
 #include "core/level_rules.h"
+#include "port/sheets.h"
 
 // A world surface: its colour, and the detail map the shader reads beside it
 // (texture1: packed tangent slopes in RG, gloss mask in B, alpha 255). Both
@@ -17,27 +18,7 @@ Texture2D finishTexture(Image img, bool tiled);
 Surface makeWallpaperSurface();    // Level 0: mono-yellow chevron vinyl, roll seams, skirting
 Surface makeCarpetSurface();       // Level 0: heathered level-loop contract carpet
 Surface makeCeilingSurface();      // Level 0: 600 mm fissured mineral board on white T-bar
-// Walk-cycle frames, laid out left to right in one sheet. A billboard picks
-// two adjacent frames and cross-fades between them, so the count is also the
-// resolution of the gait: six is enough that adjacent frames differ by a few
-// pixels and the fade reads as motion blur rather than as a dissolve.
-constexpr int ENT_FRAMES = 6;      // Clark, the Smiler and the partygoer, 128 px per frame
-constexpr int DOG_FRAMES = 4;      // the pack, 192 px per frame
-
-// Rows of the entity sheet, 256 px each. A billboard always faces you, so
-// neither a head turn nor a lean can come from the camera — both have to be in
-// the sprite.
-//
-// Rows 0-2 are how far round his head is: at row 0 he is looking away and there
-// is no eyeshine at all, at row 2 he is looking straight at you and the eye is
-// lit. The eye appearing is the tell.
-//
-// Rows 3-4 are the same front-on head, sheared: he tips into the direction he is
-// running. This is a shear in the sprite rather than a rotation at the draw call
-// because raylib's DrawBillboardPro does not place a billboard the way
-// DrawBillboardRec does — see AGENTS.md.
-enum EntRow { ENT_ROW_AWAY = 0, ENT_ROW_HALF, ENT_ROW_FACE, ENT_ROW_LEAN_L, ENT_ROW_LEAN_R, ENT_ROWS };
-
+// The sheets' frame counts, frame sizes and rows are port/sheets.h's.
 Texture2D makeClarkTex();          // PIRATE CLARK, Level 0's hunter, ENT_FRAMES wide
 Texture2D makeSmilerTex(bool glow);   // the Smiler: fog body, or its unlit eyes and grin; ENT_FRAMES wide
 Texture2D makePartygoerTex();      // the thing that lives at the party

@@ -1,4 +1,5 @@
 #include "BackroomsTypes.h"
+#include "core/layout.h"
 #include "core/world.h"
 #include "port/greybox.h"
 #include "port/scene.h"
@@ -10,3 +11,5 @@ static_assert((int)EBackroomsProp::ManilaTable == PROP_MANILA_TABLE, "EBackrooms
 static_assert((int)EBackroomsProp::Count <= 32, "greyboxChunk's meshedProps is a 32-bit mask");
 static_assert((int)EBackroomsItem::Count == (int)SceneKind::Count, "EBackroomsItem must list SceneKind");
 static_assert((int)EBackroomsItem::Hunter == (int)SceneKind::Hunter, "EBackroomsItem must list SceneKind");
+static_assert((int)EBackroomsFixture::Count == (int)FixtureKind::ManilaRoom + 1, "EBackroomsFixture must list FixtureKind");
+static_assert((int)EBackroomsFixture::LiftDoor == (int)FixtureKind::LiftDoor, "EBackroomsFixture must list FixtureKind");
