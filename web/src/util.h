@@ -4,9 +4,8 @@
 #include "raylib.h"
 #include "core/vec.h"
 #include "core/hash.h"
+#include "port/palette.h"
 #include <cstdint>
 
-inline unsigned char cl8(float v) { return (unsigned char)(v < 0 ? 0 : (v > 255 ? 255 : v)); }
-
-// LEVEL FUN =) — the party decorations share one faded palette
+// port/palette.h's PARTY_RGBA, as raylib colours
 extern const Color PARTY[5];
