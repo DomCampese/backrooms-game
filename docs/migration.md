@@ -166,12 +166,13 @@ The platform side of the seam:
 
 | file | holds |
 |---|---|
-| `web/src/world_mesh.{h,cpp}` | `bakeChunk` (the mesher), `ChunkMesh` slots, `ChunkMeshCache` |
-| `web/src/mesh_builder.{h,cpp}` | `MB`, `addPropBox`, `addSolidBox`, `PLAIN_UV` |
+| `shared/port/chunk_mesh.{h,cpp}` | `bakeChunkGeometry` (the mesher, engine-neutral), `ChunkMesh` slots |
+| `shared/port/mesh_builder.{h,cpp}`, `atlas.{h,cpp}`, `palette.h` | `MB`, `addPropBox`, `addSolidBox`, `PLAIN_UV`; `FIXTURES`, `vendUV`, tile sizes; `cl8`, `PARTY_RGBA` |
+| `web/src/world_mesh.{h,cpp}`, `mesh_upload.h` | `bakeChunk` (uploads the mesher's parts), `ChunkMeshCache` |
 | `web/src/object_meshes.{h,cpp}` | can, deck, reels, lamp, flare, crate and lid |
 | `web/src/vec_rl.h` | `toRl` / `fromRl` |
 | `web/src/levels.{h,cpp}` | `LevelCfg : LevelRules` (the look), `lightAtCPU` and the other CPU lighting mirrors |
-| `web/src/util.{h,cpp}` | `cl8`, `SAMPLE_RATE`, `PARTY` |
+| `web/src/util.{h,cpp}` | `PARTY` (raylib colours of `PARTY_RGBA`) |
 
 How meshes follow core's chunks: `ChunkData` holds no meshes. Core appends a
 `ChunkRef {storey, cx, cz}` to `World::staleChunks` wherever geometry goes

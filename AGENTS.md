@@ -89,6 +89,15 @@ docs/unreal-handoff.md "Next" has what is open. What will bite:
   their own components at `volume * CENTRE_GAIN`. Unreal defines `TWO_PI` as
   a macro, so ambience.h's phase constant is `TURN`. The move was proved
   byte-identical (docs/unreal-handoff.md, "Sound").
+- **The chunk mesher is shared/port/chunk_mesh.cpp** (October 2026), moved
+  from web/src/world_mesh.cpp with its builder (`MB`, now `Vec3`/`Vec2`/`Rgba`
+  and no `bake()`), the fixtures atlas table (port/atlas.h: `FIXTURES`, the
+  vending door rects, `vendUV`, `FLOOR_TILE_M`, `WALL_TILE_M`, `wallTileV`) and
+  the party colours (port/palette.h, `PARTY_RGBA`). The move was checked by
+  dumping every array of 686 baked chunks (5 levels, 2 visits, 3 storeys)
+  before and after: identical bytes, and the object meshes too. The port's
+  white is `RGBA_WHITE`: raylib defines `WHITE` as a macro and the Web build's
+  files see both. texdump links port/atlas.cpp now, for `FIXTURES`.
 - **`init_unreal.py` also runs when the editor binary runs the game**
   (`-game`, `make unreal-play`). There is no editor then, and its first
   EditorAssetLibrary call crashed the game in `GetSubsystemInternal`; it now
@@ -171,8 +180,10 @@ will bite:
 - **`LevelCfg` extends `LevelRules`.** `LEVELS[lv].wallH` and
   `LEVEL_RULES[lv].wallH` are one number; add a rule field to `LevelRules`,
   a look field (colour, fog, gloss, light output) to `LevelCfg`.
-- **The mesher is `bakeChunk` in `web/src/world_mesh.cpp`, and ChunkData holds no
-  meshes.** `Game::chunkMeshes` (`ChunkMeshCache`) keys baked chunks by
+- **The mesher is `bakeChunkGeometry` in `shared/port/chunk_mesh.cpp`, and
+  ChunkData holds no meshes.** It fills one `MB` per slot with plain arrays;
+  the Web build's `bakeChunk` (web/src/world_mesh.cpp) uploads them as raylib
+  meshes. `Game::chunkMeshes` (`ChunkMeshCache`) keys baked chunks by
   absolute storey and chunk. Core appends to `World::staleChunks` wherever a
   chunk's geometry goes stale (`unloadFar`, `unloadAll`, `rebuildChunk`, and so
   `shiftEdge`/`unlockEdge`), and every cache call drains that list first.
@@ -186,7 +197,7 @@ will bite:
   `vendFootprint`), `PROP_TURN`, `PROP_HASH_SALT`. textures.h reads the vending
   body from core.
 - **The wall paper's vertical mapping is state on the wall builder**
-  (`WallBuilder::tileV`, `tallPaper` in world_mesh.cpp), set per bake; it used
+  (`WallBuilder::tileV`, `tallPaper` in chunk_mesh.cpp), set per bake; it used
   to be two file globals (`gWallV`, `gTallPaper`).
 
 # Simulation and platform (September 2026)
@@ -239,7 +250,7 @@ still the mesher's. What will bite:
 
 - **A new decoration is decided in core and built in the mesher.** Add a
   `FixtureKind`, push it in `cellFixtures` (or the chunk-wide list), and build
-  it in `addFixture`. A hash in world_mesh.cpp that decides whether something
+  it in `addFixture`. A hash in chunk_mesh.cpp that decides whether something
   exists is the pattern this replaced; an Unreal port would have to copy it.
 - **Emission order is part of the output.** Fixtures are pushed in cell order
   and, inside a cell, in the order the mesher used to decide them. The mesher
@@ -550,7 +561,7 @@ Level 1 follows the wiki's "Habitable Zone" article (CREDITS.md). What changed:
   dead, a fifth stuttering, faint green-white; the tubes sit on uLY. An 8 m grid
   was tried and cost 58% more frame: nearly all nine summed fittings then fall
   inside shadow-trace range. Brighter or more live tubes cost frame the same way.
-- **Walls run floor to ceiling once.** `WallBuilder::tileV` (world_mesh.cpp) is the vertical
+- **Walls run floor to ceiling once.** `WallBuilder::tileV` (port/chunk_mesh.cpp) is the vertical
   metres per wall-texture tile: 3 everywhere, `wallH` on L1, because the
   concrete now carries a damp band, tide line and pour joints at real heights
   and a 3 m repeat drew a second tide line under the 4.2 m slab. Anything baked
@@ -764,8 +775,9 @@ build's, in `web/src/`.
 | `port/view.{h,cpp}`, `port/greybox.{h,cpp}` | what the camera shows of the sim (both builds draw from it); a chunk as plain boxes and quads for a port's first milestone |
 | `port/held.{h,cpp}`, `port/scene.{h,cpp}`, `port/sprites.{h,cpp}`, `port/sheets.h` | what is in hand, what stands loose in the world, and the actors' billboard poses and sheet layout, which both builds draw from |
 | `port/sounds.{h,cpp}`, `port/ambience.{h,cpp}`, `port/mixer.{h,cpp}` | the synthesized clips and which are recordings; the ambience synth; a software mix of the sim's `AudioEvent`s for a port |
-| `world_mesh.{h,cpp}` | the chunk mesher (`bakeChunk`), `ChunkMesh` slots, `ChunkMeshCache` |
-| `mesh_builder.{h,cpp}` | `MB`, `addPropBox`, `addSolidBox`, `PLAIN_UV` |
+| `port/chunk_mesh.{h,cpp}` | the chunk mesher (`bakeChunkGeometry`), `ChunkMesh` slots |
+| `port/mesh_builder.{h,cpp}`, `port/atlas.{h,cpp}`, `port/palette.h` | `MB`, `addPropBox`, `addSolidBox`, `PLAIN_UV`; where things sit in the fixtures atlas and the tile sizes; `cl8`, `PARTY_RGBA` |
+| `world_mesh.{h,cpp}`, `mesh_upload.h` | `bakeChunk` (the mesher's parts as raylib meshes), `ChunkMeshCache` |
 | `object_meshes.{h,cpp}` | can, tape deck, reels, flare, supply crate |
 | `vec_rl.h` | `toRl` / `fromRl` between core's and the sim's math types and raylib's |
 | `levels.{h,cpp}` | per-level look table (`LevelCfg` extends `LevelRules`); CPU mirror of the shader's lighting |
@@ -1942,7 +1954,7 @@ that works.
 
 ### Chunk mesh slots
 
-`ChunkMeshes::meshes[MESH_COUNT]` is indexed by `enum ChunkMesh` (world_mesh.h) and
+`ChunkMeshes::meshes[MESH_COUNT]` is indexed by `enum ChunkMesh` (port/chunk_mesh.h) and
 `Game::mats[MAT_COUNT]` by `enum MatSlot` (game.h). The first four entries of
 each are the same four surfaces in the same order — floor, ceiling, walls,
 props — which is what lets `renderScene` draw them in one loop. Keep that
@@ -2016,7 +2028,7 @@ brightness seam along every light-cell boundary.
 
 A panel is shaded as the **1.24 m square of glowing plastic it actually is**,
 not as a point: `PANEL_HALF` in `shaders.cpp` is the same half-extent as `hp`
-in world_mesh.cpp's panel mesher, and the shading point is `P` clamped into that
+in chunk_mesh.cpp's panel mesher, and the shading point is `P` clamped into that
 rectangle. Change the quad's size and change `PANEL_HALF` with it. Two things
 fall out of treating it as an area:
 
@@ -2135,7 +2147,7 @@ pass, and both obey the same three rules, learned the hard way:
   it and the boxes sample a transparent cell and disappear.
 - **The scrawl atlas grid lives in two places and they must agree**:
   `makeScrawlTex` (textures.cpp) lays the phrases out 4 across and 8 down, and
-  `SCRAWL_PHRASES` (core/layout.h) and `addScrawl` in world_mesh.cpp cut the UVs to match. Add a
+  `SCRAWL_PHRASES` (core/layout.h) and `addScrawl` in chunk_mesh.cpp cut the UVs to match. Add a
   phrase without changing both and walls start showing you half of one line and
   half of another. The pen clips every dab to its own cell for the same reason —
   an atlas cell that bleeds puts a stray stroke from a neighbouring phrase on a
@@ -2148,7 +2160,7 @@ pass, and both obey the same three rules, learned the hard way:
   the gap did. `WALL_EXIT` still has no collision at all, so its jambs are
   phantom; that is pre-existing, not a pattern to copy.
 - **A prop's height lives in three places and they must agree**: `addProp`
-  builds it (world_mesh.cpp), `gatherCellAABBs` gives it a collision box, and
+  builds it (chunk_mesh.cpp), `gatherCellAABBs` gives it a collision box, and
   `Sim::bottleShelfY` says how high a carton stands on it. Change one, change
   all three, or you get furniture you fall through or cartons floating.
 - **The rotten floor patches are a shortcut, not an accident, and three things

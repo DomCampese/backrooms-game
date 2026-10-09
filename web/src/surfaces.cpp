@@ -1012,4 +1012,3 @@ const LevelSurfaces LEVEL_SURFACES[NLEVELS] = {
     { SURF_BANQUET, SURF_PARTYCEIL, SURF_PARTYWALL },
 };
 
-float wallTileV(int level) { return level == 1 ? LEVEL_RULES[1].wallH : WALL_TILE_M; }
