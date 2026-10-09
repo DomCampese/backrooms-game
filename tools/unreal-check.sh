@@ -5,7 +5,7 @@
 #   - each wrapper compiles alone the way the module compiles it: no PCH, no
 #     exceptions, no RTTI, C++20, warnings as errors;
 #   - the wrappers linked together, with clang and without -ffp-contract=off
-#     (the pragmas in src/core/fp_strict.h must hold contraction off alone, as
+#     (the pragmas in shared/core/fp_strict.h must hold contraction off alone, as
 #     they must under Unreal's flags), pass the contract and replay every trace;
 #   - the .uproject and .uplugin parse.
 # Unreal's own classes (Public/, Private/*.cpp, Private/Tests) need the engine
@@ -18,14 +18,14 @@ cd "$ROOT"
 CXX=${CXX:-clang++}
 SHARED=unreal/Plugins/Backrooms/Source/Backrooms/Private/Shared
 FLAGS=(-std=c++20 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -Wshadow -Wundef
-       -Wno-unused-parameter -Wno-missing-field-initializers -Isrc -Itools)
+       -Wno-unused-parameter -Wno-missing-field-initializers -Ishared -Itools)
 # FMA available, so contraction is possible and only the pragmas prevent it. On
 # arm64 it always is.
 [[ $(uname -m) == x86_64 ]] && FLAGS+=(-mfma)
 fail=0
 
-for src in src/core/*.cpp src/sim/*.cpp src/port/*.cpp tools/contract_lib.cpp; do
-    inc=${src#src/}; inc=${inc#tools/}
+for src in shared/core/*.cpp shared/sim/*.cpp shared/port/*.cpp tools/contract_lib.cpp; do
+    inc=${src#shared/}; inc=${inc#tools/}
     if ! grep -lqx "#include \"$inc\"" "$SHARED"/*.cpp; then
         echo "FAIL $src: no wrapper in $SHARED includes \"$inc\""; fail=1
     fi

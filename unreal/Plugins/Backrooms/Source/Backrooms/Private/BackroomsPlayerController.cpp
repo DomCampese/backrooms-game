@@ -30,7 +30,7 @@ struct FControlKeys
 	FKey Keys[2];
 };
 
-// The raylib build's keys (Game::readInput).
+// The Web build's keys (Game::readInput).
 TArray<FControlKeys> ControlKeys()
 {
 	using V = EInputActionValueType;

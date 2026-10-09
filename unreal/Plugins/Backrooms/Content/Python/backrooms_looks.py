@@ -1,4 +1,4 @@
-"""Builds the level looks from the raylib build's own surfaces.
+"""Builds the level looks from the Web build's own surfaces.
 
 `tools/unreal.sh surfaces` (which `make unreal-open` runs) writes every world
 surface and looks.json to Saved/Surfaces with texdump. This imports them,
@@ -13,7 +13,7 @@ again by hand, in the editor's Python console:
 
 A look's surface materials are set only where they are empty or are this
 script's own, so a material assigned in the editor stays. Its light and fog
-are LevelCfg's (src/levels.cpp) and are written every time; tune the overall
+are LevelCfg's (web/src/levels.cpp) and are written every time; tune the overall
 light in Project Settings > Game > Backrooms (FittingLumens).
 """
 import hashlib
@@ -40,14 +40,14 @@ PARTS = {
     "walls": ("Walls", ["WALL", "STEP", "PILLAR"]),
 }
 # The detail map's red and green are slopes, height per metre along u and v:
-# (byte - 128) / 127 (finishSurface, src/surfaces.cpp).
+# (byte - 128) / 127 (finishSurface, web/src/surfaces.cpp).
 SLOPE_ZERO = 128.0 / 255.0
 SLOPE_SCALE = 255.0 / 127.0
 # The raylib shader draws no specular below a gloss of 0.10 (LevelCfg::gloss),
 # and the Poolrooms' 0.55 is the glossiest level.
 GLOSS_CUT = 0.10
 GLOSS_FULL = 0.55
-# The raylib build's ambient floor (LevelCfg::amb) as the surfaces' emissive
+# The Web build's ambient floor (LevelCfg::amb) as the surfaces' emissive
 # albedo multiple. Its shader lifts that ambient through its tone curve's toe
 # (AGENTS.md, "Lighting"); this is the starting point to tune from.
 AMBIENT_GAIN = 1.0
@@ -159,7 +159,7 @@ def _slope(mat, detail, channel, relief, y):
 
 def build_material(albedo, detail):
     """The one material every level surface is an instance of. The greybox's
-    texture coordinates are metres (src/port/greybox.h), so TileU and TileV are
+    texture coordinates are metres (shared/port/greybox.h), so TileU and TileV are
     the metres one repeat covers. The detail map's slopes become the normal
     (scaled by ReliefU and ReliefV),
     and its blue, the gloss mask, picks between RoughMatte and RoughGloss as
@@ -258,7 +258,7 @@ def build_sprite_material(name, sheet, glow):
     """A billboard's material (ABackroomsSpriteActor): translucent and
     two-sided, the texture parameter Sheet, opacity the sheet's alpha times the
     vertex alpha the cross-fade writes. The body is lit; the glow (the
-    Smiler's eyes and grin) is unlit, as in the raylib build."""
+    Smiler's eyes and grin) is unlit, as in the Web build."""
     path = SPRITE_DIR + "/" + name
     if eal().does_asset_exist(path):
         mat = eal().load_asset(path)

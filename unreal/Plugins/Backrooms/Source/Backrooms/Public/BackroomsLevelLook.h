@@ -37,7 +37,7 @@ struct FBackroomsPropLook
 };
 
 // A mesh for a wall or ceiling fixture. Its frame's origin is the layout's
-// point (src/core/layout.h, Fixture: on the wall face, the ceiling, or a run's
+// point (shared/core/layout.h, Fixture: on the wall face, the ceiling, or a run's
 // first end), X out of the face, Z up (on a ceiling, Z along the world's X). A
 // run (conduit, pipe, valve, streamer) has X along it instead, scaled to its
 // length in metres: a mesh 100 units long along X spans the run. Offset is in
@@ -112,13 +112,13 @@ public:
 	TObjectPtr<UMaterialInterface> DeadFittingMaterial;
 
 	// The tubes' colour, and their output as a multiple of FittingLumens in the
-	// project settings: the raylib build's LevelCfg::lightCol and lightMul.
+	// project settings: the Web build's LevelCfg::lightCol and lightMul.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lights")
 	FLinearColor LightColour = FLinearColor::White;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lights", meta = (ClampMin = 0))
 	float LightOutput = 1.0f;
 
-	// The raylib build's fog (LevelCfg::fogCol, fogDen): what the air fades to,
+	// The Web build's fog (LevelCfg::fogCol, fogDen): what the air fades to,
 	// and its density per metre, as in exp(-density * metres).
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Air")
 	bool bFog = false;
@@ -128,13 +128,13 @@ public:
 	float FogDensity = 0.05f;
 
 	// The camera's exposure, fixed: EV100, lower is brighter. Unreal's eye
-	// adaptation would lift the dark levels to mid grey, and the raylib build's
+	// adaptation would lift the dark levels to mid grey, and the Web build's
 	// levels are tuned to be as dark as they are.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera")
 	float ExposureEV100 = 6.0f;
 
 	// Pickups, crates, the hunter, the pack and the rest the sim places each
-	// frame (src/port/scene.h). The hunter is Pirate Clark on Level 0, a Smiler
+	// frame (shared/port/scene.h). The hunter is Pirate Clark on Level 0, a Smiler
 	// on Levels 1 and 3 and the Partygoer on 4, so each level's look gives its own.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Items")
 	TMap<EBackroomsItem, FBackroomsItemLook> Items;
@@ -145,7 +145,7 @@ public:
 
 	// The greybox's flat colours, which a new look starts from.
 	static FLinearColor DefaultColour(EBackroomsSurface Surface);
-	// LEVEL FUN's palette in the raylib build (PARTY, src/util.cpp).
+	// LEVEL FUN's palette in the Web build (PARTY, web/src/util.cpp).
 	static TArray<FLinearColor> DefaultPartyColours();
 	// The prop kinds this look draws with meshes, as greyboxChunk's mask.
 	uint32 MeshedProps() const;

@@ -47,7 +47,7 @@ ABackroomsHeldActor::ABackroomsHeldActor()
 	Gun->SetCastShadow(false);
 	Gun->SetVisibility(false);
 
-	// The raylib build's flash borrows the flare's point light for 0.09 s.
+	// The Web build's flash borrows the flare's point light for 0.09 s.
 	Flash = CreateDefaultSubobject<UPointLightComponent>(TEXT("Flash"));
 	Flash->SetupAttachment(RootComponent);
 	Flash->SetIntensityUnits(ELightUnits::Candelas);
@@ -228,7 +228,7 @@ void ABackroomsHeldActor::ShowRevolver(const Sim& Game, const FVector& Origin)
 
 	// The GLB's +x, +y, +z go to the frame's right, up and forward, and each
 	// mesh axis holds one of them (Perm). The matrix may be a mirror, as the
-	// raylib build's is; FTransform keeps that as a negative scale.
+	// Web build's is; FTransform keeps that as a negative scale.
 	const HeldFrame Frame = heldWeapon(Game, simView(Game));
 	const Vec3 Dirs[3] = { Frame.right, Frame.up, Frame.forward };
 	const float Scale = Frame.scale * BackroomsCoords::CmPerM / Units;

@@ -4,7 +4,7 @@
 #include "CoreMinimal.h"
 #include "BackroomsTypes.generated.h"
 
-// GreySurface (src/port/greybox.h): what a greybox face is.
+// GreySurface (shared/port/greybox.h): what a greybox face is.
 UENUM(BlueprintType)
 enum class EBackroomsSurface : uint8
 {
@@ -12,7 +12,7 @@ enum class EBackroomsSurface : uint8
 	Count UMETA(Hidden)
 };
 
-// PropKind (src/core/world.h): what stands in a cell.
+// PropKind (shared/core/world.h): what stands in a cell.
 UENUM(BlueprintType)
 enum class EBackroomsProp : uint8
 {
@@ -22,7 +22,7 @@ enum class EBackroomsProp : uint8
 	Count UMETA(Hidden)
 };
 
-// FixtureKind (src/core/layout.h): what is fixed to a wall or a ceiling.
+// FixtureKind (shared/core/layout.h): what is fixed to a wall or a ceiling.
 UENUM(BlueprintType)
 enum class EBackroomsFixture : uint8
 {
@@ -31,7 +31,7 @@ enum class EBackroomsFixture : uint8
 	Count UMETA(Hidden)
 };
 
-// SceneKind (src/port/scene.h): what stands in the world besides its chunks.
+// SceneKind (shared/port/scene.h): what stands in the world besides its chunks.
 UENUM(BlueprintType)
 enum class EBackroomsItem : uint8
 {
@@ -40,7 +40,7 @@ enum class EBackroomsItem : uint8
 	Count UMETA(Hidden)
 };
 
-// The sim's controls (InputFrame, src/sim/input_frame.h), one Enhanced Input
+// The sim's controls (InputFrame, shared/sim/input_frame.h), one Enhanced Input
 // action each.
 UENUM(BlueprintType)
 enum class EBackroomsControl : uint8

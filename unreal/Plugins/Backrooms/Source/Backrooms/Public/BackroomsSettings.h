@@ -78,7 +78,7 @@ public:
 
 	// Your own input assets. An action set here is read for its control instead
 	// of the built-in one, with the keys your mapping context gives it; controls
-	// left empty keep the raylib build's keys.
+	// left empty keep the Web build's keys.
 	UPROPERTY(Config, EditAnywhere, Category = "Input")
 	TSoftObjectPtr<UInputMappingContext> InputContext;
 	UPROPERTY(Config, EditAnywhere, Category = "Input")
@@ -103,7 +103,7 @@ public:
 	FRotator RevolverMeshRotation = FRotator::ZeroRotator;
 
 	// The actors' sprite sheets and the materials that draw them
-	// (ABackroomsSpriteActor). The editor builds them from the raylib build's
+	// (ABackroomsSpriteActor). The editor builds them from the Web build's
 	// own sheets to these paths (backrooms_looks.py); until it has, the hunter
 	// and the pack are plain shapes.
 	UPROPERTY(Config, EditAnywhere, Category = "Actors")

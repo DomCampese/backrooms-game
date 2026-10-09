@@ -1,8 +1,8 @@
 # The Backrooms on Unreal Engine 5
 
-The port described in docs/unreal-handoff.md. The raylib build in the rest of
+The port described in docs/unreal-handoff.md. The Web build in the rest of
 this repository stays the reference until the port reaches M5; nothing here
-replaces it, and nothing in the raylib build depends on this folder.
+replaces it, and nothing in the Web build depends on this folder.
 
 It builds and runs on an M4 Mac with Unreal Engine 5.8.3 (29 September 2026):
 a run on Level 0 streams the greybox, the sim moves the camera, the text HUD
@@ -27,20 +27,20 @@ tools/unreal.sh log # the "Backrooms:" lines from the last run
 |---|---|
 | `BackroomsGame.uproject` | the project; its only module is a stub, the game lives in the plugin |
 | `Plugins/Backrooms/` | one Runtime module, `Backrooms` |
-| `.../Private/Shared/*.cpp` | one file per source in `src/core`, `src/sim`, `src/port` and `tools/contract_lib.cpp`, each a single `#include`: the module compiles the repository's files, not copies |
+| `.../Private/Shared/*.cpp` | one file per source in `shared/core`, `shared/sim`, `shared/port` and `tools/contract_lib.cpp`, each a single `#include`: the module compiles the repository's files, not copies |
 | `.../Public/BackroomsCoords.h` | the one conversion between core (metres, y up) and Unreal (centimetres, z up) |
 | `.../BackroomsWorldSubsystem` | owns the `Sim` (and core's `World` in it); steps a run, streams chunk actors round the player, `GetHud` for a HUD |
 | `.../BackroomsPlayerController` | the sim's controls as Enhanced Input actions; fills an `InputFrame` each frame |
-| `.../BackroomsPawn` | the camera, placed where the sim's view is (src/port/view.h) |
+| `.../BackroomsPawn` | the camera, placed where the sim's view is (shared/port/view.h) |
 | `.../BackroomsChunkActor`, `BackroomsChunkBuild` | a chunk: the greybox drawn with the level's look, plus prop and fitting meshes |
 | `.../BackroomsLevelLook` | the data asset for a level's look: materials, prop meshes, fitting mesh, the tubes' colour and output, fog |
 | `.../BackroomsLightsActor` | rect lights at the live fittings nearest the player (dead ones dark, faulty ones stuttering, all out in a blackout), the level's fog, and a post-process volume: fixed exposure, the colour split |
-| `.../BackroomsSpriteActor` | the hunter and the pack as billboards from the game's sprite sheets, frames and rows from `src/port/sprites.h` |
+| `.../BackroomsSpriteActor` | the hunter and the pack as billboards from the game's sprite sheets, frames and rows from `shared/port/sprites.h` |
 | `.../Private/BackroomsFixtureShapes` | where a `chunkLayout` fixture stands, and its plain box until a look gives the kind a mesh |
 | `Plugins/Backrooms/Content/Python` | run by the editor on open: imports the revolver and the recorded sounds, and builds the level looks from the game's surfaces (`backrooms_looks.py`) |
 | `.../BackroomsSettings` | Project Settings > Game > Backrooms |
 | `.../BackroomsPreviewActor` | the generated maze in the editor viewport |
-| `.../BackroomsSound` | the sim's sound: the game's own mix (src/port/mixer.h) streamed through a procedural wave, the imported recordings on components of their own |
+| `.../BackroomsSound` | the sim's sound: the game's own mix (shared/port/mixer.h) streamed through a procedural wave, the imported recordings on components of their own |
 | `.../BackroomsTypes` | Blueprint mirrors of core's surfaces, props and controls; the HUD snapshot |
 | `.../BackroomsGameMode` | starts a run (or a free camera with `?mode=free`) from the map's options |
 | `.../Private/Tests/BackroomsTests.cpp` | automation tests: contract, trace replay, coordinates, greybox |
@@ -51,12 +51,12 @@ with hidden symbols, so a second module could not call core. Why no PCH: a
 shared PCH is force-included into every file of the module, core's included,
 and core must see nothing but itself and the standard library.
 
-A new `.cpp` in `src/core`, `src/sim` or `src/port` needs a wrapper in
+A new `.cpp` in `shared/core`, `shared/sim` or `shared/port` needs a wrapper in
 `Private/Shared`. `tools/unreal-check.sh` fails until it has one.
 
 ## Opening it
 
-The project compiles files from the repository's `src/`, so check out the whole
+The project compiles files from the repository's `shared/`, so check out the whole
 repository, not just this folder. On the Mac:
 
 1. Xcode, the version Unreal 5.8's release notes ask for, opened once so it
@@ -93,7 +93,7 @@ repository, not just this folder. On the Mac:
    has no editor, and warns if this has not happened yet.
 5. Press Play. The default map is the engine's empty Entry map; the game mode
    starts a run on Level 0 at seed 1337 and the sim drives the camera: WASD,
-   the mouse, the raylib build's keys (F3 for the debug keys). Floors, walls
+   the mouse, the Web build's keys (F3 for the debug keys). Floors, walls
    and ceilings wear the game's own surfaces, lit by the fittings; fixtures
    are plain boxes and the rest of the greybox keeps its flat colours; the
    hunter and the pack are the game's own sprites (`ABackroomsSpriteActor`),
@@ -115,8 +115,8 @@ the Poolrooms' greybox (WASD, Space up, Ctrl down, Shift faster).
 ## The level looks
 
 `make unreal-open` runs `tools/unreal.sh surfaces` before it opens the editor:
-`texdump --unreal` writes every world surface the raylib build generates
-(`src/surfaces.cpp`) to `Saved/Surfaces`, each as a colour PNG and a detail PNG
+`texdump --unreal` writes every world surface the Web build generates
+(`web/src/surfaces.cpp`) to `Saved/Surfaces`, each as a colour PNG and a detail PNG
 (slopes in red and green, gloss in blue), and `looks.json`, which names each
 level's floor, ceiling and wall surface and gives its tile sizes, gloss, tube
 colour and output and fog, from `LEVEL_SURFACES` and `LEVELS`. The editor then
@@ -125,7 +125,7 @@ runs `backrooms_looks.py`, which, when those files changed:
 - imports the PNGs to `/Game/Backrooms/Surfaces`, the detail maps linear and
   uncompressed;
 - builds `M_BackroomsSurface`: the greybox's texture coordinates are metres
-  (src/port/greybox.h), so `TileU`/`TileV` are the metres one repeat covers
+  (shared/port/greybox.h), so `TileU`/`TileV` are the metres one repeat covers
   (2 m on floors and ceilings, 3 m across walls, 3 m or Level 1's 4.2 m down);
   the detail map's slopes make the normal, scaled by `ReliefU` and `ReliefV`
   (across and down the texture), and its gloss
@@ -141,7 +141,7 @@ runs `backrooms_looks.py`, which, when those files changed:
   `DA_Level0` to `DA_Level4` in `/Game/Backrooms/Looks`, which the settings
   name by default. Floors and stairs take the floor, walls, steps and pillars
   the walls. A material you assign to a look in the editor is kept; the
-  light and fog are rewritten from `src/levels.cpp`.
+  light and fog are rewritten from `web/src/levels.cpp`.
 
 The tangents' handedness is worked out in code (`Tangent` in
 BackroomsChunkBuild.cpp) and has not been seen on the Mac yet. If horizontal
@@ -155,7 +155,7 @@ mapping with raylib, to hold against a capture of the game.
 ## Working in the editor
 
 Where things are is decided in code (core and the sim), so the maze, and every
-prop, light and door in it, is the same one the raylib build generates. How
+prop, light and door in it, is the same one the Web build generates. How
 they look is set in the editor, and code has a default for everything, so the
 project runs before any of it exists.
 
@@ -181,7 +181,7 @@ UnrealEditor-Cmd BackroomsGame.uproject -ExecCmds="Automation RunTests Backrooms
 | test | passes when |
 |---|---|
 | `Backrooms.Core.Contract` | every line of `tests/golden` matches (docs/migration.md, "Contract tests") |
-| `Backrooms.Sim.Replay` | every trace in `tests/traces` replays with every digest matching (src/sim/trace.h) |
+| `Backrooms.Sim.Replay` | every trace in `tests/traces` replays with every digest matching (shared/sim/trace.h) |
 | `Backrooms.Port.Coords` | the conversion scales, swaps y and z, and does not mirror (forward and right land on Unreal's) |
 | `Backrooms.Port.Greybox` | every level's origin chunk has geometry and valid indices |
 

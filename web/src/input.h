@@ -5,7 +5,7 @@
 // Natively — and on a desktop browser — every one of these is the raylib call
 // it is named after, inlined, and the generated code is identical. On a phone
 // there is no pointer to lock and no key to press: web/shell.html draws the
-// touch controls, publishes their state, and src/input_web.cpp folds that state
+// touch controls, publishes their state, and web/src/input_web.cpp folds that state
 // into the same answers. Game code does not know which happened.
 //
 // Use these rather than the raylib functions anywhere the *player's* intent is

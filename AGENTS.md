@@ -5,15 +5,26 @@
 - docs/migration.md: the core / sim / platform layers and what may depend on
   what. docs/unreal-handoff.md: the planned move to Unreal Engine 5.
 
+# Two builds, one repository (October 2026)
+
+The raylib game is the **Web** build and lives in `web/` (`web/src/` and the
+browser shell); the Unreal Engine 5 game is the **Unreal** build in `unreal/`.
+Both compile `shared/` (`core`, `sim`, `port`). Every platform compile passes
+`-Ishared`, because platform code includes `core/...`, `sim/...` and
+`port/...` by those paths; without it nothing outside `shared/` finds them.
+The move from `src/` was checked by compiling all 44 sources before and after:
+identical assembly. The Web build also runs natively on desktop; the name is
+its role, not its only platform.
+
 # Unreal port, first slice (September 2026)
 
 The Unreal project is `unreal/` (its README, docs/unreal-handoff.md "Status").
-The raylib build stays the reference and nothing in it depends on `unreal/`.
+The Web build stays the reference and nothing in it depends on `unreal/`.
 It builds and runs on the target Mac (UE 5.8.3); build it with `make unreal`
 after every pull, since opening the `.uproject` runs the last build.
 docs/unreal-handoff.md "Next" has what is open. What will bite:
 
-- **A new .cpp in src/core, src/sim or src/port needs a one-line wrapper** in
+- **A new .cpp in shared/core, shared/sim or shared/port needs a one-line wrapper** in
   `unreal/Plugins/Backrooms/Source/Backrooms/Private/Shared`, or the Unreal
   module does not compile it. `tools/unreal-check.sh` fails until it has one;
   it also builds the wrappers the module's way (clang, C++20, `-Werror`,
@@ -32,7 +43,7 @@ docs/unreal-handoff.md "Next" has what is open. What will bite:
   expanded by it in any file that also includes Unreal (`contract::compare`).
 - **The sim includes `fp_strict.h` now, like core.** Without it (or the flag)
   a trace replayed with gcc or clang at `-march=native` diverged at frame 31.
-- **Traces** (`BACKROOMS_RECORD=path`, `./replay path`, src/sim/trace.h): a new
+- **Traces** (`BACKROOMS_RECORD=path`, `./replay path`, shared/sim/trace.h): a new
   `InputFrame` field goes into `inputFields` in trace.cpp or it is not recorded.
   `tests/traces/walk-l0-l2.trace` is a golden for the sim; a change that moves
   the sim on purpose re-records it with `tools/record-trace.sh` (needs
@@ -40,7 +51,7 @@ docs/unreal-handoff.md "Next" has what is open. What will bite:
 - **xdotool taps are shorter than a frame.** At the sandbox's 2-3 fps a
   `xdotool key` press and release land inside one poll and raylib never sees
   the key. Hold every key across a frame (record-trace.sh's `key`).
-- **The game starts a run through `SimStart`** (src/sim/start.h): `Game::init`
+- **The game starts a run through `SimStart`** (shared/sim/start.h): `Game::init`
   fills it from the BACKROOMS_* knobs and calls `simBegin`, `enterLevel`,
   `simPlace`. A replay and a port call the same three.
 - **A capture's spawn spot is chosen before any level is entered**: `simBegin`
@@ -54,9 +65,9 @@ docs/unreal-handoff.md "Next" has what is open. What will bite:
 - **The Unreal editor's enums mirror core's.** `EBackroomsProp` lists `PropKind`
   and `EBackroomsSurface` lists `GreySurface` in the same order
   (unreal/.../BackroomsTypes.h), and `EBackroomsItem` lists `SceneKind`
-  (src/port/scene.h); a new prop kind, greybox surface or scene kind goes into
+  (shared/port/scene.h); a new prop kind, greybox surface or scene kind goes into
   both, or a level look's meshes land on the wrong things.
-- **The revolver's placement and pose are src/port/held.cpp's** (`heldWeapon`,
+- **The revolver's placement and pose are shared/port/held.cpp's** (`heldWeapon`,
   `revolverPose`), which render.cpp, revolver.cpp and the Unreal
   `ABackroomsHeldActor` all read; the move was checked against a capture of
   the old build (0 pixels over 16/255, none on the gun). The Unreal side
@@ -67,10 +78,10 @@ docs/unreal-handoff.md "Next" has what is open. What will bite:
   "Backrooms:" when it changes, and each reload logs how far the drum moved
   in the clip and on the gun (`tools/unreal.sh log`). If it faces the wrong
   way, `RevolverMeshRotation` in Project Settings > Game > Backrooms turns it.
-- **Sound is the raylib build's mix, streamed.** The clips are PCM from
-  src/port/sounds.cpp and the bed is src/port/ambience.cpp, which sfx.cpp,
+- **Sound is the Web build's mix, streamed.** The clips are PCM from
+  shared/port/sounds.cpp and the bed is shared/port/ambience.cpp, which sfx.cpp,
   audio.cpp and `GameAudio` now only load into raylib; `SoundMixer`
-  (src/port/mixer.h) plays the events into one stereo stream, which
+  (shared/port/mixer.h) plays the events into one stereo stream, which
   `UBackroomsSound` queues on a `USoundWaveProcedural` `SoundLatency` ahead.
   A new `Sfx` gets its row in `clipSpec`/`clipPcm` (or `clipRecording`) and
   both builds play it. The mixer uses raylib's pan law (centre is 0.6875 a
@@ -87,23 +98,23 @@ docs/unreal-handoff.md "Next" has what is open. What will bite:
   the project and imports any missing ones to the paths the settings name;
   `unreal/Content/Backrooms/Revolver/` is gitignored because of it. A game run
   from a project the editor has never opened has no gun.
-- **render.cpp draws loose things from `simScene`** (src/port/scene.cpp):
+- **render.cpp draws loose things from `simScene`** (shared/port/scene.cpp):
   pickups, crates, the set-down deck, coins, balloons, confetti and chalk, in
   the order and at the reaches (`SCENE_*`) it always drew them. Flares,
   impacts and the actors are still drawn from sim state. A `SceneItem`'s yaw
   turns +x toward +z, and raylib's `MatrixRotateY` the other way, so the
   spins of cans, crates and the deck are stored negated and render.cpp undoes
   it; the Unreal scene had them all turned backwards until this was found.
-- **The can and the deck in hand are `heldCan`/`heldDeck`** (src/port/held.cpp),
+- **The can and the deck in hand are `heldCan`/`heldDeck`** (shared/port/held.cpp),
   moved from render.cpp's `drawDrinkCan`/`drawHeldDeck` and checked bit for bit
   against the old code over 200k states. `ABackroomsHeldActor` places them,
   and a flare, with the level look's item mesh or the plain shape
   (Private/BackroomsItemShapes.h) the scene actor uses on the floor.
   BackroomsTypes.cpp static_asserts the ends of each list, not every entry.
-- **The level looks are built from the raylib build's own surfaces.**
+- **The level looks are built from the Web build's own surfaces.**
   `tools/unreal.sh surfaces` (run by `make unreal-open`) writes them with
   `texdump --unreal` to `unreal/Saved/Surfaces`, with `looks.json` from
-  `LEVEL_SURFACES` (src/textures.h, which `Game::applyLevelLook` reads too)
+  `LEVEL_SURFACES` (web/src/textures.h, which `Game::applyLevelLook` reads too)
   and `LEVELS`; the editor's `backrooms_looks.py` rebuilds the material and
   the looks when those files change. The greybox's texture coordinates are
   metres, so tile sizes live in the material (`FLOOR_TILE_M`, `WALL_TILE_M`,
@@ -113,7 +124,7 @@ docs/unreal-handoff.md "Next" has what is open. What will bite:
   dead, part output and faulty come from the layout, and a faulty tube
   stutters by core's `tubeStutter`, the shader's `lightState` formula. Change
   one, change both.
-- **The hunter's and the pack's poses are src/port/sprites.h's**
+- **The hunter's and the pack's poses are shared/port/sprites.h's**
   (`hunterSprite`, `dogSprite`): sheet, walk frames, row, size, fade. render.cpp
   and `ABackroomsSpriteActor` both read them; the move was checked against the
   old inline code over 169k poses. The sheets' layout (`ENT_FRAMES`,
@@ -125,7 +136,7 @@ docs/unreal-handoff.md "Next" has what is open. What will bite:
 - **Unreal's exposure is pinned per look** (`ExposureEV100`, a post-process
   volume in `ABackroomsLightsActor`). Without it eye adaptation lifts the Red
   Halls to mid grey. The colour split reads `colourSplit` and `migraineThrob`
-  (src/port/view.h), the post shader's terms; change one, change both.
+  (shared/port/view.h), the post shader's terms; change one, change both.
 - **The layout golden (`tests/golden/layout.txt`) prints every field**, so an
   uninitialised field shows as a nondeterministic line: `Fixture::end` was
   garbage for most kinds until it was zeroed. A new field needs a value for
@@ -137,7 +148,7 @@ The generator is a library with no raylib in it, so an engine port can reuse
 it (docs/migration.md has the layers and their status). What moved, and what
 will bite:
 
-- **`src/core/` includes only itself and the standard library.** It holds the
+- **`shared/core/` includes only itself and the standard library.** It holds the
   math types (`Vec2`, `Vec3`, `TAU`, `clampf`), hashes and noise (`hash.h`),
   the per-level rules (`level_rules.h`: wall height, light pitch, storey
   pitch, name, which tubes work, `EXIT_NEXT`), the world (`world.{h,cpp}`:
@@ -146,7 +157,7 @@ will bite:
   `tools/core-check.sh` compiles each file alone with `-fno-exceptions
   -fno-rtti` and fails on any include outside the layer, raylib or GL. Run it
   after touching core. Platform code converts with `toRl`/`fromRl`
-  (`src/vec_rl.h`).
+  (`web/src/vec_rl.h`).
 - **`./contract --check` is core's acceptance test** (`tools/sandbox-build.sh
   contract`): generated chunks, query answers and wall mutations against
   `tests/golden`, in under a second. Run it after touching core, alongside the
@@ -160,7 +171,7 @@ will bite:
 - **`LevelCfg` extends `LevelRules`.** `LEVELS[lv].wallH` and
   `LEVEL_RULES[lv].wallH` are one number; add a rule field to `LevelRules`,
   a look field (colour, fog, gloss, light output) to `LevelCfg`.
-- **The mesher is `bakeChunk` in `src/world_mesh.cpp`, and ChunkData holds no
+- **The mesher is `bakeChunk` in `web/src/world_mesh.cpp`, and ChunkData holds no
   meshes.** `Game::chunkMeshes` (`ChunkMeshCache`) keys baked chunks by
   absolute storey and chunk. Core appends to `World::staleChunks` wherever a
   chunk's geometry goes stale (`unloadFar`, `unloadAll`, `rebuildChunk`, and so
@@ -180,12 +191,12 @@ will bite:
 
 # Simulation and platform (September 2026)
 
-The rules live in `src/sim/` as `Sim`; `Game` (game.cpp, render.cpp,
+The rules live in `shared/sim/` as `Sim`; `Game` (game.cpp, render.cpp,
 game_audio.cpp) is the raylib platform around it. docs/migration.md has the
 contracts. What will bite:
 
 - **The sim reads input only through `InputFrame`.** `Game::readInput` fills it
-  once a tick from src/input.h, after the cursor is captured or released, so
+  once a tick from web/src/input.h, after the cursor is captured or released, so
   `playing` is what the rest of the tick sees. A new control is a field there
   and a line in `readInput`.
 - **The sim never reads the clock.** `Sim::step(in, dt, now)` gets the tick's
@@ -202,10 +213,10 @@ contracts. What will bite:
   `dropAimLatch` and `recordsChanged` (`Game::finishStep`). `levelEntries`
   counts `applyLevel` calls; `Game::syncLevelLook` applies a new level's
   surfaces and uniforms when it moves, after the step and before a render.
-- **src/sim includes core and the standard library only.** Its math is core's
+- **shared/sim includes core and the standard library only.** Its math is core's
   `Vec2`/`Vec3` and `sim_math.h` (`add`, `scale`, `normalize`, ..., `Ray3`,
   `Box3`, `RayHit`, `rayBox`), each raymath's formula in raymath's order, so
-  results match the raylib build to the bit. Level numbers come from
+  results match the Web build to the bit. Level numbers come from
   `LEVEL_RULES`, never `LEVELS`. Colours are presentation: balloons and
   confetti carry an index below `PARTY_COLOURS`, and render.cpp looks it up in
   `PARTY`. Convert at the boundary with `toRl`/`fromRl`. `tools/core-check.sh`
@@ -220,7 +231,7 @@ contracts. What will bite:
 
 # Chunk layout (September 2026)
 
-`chunkLayout(world, cx, cz)` (src/core/layout.h) decides what a chunk holds
+`chunkLayout(world, cx, cz)` (shared/core/layout.h) decides what a chunk holds
 besides its floorplan: props, wall and ceiling fixtures, light fittings and
 the openings in its walls, in metres. `bakeChunk` builds each item and decides
 nothing about where it goes. Walls, floors, ceilings, stairs and pools are
@@ -299,7 +310,7 @@ selling almond water. What will bite:
 
 # Surface and asset realism pass (September 2026)
 
-Every world surface was rebuilt in `src/surfaces.cpp`, and the held and loose
+Every world surface was rebuilt in `web/src/surfaces.cpp`, and the held and loose
 objects were redrawn. What changed, and what will bite:
 
 - **Relief is authored in metres, never derived from paint.** Each generator
@@ -677,7 +688,7 @@ entries, and the 2002 photograph (CREDITS.md). What changed, and what will bite:
   This lets cloth remain matte and metal reflect in carpeted levels. Vertex
   alpha 254 still disables normal relief independently of material gloss.
 - The revolver is the user-authorized CC0 model in assets/revolver. See its
-  README for provenance and optional NumPy/Pillow reimport. src/revolver.cpp
+  README for provenance and optional NumPy/Pillow reimport. web/src/revolver.cpp
   skins two material batches only when the pose changes; idle draws reuse buffers.
 - The reload hinge and cartridge trajectories are reversed together at import,
   in the handle’s local frame, to open left. Do not mirror the complete gun/UVs.
@@ -731,6 +742,9 @@ Keep provenance and license information alongside additions; embed assets at bui
 time so the executable remains independent of its working directory.
 
 ### Module map
+
+Paths under `core/`, `sim/` and `port/` are in `shared/`; the rest are the Web
+build's, in `web/src/`.
 
 | file | what lives there |
 |---|---|
@@ -817,14 +831,14 @@ Pages workflow runs exactly that script, so if it works locally it works in CI.
 It compiles raylib for the browser itself, from a pinned tag, into `.raylib-web/`.
 
 Everything platform-specific is behind `PLATFORM_WEB`, which the script defines.
-The native build is untouched by all of it — `src/shaders.cpp`'s split was
+The native build is untouched by all of it — `web/src/shaders.cpp`'s split was
 verified with the assembly diff above, which came back identical.
 
 Three things about that port are load-bearing:
 
 - **`main()` cannot loop.** A browser tab owns its event loop, so
   `while (!WindowShouldClose())` hangs the page before the first frame is
-  presented. `src/main.cpp` hands `tick()` to `emscripten_set_main_loop`
+  presented. `web/src/main.cpp` hands `tick()` to `emscripten_set_main_loop`
   instead. `shutdown()` is therefore unreachable on the web — anything that has
   to happen before the player leaves cannot live there.
 - **It must be WebGL 2, not WebGL 1.** The world shader uses `dFdx` and
@@ -842,11 +856,11 @@ Three things about that port are load-bearing:
 
 ### Touch controls
 
-A phone has no keyboard, no mouse and no pointer to lock. `src/input.h` is the
+A phone has no keyboard, no mouse and no pointer to lock. `web/src/input.h` is the
 one place the game asks whether the player is doing something: natively, and in
 a desktop browser, every wrapper is the raylib call it is named after and the
 generated code is identical — the same frame captured before and after the
-change differed by **0 pixels**. On a touch device `src/input_web.cpp` answers
+change differed by **0 pixels**. On a touch device `web/src/input_web.cpp` answers
 from the on-screen controls `web/shell.html` draws instead.
 
 Read player intent through those wrappers, not through raylib directly, or the
@@ -861,7 +875,7 @@ whenever the touch controls are up, because on that platform they *are* the
 playing state.
 
 **The virtual button bits are written down in two files** — the enum in
-`src/input_web.cpp` and `BTN` in `web/shell.html` — and nothing checks that they
+`web/src/input_web.cpp` and `BTN` in `web/shell.html` — and nothing checks that they
 agree. Get them out of step and a button still works, it just does another
 button's job, which reads as a game bug rather than a mapping bug.
 
@@ -1150,7 +1164,7 @@ Environment variables, all read at startup:
 | `BACKROOMS_MENU=1` | hold on the title screen instead of starting the run |
 | `BACKROOMS_FLASH=1` | start with the flashlight on |
 | `BACKROOMS_MANILA=1` | put a Manila Room in the chunk east of spawn (centre x 48, z 16) |
-| `BACKROOMS_RECORD=path` | record every call on the sim, for `./replay` and the port (src/sim/trace.h) |
+| `BACKROOMS_RECORD=path` | record every call on the sim, for `./replay` and the port (shared/sim/trace.h) |
 
 **`BACKROOMS_NOENT` does not exist.** It appears in scratch scripts written
 during development and is silently ignored — it never suppressed the entity.
@@ -1210,7 +1224,7 @@ cannot otherwise reach.
 
 ## Measuring the layout, which screenshots will lie to you about
 
-`tools/mapdump.cpp` links `src/core` alone and calls `generate()` directly —
+`tools/mapdump.cpp` links `shared/core` alone and calls `generate()` directly —
 no window, no GL, no raylib, about a second for a 258 m square:
 
 ```bash
@@ -1272,7 +1286,7 @@ the partition was built to fix, and is not: the ring is 87 of a chunk's 256
 cells, so 34% of the floor *is* corridor, and a corridor has no walls. Compare
 the two numbers before reading anything into either.
 
-`hideSpotAt` and `coinAt` live on `Sim` (src/sim/items.cpp) and mapdump
+`hideSpotAt` and `coinAt` live on `Sim` (shared/sim/items.cpp) and mapdump
 mirrors those two rules. Change either there and change it in mapdump too, or
 the harness quietly reports the old world.
 
@@ -1289,8 +1303,8 @@ screenshot. Compile the file both ways and compare the generated assembly:
 
 ```bash
 git worktree add /tmp/base HEAD --detach     # link rlshim/ and .rlwheel/ into it
-c++ -std=c++17 -O2 -Irlshim -S -o new.s src/sfx.cpp
-c++ -std=c++17 -O2 -Irlshim -S -o old.s /tmp/base/src/sfx.cpp
+c++ -std=c++17 -O2 -Irlshim -Ishared -S -o new.s web/src/sfx.cpp
+c++ -std=c++17 -O2 -Irlshim -Ishared -S -o old.s /tmp/base/web/src/sfx.cpp
 diff <(grep -vE '^\s*\.(file|ident)|^\.LF[BE][0-9]+:' old.s) \
      <(grep -vE '^\s*\.(file|ident)|^\.LF[BE][0-9]+:' new.s)
 ```
@@ -1565,7 +1579,7 @@ one-keyframe clip, which is how you push a hand-built pose, therefore reads one
 past the end and segfaults inside the library: the game died on startup with a
 stack ending in `UpdateModelAnimation` and nothing in the log. Two identical
 keyframes interpolate to themselves and are safe on both versions.
-`src/model_asset.cpp` is the only file allowed to know any of this — ask
+`web/src/model_asset.cpp` is the only file allowed to know any of this — ask
 `ModelAsset` for the skeleton rather than reaching through `Model`.
 
 That interpolation also moves the *poses*, not just the API. The sampled reload
@@ -1582,8 +1596,8 @@ the number instead of reading it.
 `tests/fixtures` or it exits immediately on its first `CHECK` — which reads as
 a broken build rather than a missing variable. `tools/sandbox-build.sh` has no
 regression target, so nothing in the repo tells you that; build it by hand with
-`src/*.cpp`, `src/core/*.cpp`, `src/sim/*.cpp` and `src/port/*.cpp` minus
-`main.cpp`, plus `tools/regression.cpp`.
+`web/src/*.cpp`, `shared/core/*.cpp`, `shared/sim/*.cpp` and `shared/port/*.cpp` minus
+`main.cpp`, plus `tools/regression.cpp`, with `-Ishared -Iweb/src`.
 
 **raylib 6.0 redefined `SetSoundPan`'s argument without renaming it.** 5.5 took
 0..1 with **0 = hard right**; 6.0 takes -1..1 with **-1 = hard left**. The
@@ -1680,7 +1694,7 @@ the aspect — so the authored 70 was only right at the 1440x850 window (about
 against. On a portrait phone (0.46:1) it became a 34 deg horizontal keyhole
 that read as "the game is fine, just narrow" rather than as a projection bug.
 `Game::baseFov()` now locks the horizontal view instead (pure
-`windowFovY()` in src/port/view.h, which the harness and a port call), exact at the authored shape so the sweep
+`windowFovY()` in shared/port/view.h, which the harness and a port call), exact at the authored shape so the sweep
 stays pixel-clean, clamped 58-100 vertical so square windows don't go fisheye
 and phone-landscape doesn't go binoculars. Two rules to keep: the sprint/aim/
 slide terms stay constant *vertical* offsets on the base — they are action,
@@ -1753,7 +1767,7 @@ dead-level shot goes over a dog's back at any range — you have to put the
 crosshair on it, which is the point. `popBalloonsAlongAim` had no sight test at
 all and popped the party through walls; it gates on `lineOfSight` per balloon.
 
-**An `osc()` index is an ownership claim, not a scratch slot.** `Ambience::ph[]` (src/port/ambience.h)
+**An `osc()` index is an ownership claim, not a scratch slot.** `Ambience::ph[]` (shared/port/ambience.h)
 is one running phase per oscillator, and two signals sharing an index advance it
 at *both* their frequencies — so each one gets the other's detune folded in and
 both come out subtly wrong rather than obviously broken. The hum's new beat
@@ -2170,7 +2184,7 @@ pass, and both obey the same three rules, learned the hard way:
 
 ## Projectiles and squeezing
 
-- `SHOT_INTERVAL` (src/sim/weapon_timing.h) controls both firing cadence and
+- `SHOT_INTERVAL` (shared/sim/weapon_timing.h) controls both firing cadence and
   Shoot playback, and `RELOAD_TIME` the reload and its clip. One definition
   each; the revolver's pose reads them.
 - Revolver rounds advance at 220 m/s and ray-test the full frame segment against
@@ -2235,7 +2249,7 @@ pass, and both obey the same three rules, learned the hard way:
 - Water one-shots and loops are recordings in `assets/sounds/water` (Red
   Eclipse, CC BY-SA) and LEVEL FUN's music is `assets/sounds/music/level_fun.ogg`
   (Abstraction, CC0). `tools/embed-materials.py sounds` embeds every `.ogg`
-  under `assets/sounds` into `src/sounds.generated.h`; load them by path with
+  under `assets/sounds` into `web/src/sounds.generated.h`; load them by path with
   `loadEmbeddedSound` / `loadEmbeddedMusic` (sfx.cpp). The synthesized pool
   water and the "Happy Birthday" music box are gone from `audio.cpp`; osc slots
   11, 12 and 15 are free. The Poolrooms deliberately have no water bed at all:

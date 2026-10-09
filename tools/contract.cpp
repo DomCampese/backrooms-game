@@ -1,7 +1,7 @@
-// Contract tests for src/core. Generates a fixed set of chunks and asks the
+// Contract tests for shared/core. Generates a fixed set of chunks and asks the
 // world fixed questions, and compares the answers with the text files in
 // tests/golden. Another engine running the same core must reproduce them
-// exactly. Links src/core alone; the tests themselves are in
+// exactly. Links shared/core alone; the tests themselves are in
 // tools/contract_lib.cpp.
 //
 //   tools/sandbox-build.sh contract

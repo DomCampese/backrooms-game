@@ -10,9 +10,9 @@ class UBackroomsLevelLook;
 class UMaterialInstanceDynamic;
 class UProceduralMeshComponent;
 
-// The hunter and the pack as the raylib build draws them: billboards cut from
+// The hunter and the pack as the Web build draws them: billboards cut from
 // the game's own sprite sheets, the walk frames cross-faded and the row picked
-// by src/port/sprites.h. The editor builds the sheets and the two materials
+// by shared/port/sprites.h. The editor builds the sheets and the two materials
 // (backrooms_looks.py); until it has, or where a level look gives the hunter or
 // the dog a mesh, the scene actor draws them instead.
 UCLASS(Transient)

@@ -3,7 +3,7 @@
 #include <cmath>
 
 namespace {
-// raylib's DEG2RAD and RAD2DEG, as it computes them, so the raylib build's
+// raylib's DEG2RAD and RAD2DEG, as it computes them, so the Web build's
 // field of view is unchanged to the bit.
 constexpr float PI_F = 3.14159265358979323846f;
 constexpr float DEG_TO_RAD = PI_F / 180.0f;

@@ -1,5 +1,5 @@
 // A measuring instrument for the generator. No window, no GL, no Xvfb: it links
-// src/core alone and calls generate() directly, so every number below comes
+// shared/core alone and calls generate() directly, so every number below comes
 // from exactly the code the game ships.
 //
 // This exists because screenshots were actively misleading about the layout.
@@ -12,10 +12,10 @@
 //   tools/sandbox-build.sh mapdump     # builds ./mapdump
 //   ./mapdump --level 0 --seed 1337 --cells 129 --plan 0 0 48 32
 //
-#include "../src/core/world.h"
-#include "../src/core/hash.h"
-#include "../src/core/level_rules.h"
-#include "../src/core/layout.h"
+#include "../shared/core/world.h"
+#include "../shared/core/hash.h"
+#include "../shared/core/level_rules.h"
+#include "../shared/core/layout.h"
 
 #include <algorithm>
 #include <cmath>

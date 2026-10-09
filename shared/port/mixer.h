@@ -47,7 +47,7 @@ private:
     Pcm voicePcm;
     Voice tapeVoice;
     Ambience bed;
-    // The raylib build fills the bed's stream only on a tick that emits
+    // The Web build fills the bed's stream only on a tick that emits
     // AMBIENCE (not on Level 2 or the title screen), and a starved stream is
     // silent. The bed sounds only after a tick that fed it.
     bool bedFed = false;

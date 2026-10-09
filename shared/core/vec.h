@@ -1,6 +1,6 @@
 #pragma once
 // Small math types for core. Platform code converts to its own vector types at
-// the boundary (src/vec_rl.h for raylib).
+// the boundary (web/src/vec_rl.h for raylib).
 
 constexpr float TAU = 6.28318530718f;   // one turn, radians
 

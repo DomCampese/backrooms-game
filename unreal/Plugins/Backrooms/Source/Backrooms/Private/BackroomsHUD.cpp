@@ -36,7 +36,7 @@ void ABackroomsHUD::DrawHUD()
 		return;
 	}
 	const float W = Canvas->ClipX, H = Canvas->ClipY;
-	// Scaled from the raylib build's 850-pixel-high window.
+	// Scaled from the Web build's 850-pixel-high window.
 	const float K = H / 850.0f;
 	const FLinearColor Pale(0.92f, 0.9f, 0.8f), Dim(0.7f, 0.68f, 0.6f), Warn(0.95f, 0.45f, 0.35f);
 

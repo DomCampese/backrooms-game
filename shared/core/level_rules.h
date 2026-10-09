@@ -1,6 +1,6 @@
 #pragma once
 // Per-level numbers the generator and the game rules read. How a level looks
-// (light colour and output, fog, gloss) is platform data in src/levels.h, which
+// (light colour and output, fog, gloss) is platform data in web/src/levels.h, which
 // extends this table rather than repeating it.
 
 struct LevelRules {
