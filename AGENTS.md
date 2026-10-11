@@ -2021,9 +2021,10 @@ fades out before it leaves that window — without the fade you get a visible
 brightness seam along every light-cell boundary.
 
 A panel is shaded as the **1.24 m square of glowing plastic it actually is**,
-not as a point: `PANEL_HALF` in `shaders.cpp` is the same half-extent as `hp`
-in world_mesh.cpp's panel mesher, and the shading point is `P` clamped into that
-rectangle. Change the quad's size and change `PANEL_HALF` with it. Two things
+not as a point: `PANEL_HALF` (core/layout.h) is its half-extent, which
+`lightAtCPU`, the greybox and Unreal's rect lights read. The shader's
+`PANEL_HALF` and the mesher's `hp` are still copies, and the shading point is
+`P` clamped into that rectangle. Change the quad's size and change all three. Two things
 fall out of treating it as an area:
 
 - The terminator softens by how big the panel *looks* from the shaded point

@@ -28,7 +28,6 @@ const float CEIL_BOARD[NLEVELS] = { 2.0f / 3.0f, 0.0f, 0.0f, 0.0f, 0.5f };
 // Keep this in step with roomLight()/tonemap() in shaders.cpp: the two are one
 // lighting model with two implementations, and when they drift what you see is
 // sprites lit for a different room than the one they are standing in.
-static const float PANEL_HALF_CPU = 0.62f;   // same panel rectangle as the shader
 // uRoomMask and uLamp, mirrored: Game sets both every frame alongside the
 // shader uniforms, so a sprite in the Manila Room is lit by its chandelier
 // and not by the tubes that aren't there.
@@ -79,8 +78,8 @@ float lightAtCPU(float x, float y, float z, float blackout,
         // the panel is a rectangle, and the shader shades from the point on it
         // closest to the surface — mirror that, or a sprite standing under a
         // fitting comes out dimmer than the floor it is standing on
-        float cx = clampf(x, lx - PANEL_HALF_CPU, lx + PANEL_HALF_CPU);
-        float cz = clampf(z, lz - PANEL_HALF_CPU, lz + PANEL_HALF_CPU);
+        float cx = clampf(x, lx - PANEL_HALF, lx + PANEL_HALF);
+        float cz = clampf(z, lz - PANEL_HALF, lz + PANEL_HALF);
         float d2 = (cx - x) * (cx - x) + (lly - y) * (lly - y) + (cz - z) * (cz - z);
         float st = 1.0f;
         if (entDark > 0.01f) {   // mirror the shader: the fluorescents near it die
@@ -96,7 +95,7 @@ float lightAtCPU(float x, float y, float z, float blackout,
         // A sprite is a billboard with no normal worth speaking of, so take the
         // shader's wrap at its softest — the value a surface facing the light
         // edge-on would get — rather than a lambert against a made-up normal.
-        float w = clampf(PANEL_HALF_CPU / sqrtf(d2 + PANEL_HALF_CPU * PANEL_HALF_CPU), 0.10f, 0.80f);
+        float w = clampf(PANEL_HALF / sqrtf(d2 + PANEL_HALF * PANEL_HALF), 0.10f, 0.80f);
         float ndl = (0.55f + w) / (1.0f + w);
         sum += out * st / (1.0f + 0.22f * d2) * 5.4f * mul * ndl * wx * wz;
     }

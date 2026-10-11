@@ -5,12 +5,13 @@
 #include "Components/ExponentialHeightFogComponent.h"
 #include "Components/PostProcessComponent.h"
 #include "Components/RectLightComponent.h"
+#include "core/layout.h"
 #include "port/view.h"
 
 namespace
 {
-// The panel's glowing square, the shader's PANEL_HALF either side.
-constexpr float PanelCm = 124.0f;
+// The panel's glowing square, core's PANEL_HALF either side.
+constexpr float PanelCm = 2.0f * PANEL_HALF * 100.0f;
 // Unreal's fog density is per 1000 world units (cm), raylib's per metre:
 // exp(-den * metres) is exp(-(den * 10) / 1000 * cm).
 constexpr float FogPerMetre = 10.0f;

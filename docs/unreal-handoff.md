@@ -300,5 +300,5 @@ What the seams leave for the port, or for the Web build before it.
 | floorplan geometry as data | walls, floors, ceilings, soffits, stairs, pools, arches, skirting are still built directly by `bakeChunk` | the greybox (`shared/port`) derives them from core's accessors for M2; art needs core to describe the floorplan the way `chunkLayout` describes fixtures |
 | sound in Unreal | written (`UBackroomsSound`), not yet heard on the Mac | M6 |
 | libm in the sim | shared/sim | replaying a Linux trace on a Mac may diverge (Status, above) |
-| lighting numbers mirrored by hand | panel half-size, light plane, tube hash in core, the mesher, the shader and `lightAtCPU` | a port reads them from core; the Web build still has copies |
+| lighting numbers mirrored by hand | the panel half-size and light plane are core's (`PANEL_HALF`, `LIGHT_DROP`), read by `lightAtCPU`, the greybox and Unreal's lights; the mesher's `hp` (waiting on PR #150's move of the mesher) and the shader's GLSL still copy them, and the shader keeps its own tube hash | a port reads them from core; the Web build still has copies |
 | HUD strings are `const char *` sim state | shared/sim | a port maps them to its own text type |
