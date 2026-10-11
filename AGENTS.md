@@ -168,6 +168,12 @@ will bite:
   pragma. Without them clang with FMA changed a `stairY` answer; a flipped noise
   threshold would change the maze. Never build core with fast math
   (docs/migration.md, "Floating point").
+- **Core takes sine from `portableSin` (core/hash.h), never `sinf`.** glibc's
+  `sinf` is one ULP off the true value for 0.2% of floats, so no portable
+  function can reproduce it, and another libm rounds differently again. The
+  tube hash multiplies by 43758.5453 and then by 53.7, so one ULP of sine moved
+  a fitting's output by up to 0.42. Switching re-recorded 5 lines of
+  `layout.txt`.
 - **`LevelCfg` extends `LevelRules`.** `LEVELS[lv].wallH` and
   `LEVEL_RULES[lv].wallH` are one number; add a rule field to `LevelRules`,
   a look field (colour, fog, gloss, light output) to `LevelCfg`.

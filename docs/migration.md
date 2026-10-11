@@ -112,12 +112,19 @@ last bit another libm may round differently. It now reads a four-entry table of
 glibc's values (hex float literals), so every result is unchanged here and the
 same everywhere.
 
-One libm dependency remains: `tubeHash` (layout.cpp) is `fract(sinf(...) *
-43758.5453)`, the GLSL hash the shader also uses, and decides which fittings
-are dead, dim or faulty. A `sinf` that rounds its last bit differently can flip
-one of those on a port. `layout.txt` prints every fitting's state, so a port
-fails there first, and only on fitting lines. Replacing the hash changes which
-tubes are dead in the Web build too, so it waits for the port to need it.
+`tubeHash` and `tubeStutter` (layout.cpp) are `fract(sin(...) * 43758.5453)`,
+the GLSL hash the shader also uses, and decide which fittings are dead, dim or
+faulty. They call `portableSin` (hash.cpp), a sine built from IEEE double
+arithmetic alone, so core calls no transcendental libm function. It cannot
+reproduce glibc's `sinf`, because glibc's is not correctly rounded: for 0.21% of
+floats below 1e5 it is one ULP off (compared with `sinl`). `portableSin` is
+correctly rounded there except for 3 of 2.4 billion inputs, and returns the same
+bits for every float under gcc -O0, gcc -O2 and clang -O2 -mfma (a digest over
+all 2^32 inputs). Beyond about 6.5e6 its reduction loses accuracy, never
+determinism. Switching moved 5 fitting lines of `layout.txt` (output and stutter
+seed only). Over every fitting in a 2 km square, on Level 0's storeys -8 to 8,
+1.1% of hashes moved and 0.008% of dead or faulty decisions flipped. The shader
+keeps GLSL `sin`, which matched neither.
 
 The sim needs the same. Replaying `tests/traces/walk-l0-l2.trace` built with
 gcc or clang at `-march=native` and no `-ffp-contract=off` diverged at frame 31

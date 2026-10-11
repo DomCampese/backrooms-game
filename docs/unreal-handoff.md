@@ -201,8 +201,9 @@ must do.
 
 What to expect on the Mac:
 
-- **Contract**: should pass. If only fitting lines of `layout.txt` fail, it is
-  `tubeHash`'s `sinf` (docs/migration.md, "Floating point").
+- **Contract**: should pass. Core calls no transcendental libm function: the
+  tube hash's `sinf` became core's own `portableSin` on 11 October 2026
+  (docs/migration.md, "Floating point").
 - **Replay**: may not. The sim calls `sinf`, `cosf`, `atan2f`, `expf` and
   friends, and Apple's libm may round some last bits differently from glibc's.
   A replay failure names the first frame and field that moved. If it is libm,
@@ -299,6 +300,5 @@ What the seams leave for the port, or for the Web build before it.
 | floorplan geometry as data | walls, floors, ceilings, soffits, stairs, pools, arches, skirting are still built directly by `bakeChunk` | the greybox (`shared/port`) derives them from core's accessors for M2; art needs core to describe the floorplan the way `chunkLayout` describes fixtures |
 | sound in Unreal | written (`UBackroomsSound`), not yet heard on the Mac | M6 |
 | libm in the sim | shared/sim | replaying a Linux trace on a Mac may diverge (Status, above) |
-| `tubeHash`'s `sinf` | shared/core/layout.cpp | the one libm call left in core; may flip a fitting's dead or faulty state on another libm |
 | lighting numbers mirrored by hand | panel half-size, light plane, tube hash in core, the mesher, the shader and `lightAtCPU` | a port reads them from core; the Web build still has copies |
 | HUD strings are `const char *` sim state | shared/sim | a port maps them to its own text type |
