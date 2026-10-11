@@ -399,14 +399,14 @@ bool cellHasCeiling(World &w, int gi, int gk) {
 }
 
 float tubeHash(float gx, float gz) {
-    float v = sinf(gx * 127.1f + gz * 311.7f) * 43758.5453f;
+    float v = portableSin(gx * 127.1f + gz * 311.7f) * 43758.5453f;
     return v - floorf(v);
 }
 
 float tubeStutter(float seed, float t) {
     auto fract = [](float v) { return v - floorf(v); };
-    float gate = fract(sinf(floorf(t * 0.45f + seed * 37.0f) * 12.9898f) * 43758.5453f);
-    float noise = fract(sinf(t * (7.0f + seed * 10.0f) + seed * 211.0f) * 43758.5453f);
+    float gate = fract(portableSin(floorf(t * 0.45f + seed * 37.0f) * 12.9898f) * 43758.5453f);
+    float noise = fract(portableSin(t * (7.0f + seed * 10.0f) + seed * 211.0f) * 43758.5453f);
     return gate > 0.74f && noise < 0.5f ? 0.62f : 1.0f;
 }
 

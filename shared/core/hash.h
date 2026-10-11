@@ -21,3 +21,7 @@ uint32_t ih(int x, int y, uint32_t s);        // integer lattice hash
 float lat(int x, int y, uint32_t s);          // lattice value, 0..1
 float vnoise2(float x, float y, uint32_t s);  // value noise, 0..1 (not -1..1)
 float fbm2(float x, float y, uint32_t s, int oct);   // octaves of vnoise2; not periodic
+// sin(x) from IEEE double arithmetic alone, so every platform returns the same
+// float. Core's hashes go through it: a libm sinf may round its last bit
+// differently on another platform, and glibc's is not correctly rounded.
+float portableSin(float x);
