@@ -85,7 +85,7 @@ vec4 chanFor(int rel){
 float storeyOffset(float st){ return fract(st * 0.6180339) * 97.0; }
 
 // Half-width of one ceiling diffuser. MUST match PANEL_HALF in core/layout.h,
-// which the mesher's `hp` and lightAtCPU follow: the lighting treats the panel as
+// which the mesher and lightAtCPU read: the lighting treats the panel as
 // the rectangle it actually draws, so if the quad changes size and this doesn't,
 // the light stops matching the fitting it is supposed to be coming out of.
 const float PANEL_HALF = 0.62;

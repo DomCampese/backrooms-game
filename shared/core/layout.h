@@ -36,8 +36,8 @@ constexpr float WINDOW_SILL = 1.0f, WINDOW_HEAD = 2.1f;
 // shader's uLY and lightAtCPU use wallH - LIGHT_DROP.
 constexpr float LIGHT_DROP = 0.12f;
 // Half the side of a fitting's glowing square, in metres. The lighting treats
-// the panel as this rectangle; the shader's PANEL_HALF and the mesher's `hp`
-// are copies, so change them with it or the light stops matching its fitting.
+// the panel as this rectangle; the shader's PANEL_HALF is a GLSL copy, so
+// change it with this or the light stops matching its fitting.
 constexpr float PANEL_HALF = 0.62f;
 
 struct PropPlacement {

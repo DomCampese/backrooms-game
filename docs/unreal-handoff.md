@@ -32,7 +32,7 @@ does not move: the game runs smoothly on the owner's Mac.
 | `shared/sim/` | as source | compiled into the same module |
 | `tests/traces`, `shared/sim/trace.h` | as the sim's acceptance test | recorded input replayed through the sim, every frame's state compared |
 | layout (`chunkLayout`, shared/core/layout.h) | as data | drives instanced meshes, light fittings and doors; the per-level choice of decorations is the `DECOR` table in layout.cpp |
-| mesher (`web/src/world_mesh.cpp`) | as reference only | the greybox (`shared/port`) replaces it for M2; art replaces both |
+| mesher (`shared/port/chunk_mesh.cpp`) | as source | moved to port in October 2026 (byte-identical); Unreal can build chunks from it instead of the greybox |
 | shader, occupancy texture, `lightAtCPU`, texture painters | no | Unreal's lighting and materials replace them |
 | raylib audio, input, window | no | the game's own mix streamed through a procedural sound wave (shared/port/mixer.h), Enhanced Input, the engine |
 | sounds, revolver GLB, CC0 textures | as assets | import; keep provenance beside each |
@@ -300,5 +300,5 @@ What the seams leave for the port, or for the Web build before it.
 | floorplan geometry as data | walls, floors, ceilings, soffits, stairs, pools, arches, skirting are still built directly by `bakeChunk` | the greybox (`shared/port`) derives them from core's accessors for M2; art needs core to describe the floorplan the way `chunkLayout` describes fixtures |
 | sound in Unreal | written (`UBackroomsSound`), not yet heard on the Mac | M6 |
 | libm in the sim | shared/sim | replaying a Linux trace on a Mac may diverge (Status, above) |
-| lighting numbers mirrored by hand | the panel half-size and light plane are core's (`PANEL_HALF`, `LIGHT_DROP`), read by `lightAtCPU`, the greybox and Unreal's lights; the mesher's `hp` (waiting on PR #150's move of the mesher) and the shader's GLSL still copy them, and the shader keeps its own tube hash | a port reads them from core; the Web build still has copies |
+| lighting numbers mirrored by hand | the panel half-size and light plane are core's (`PANEL_HALF`, `LIGHT_DROP`), read by the mesher, `lightAtCPU`, the greybox and Unreal's lights; the shader's GLSL still copies them and keeps its own tube hash | a port reads them from core; the Web build's shader still has copies |
 | HUD strings are `const char *` sim state | shared/sim | a port maps them to its own text type |

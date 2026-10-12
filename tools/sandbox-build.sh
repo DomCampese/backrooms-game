@@ -66,7 +66,7 @@ build_greybox_view() {
 build_texdump() {
     rm -f texdump
     python3 tools/embed-materials.py
-    c++ "${FLAGS[@]}" tools/texdump.cpp web/src/textures.cpp web/src/surfaces.cpp web/src/levels.cpp web/src/util.cpp \
+    c++ "${FLAGS[@]}" tools/texdump.cpp web/src/textures.cpp web/src/surfaces.cpp web/src/levels.cpp web/src/util.cpp shared/port/atlas.cpp \
         "${CORE[@]}" -o texdump "${LINK[@]}"
     echo "built ./texdump (python$PYV)"
 }

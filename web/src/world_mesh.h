@@ -1,26 +1,11 @@
 #pragma once
-// The chunk mesher: turns core's floorplan and layout (core/layout.h) into
-// raylib meshes, and keeps them for as long as core keeps the chunk they were
-// baked from. Core decides what stands where; this file decides how it looks.
+// The chunk mesher's output (port/chunk_mesh.h) as raylib meshes, kept for as
+// long as core keeps the chunk they were baked from.
 #include "raylib.h"
 #include "core/world.h"
+#include "port/chunk_mesh.h"   // ChunkMesh, the slots
 #include <cstdint>
 #include <unordered_map>
-
-// Slots in ChunkMeshes::meshes. Each is baked separately because each needs a
-// different material or a different draw order (see Game::renderScene).
-enum ChunkMesh {
-    MESH_FLOOR = 0,
-    MESH_CEILING,
-    MESH_WALLS,
-    MESH_PROPS,
-    MESH_WATER,
-    MESH_SCRAWL,      // graffiti decals, pressed just off the wall faces
-    MESH_FIXTURES,    // outlets, grilles, diffusers, signs, conduit and sprinklers
-    MESH_GLASS,       // window panes
-    MESH_AO,          // baked contact-shadow gradients in every crease
-    MESH_COUNT,
-};
 
 // One chunk's baked geometry, in its own storey's frame (y = 0 is that
 // storey's floor); another storey's chunk is drawn translated by a pitch.

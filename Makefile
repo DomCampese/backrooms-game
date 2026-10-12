@@ -86,7 +86,7 @@ replay-check: replay
 
 # Every texture generator without a window (tools/texdump.cpp); `--unreal DIR`
 # writes what the Unreal editor imports.
-TEXDUMP_SRCS := tools/texdump.cpp web/src/textures.cpp web/src/surfaces.cpp web/src/levels.cpp web/src/util.cpp $(CORE_SRCS)
+TEXDUMP_SRCS := tools/texdump.cpp web/src/textures.cpp web/src/surfaces.cpp web/src/levels.cpp web/src/util.cpp shared/port/atlas.cpp $(CORE_SRCS)
 texdump: $(TEXDUMP_SRCS) $(HDRS) $(GENERATED)
 	c++ $(CXX_FLAGS) $(CFLAGS_RL) $(TEXDUMP_SRCS) -o texdump $(LIBS_RL)
 
