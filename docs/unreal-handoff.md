@@ -32,7 +32,7 @@ does not move: the game runs smoothly on the owner's Mac.
 | `shared/sim/` | as source | compiled into the same module |
 | `tests/traces`, `shared/sim/trace.h` | as the sim's acceptance test | recorded input replayed through the sim, every frame's state compared |
 | layout (`chunkLayout`, shared/core/layout.h) | as data | drives instanced meshes, light fittings and doors; the per-level choice of decorations is the `DECOR` table in layout.cpp |
-| mesher (`web/src/world_mesh.cpp`) | as reference only | the greybox (`shared/port`) replaces it for M2; art replaces both |
+| mesher (`shared/port/chunk_mesh.cpp`) | as source | moved to port in October 2026 (byte-identical); Unreal can build chunks from it instead of the greybox |
 | shader, occupancy texture, `lightAtCPU`, texture painters | no | Unreal's lighting and materials replace them |
 | raylib audio, input, window | no | the game's own mix streamed through a procedural sound wave (shared/port/mixer.h), Enhanced Input, the engine |
 | sounds, revolver GLB, CC0 textures | as assets | import; keep provenance beside each |
