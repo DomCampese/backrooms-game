@@ -3,6 +3,7 @@
 #include "BackroomsCoords.h"
 #include "BackroomsHeldActor.h"
 #include "BackroomsLevelLook.h"
+#include "BackroomsLighting.h"
 #include "BackroomsLightsActor.h"
 #include "BackroomsSceneActor.h"
 #include "BackroomsSettings.h"
@@ -306,6 +307,8 @@ void UBackroomsWorldSubsystem::Tick(float DeltaTime)
 			Light->SetIntensity(60.0f);
 			Light->SetAttenuationRadius(4000.0f);
 			Light->SetCastShadows(false);
+			// Every storey's channel (BackroomsLighting.h).
+			Light->SetLightingChannels(true, true, true);
 		}
 	}
 	if (CameraLight)
@@ -317,7 +320,7 @@ void UBackroomsWorldSubsystem::Tick(float DeltaTime)
 		// The sim owns which storey is current (it rebases as you climb).
 		StreamAround(BackroomsCoords::ToUnreal({ Game->px, 0.0f, Game->pz }), Game->world.storey, DeltaTime);
 		ShowScene(Camera);
-		ShowLights(simView(*Game).eye);
+		ShowLights(BackroomsCoords::ToUnreal(simView(*Game).eye) + StoreyOrigin());
 	}
 	else
 	{
@@ -329,7 +332,7 @@ void UBackroomsWorldSubsystem::Tick(float DeltaTime)
 			Game->world.setStorey(Storey);
 		}
 		StreamAround(Camera, Storey, DeltaTime);
-		ShowLights(BackroomsCoords::FromUnreal(Camera - StoreyOrigin()));
+		ShowLights(Camera);
 	}
 }
 
@@ -480,10 +483,6 @@ void UBackroomsWorldSubsystem::DropChunk(const FIntVector& Key)
 	{
 		Actor->Destroy();
 	}
-	if (Lights)
-	{
-		Lights->Forget(Key);
-	}
 }
 
 void UBackroomsWorldSubsystem::DropAll()
@@ -496,10 +495,6 @@ void UBackroomsWorldSubsystem::DropAll()
 		}
 	}
 	Chunks.Reset();
-	if (Lights)
-	{
-		Lights->ForgetAll();
-	}
 }
 
 void UBackroomsWorldSubsystem::ShowScene(const FVector& Camera)
@@ -536,9 +531,18 @@ void UBackroomsWorldSubsystem::ShowScene(const FVector& Camera)
 	{
 		Hand->Show(*Game, CurrentLook(), StoreyOrigin());
 	}
+	// All three stand on the player's storey and take its fittings' light.
+	AActor* const OnStoreys[] = { Scene.Get(), Hand.Get(), Sprites.Get() };
+	for (AActor* OnStorey : OnStoreys)
+	{
+		if (OnStorey)
+		{
+			BackroomsLighting::Apply(*OnStorey, Game->world.storey);
+		}
+	}
 }
 
-void UBackroomsWorldSubsystem::ShowLights(const Vec3& At)
+void UBackroomsWorldSubsystem::ShowLights(const FVector& At)
 {
 	if (!Lights)
 	{
@@ -557,6 +561,6 @@ void UBackroomsWorldSubsystem::ShowLights(const Vec3& At)
 			Moment.Fear = Game->fear;
 			Moment.Migraine = Game->migraine;
 		}
-		Lights->Show(Game->world, At, CurrentLook(), Moment, StoreyOrigin());
+		Lights->Show(Chunks, Game->world.storey, At, CurrentLook(), Moment, StoreyOrigin());
 	}
 }

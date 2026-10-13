@@ -3,9 +3,9 @@
 `tools/unreal.sh surfaces` (which `make unreal-open` runs) writes every world
 surface and looks.json to Saved/Surfaces with texdump. This imports them,
 builds one material that reads a surface at its real size, an instance per
-level surface, and a level look per level (UBackroomsLevelLook) with those, the
-tubes' colour and output and the fog; and the actors' sprite sheets with the
-two materials that draw them. init_unreal.py runs it when the files in
+level surface, a glowing panel for the light fittings, and a level look per
+level (UBackroomsLevelLook) with those, the tubes' colour and output and the
+fog; and the actors' sprite sheets with the two materials that draw them. init_unreal.py runs it when the files in
 Saved/Surfaces differ from the ones the looks were built from. To build them
 again by hand, in the editor's Python console:
 
@@ -31,6 +31,11 @@ SPRITE_MATERIAL = "M_BackroomsSprite"
 SPRITE_GLOW_MATERIAL = "M_BackroomsSpriteGlow"
 LOOK_DIR = "/Game/Backrooms/Looks"
 MATERIAL_NAME = "M_BackroomsSurface"
+PANEL_MATERIAL = "M_BackroomsPanel"
+# A full panel's emissive, in the units the looks' fixed exposure is set in
+# (cd/m2), times the level's lightMul. Bright enough to clip to white at
+# EV100 6; tune against the Web build's tubes.
+PANEL_GLOW = 120.0
 # UBackroomsSettings' default LevelLooks.
 LOOK_NAME = "DA_Level%d"
 # Which greybox surfaces (EBackroomsSurface) take each of a level's surfaces.
@@ -225,6 +230,53 @@ def build_material(albedo, detail):
     return mat
 
 
+def build_panel_material():
+    """The live light panels' material: unlit, Colour times Glow times the
+    panel's brightness, which the chunk writes as per-instance custom data 0
+    (ABackroomsChunkActor::ShowLights) so faulty tubes stutter and blackouts
+    dim them."""
+    path = LOOK_DIR + "/" + PANEL_MATERIAL
+    if eal().does_asset_exist(path):
+        mat = eal().load_asset(path)
+        mel().delete_all_material_expressions(mat)
+    else:
+        mat = unreal.AssetToolsHelpers.get_asset_tools().create_asset(
+            PANEL_MATERIAL, LOOK_DIR, unreal.Material, unreal.MaterialFactoryNew())
+    mat.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    mat.set_editor_property("used_with_instanced_static_meshes", True)
+    colour = mel().create_material_expression(mat, unreal.MaterialExpressionVectorParameter, -600, -100)
+    colour.set_editor_property("parameter_name", "Colour")
+    colour.set_editor_property("default_value", unreal.LinearColor(1.0, 1.0, 1.0, 1.0))
+    glow = _scalar(mat, "Glow", PANEL_GLOW, -600, 100)
+    level = mel().create_material_expression(mat, unreal.MaterialExpressionPerInstanceCustomData, -600, 250)
+    level.set_editor_property("data_index", 0)
+    level.set_editor_property("const_default_value", 1.0)
+    bright = mel().create_material_expression(mat, unreal.MaterialExpressionMultiply, -350, 150)
+    _link(glow, "", bright, "A")
+    _link(level, "", bright, "B")
+    out = mel().create_material_expression(mat, unreal.MaterialExpressionMultiply, -150, 0)
+    _link(colour, "", out, "A")
+    _link(bright, "", out, "B")
+    mel().connect_material_property(out, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    mel().recompile_material(mat)
+    return mat
+
+
+def build_panel_instance(panel, index, level):
+    path = LOOK_DIR + "/MI_L%d_Panel" % index
+    if eal().does_asset_exist(path):
+        mi = eal().load_asset(path)
+    else:
+        mi = unreal.AssetToolsHelpers.get_asset_tools().create_asset(
+            "MI_L%d_Panel" % index, LOOK_DIR, unreal.MaterialInstanceConstant,
+            unreal.MaterialInstanceConstantFactoryNew())
+    mel().set_material_instance_parent(mi, panel)
+    mel().set_material_instance_vector_parameter_value(mi, "Colour", _colour(level["lightColour"]))
+    mel().set_material_instance_scalar_parameter_value(mi, "Glow", PANEL_GLOW * level["lightMul"])
+    mel().update_material_instance(mi)
+    return mi
+
+
 def import_sprites():
     """Imports each sheet in SPRITES; returns {name: texture} or None."""
     folder = surfaces_dir()
@@ -323,7 +375,17 @@ def _colour(rgb):
     return unreal.LinearColor(rgb[0], rgb[1], rgb[2], 1.0)
 
 
-def build_look(index, level, looks, mat, textures):
+def _set_surface(surfaces, kind, mi):
+    """Gives a surface kind mi, unless the editor assigned it a material of its own."""
+    key = getattr(unreal.BackroomsSurface, kind)
+    entry = surfaces[key] if key in surfaces else unreal.BackroomsSurfaceLook()
+    current = entry.get_editor_property("material")
+    if current is None or current.get_path_name().startswith(LOOK_DIR + "/MI_"):
+        entry.set_editor_property("material", mi)
+        surfaces[key] = entry
+
+
+def build_look(index, level, looks, mat, panel, textures):
     name = LOOK_NAME % index
     path = LOOK_DIR + "/" + name
     if eal().does_asset_exist(path):
@@ -342,12 +404,8 @@ def build_look(index, level, looks, mat, textures):
         mi = build_instance(mat, "MI_L%d_%s" % (index, label), textures[level[part]], tile_u, tile_v,
                             level["gloss"], level["ambient"])
         for kind in kinds:
-            key = getattr(unreal.BackroomsSurface, kind)
-            entry = surfaces[key] if key in surfaces else unreal.BackroomsSurfaceLook()
-            current = entry.get_editor_property("material")
-            if current is None or current.get_path_name().startswith(LOOK_DIR + "/MI_"):
-                entry.set_editor_property("material", mi)
-                surfaces[key] = entry
+            _set_surface(surfaces, kind, mi)
+    _set_surface(surfaces, "LIGHT", build_panel_instance(panel, index, level))
     look.set_editor_property("surfaces", surfaces)
 
     look.set_editor_property("light_colour", _colour(level["lightColour"]))
@@ -367,8 +425,9 @@ def build_looks():
     if textures is None:
         return False
     mat = build_material(*textures[names[0]])
+    panel = build_panel_material()
     for index, level in enumerate(looks["levels"]):
-        build_look(index, level, looks, mat, textures)
+        build_look(index, level, looks, mat, panel, textures)
     # The looks stand without the sprites: the hunter and the pack fall back
     # to plain shapes.
     build_sprites()
@@ -388,6 +447,8 @@ def stale():
     path = LOOK_DIR + "/" + MATERIAL_NAME
     if not eal().does_asset_exist(path):
         return "the material is missing"
+    if not eal().does_asset_exist(LOOK_DIR + "/" + PANEL_MATERIAL):
+        return "the panel material is missing"
     if not eal().does_asset_exist(SPRITE_DIR + "/" + SPRITE_GLOW_MATERIAL):
         return "the sprites are missing"
     if eal().get_metadata_tag(eal().load_asset(path), DIGEST_TAG) != digest():

@@ -32,9 +32,10 @@ tools/unreal.sh log # the "Backrooms:" lines from the last run
 | `.../BackroomsWorldSubsystem` | owns the `Sim` (and core's `World` in it); steps a run, streams chunk actors round the player, `GetHud` for a HUD |
 | `.../BackroomsPlayerController` | the sim's controls as Enhanced Input actions; fills an `InputFrame` each frame |
 | `.../BackroomsPawn` | the camera, placed where the sim's view is (shared/port/view.h) |
-| `.../BackroomsChunkActor`, `BackroomsChunkBuild` | a chunk: the greybox drawn with the level's look, plus prop and fitting meshes |
+| `.../BackroomsChunkActor`, `BackroomsChunkBuild` | a chunk: the greybox drawn with the level's look, prop and fitting meshes, the glowing panels, and a point light at each live fitting that lives as long as the chunk |
 | `.../BackroomsLevelLook` | the data asset for a level's look: materials, prop meshes, fitting mesh, the tubes' colour and output, fog |
-| `.../BackroomsLightsActor` | rect lights at the live fittings nearest the player (dead ones dark, faulty ones stuttering, all out in a blackout), the level's fog, and a post-process volume: fixed exposure, the colour split |
+| `.../BackroomsLightsActor` | sets the chunks' fitting lights each frame (faulty ones stuttering, all out in a blackout) and gives the nearest shadows; the level's fog, and a post-process volume: fixed exposure, the colour split |
+| `.../Private/BackroomsLighting` | each storey on its own lighting channel, so fittings do not light the storey above or below through the slab |
 | `.../BackroomsSpriteActor` | the hunter and the pack as billboards from the game's sprite sheets, frames and rows from `shared/port/sprites.h` |
 | `.../Private/BackroomsFixtureShapes` | where a `chunkLayout` fixture stands, and its plain box until a look gives the kind a mesh |
 | `Plugins/Backrooms/Content/Python` | run by the editor on open: imports the revolver and the recorded sounds, and builds the level looks from the game's surfaces (`backrooms_looks.py`) |
@@ -137,6 +138,11 @@ runs `backrooms_looks.py`, which, when those files changed:
 - imports the actors' sheets to `/Game/Backrooms/Sprites` with
   `M_BackroomsSprite` (lit, translucent) and `M_BackroomsSpriteGlow` (unlit,
   the Smiler's eyes and grin), which the settings name by default;
+- builds `M_BackroomsPanel` for the live light panels: unlit, `Colour` times
+  `Glow` times the panel's brightness, which each chunk writes as per-instance
+  custom data so faulty tubes stutter and blackouts dim them; `MI_L0_Panel`
+  and the rest take the level's tube colour, and `PANEL_GLOW` in the script
+  sets how bright a full panel is;
 - makes an instance per level and surface (`MI_L0_Floor`, ...) and the looks
   `DA_Level0` to `DA_Level4` in `/Game/Backrooms/Looks`, which the settings
   name by default. Floors and stairs take the floor, walls, steps and pillars
@@ -168,7 +174,7 @@ project runs before any of it exists.
 | change what a chunk or the player carries | Blueprint subclasses of Backrooms Chunk Actor (set it as the settings' Chunk Class), Backrooms Pawn and Backrooms Player Controller (set them on a Blueprint subclass of the game mode) |
 | build a HUD | a UMG widget that calls Get World Subsystem (Backrooms World Subsystem) > Get Hud each tick: health, sanity, ammo, notes, the death card |
 | give a fixture a mesh | a look's Fixtures, by kind. Its origin is the layout's point on the wall face or ceiling, X out of the face; a run (conduit, pipe, valve, streamer) has X along it, scaled so a mesh 100 units long spans it |
-| tune | Project Settings > Game > Backrooms: look sensitivity, streaming reach, default seed and level, how many fittings get lights (`FittingLights`, `FittingShadows`), their output (`FittingLumens`) and reach, the camera light, the sprite sheets and materials. A look's `ExposureEV100` sets its brightness (lower is brighter) |
+| tune | Project Settings > Game > Backrooms: look sensitivity, streaming reach, default seed and level, the fittings' output (`FittingLumens`), reach in light pitches (`FittingReachPitches`), how far away they stay lit and fade (`FittingDrawDistance`, `FittingFade`) and how many of the nearest cast shadows (`FittingShadows`), the camera light, the sprite sheets and materials. A look's `ExposureEV100` sets its brightness (lower is brighter) |
 
 ## Tests (M1)
 

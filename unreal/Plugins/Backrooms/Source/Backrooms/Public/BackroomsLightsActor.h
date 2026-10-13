@@ -1,20 +1,19 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-#include "core/layout.h"
 #include "BackroomsLightsActor.generated.h"
 
+class ABackroomsChunkActor;
 class UBackroomsLevelLook;
 class UExponentialHeightFogComponent;
+class UPointLightComponent;
 class UPostProcessComponent;
-class URectLightComponent;
 
-// A level's light, air and camera (M5): rect lights at the live fittings
-// nearest the player, the Web build's fog, and a post-process volume with
-// the look's fixed exposure and the post pass's colour split. Where the
-// fittings are, and which are dead, part output or faulty, is core's
-// (chunkLayout); the look gives the tubes' colour and output, the fog and the
-// exposure. The subsystem spawns one and updates it every frame.
+// A level's light, air and camera (M5): the fittings' lights, which the chunks
+// own (ABackroomsChunkActor), set for the moment and the nearest given
+// shadows; the Web build's fog; and a post-process volume with the look's
+// fixed exposure and the post pass's colour split. The subsystem spawns one
+// and updates it every frame.
 UCLASS(Transient)
 class BACKROOMS_API ABackroomsLightsActor : public AActor
 {
@@ -32,22 +31,17 @@ public:
 		float Migraine = 0.0f;
 	};
 
-	// Lights the fittings round At (metres, in the frame of W's current storey),
-	// which Origin places in the world.
-	void Show(World& W, const Vec3& At, const UBackroomsLevelLook* Look, const FMoment& Moment,
-		const FVector& Origin);
-	// Chunk (x, y) of storey z was dropped or rebuilt: read its fittings again.
-	void Forget(const FIntVector& Key) { Fittings.Remove(Key); }
-	void ForgetAll() { Fittings.Reset(); }
+	// Lights the streamed chunks (keyed (cx, cz, storey)) for the moment. The
+	// fittings nearest At (Unreal space) on Storey cast shadows. Origin is where
+	// the player's storey stands.
+	void Show(const TMap<FIntVector, TObjectPtr<ABackroomsChunkActor>>& Chunks, int32 Storey, const FVector& At,
+		const UBackroomsLevelLook* Look, const FMoment& Moment, const FVector& Origin);
 
 private:
-	const TArray<LightFitting>& FittingsOf(World& W, int32 Cx, int32 Cz);
+	void PickShadows(const TMap<FIntVector, TObjectPtr<ABackroomsChunkActor>>& Chunks, int32 Storey, const FVector& At);
 
-	// The live fittings of each chunk read so far, keyed as the subsystem keys
-	// chunks: (cx, cz, storey).
-	TMap<FIntVector, TArray<LightFitting>> Fittings;
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<URectLightComponent>> Pool;
+	// The lights casting shadows, nearest first.
+	TArray<TWeakObjectPtr<UPointLightComponent>> Shadowed;
 	UPROPERTY(Transient)
 	TObjectPtr<UExponentialHeightFogComponent> Fog;
 	UPROPERTY(Transient)

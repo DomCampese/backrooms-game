@@ -5,7 +5,6 @@
 #include "BackroomsWorldSubsystem.generated.h"
 
 struct Sim;
-struct Vec3;
 struct InputFrame;
 struct TraceWriter;
 struct SolidTracer;
@@ -82,9 +81,9 @@ private:
 	// and the revolver in hand. Camera is where the camera is, which the
 	// actors' billboards face.
 	void ShowScene(const FVector& Camera);
-	// Lights the fittings round At (metres, in the current storey's frame) and
-	// sets the level's fog.
-	void ShowLights(const Vec3& At);
+	// Sets the fittings' lights for the moment, shadows on those nearest At
+	// (Unreal space), and the level's fog.
+	void ShowLights(const FVector& At);
 	// The level's look from the project settings, loaded once per level.
 	const UBackroomsLevelLook* CurrentLook();
 

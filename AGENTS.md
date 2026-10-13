@@ -129,10 +129,17 @@ docs/unreal-handoff.md "Next" has what is open. What will bite:
   metres, so tile sizes live in the material (`FLOOR_TILE_M`, `WALL_TILE_M`,
   `wallTileV`). `BACKROOMS_TEXTURED=1 ./greybox-view` shows the mapping
   with raylib before anything reaches the Mac.
-- **Unreal's lights follow `chunkLayout`'s fittings** (`ABackroomsLightsActor`):
+- **Unreal's lights follow `chunkLayout`'s fittings** (`ABackroomsChunkActor`):
   dead, part output and faulty come from the layout, and a faulty tube
   stutters by core's `tubeStutter`, the shader's `lightState` formula. Change
-  one, change both.
+  one, change both. Each live fitting has its own point light, owned by its
+  chunk and hung `LIGHT_DROP` under the ceiling so the ceiling round the panel
+  is lit; lights fade out by distance (`FittingDrawDistance`, `FittingFade`)
+  instead of being handed to the nearest fittings each frame, which made them
+  switch on in view. Storeys take Unreal's three lighting channels in turn
+  (Private/BackroomsLighting.h), or a fitting lights the foot of the walls on
+  the storey above through the slab; an actor on the player's storey needs
+  `BackroomsLighting::Apply` or the fittings do not light it.
 - **The hunter's and the pack's poses are shared/port/sprites.h's**
   (`hunterSprite`, `dogSprite`): sheet, walk frames, row, size, fade. render.cpp
   and `ABackroomsSpriteActor` both read them; the move was checked against the

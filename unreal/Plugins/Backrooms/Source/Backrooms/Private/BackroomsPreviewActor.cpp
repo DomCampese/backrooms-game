@@ -85,7 +85,8 @@ void ABackroomsPreviewActor::Rebuild()
 				Mesh->SetWorldTransform(FTransform(FVector(0.0, 0.0, BackroomsCoords::StoreyZ(S, Maze->storeyH))));
 				Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 				Mesh->RegisterComponent();
-				BackroomsChunkBuild::Build(*Maze, Pcx + Dx, Pcz + Dz, LevelLook, *Mesh, false, Instances);
+				FBackroomsLitFittings Lit;
+				BackroomsChunkBuild::Build(*Maze, Pcx + Dx, Pcz + Dz, LevelLook, *Mesh, false, Instances, Lit);
 				Meshes.Add(Mesh);
 			}
 		}

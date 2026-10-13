@@ -54,19 +54,25 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Look")
 	bool bCameraLight = false;
 
-	// Rect lights at the live fittings nearest the player, and how many of the
-	// nearest cast shadows. The raylib shader sums the 3x3 fittings round each
-	// point, nine on a level's own grid; more cover a fall-off it does not have.
-	UPROPERTY(Config, EditAnywhere, Category = "Look", meta = (ClampMin = 0, ClampMax = 64))
-	int32 FittingLights = 16;
+	// Every live fitting in a streamed chunk has its own light, hung under the
+	// ceiling with the chunk. The nearest FittingShadows on the player's storey
+	// cast shadows.
 	UPROPERTY(Config, EditAnywhere, Category = "Look", meta = (ClampMin = 0, ClampMax = 64))
 	int32 FittingShadows = 4;
-	// A live fitting at a look's LightOutput of 1, and how far its light reaches,
-	// metres.
+	// A live fitting at a look's LightOutput of 1, as the lumens a panel shining
+	// down would give: straight below it, the light is that panel's.
 	UPROPERTY(Config, EditAnywhere, Category = "Look", meta = (ClampMin = 0))
 	float FittingLumens = 3000.0f;
+	// How far a fitting's light reaches, in the level's light pitches. The raylib
+	// shader sums the 3x3 fittings round each point, about 1.5 pitches.
+	UPROPERTY(Config, EditAnywhere, Category = "Look", meta = (ClampMin = 0.5))
+	float FittingReachPitches = 2.0f;
+	// Fittings farther from the camera than this (metres) are not lit; over the
+	// last FittingFade metres they fade out, so none switches on in view.
 	UPROPERTY(Config, EditAnywhere, Category = "Look", meta = (ClampMin = 1))
-	float FittingReach = 16.0f;
+	float FittingDrawDistance = 40.0f;
+	UPROPERTY(Config, EditAnywhere, Category = "Look", meta = (ClampMin = 0))
+	float FittingFade = 16.0f;
 
 	// The sim turns 0.0030 rad per raylib mouse pixel, and this multiplies
 	// Unreal's mouse delta before it gets there. At 1 the first run on a Mac

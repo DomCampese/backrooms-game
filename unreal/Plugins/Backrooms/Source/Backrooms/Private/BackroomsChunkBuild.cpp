@@ -13,6 +13,10 @@ namespace
 {
 // The engine's plain material, which takes a colour parameter.
 const TCHAR* BaseMaterial = TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial");
+// A light panel without a look's fitting mesh: the engine's 1 m plane at core's
+// panel size.
+const TCHAR* PanelPlane = TEXT("/Engine/BasicShapes/Plane.Plane");
+constexpr double PanelScale = 2.0 * PANEL_HALF;
 
 UMaterialInterface* SurfaceMaterial(const UBackroomsLevelLook* Look, EBackroomsSurface Surface, UObject* Outer)
 {
@@ -114,10 +118,15 @@ void AddFixtures(const ChunkLayout& Layout, const UBackroomsLevelLook* Look, UPr
 	}
 }
 
-void AddFittings(const ChunkLayout& Layout, const UBackroomsLevelLook& Look, UProceduralMeshComponent& Parent,
-	TArray<TObjectPtr<UInstancedStaticMeshComponent>>& Instances)
+// The live fittings' panels, one instance each in Lit's order, with the
+// panel's brightness as custom data 0 for the chunk to dim: the look's
+// fitting mesh, or a plane carrying the look's panel material. Dead fittings
+// take the look's mesh too, or stay in the greybox.
+void AddFittings(const ChunkLayout& Layout, const UBackroomsLevelLook* Look, UProceduralMeshComponent& Parent,
+	TArray<TObjectPtr<UInstancedStaticMeshComponent>>& Instances, FBackroomsLitFittings& Lit)
 {
-	UInstancedStaticMeshComponent* Lit = nullptr;
+	UStaticMesh* Own = Look ? Look->FittingMesh.Get() : nullptr;
+	UStaticMesh* Plane = Own ? nullptr : LoadObject<UStaticMesh>(nullptr, PanelPlane);
 	UInstancedStaticMeshComponent* Dead = nullptr;
 	for (const LightFitting& Fitting : Layout.fittings)
 	{
@@ -125,24 +134,49 @@ void AddFittings(const ChunkLayout& Layout, const UBackroomsLevelLook& Look, UPr
 		{
 			continue;
 		}
-		UInstancedStaticMeshComponent*& Component = Fitting.dead ? Dead : Lit;
-		if (!Component)
-		{
-			Component = NewInstances(Parent, Look.FittingMesh, Instances);
-			if (Fitting.dead && Look.DeadFittingMaterial)
-			{
-				Component->SetMaterial(0, Look.DeadFittingMaterial);
-			}
-		}
 		// A Level 1 batten runs along x: a quarter turn.
 		const float Yaw = Fitting.turned ? UE_HALF_PI : 0.0f;
-		Component->AddInstance(FTransform(BackroomsCoords::ToUnrealRotator(Yaw, 0.0f), BackroomsCoords::ToUnreal(Fitting.pos)));
+		const FTransform Frame(BackroomsCoords::ToUnrealRotator(Yaw, 0.0f), BackroomsCoords::ToUnreal(Fitting.pos));
+		if (Fitting.dead)
+		{
+			if (!Own)
+			{
+				continue;
+			}
+			if (!Dead)
+			{
+				Dead = NewInstances(Parent, Own, Instances);
+				if (Look->DeadFittingMaterial)
+				{
+					Dead->SetMaterial(0, Look->DeadFittingMaterial);
+				}
+			}
+			Dead->AddInstance(Frame);
+			continue;
+		}
+		if (!Lit.Panels)
+		{
+			Lit.Panels = NewInstances(Parent, Own ? Own : Plane, Instances);
+			Lit.Panels->SetNumCustomDataFloats(1);
+			// The fitting's light sits in the panel's plane.
+			Lit.Panels->SetCastShadow(false);
+			if (!Own)
+			{
+				Lit.Panels->SetMaterial(0, SurfaceMaterial(Look, EBackroomsSurface::Light, Parent.GetOwner()));
+			}
+		}
+		// The plane faces +Z and is 1 m square: turned face down, sized to the panel.
+		const int32 Index = Lit.Panels->AddInstance(Own ? Frame
+			: FTransform(FRotator(0.0, 0.0, 180.0), FVector::ZeroVector, FVector(PanelScale, PanelScale, 1.0)) * Frame);
+		Lit.Panels->SetCustomDataValue(Index, 0, Fitting.output);
+		Lit.Fittings.Add(Fitting);
 	}
 }
 }
 
 void BackroomsChunkBuild::Build(World& W, int32 Cx, int32 Cz, const UBackroomsLevelLook* Look,
-	UProceduralMeshComponent& Mesh, bool bCollision, TArray<TObjectPtr<UInstancedStaticMeshComponent>>& Instances)
+	UProceduralMeshComponent& Mesh, bool bCollision, TArray<TObjectPtr<UInstancedStaticMeshComponent>>& Instances,
+	FBackroomsLitFittings& Lit)
 {
 	const uint32 MeshedProps = Look ? Look->MeshedProps() : 0;
 	const bool bMeshedFittings = Look && Look->FittingMesh;
@@ -151,8 +185,9 @@ void BackroomsChunkBuild::Build(World& W, int32 Cx, int32 Cz, const UBackroomsLe
 	for (int32 S = 0; S < (int32)GreySurface::Count; S++)
 	{
 		const GreyboxMesh::Section& Section = Greybox.sections[S];
-		const bool bFitting = S == (int32)GreySurface::Light || S == (int32)GreySurface::DeadLight;
-		if (Section.index.empty() || (bFitting && bMeshedFittings))
+		// Live panels are AddFittings' instances, so each can be dimmed alone.
+		const bool bFitting = S == (int32)GreySurface::Light || (S == (int32)GreySurface::DeadLight && bMeshedFittings);
+		if (Section.index.empty() || bFitting)
 		{
 			continue;
 		}
@@ -193,8 +228,5 @@ void BackroomsChunkBuild::Build(World& W, int32 Cx, int32 Cz, const UBackroomsLe
 	{
 		AddProps(Layout, *Look, Mesh, Instances);
 	}
-	if (bMeshedFittings)
-	{
-		AddFittings(Layout, *Look, Mesh, Instances);
-	}
+	AddFittings(Layout, Look, Mesh, Instances, Lit);
 }
