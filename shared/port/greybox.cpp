@@ -7,8 +7,6 @@ namespace {
 
 // Stair cells are drawn as this many treads a side, each at stairY of its middle.
 constexpr int STAIR_SUB = 8;
-// A light panel's half extent: the shader's PANEL_HALF.
-constexpr float PANEL_HALF = 0.62f;
 // A locked door's leaf, and a window's glass, half thickness.
 constexpr float LEAF_T = 0.03f;
 

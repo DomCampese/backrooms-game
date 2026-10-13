@@ -1097,7 +1097,7 @@ static void addWindowW(WallBuilder &wa, MB &gl, const Opening &op, float gx, flo
 // recessed diffuser. Emissive parts are alpha 0.
 static void addFitting(MB &pr, MB &ce, const LightFitting &lf, int level) {
     const Rgba panel = {255,255,255,0};
-    const float lx = lf.pos.x, lz = lf.pos.z, hp = 0.62f;
+    const float lx = lf.pos.x, lz = lf.pos.z, hp = PANEL_HALF;
     // The fitting hangs in the ceiling of the cell it is centred in. The 1.38 m
     // tray can overhang a neighbour at another height; that neighbour's soffit is
     // what it meets.
