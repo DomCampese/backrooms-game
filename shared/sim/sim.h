@@ -9,6 +9,7 @@
 #include "entity.h"
 #include "weapon_timing.h"
 #include "../core/hash.h"
+#include "../core/portable_math.h"
 #include "../core/level_rules.h"
 #include "../core/world.h"
 #include <cstdint>

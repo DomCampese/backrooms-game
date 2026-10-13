@@ -177,12 +177,16 @@ will bite:
   pragma. Without them clang with FMA changed a `stairY` answer; a flipped noise
   threshold would change the maze. Never build core with fast math
   (docs/migration.md, "Floating point").
-- **Core takes sine from `portableSin` (core/hash.h), never `sinf`.** glibc's
-  `sinf` is one ULP off the true value for 0.2% of floats, so no portable
-  function can reproduce it, and another libm rounds differently again. The
+- **Core and the sim take sin, cos, exp, atan2 and hypot from
+  `core/portable_math.h`, never libm.** glibc's `sinf` is one ULP off the true
+  value for 0.2% of floats and its `atan2f` for 16% of pairs, so no portable
+  function can reproduce them, and another libm rounds differently again. The
   tube hash multiplies by 43758.5453 and then by 53.7, so one ULP of sine moved
-  a fitting's output by up to 0.42. Switching re-recorded 5 lines of
-  `layout.txt`.
+  a fitting's output by up to 0.42 (switching re-recorded 5 lines of
+  `layout.txt`); in the sim one ULP of a yaw's cosine moves the player, and a
+  trace replayed on a Mac would stop there. `tools/core-check.sh` fails on any
+  transcendental libm symbol in a core or sim object. The port (sound, poses,
+  meshes) still calls libm: nothing there feeds a decision.
 - **`LevelCfg` extends `LevelRules`.** `LEVELS[lv].wallH` and
   `LEVEL_RULES[lv].wallH` are one number; add a rule field to `LevelRules`,
   a look field (colour, fog, gloss, light output) to `LevelCfg`.
@@ -776,7 +780,7 @@ build's, in `web/src/`.
 | `core/world.{h,cpp}` | infinite maze: chunk generation, storeys, collision, line of sight, pathfinding, occupancy grid. `WallKind` / `PropKind` name the codes stored per cell. No raylib |
 | `core/level_rules.h` | per-level rules: wall height, light pitch, storey pitch, name, which tubes work, exits |
 | `core/layout.{h,cpp}` | `ChunkLayout`: a chunk's props, fixtures, light fittings and openings, decided from the seed |
-| `core/hash.{h,cpp}`, `core/vec.h` | hashes, RNG, value noise; `Vec2`/`Vec3`, `TAU`, `clampf` |
+| `core/hash.{h,cpp}`, `core/vec.h`, `core/portable_math.{h,cpp}` | hashes, RNG, value noise; `Vec2`/`Vec3`, `TAU`, `clampf`; sin, cos, exp, atan2, hypot that round the same everywhere |
 | `sim/start.{h,cpp}`, `sim/trace.{h,cpp}` | how a run starts (`SimStart`); recording and replaying the calls on the sim |
 | `port/view.{h,cpp}`, `port/greybox.{h,cpp}` | what the camera shows of the sim (both builds draw from it); a chunk as plain boxes and quads for a port's first milestone |
 | `port/held.{h,cpp}`, `port/scene.{h,cpp}`, `port/sprites.{h,cpp}`, `port/sheets.h` | what is in hand, what stands loose in the world, and the actors' billboard poses and sheet layout, which both builds draw from |

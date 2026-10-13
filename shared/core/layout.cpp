@@ -2,6 +2,7 @@
 #include "layout.h"
 #include "hash.h"
 #include "level_rules.h"
+#include "portable_math.h"
 #include <algorithm>
 #include <cmath>
 

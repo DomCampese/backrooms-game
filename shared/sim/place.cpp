@@ -234,7 +234,7 @@ void Sim::markWayOut() {
         if (dot > pd) { pd = dot; pick = q; }
     }
     float mx = DOORS[pick][2] + DOORS[pick][0] * 1.3f, mz = DOORS[pick][3] + DOORS[pick][1] * 1.3f;
-    float yawTo = atan2f(tz - mz, tx - mx);
+    float yawTo = portableAtan2(tz - mz, tx - mx);
     chalk[level].insert(chalk[level].begin(), ChalkMark{ { mx, world.groundAt(mx, mz, 0.0f) + 0.016f, mz }, yawTo, false,
                                                          world.storey });
 }
