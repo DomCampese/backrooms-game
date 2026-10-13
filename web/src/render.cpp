@@ -367,7 +367,7 @@ void Game::renderScene(double now) {
     float ambLumP = (lc.amb.x + lc.amb.y + lc.amb.z) / 3.0f;
     float edSend = (sim.ent.st == EState::Hidden) ? 0.0f : sim.entDarkCur;
     auto propLum = [&](float x, float y, float z) {
-        float lum = lightAtCPU(x, y, z, sim.blackoutCur, lc.ls, lc.wallH - 0.12f, lc.dead, lc.lightMul, ambLumP,
+        float lum = lightAtCPU(x, y, z, sim.blackoutCur, lc.ls, lc.wallH - LIGHT_DROP, lc.dead, lc.lightMul, ambLumP,
                                sim.ent.x, sim.ent.z, edSend, lc.vary);
         if (flareInt > 0.01f) {
             float fx = x - flarePos.x, fy = y - flarePos.y, fz = z - flarePos.z;
@@ -522,7 +522,7 @@ void Game::renderScene(double now) {
         const LevelCfg &c = LEVELS[sim.level];
         float ambLum = (c.amb.x + c.amb.y + c.amb.z) / 3.0f;
         float lum = lightAtCPU(sp.litAt.x, sp.litAt.y, sp.litAt.z, sim.blackoutCur,
-                               c.ls, c.wallH - 0.12f, c.dead, c.lightMul, ambLum, 0, 0, 0, c.vary);
+                               c.ls, c.wallH - LIGHT_DROP, c.dead, c.lightMul, ambLum, 0, 0, 0, c.vary);
         if (sim.flashCur > 0.05f) {
             float d2 = dd * dd + 1e-4f;
             float cone = powf(fmaxf((ddx * sim.fwd.x + ddz * sim.fwd.z) / (dd + 1e-4f), 0.0f), 26.0f);
@@ -554,7 +554,7 @@ void Game::renderScene(double now) {
         const LevelCfg &c = LEVELS[sim.level];
         float ambLum = (c.amb.x + c.amb.y + c.amb.z) / 3.0f;
         float lum = lightAtCPU(sp.litAt.x, sp.litAt.y, sp.litAt.z, sim.blackoutCur,
-                               c.ls, c.wallH - 0.12f, c.dead, c.lightMul, ambLum,
+                               c.ls, c.wallH - LIGHT_DROP, c.dead, c.lightMul, ambLum,
                                sim.ent.x, sim.ent.z, sim.entDarkCur, c.vary);   // it stands in its own pool of dead light
         if (sim.flashCur > 0.05f) {   // flashlight picks him out of the dark
             float vx2 = sim.ent.x - sim.px, vz2 = sim.ent.z - sim.pz;
