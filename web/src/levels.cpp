@@ -122,7 +122,7 @@ float lightAtCPU(float x, float y, float z, float blackout,
     return clampf(lit, 0.0f, 1.0f);
 }
 
-// The shader's damp-patch field (uWet in WORLD_FS), on the CPU: the same
+// The shader's damp-patch field (uWet in the world fragment shader), on the CPU: the same
 // vnoise over the same hash at the same two scales and the same threshold, so
 // anything asking the CPU "is it wet here" gets the patch the eye sees. GPU and CPU sin() differ
 // in the last bits at large arguments; for a footstep that is nothing.

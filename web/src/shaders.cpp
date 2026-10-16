@@ -1,4 +1,7 @@
 #include "shaders.h"
+#include "core/layout.h"
+#include <cstdio>
+#include <cstdlib>
 
 // The shader bodies below are shared verbatim by both targets: GLSL 330 and
 // GLSL ES 3.00 agree on everything they use (in/out, texture(), texelFetch,
@@ -37,7 +40,7 @@ void main(){
 }
 )GLSL";
 
-const char *WORLD_FS = GLSL_VERSION_HEADER R"GLSL(
+static const char *WORLD_FS_TEMPLATE = GLSL_VERSION_HEADER R"GLSL(
 in vec3 fragPos; in vec2 fragUV; in vec3 fragN; in vec4 fragC;
 uniform sampler2D texture0; uniform vec4 colDiffuse;
 uniform float uTime; uniform float uBlackout; uniform vec3 uViewPos;
@@ -84,11 +87,11 @@ vec4 chanFor(int rel){
 // core/layout.cpp. Bounded, because sin() loses the hash at large arguments.
 float storeyOffset(float st){ return fract(st * 0.6180339) * 97.0; }
 
-// Half-width of one ceiling diffuser. MUST match PANEL_HALF in core/layout.h,
-// which the mesher and lightAtCPU read: the lighting treats the panel as
-// the rectangle it actually draws, so if the quad changes size and this doesn't,
-// the light stops matching the fitting it is supposed to be coming out of.
-const float PANEL_HALF = 0.62;
+// Half-width of one ceiling diffuser: PANEL_HALF in core/layout.h, which the
+// mesher and lightAtCPU read too. worldFragmentShader() writes the number in,
+// so the lighting always treats the panel as the rectangle the mesher draws.
+// The token below is never compiled as it stands.
+const float PANEL_HALF = @PANEL_HALF@;
 
 // How lit the shaded point came out. roomLight() fills this in so the fog can be
 // lit by the same room the surface is — set once per fragment, read at the end.
@@ -815,3 +818,24 @@ void main(){
     finalColor = vec4(c, 1.0);
 }
 )GLSL";
+
+// A float as GLSL source: the shortest decimal that reads back as the same
+// float, with a decimal point, because GLSL ES does not convert an int
+// literal to float.
+static std::string glslFloat(float v) {
+    char buf[32];
+    for (int digits = 1; digits <= 9; digits++) {
+        snprintf(buf, sizeof buf, "%.*g", digits, v);
+        if (strtof(buf, nullptr) == v) break;
+    }
+    std::string out = buf;
+    if (out.find_first_of(".e") == std::string::npos) out += ".0";
+    return out;
+}
+
+std::string worldFragmentShader() {
+    std::string src = WORLD_FS_TEMPLATE;
+    const std::string token = "@PANEL_HALF@";
+    src.replace(src.find(token), token.size(), glslFloat(PANEL_HALF));
+    return src;
+}
