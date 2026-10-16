@@ -602,7 +602,7 @@ entries, and the 2002 photograph (CREDITS.md). What changed, and what will bite:
   where no light came from. `vary`/`faulty` (LevelRules) make tubes uneven and
   stutter; lightState(), lightAtCPU and chunkLayout all apply them, change all
   three. L0 trays
-  are flush lay-in troffers; the light plane stays at `wallH - 0.12`.
+  are flush lay-in troffers; the light plane stays at `wallH - LIGHT_DROP` (0.12 m).
 - **Wet carpet** is world-space in the shader (`uWet`), not in the carpet tile:
   a puddle baked into a 2 m texture repeats every 2 m. `carpetWetCPU` mirrors it
   on the CPU (the squelching footsteps it fed were removed by request).
@@ -2013,7 +2013,7 @@ Two rules fall out of this, and both have already been broken once:
   straight through.
 
 What has *not* moved is the shader's light plane within a storey. `uLY` is
-one constant per level (`wallH - 0.12`), offset by a whole pitch per storey on
+one constant per level (`wallH - LIGHT_DROP`, core/layout.h), offset by a whole pitch per storey on
 Level 0, and `lightAtCPU` mirrors that constant, so a fitting
 hanging in a raised bay is drawn where it is but lights the room from where the
 base ceiling is. That is invisible at Level 1's 0.6-1.2 m decks and would not be

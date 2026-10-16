@@ -296,7 +296,7 @@ void Game::applyLevelLook(int lv) {
         mats[mat[k]].maps[MATERIAL_MAP_DIFFUSE].texture = sf.albedo;
         mats[mat[k]].maps[MATERIAL_MAP_SPECULAR].texture = sf.detail;
     }
-    float ly = c.wallH - 0.12f;
+    float ly = c.wallH - LIGHT_DROP;
     SetShaderValue(worldShader, locAmb, &c.amb, SHADER_UNIFORM_VEC3);
     SetShaderValue(worldShader, locFogCol, &c.fogCol, SHADER_UNIFORM_VEC3);
     SetShaderValue(worldShader, locFogDen, &c.fogDen, SHADER_UNIFORM_FLOAT);
