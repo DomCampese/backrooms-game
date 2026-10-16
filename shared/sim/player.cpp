@@ -23,9 +23,9 @@ void Sim::updateLook(const InputFrame &in) {
         yaw += in.look.x * sensitivity;
         pitch = clampf(pitch - in.look.y * sensitivity, -1.45f, 1.45f);
     }
-    fwd = { cosf(pitch) * cosf(yaw), sinf(pitch), cosf(pitch) * sinf(yaw) };
-    f2x = cosf(yaw); f2z = sinf(yaw);
-    r2x = -sinf(yaw); r2z = cosf(yaw);
+    fwd = { portableCos(pitch) * portableCos(yaw), portableSin(pitch), portableCos(pitch) * portableSin(yaw) };
+    f2x = portableCos(yaw); f2z = portableSin(yaw);
+    r2x = -portableSin(yaw); r2z = portableCos(yaw);
 }
 
 void Sim::updateSprint(bool requested, bool moving, bool crouched, float dt) {
@@ -47,12 +47,12 @@ bool Sim::updateSwimming(float dt, bool rise) {
     if (!swimming) return false;
     grounded = false;
     float desired = rise ? clampf((FLOAT_PY - py) * 3.0f, -1.5f, 2.2f) : -1.2f;
-    vy += (desired - vy) * (1 - expf(-5.0f * dt));
+    vy += (desired - vy) * (1 - portableExp(-5.0f * dt));
     py += vy * dt;
     if (py < bottom) { py = bottom; vy = fmaxf(vy, 0); }
     // Held at the surface rather than bobbing out of it in a row of jumps.
     if (py > FLOAT_PY && rise) { py = FLOAT_PY; vy = fminf(vy, 0); }
-    swimPhase += dt * (1.1f + 0.45f * hypotf(velx, velz));
+    swimPhase += dt * (1.1f + 0.45f * portableHypot(velx, velz));
     return true;
 }
 
@@ -97,16 +97,16 @@ void Sim::updateMovement(const InputFrame &in, float dt, double now) {
     if (!in.forward) wSprint = false;
     updateSprint(in.sprint || wSprint, moving, crouched || squeezing, dt);
     boostT = fmaxf(0, boostT - dt);
-    swimClimb *= expf(-10 * dt);
+    swimClimb *= portableExp(-10 * dt);
     float speed = (squeezing ? 1.1f : sprinting ? 6.8f : crouched ? 1.9f : 3.6f) * (inWater ? 0.55f : 1.0f)
                 * (boostT > 0 ? 1.12f : 1.0f);
     if (swimming) speed = sprinting ? 3.5f : 2.4f;
     float tvx = ix * speed, tvz = iz * speed;
     float accel = inWater ? (moving ? 3.8f : 2.8f) : (moving ? 12.0f : 9.0f);
-    float drag = inWater ? 1 - expf(-accel * dt) : fminf(1, accel * dt);
+    float drag = inWater ? 1 - portableExp(-accel * dt) : fminf(1, accel * dt);
     velx += (tvx - velx) * drag;
     velz += (tvz - velz) * drag;
-    if (squeezing) { float v = hypotf(velx, velz); if (v > speed) { velx *= speed / v; velz *= speed / v; } }
+    if (squeezing) { float v = portableHypot(velx, velz); if (v > speed) { velx *= speed / v; velz *= speed / v; } }
     float oldX = px, oldZ = pz;
     px += velx * dt; pz += velz * dt;
     world.collideCircle(px, pz, squeezing ? SQUEEZE_R : PR, py);
@@ -126,7 +126,7 @@ void Sim::updateMovement(const InputFrame &in, float dt, double now) {
     }
     // Distance actually covered drives footsteps, bob and records: running into
     // a wall is not a sprint.
-    float spd = hypotf(px - oldX, pz - oldZ) / fmaxf(dt, 0.0001f);
+    float spd = portableHypot(px - oldX, pz - oldZ) / fmaxf(dt, 0.0001f);
     distWalked += spd * dt;
 
     strafeInput = clampf((velx * r2x + velz * r2z) / 6.0f, -1.0f, 1.0f);
@@ -228,20 +228,20 @@ void Sim::updateGait(float spd, float speed, bool inWater, float dt) {
     float strideLen = 0.49f + speed * 0.24f;
     float lastPhase = bobPhase;
     bobPhase += (spd * dt / strideLen) * (grounded ? 1.0f : 0.0f);
-    eyeY = EYE_H - 0.55f * crouchCur - landDip - softSag + py - cosf(bobPhase * 6.28318f) * 0.032f * bobAmt;
+    eyeY = EYE_H - 0.55f * crouchCur - landDip - softSag + py - portableCos(bobPhase * 6.28318f) * 0.032f * bobAmt;
     if (swimming) {
         // Two swells that never line up and a dip each stroke, fading as you
         // sink below the surface float.
         floatT += dt;
         float surf = clampf(1.0f - (FLOAT_PY - py) / 0.8f, 0, 1);
-        float swell = 0.075f * sinf(floatT * 1.55f) + 0.03f * sinf(floatT * 2.6f + 1.3f);
-        eyeY = py + EYE_H + swell * surf + sinf(swimPhase) * 0.022f;
-        floatRoll = (0.045f * sinf(floatT * 1.05f + 0.6f) + 0.015f * sinf(floatT * 2.3f)) * surf;
+        float swell = 0.075f * portableSin(floatT * 1.55f) + 0.03f * portableSin(floatT * 2.6f + 1.3f);
+        eyeY = py + EYE_H + swell * surf + portableSin(swimPhase) * 0.022f;
+        floatRoll = (0.045f * portableSin(floatT * 1.05f + 0.6f) + 0.015f * portableSin(floatT * 2.3f)) * surf;
         if ((int)(swimPhase / 3.14159f) != (int)((swimPhase - dt * (1.1f + 0.45f * spd)) / 3.14159f) && spd > 0.2f) {
             int v = grng.ri(0, 3);
             play(Sfx::SwimStroke, v).atPitch(0.9f + grng.f01() * 0.2f).atVolume(0.55f);
         }
-    } else floatRoll *= expf(-6 * dt);
+    } else floatRoll *= portableExp(-6 * dt);
     eyeY -= swimClimb;
     if (floorf(bobPhase) > floorf(lastPhase)) {
         int v = grng.ri(0, 3);   // wading, a stroke pitched up is a leg pushing through water

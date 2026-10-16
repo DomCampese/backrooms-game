@@ -4,7 +4,9 @@
 # Fails if a file does not compile that way, or if it includes anything outside
 # its allowed layers (docs/migration.md): core may include core; sim may include
 # core and sim; port may include core, sim and port. A raylib, GL or platform header anywhere in the chain fails too,
-# even where one happens to be installed system-wide.
+# even where one happens to be installed system-wide. Also fails if core or the
+# sim calls a transcendental libm function, whose last bit differs between libms
+# (core/portable_math.h).
 #
 #   tools/core-check.sh
 set -euo pipefail
@@ -51,5 +53,17 @@ check() {
 check core shared/core shared/core
 check sim shared/sim shared/core shared/sim
 check port shared/port shared/core shared/sim shared/port
+
+# A replay on another platform's libm diverges at the first call whose result
+# rounds differently. sqrt, floor, fabs and fmod are exact everywhere.
+LIBM='^_?(a?sinh?|a?cosh?|a?tanh?|atan2|sincos|exp(2|m1)?|log(2|10|1p)?|pow|cbrt|hypot|erfc?|[lt]gamma)[fl]?$'
+OBJ=$(mktemp -d)
+trap 'rm -rf "$OBJ"' EXIT
+for f in shared/core/*.cpp shared/sim/*.cpp; do
+    o=$OBJ/$(basename "$f" .cpp).o
+    "$CXX" "${FLAGS[@]/-fsyntax-only/-O2}" -c "$f" -o "$o"
+    calls=$(nm -u "$o" | awk '{print $NF}' | grep -E "$LIBM" | tr '\n' ' ' || true)
+    [ -z "$calls" ] || { echo "FAIL $f: calls libm $calls(use core/portable_math.h)"; fail=1; }
+done
 
 [ $fail = 0 ] && echo "core-check: passed" || { echo "core-check: FAILED"; exit 1; }

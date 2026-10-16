@@ -136,7 +136,7 @@ void Sim::bulletHitsHunter() {
         ent.st = EState::Die; ent.life = 0;
         for (int c2 = 0; c2 < 5; c2++) {   // he spills his doubloons
             float aa = c2 * 1.2566f + grng.f01();
-            coinsWorld.push_back({ ent.x + cosf(aa) * 0.5f, ent.dispY, ent.z + sinf(aa) * 0.5f });
+            coinsWorld.push_back({ ent.x + portableCos(aa) * 0.5f, ent.dispY, ent.z + portableSin(aa) * 0.5f });
         }
         bankRecords();
     } else {
@@ -286,7 +286,7 @@ bool Sim::popBalloonAt(Vec3 point) {
     auto burst = [&](Vec3 at, uint8_t base, int n) {
         for (int c2 = 0; c2 < n; c2++) {
             float aa = grng.f01() * TAU, sp = 1.2f + grng.f01() * 2.2f;
-            confetti.push_back({ at, { cosf(aa) * sp, 0.6f + grng.f01() * 1.6f, sinf(aa) * sp },
+            confetti.push_back({ at, { portableCos(aa) * sp, 0.6f + grng.f01() * 1.6f, portableSin(aa) * sp },
                                  1.3f + grng.f01() * 0.9f,
                                  grng.f01() < 0.5f ? base : (uint8_t)(c2 % PARTY_COLOURS) });
         }

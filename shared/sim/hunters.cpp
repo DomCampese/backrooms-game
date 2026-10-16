@@ -70,7 +70,7 @@ void Sim::updateEntity(float dt, double now, bool forceSpawn) {
         // His gait counts footfalls by distance covered, in every state: an
         // integer is a boot landing, which is both the sound here and the
         // walk-cycle frame render.cpp draws.
-        float moved = hypotf(ent.x - gaitFromX, ent.z - gaitFromZ);
+        float moved = portableHypot(ent.x - gaitFromX, ent.z - gaitFromZ);
         float lastGait = ent.gait;
         ent.gait += moved / ENT_STRIDE;
         if (ent.gait > 4096.0f) ent.gait -= 4096.0f;   // an even integer keeps the cycle continuous
@@ -152,13 +152,13 @@ void Sim::spawnHunter() {
         for (int tries = 0; tries < 16 && !placed; tries++) {
             float a = grng.f01() * TAU;
             float d = SPAWN_NEAR_MIN + grng.f01() * (SPAWN_NEAR_MAX - SPAWN_NEAR_MIN);
-            placed = unseenSpot(px + cosf(a) * d, pz + sinf(a) * d, sx, sz);
+            placed = unseenSpot(px + portableCos(a) * d, pz + portableSin(a) * d, sx, sz);
         }
     }
     if (!placed) {
         float a = grng.f01() * TAU;
         float d = SPAWN_FAR_MIN + grng.f01() * SPAWN_FAR_SPAN;
-        Vec2 spot = world.findOpenSpot(px + cosf(a) * d, pz + sinf(a) * d);
+        Vec2 spot = world.findOpenSpot(px + portableCos(a) * d, pz + portableSin(a) * d);
         sx = spot.x; sz = spot.y;
     }
     ent.x = sx; ent.z = sz;
@@ -237,7 +237,7 @@ void Sim::updateDogs(float dt, double now) {
         for (auto &d : dogs) {
             if (d.st != DState::Gone) continue;
             float a = grng.f01() * TAU, dist = 17 + grng.f01() * 9;
-            Vec2 spot = world.findOpenSpot(px + cosf(a) * dist, pz + sinf(a) * dist);
+            Vec2 spot = world.findOpenSpot(px + portableCos(a) * dist, pz + portableSin(a) * dist);
             d.x = spot.x; d.z = spot.y;
             d.st = DState::Prowl; d.life = 0; d.lost = 0; d.hp = 2;
             d.dispY = world.groundAt(d.x, d.z, py + 1.0f);
@@ -310,7 +310,7 @@ bool Sim::updateDog(int i, float dt, double now, float noise, float nsx, float n
             float rdx = d.roamX - d.x, rdz = d.roamZ - d.z;
             if (now > d.nextRoam || rdx * rdx + rdz * rdz < 1.4f * 1.4f) {
                 float a = grng.f01() * TAU, r = 9 + grng.f01() * 11;
-                Vec2 sp = world.findOpenSpot(d.x + cosf(a) * r, d.z + sinf(a) * r);
+                Vec2 sp = world.findOpenSpot(d.x + portableCos(a) * r, d.z + portableSin(a) * r);
                 d.roamX = sp.x; d.roamZ = sp.y;
                 d.nextRoam = now + 9 + grng.f01() * 9;
             }

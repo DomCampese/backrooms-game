@@ -132,7 +132,7 @@ void Sim::updateTapeDeck(const InputFrame &in, float dt, double now) {
             deck.carried = false; deck.flying = true;
             deck.x = px + fwd.x * 0.4f; deck.y = eyeY - 0.35f; deck.z = pz + fwd.z * 0.4f;
             deck.vx = fwd.x * 5.0f; deck.vz = fwd.z * 5.0f; deck.vy = fwd.y * 5.0f + 1.4f;
-            deck.yaw = atan2f(fwd.x, fwd.z);
+            deck.yaw = portableAtan2(fwd.x, fwd.z);
             deckNoteT = 2.6f; deckNote = "you leave it talking, and walk away.";
         } else if (tapes <= 0) {
             deckNoteT = 2.2f; deckNote = "no tape. the deck is empty.";
@@ -303,7 +303,7 @@ void Sim::useWhatIsNear() {
                     for (int c2 = 0; c2 < 9; c2++) {
                         float aa = c2 * 0.698f + grng.f01();
                         float rr = 1.2f + grng.f01() * 1.1f;
-                        coinsWorld.push_back({ px + cosf(aa) * rr, py, pz + sinf(aa) * rr });
+                        coinsWorld.push_back({ px + portableCos(aa) * rr, py, pz + portableSin(aa) * rr });
                     }
                 }
             }

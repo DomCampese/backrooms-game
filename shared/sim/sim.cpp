@@ -49,10 +49,10 @@ void Sim::updateHealth(float dt) {
 
 void Sim::menuDrift(float dt, double now) {
     yaw += dt * 0.085f;                         // slow pan across the hall
-    pitch = sinf((float)now * 0.22f) * 0.045f;  // faint breathing tilt
-    fwd = { cosf(pitch) * cosf(yaw), sinf(pitch), cosf(pitch) * sinf(yaw) };
-    f2x = cosf(yaw); f2z = sinf(yaw);
-    r2x = -sinf(yaw); r2z = cosf(yaw);
+    pitch = portableSin((float)now * 0.22f) * 0.045f;  // faint breathing tilt
+    fwd = { portableCos(pitch) * portableCos(yaw), portableSin(pitch), portableCos(pitch) * portableSin(yaw) };
+    f2x = portableCos(yaw); f2z = portableSin(yaw);
+    r2x = -portableSin(yaw); r2z = portableCos(yaw);
     eyeY = EYE_H; bobAmt = 0; leanCur = 0; landDip = 0; softTimer = 0; softSag = 0;
     flashOn = false; flashCur = 0;
     ent.st = EState::Hidden; entDist = 1e9f; entDarkCur = 0;
@@ -137,7 +137,7 @@ void Sim::seedStrangerChalk() {
     Rng r(hash64((uint64_t)world.seed ^ ((uint64_t)level * 0x9E3779B97F4A7C15ULL) ^ 0xC4A15ULL));
     for (int i = 0; i < 2; i++) {
         float a = r.f01() * TAU, d = 18 + r.f01() * 22;
-        Vec2 spot = world.findOpenSpot(px + cosf(a) * d, pz + sinf(a) * d);
+        Vec2 spot = world.findOpenSpot(px + portableCos(a) * d, pz + portableSin(a) * d);
         chalk[level].push_back({{ spot.x, world.groundAt(spot.x, spot.y, 0.0f) + 0.016f, spot.y },
                                 r.f01() * TAU, false, world.storey });
     }
@@ -220,7 +220,7 @@ bool Sim::hurtPlayer(double now, float dmg, const char *by, float fromX, float f
     if (health <= 0.001f) { health = 0; dieRun(now, by); return true; }
     hurtT = HURT_GRACE; sinceHurt = 0;
     // Shoved clear, so the attacker is not on top of you when the grace ends.
-    float dx = px - fromX, dz = pz - fromZ, d = hypotf(dx, dz);
+    float dx = px - fromX, dz = pz - fromZ, d = portableHypot(dx, dz);
     if (d > 0.01f) { velx = dx / d * 6.0f; velz = dz / d * 6.0f; }
     play(Sfx::Groan).atPitch(1.3f);   // the floor's groan, pitched up: a body blow
     fear = fmaxf(fear, 0.9f);

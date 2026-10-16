@@ -114,7 +114,7 @@ same everywhere.
 
 `tubeHash` and `tubeStutter` (layout.cpp) are `fract(sin(...) * 43758.5453)`,
 the GLSL hash the shader also uses, and decide which fittings are dead, dim or
-faulty. They call `portableSin` (hash.cpp), a sine built from IEEE double
+faulty. They call `portableSin` (portable_math.cpp), a sine built from IEEE double
 arithmetic alone, so core calls no transcendental libm function. It cannot
 reproduce glibc's `sinf`, because glibc's is not correctly rounded: for 0.21% of
 floats below 1e5 it is one ULP off (compared with `sinl`). `portableSin` is
@@ -129,9 +129,28 @@ keeps GLSL `sin`, which matched neither.
 The sim needs the same. Replaying `tests/traces/walk-l0-l2.trace` built with
 gcc or clang at `-march=native` and no `-ffp-contract=off` diverged at frame 31
 (the audio mix first) until every sim .cpp included `fp_strict.h`; with it,
-clang passes without the flag. The sim also calls `sinf`, `cosf`, `atan2f` and
-`expf` freely, so a replay on another libm may still diverge
-(docs/unreal-handoff.md, "Status").
+clang passes without the flag.
+
+The sim takes `portableSin`, `portableCos`, `portableExp`, `portableAtan2` and
+`portableHypot` (core/portable_math.h) where it used libm's, so neither core nor
+the sim calls a transcendental libm function, and `tools/core-check.sh` fails on
+one in any core or sim object. Each is computed in double and rounded once to
+float. Measured against `long double` references rounded to float:
+
+| function | inputs | portable wrong | glibc wrong |
+|---|---|---|---|
+| sin, cos | every 97th float under 1e5 (24.8 M) | 0 | 0.21%, 0.16% |
+| exp | portable: every 97th float under 120; glibc: every 7th under 88 (639 M) | 0 | 0.008% |
+| atan2 | 10 M uniform pairs in +-100, 10 M random bit patterns | 0 | 16% of the uniform pairs |
+| hypot | the same pairs | 0 | 0 |
+
+A digest over all 2^32 inputs (atan2 and hypot paired with a scrambled second
+argument) is the same under gcc -O0, gcc -O2 -march=native and clang -O2 -mfma.
+`atan2` of a NaN returns one quiet NaN: `y + x` kept whichever payload the
+optimiser put first, and gcc -O0 and -O2 disagreed. The switch moved no digest
+of `tests/traces/walk-l0-l2.trace`: in those 152 frames no call landed on one
+of glibc's misrounded values. The port (sound synthesis, held poses, meshes)
+still calls libm; none of it feeds the sim.
 
 Evaluation order: a function's arguments are evaluated in no fixed order, and
 gcc and clang differ. `railOn` passed two calls that both wrote `voidSide` to
@@ -165,6 +184,7 @@ small difference.
 |---|---|
 | `vec.h` | `Vec2`, `Vec3`, `TAU`, `clampf` |
 | `hash.{h,cpp}` | `hash64`, `Rng`, `ih`, `lat`, `vnoise2`, `fbm2` |
+| `portable_math.{h,cpp}` | `portableSin`, `portableCos`, `portableExp`, `portableAtan2`, `portableHypot` (Floating point, above) |
 | `fp_strict.h` | no floating-point contraction for the file that includes it first (Floating point, above) |
 | `level_rules.h` | `LevelRules` (wall height, light pitch, storey pitch, name, which tubes work), `LEVEL_RULES`, `EXIT_NEXT` |
 | `world.{h,cpp}` | `ChunkData`, generation, storeys and vertical features, the wall/prop/floor/ceiling accessors and overlays, collision (`gatherCellAABBs`, `collideCircle`, `groundAt`), `lineOfSight`, `canStep`, `pathStep`, `findOpenSpot`, `buildOccupancy`, the Manila Room, vending placement (`vendFootprint`, `liftHash`) |
