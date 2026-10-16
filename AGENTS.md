@@ -2039,8 +2039,9 @@ brightness seam along every light-cell boundary.
 A panel is shaded as the **1.24 m square of glowing plastic it actually is**,
 not as a point: `PANEL_HALF` (core/layout.h) is its half-extent, which the
 mesher (`hp` in chunk_mesh.cpp), `lightAtCPU`, the greybox and Unreal's rect
-lights read. The shader's `PANEL_HALF` is a GLSL copy, and the shading point is
-`P` clamped into that rectangle. Change the quad's size and change both. Two things
+lights read; `worldFragmentShader()` (shaders.cpp) writes it into the GLSL in
+place of `@PANEL_HALF@`, so load that, not the template. The shading point is
+`P` clamped into that rectangle. Two things
 fall out of treating it as an area:
 
 - The terminator softens by how big the panel *looks* from the shaded point
