@@ -14,6 +14,7 @@
 #include "object_meshes.h"
 #include "revolver.h"
 #include "textures.h"
+#include "camcorder.h"
 #include <vector>
 
 // Slots in Game::mats. The first four line up with the chunk mesh slots of the
@@ -61,6 +62,8 @@ struct Game {
     int frame = 0;
     bool debugHud = false;                    // F3; the dev keys act only while it is up
     bool everFlashed = false;                 // HUD: the flashlight hint shows until first use
+    int camKnob = 0;                          // BACKROOMS_CAM: 1 camera up from the start, 2 in night shot
+    bool chaseKnob = false;                   // BACKROOMS_CHASE: the forced spawn chases (the tape's capture)
     char bestPath[512] = {};                  // where the records live
 
     // resources
@@ -92,10 +95,11 @@ struct Game {
         locDead = -1, locLightMul = -1, locFlarePos = -1, locFlareInt = -1, locGloss = -1,
         locEntPos = -1, locEntDark = -1, locOccOrigin = -1, locOccN = -1, locEntBlock = -1,
         locVary = -1, locFaulty = -1, locWet = -1, locWetFrom = -1, locRoomMask = -1, locLamp = -1,
-        locStoreyH = -1, locStorey = -1, locLampCol = -1, locMacro = -1, locBoard = -1, locObjRefl = -1, locDrawRel = -1;
+        locStoreyH = -1, locStorey = -1, locLampCol = -1, locMacro = -1, locBoard = -1, locObjRefl = -1, locDrawRel = -1, locIR = -1;
     int locPTime = -1, locPFear = -1, locPWater = -1, locPMigraine = -1;
     Material mats[MAT_COUNT]{};
     GameAudio audio;
+    Camcorder camcorder;
     RenderTexture2D rt{};
 
     void init();

@@ -27,6 +27,7 @@ enum : uint32_t {
     BTN_CROUCH   = 1u << 10,
     BTN_THROW    = 1u << 11,
     BTN_SQUEEZE  = 1u << 12,
+    BTN_CAM      = 1u << 13,
 };
 
 // One frame's worth of touch state, filled by the EM_ASM block below. Laid out
@@ -72,6 +73,14 @@ void setAimLatch(bool on) {
 } // namespace
 
 void webReleaseAim() { setAimLatch(false); }
+
+void webLightCam(bool on) {
+    static bool lit = false;
+    if (lit == on) return;
+    lit = on;
+    EM_ASM({ if (Module.__touch && Module.__touch.setHeld) Module.__touch.setHeld($0, $1 != 0); },
+           (int)BTN_CAM, on ? 1 : 0);
+}
 
 void webInputPoll() {
     EM_ASM({
@@ -145,6 +154,7 @@ bool inKeyPressed(int key) {
         case KEY_M:     return (g.pressed & BTN_CHALK)    != 0;
         case KEY_THREE: return (g.pressed & BTN_DRINK)    != 0;
         case KEY_Q:     return (g.pressed & BTN_THROW)    != 0;
+        case KEY_V:     return (g.pressed & BTN_CAM)      != 0;
         default:        return false;
     }
 }

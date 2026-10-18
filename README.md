@@ -64,8 +64,8 @@ are per-browser.
 
 Touch controls appear automatically on a coarse pointer: a floating thumbstick
 in the lower left (push it all the way to run), drag anywhere else to look, and
-a button cluster for fire, aim, reload, jump, use, torch, item, throw, chalk and
-drink. Force them on or off with `?touch=1` / `?touch=0`.
+a button cluster for fire, aim, reload, jump, use, torch, item, throw, chalk,
+drink and the camcorder. Force them on or off with `?touch=1` / `?touch=0`.
 
 **Tap anywhere to begin**, or just push the stick — the title card and the
 death card both start a run on any tap of open screen, and a stick push starts
@@ -184,6 +184,41 @@ records follow actual travel. Full batteries remain available to collect later.
 
 See [validation and limitations](docs/graphics-update.md).
 
+
+## The camcorder, and the tape it leaves
+
+You carry a camcorder, and it is always recording.
+
+- **Raise it** with **V** (**CAM** on a phone) and you see the halls through its
+  viewfinder: interlaced VHS with smeared colour, a blinking **REC**, the tape
+  counter, today's date on a 1996 tape. The gun or the can goes out of frame,
+  because both hands are on the camera. Picking an item, drinking or throwing
+  a flare lowers it.
+- **Night shot.** Click (FIRE) while it is up and it switches to infrared: the
+  picture goes green and gains up out of the dark, and an infrared lamp beside
+  the lens lights the near field. It sees through a blackout and into the dead
+  light a hunter brings with it, as far as the lamp reaches. The lamp runs on
+  the camera's battery, about 75 s from full and twice that to recharge. Night
+  shot with a flat battery is gain and noise and nothing else.
+- **Zoom.** Hold right mouse to run the lens out to 4x, or set it with the
+  wheel; on a phone, AIM steps between 1x and 3x. The motor whines while it
+  moves, and looking is slower the further in you are.
+- **It knows before you do.** The tape picks up anything that hunts as
+  interference, through walls: the picture tears, a tracking band rolls down
+  it and lines drop out, worse the closer it is and worst in a chase. Hold
+  the camera up to a quiet corridor and watch whether it stays quiet.
+- **The recovered tape.** When something takes you, the death card does not
+  just name it. The deck clunks, the screen snows, and the last four seconds
+  of your tape play back as found footage, with every sound the run made in
+  that stretch coming back off the tape. The final second drags at a third of
+  speed, pitch and all, and stops on a shivering still of the last frame
+  before the card's words come up over it. Any key skips it after the first
+  1.6 s, as before.
+
+The tape is kept at 15 frames a second in one 2048-pixel texture, so the
+whole reel is a single framebuffer (14 MB at 1440x850) whatever the window. None of this
+reaches the sim: the camera's buttons are taken out of the input before it is
+handed over, so traces and replays are unchanged.
 
 ## The levels
 
@@ -559,6 +594,8 @@ Details that reward paying attention:
 | 4 | tape player (click to play a tape; click again to set it down running) |
 | M | chalk a directional floor arrow |
 | E | vending machine, or pick the tape player back up |
+| V | raise / lower the camcorder |
+| left click / right mouse / wheel (camera up) | night shot / zoom in / set zoom |
 | F11 | borderless fullscreen |
 | P | pause |
 | ESC / click | release / capture mouse |
@@ -578,6 +615,8 @@ With the F3 debug HUD open, dev hotkeys are live: `B` force blackout,
 - `BACKROOMS_EXITS=1` — exit doors everywhere (visual testing).
 - `BACKROOMS_MANILA=1` — a Manila Room in the chunk east of spawn, centred at x 48, z 16 (visual testing).
 - `BACKROOMS_RECORD=path` — record every call on the sim to a trace; `./replay path` replays it without the game (shared/sim/trace.h).
+- `BACKROOMS_CAM=1` — the camcorder up from the start; `2` in night shot (visual testing).
+- `BACKROOMS_CHASE=1` — the hunter the headless capture spawns on frame 300 gives chase, which is how a capture reaches the death card's tape.
 - `BACKROOMS_POS="x,z,yaw[,pitch]"` — start at a specific spot and heading, optionally looking up (+) or down (-) by `pitch` radians (visual testing).
 - `BACKROOMS_LEVEL=n` — start on level n (visual testing).
 - `BACKROOMS_SEED=n` — fix the world seed (repeatable maze).

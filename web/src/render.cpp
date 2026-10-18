@@ -105,7 +105,7 @@ void Game::renderScene(double now) {
     cam.position = toRl(view.eye);
     cam.target = Vector3Add(cam.position, toRl(view.forward));
     cam.up = toRl(view.up);
-    cam.fovy = view.fovY;
+    cam.fovy = camcorder.fovY(view.fovY);
     cam.projection = CAMERA_PERSPECTIVE;
 
     float timeF = (float)now;
@@ -121,6 +121,8 @@ void Game::renderScene(double now) {
     }
     SetShaderValue(worldShader, locFlash, &flashSend, SHADER_UNIFORM_FLOAT);
     SetShaderValue(worldShader, locFlashDir, &sim.fwd, SHADER_UNIFORM_VEC3);
+    float irSend = camcorder.irLamp();
+    SetShaderValue(worldShader, locIR, &irSend, SHADER_UNIFORM_FLOAT);
     float flick = 0.91f + 0.09f * sinf(timeF * 31.0f) * sinf(timeF * 47.3f + 1.3f);
     // The shader carries one flare point light, so several fires on the floor
     // become the one with the most presence at your feet — the others still
@@ -366,6 +368,14 @@ void Game::renderScene(double now) {
     const LevelCfg &lc = LEVELS[sim.level];
     float ambLumP = (lc.amb.x + lc.amb.y + lc.amb.z) / 3.0f;
     float edSend = (sim.ent.st == EState::Hidden) ? 0.0f : sim.entDarkCur;
+    // The camcorder's infrared lamp on what is drawn unlit, as the world shader has it.
+    auto irLum = [&](float x, float y, float z) {
+        if (irSend <= 0.01f) return 0.0f;
+        float dx = x - sim.px, dy = y - sim.eyeY, dz = z - sim.pz;
+        float d2 = dx * dx + dy * dy + dz * dz, d = sqrtf(d2) + 1e-4f;
+        float ahead = fmaxf((dx * sim.fwd.x + dy * sim.fwd.y + dz * sim.fwd.z) / d, 0.0f);
+        return irSend * (0.30f + 0.70f * ahead * ahead * ahead) * 6.0f / (1.0f + 0.14f * d2);
+    };
     auto propLum = [&](float x, float y, float z) {
         float lum = lightAtCPU(x, y, z, sim.blackoutCur, lc.ls, lc.wallH - LIGHT_DROP, lc.dead, lc.lightMul, ambLumP,
                                sim.ent.x, sim.ent.z, edSend, lc.vary);
@@ -373,6 +383,7 @@ void Game::renderScene(double now) {
             float fx = x - flarePos.x, fy = y - flarePos.y, fz = z - flarePos.z;
             lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fx * fx + fy * fy + fz * fz)), 0.0f, 1.0f);
         }
+        lum = clampf(lum + irLum(x, y, z), 0.0f, 1.0f);
         return 0.18f + 0.82f * lum;   // a hint of form survives the dark
     };
     auto lit = [](Color c, float f) {
@@ -532,6 +543,7 @@ void Game::renderScene(double now) {
             float fx = sp.litAt.x - flarePos.x, fz = sp.litAt.z - flarePos.z;
             lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fx * fx + fz * fz)), 0.0f, 1.0f);
         }
+        lum = clampf(lum + irLum(sp.litAt.x, sp.litAt.y, sp.litAt.z), 0.0f, 1.0f);
         unsigned char l8 = cl8(40 + 215 * lum);
         unsigned char al = cl8(255 * clampf(expf(-dd * c.fogDen) * 1.6f, 0, 1) * sp.fade);
         DrawBillboardRec(cam, texDog, spriteRect(sp, sp.frame0), toRl(sp.centre), { sp.w, sp.h },
@@ -566,6 +578,7 @@ void Game::renderScene(double now) {
             float fvx = sim.ent.x - flarePos.x, fvz = sim.ent.z - flarePos.z;
             lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fvx * fvx + fvz * fvz)), 0.0f, 1.0f);
         }
+        lum = clampf(lum + irLum(sp.litAt.x, sp.litAt.y, sp.litAt.z), 0.0f, 1.0f);
         float fogf = expf(-sim.entDist * c.fogDen);
         unsigned char lum8 = cl8(40 + 215 * lum);
         unsigned char al = cl8(255 * clampf(fogf * 1.6f, 0, 1) * sp.fade);
@@ -637,7 +650,8 @@ void Game::renderScene(double now) {
             DrawSphere(p,0.009f,color);
         }
     }
-    const Held held = heldItem(sim);
+    // Looking through the camcorder, whatever is in the other hand is out of frame.
+    const Held held = camcorder.viewing() ? Held::None : heldItem(sim);
     if (held != Held::None) {
         // Held against a wall, the can falls inside that wall's shadow and goes
         // black in your hands. A viewmodel shouldn't be shadowed by the room it
@@ -713,19 +727,33 @@ void Game::renderUI(double now) {
     float submerged = sim.level==2 && sim.world.poolAt(cellOf(sim.px),cellOf(sim.pz)) ? clampf((WATER_Y-sim.eyeY)*8,0,1) : 0;
     SetShaderValue(postShader,locPWater,&submerged,SHADER_UNIFORM_FLOAT);
     SetShaderValue(postShader, locPMigraine, &sim.migraine, SHADER_UNIFORM_FLOAT);
-    BeginShaderMode(postShader);
-    DrawTextureRec(rt.texture, { 0, 0, (float)rt.texture.width, -(float)rt.texture.height }, { 0, 0 }, WHITE);
-    EndShaderMode();
+    int sw = GetScreenWidth(), sh = GetScreenHeight();
+    // Through the camcorder the tape's look replaces the eye's, and the
+    // inventory and meters give way to its OSD.
+    const bool filming = camcorder.viewing() && !sim.inMenu;
+    if (filming) camcorder.drawViewfinder(rt, timeF, (float)elapsed);
+    else {
+        BeginShaderMode(postShader);
+        DrawTextureRec(rt.texture, { 0, 0, (float)rt.texture.width, -(float)rt.texture.height }, { 0, 0 }, WHITE);
+        EndShaderMode();
+    }
+    if (!sim.inMenu && camcorder.raise > 0.0f && camcorder.raise < 1.0f)   // the eye meeting the finder
+        DrawRectangle(0, 0, sw, sh, Fade(BLACK, 1.0f - fabsf(2.0f * camcorder.raise - 1.0f)));
     if (cleanShot && !sim.inMenu) { EndDrawing(); return; }
 
-    int sw = GetScreenWidth(), sh = GetScreenHeight();
     if (sim.swimming && !sim.inMenu)
         hudTextC(inTouchActive() ? "hold JUMP  stay up   ·   let go  dive" : "hold SPACE  stay up   ·   let go  dive   ·   SHIFT  swim faster",
                  sw/2,sh-hud(42),hud(16),Color{174,221,214,230});
 
     if (sim.inMenu && sim.deathT > 0) {   // the run just ended; the card holds the title screen
-        DrawRectangle(0, 0, sw, sh, Fade(Color{ 10, 3, 3, 255 }, 0.88f));
         float a = clampf(sim.deathT > Sim::DEATH_CARD - 0.6f ? (Sim::DEATH_CARD - sim.deathT) / 0.6f : sim.deathT / 1.0f, 0, 1);
+        if (camcorder.replaying()) {
+            // The tape plays first; the words come up over its last frame.
+            camcorder.drawReplay(timeF);
+            a = fminf(clampf(sim.deathT, 0, 1), camcorder.cardAlpha());
+            DrawRectangle(0, 0, sw, sh, Fade(Color{ 10, 3, 3, 255 }, 0.66f * a));
+            if (sim.deathT < 1.0f) DrawRectangle(0, 0, sw, sh, Fade(BLACK, 1.0f - sim.deathT));
+        } else DrawRectangle(0, 0, sw, sh, Fade(Color{ 10, 3, 3, 255 }, 0.88f));
         hudTextC(sim.deathTitle, sw / 2, sh / 3, hud(54), Fade({ 178, 34, 24, 255 }, a));
         hudTextC(TextFormat("%s took you on %s", sim.deathBy, LEVELS[sim.deathLevel].name),
                  sw / 2, sh / 3 + hud(74), hud(20), Fade({ 176, 132, 122, 255 }, a * 0.95f));
@@ -775,16 +803,16 @@ void Game::renderUI(double now) {
                                 sim.best.longestRun / 60, sim.best.longestRun % 60),
                      sw / 2, sh * 2 / 3 + hud(62), hud(16), { 140, 132, 100, 200 });
         const char *tc = inTouchActive()
-            ? TextFormat("STICK move    AIM taps the sights up and down    LAMP torch    ITEM cycle    bank %d doubloons to leave",
+            ? TextFormat("STICK move    AIM taps the sights up and down    LAMP torch    ITEM cycle    CAM camcorder    bank %d doubloons to leave",
                          Sim::ESCAPE_COST)
-            : TextFormat("WASD move    SHIFT run    C squeeze    F flashlight    1/2/4 item    bank %d doubloons to leave",
+            : TextFormat("WASD move    SHIFT run    C squeeze    F flashlight    1/2/4 item    V camcorder    bank %d doubloons to leave",
                          Sim::ESCAPE_COST);
         hudTextC(tc, sw / 2, sh - hud(42), hud(15), { 128, 122, 96, 170 });
         EndDrawing();
         return;
     }
 
-    if (sim.drinkT <= 0 && (sim.weapon == WEAPON_REVOLVER || (sim.weapon == WEAPON_FLARE && sim.flares > 0)))
+    if (!filming && sim.drinkT <= 0 && (sim.weapon == WEAPON_REVOLVER || (sim.weapon == WEAPON_FLARE && sim.flares > 0)))
         // Scaled like every other HUD element (BUG-10), and faded out as the
         // sights come up (the iron-sight work): with the revolver aimed the
         // blade is the sight, and a dot floating over it reads as a smudge.
@@ -810,8 +838,8 @@ void Game::renderUI(double now) {
         const char *t2 = "if you're reading this, you've already noclipped";
         hudTextC(t2, sw / 2, sh / 3 + hud(66), hud(18), Fade({ 160, 150, 110, 255 }, ta * 0.9f));
         const char *t3 = inTouchActive()
-            ? "STICK walk   push past its ring to run   DUCK crouch   SQUEEZE   JUMP   LAMP torch   ITEM cycle   DRINK   MARK chalk   USE vend/pick up"
-            : "WASD walk   SHIFT or W W run   CTRL crouch   C squeeze   SPACE jump   F flashlight   1/2/4 item   3 drink   M chalk   E vend/pick up";
+            ? "STICK walk   push past its ring to run   DUCK crouch   SQUEEZE   JUMP   LAMP torch   ITEM cycle   DRINK   MARK chalk   USE vend/pick up   CAM camcorder"
+            : "WASD walk   SHIFT or W W run   CTRL crouch   C squeeze   SPACE jump   F flashlight   1/2/4 item   3 drink   M chalk   E vend/pick up   V camcorder";
         hudTextC(t3, sw / 2, sh - hud(60), hud(16), Fade({ 140, 132, 100, 255 }, ta * 0.8f));
         if (sim.best.escapes || sim.best.kills || sim.best.metres || sim.best.wins) {
             const char *tb = sim.best.tapes > 0
@@ -883,16 +911,16 @@ void Game::renderUI(double now) {
         const char *t = "click to capture mouse";
         hudTextC(t, sw / 2, sh / 2 + hud(80), hud(20), { 200, 190, 150, 200 });
     }
-    hudTextR(TextFormat("%d", GetFPS()), sw - hud(14), hud(12), hud(16), { 190, 180, 140, 150 });
+    if (!filming) hudTextR(TextFormat("%d", GetFPS()), sw - hud(14), hud(12), hud(16), { 190, 180, 140, 150 });
     // persistent flashlight reminder until first use; small state dot + charge bar after
     if (sim.flashOn) everFlashed = true;
-    if (!everFlashed && elapsed > 9.0)
+    if (!everFlashed && elapsed > 9.0 && !filming)
         // NOT an em dash: raylib's default font stops at Latin-1, and anything
         // past it draws as a literal "?" on the HUD. U+00B7 is inside the range.
         hudTextR("F · flashlight", sw - hud(16), sh - hud(28), hud(16), { 190, 180, 140, 160 });
-    else if (sim.flashOn)
+    else if (sim.flashOn && !filming)
         hudTextR("[ flashlight ]", sw - hud(16), sh - hud(26), hud(14), { 235, 225, 180, 120 });
-    {   // sanity: always up, because it is always going down
+    if (!filming) {   // sanity: always up, because it is always going down
         const int w = hud(90), x = sw - w - hud(16), y = sh - hud(60), th = hud(5);
         DrawRectangle(x - hud(1), y - hud(1), w + hud(2), th + hud(2), { 0, 0, 0, 120 });
         // steady cream, souring toward red as it empties; the last stretch pulses
@@ -928,7 +956,7 @@ void Game::renderUI(double now) {
         float a = clampf(sim.sanityWarnT / 1.2f, 0, 1) * clampf((4.0f - sim.sanityWarnT) / 0.4f, 0, 1);
         hudTextC(sim.sanityLine, sw / 2, sh / 2 + hud(96), hud(19), Fade({ 206, 176, 176, 255 }, a * 0.9f));
     }
-    if (sim.flashOn || sim.battery < 0.99f) {   // charge bar, once it's been used or spent at all
+    if (!filming && (sim.flashOn || sim.battery < 0.99f)) {   // charge bar, once it's been used or spent at all
         const int w = hud(90), x = sw - w - hud(16), y = sh - hud(44), th = hud(5);   // one row below the sanity meter
         DrawRectangle(x - hud(1), y - hud(1), w + hud(2), th + hud(2), { 0, 0, 0, 120 });
         Color bar = sim.battery < 0.15f ? Color{ 220, 90, 70, 190 } : Color{ 200, 190, 150, 150 };
@@ -939,7 +967,7 @@ void Game::renderUI(double now) {
             hudTextR(t, sw - hud(16), sh - hud(78), hud(13), Fade({ 220, 120, 100, 220 }, pulse));   // clear of the sanity meter
         }
     }
-    {   // inventory, bottom-left; the selected weapon is lit
+    if (!filming) {   // inventory, bottom-left; the selected weapon is lit
         // Draw each line straight off its TextFormat rather than holding the
         // pointers and drawing at the end: TextFormat hands back a slot in a
         // small rotating buffer, and this block now formats more lines than
@@ -993,7 +1021,7 @@ void Game::renderUI(double now) {
         DrawRectangleGradientH(0, 0, e, sh, r0, r1);
         DrawRectangleGradientH(sw - e, 0, e, sh, r1, r0);
     }
-    if (sim.stamina < 0.98f) {   // sprint bar, bottom centre
+    if (!filming && sim.stamina < 0.98f) {   // sprint bar, bottom centre
         const int w = hud(220), x = sw / 2 - w / 2, y = sh - hud(42), th = hud(6);
         DrawRectangle(x - hud(1), y - hud(1), w + hud(2), th + hud(2), { 0, 0, 0, 120 });
         DrawRectangle(x, y, (int)(w * sim.stamina), th,
@@ -1019,7 +1047,7 @@ void Game::renderUI(double now) {
         coverLine = "[ crouched ]";
         coverCol = { 180, 170, 140, 120 };
     }
-    if (coverLine)
+    if (coverLine && !filming)
         hudTextC(coverLine, sw / 2, sh - hud(62), hud(14), coverCol);
     if (sim.level == 3 && sim.valveT > 0) {   // just closed one
         float a = clampf(sim.valveT / 1.6f, 0, 1);
