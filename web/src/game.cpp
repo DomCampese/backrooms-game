@@ -123,6 +123,7 @@ void Game::init() {
     locMacro = GetShaderLocation(worldShader, "uMacro");
     locBoard = GetShaderLocation(worldShader, "uBoard");
     locObjRefl = GetShaderLocation(worldShader, "uObjRefl");
+    locIR = GetShaderLocation(worldShader, "uIR");
     postShader = LoadShaderFromMemory(NULL, POST_FS);
     if (postShader.id == rlGetShaderIdDefault())
         TraceLog(LOG_ERROR, "post shader failed to compile - see the SHADER lines above");
@@ -204,6 +205,10 @@ void Game::init() {
     simBegin(sim, start, now);
     rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
     SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);   // post CA/bloom sample past the edges: clamp, don't wrap
+    camcorder.load();
+    camcorder.fitReel(GetScreenWidth(), GetScreenHeight());
+    if (const char *camEnv = getenv("BACKROOMS_CAM")) camKnob = atoi(camEnv);
+    chaseKnob = getenv("BACKROOMS_CHASE") != nullptr;
 
     // The look first: applyLevel's schedules start from after its surfaces are made.
     enterLevel(0);
@@ -336,6 +341,7 @@ bool Game::tick() {
         rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
         SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);   // post CA/bloom sample past the edges: clamp, don't wrap
         sim.fov = baseFov();   // a phone turned on its side is framed from the first frame
+        camcorder.fitReel(GetScreenWidth(), GetScreenHeight());
         if (trace) trace.fov(sim.fov);
     }
     if (IsKeyPressed(KEY_F11)) ToggleBorderlessWindowed();
@@ -349,6 +355,9 @@ bool Game::tick() {
         updateOccupancy();
         sim.menuBegin(in, now);
         if (trace) trace.digest(sim);
+        if (!sim.inMenu || sim.deathT <= 0) camcorder.stopReplay();
+        if (!sim.inMenu) camcorder.startTape();
+        camcorder.stepReplay(dt, audio);
         finishStep(true);
         renderScene(now);
         renderUI(now);
@@ -379,14 +388,19 @@ bool Game::tick() {
     bool captureClick = !inCursorHidden() && !shotPath && inMousePressed(MOUSE_BUTTON_LEFT);
     if (captureClick) DisableCursor();
     InputFrame in = readInput(captureClick);
+    if (camKnob && frame == 2) { camcorder.up = true; camcorder.night = camKnob > 1; }
+    camcorder.control(in, sim, dt);   // before the trace: what is recorded is what the sim was given
     if (trace) trace.step(in, dt, now, sim.clockSeed);
     sim.step(in, dt, now);
     if (trace) trace.digest(sim);
+    camcorder.logSounds(sim.audio);
+    if (sim.inMenu && sim.deathT > 0) camcorder.beginReplay();   // taken: the tape plays on the card
     finishStep(false);
     streamChunks();
     updateOccupancy();
 
     renderScene(now);
+    if (!sim.inMenu) camcorder.record(rt, sim, dt, (float)(now - sim.runStart));
     renderUI(now);
 
     if (shotPath && frame == shotFrame) {
@@ -440,6 +454,7 @@ InputFrame Game::readInput(bool captureClick) {
     }
     in.screenFov = baseFov();
     in.forceSpawn = shotPath && !benchmark && frame == 300;   // headless: put the hunter in view
+    if (chaseKnob && frame == 301) in.dev.chase = true;
     return in;
 }
 

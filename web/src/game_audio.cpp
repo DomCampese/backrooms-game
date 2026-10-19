@@ -57,6 +57,18 @@ void GameAudio::play(const std::vector<AudioEvent> &events) {
     }
 }
 
+void GameAudio::echo(const AudioEvent &e, float pitch, float volume) {
+    Sound &src = clips[(int)e.sfx][e.variant];
+    if (!src.stream.buffer) return;
+    Sound &s = echoes[(int)e.sfx][e.variant];
+    if (!s.stream.buffer) s = LoadSoundAlias(src);
+    ClipSpec spec = clipSpec(e.sfx);
+    SetSoundPitch(s, (e.set & AudioEvent::SET_PITCH ? e.pitch : spec.pitch) * pitch);
+    SetSoundVolume(s, (e.set & AudioEvent::SET_VOLUME ? e.volume : spec.volume) * volume);
+    SetSoundPan(s, panFor(e.set & AudioEvent::SET_PAN ? e.pan : 0.0f));
+    PlaySound(s);
+}
+
 void GameAudio::holdPaused(const AmbienceMix &mix, const LoopCue &loops) {
     synth.bed.mix = mix;
     synth.bed.mix.growl = synth.bed.mix.hiss = synth.bed.mix.whisper = 0;

@@ -16,6 +16,41 @@ The move from `src/` was checked by compiling all 44 sources before and after:
 identical assembly. The Web build also runs natively on desktop; the name is
 its role, not its only platform.
 
+# Camcorder and recovered tape (October 2026)
+
+web/src/camcorder.{h,cpp}, the `TAPE_FS` shader and the world shader's `uIR`.
+It is the Web build's alone; the Unreal build does not have it. What will bite:
+
+- **The sim never sees the camera.** `Camcorder::control` runs between
+  `readInput` and `trace.step` and takes fire, aim, reload and the wheel out
+  of the `InputFrame`. Move it after the trace and a recorded run replays
+  with the gun firing every time night shot was switched.
+- **Raising it does not need `in.playing`; toggling does.** A headless capture
+  never captures the cursor, so `BACKROOMS_CAM` stayed down until that check
+  was split.
+- **The touch AIM latch is dropped by the sim every tick an aim is refused**
+  (`dropAimLatch`), and with the camera up every aim is refused. So on touch
+  the zoom reads AIM as an edge, not a held state.
+- **The reel is one render texture, at most 2048 on a side**, which is all
+  WebGL 2 guarantees. A frame is 288 px on its long side and the reel holds
+  64 of them, 4.3 s at 15 Hz; at 1440x850 that is 7 x 10 cells and 14 MB.
+  Each frame is cleared to black before the scene is drawn into it:
+  the scene target carries alpha (glass, water) and would blend over the
+  frame the slot held before.
+- **`TAPE_FS` takes its coordinates from `gl_FragCoord`, not the quad.** One
+  shader draws the scene target and a frame on the reel, and samples either
+  through `uCellA`/`uCellB` as uv rectangles with v up the picture. raylib's
+  y runs down and a framebuffer's rows run up, which is what `cellUV` converts.
+- **Echoed sounds play on aliases** (`GameAudio::echo`, `LoadSoundAlias`).
+  A clip keeps the pitch it was last given, so setting it on the clip itself
+  would carry the slow-motion pitch into the next run's footsteps, which the
+  rules play without `SET_PITCH`.
+- **`Sim::DEATH_CARD` is 12 s, was 7**, to fit the playback (about 6 s) and
+  then the card. `DEATH_CARD_HOLD` is unchanged, so a key still skips it.
+- **Interference is real.** At frame 40 of a seed-1337 Level 0 capture the
+  tape is torn because Clark has spawned stalking about 12 m away, out of sight.
+  That is the feature, not a bug in the shader.
+
 # Unreal port, first slice (September 2026)
 
 The Unreal project is `unreal/` (its README, docs/unreal-handoff.md "Status").
@@ -798,6 +833,7 @@ build's, in `web/src/`.
 | `sfx.cpp` | loads the clips (`port/sounds.h`) and the embedded recordings into raylib |
 | `audio.cpp` | feeds the ambience bed (`port/ambience.h`) to a raylib stream; recorded loops live in `GameAudio::feedLoops` |
 | `sim/entity.h` | `Entity` (Clark on Level 0, the Smiler on 1 and 3, the Partygoer on 4) and `Dog` state |
+| `camcorder.{h,cpp}` | the camcorder: viewfinder, night shot, zoom, interference, the tape reel and its playback on the death card, its OSD and sounds |
 | `util.{h,cpp}` | platform helpers (`cl8`, `PARTY`); includes core's math and hashes. `SAMPLE_RATE` is port/sounds.h's |
 
 `Sim::step` calls the update functions in a fixed order: flashlight, look,
@@ -1187,6 +1223,8 @@ Environment variables, all read at startup:
 | `BACKROOMS_FLASH=1` | start with the flashlight on |
 | `BACKROOMS_MANILA=1` | put a Manila Room in the chunk east of spawn (centre x 48, z 16) |
 | `BACKROOMS_RECORD=path` | record every call on the sim, for `./replay` and the port (shared/sim/trace.h) |
+| `BACKROOMS_CAM=1` | the camcorder up from frame 2; `2` in night shot |
+| `BACKROOMS_CHASE=1` | the hunter the capture spawns on frame 300 chases; with `BACKROOMS_POS=15,15,0.8` and seed 1337 it takes you on frame 410, so the tape plays from there |
 
 **`BACKROOMS_NOENT` does not exist.** It appears in scratch scripts written
 during development and is silently ignored — it never suppressed the entity.

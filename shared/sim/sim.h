@@ -104,7 +104,7 @@ struct Sim {
     static constexpr float LUNGE_REACH = 2.5f;
     static constexpr float LUNGE_TIME = 0.6f;
     static constexpr float CATCH_REACH = 1.25f;
-    static constexpr float DEATH_CARD = 7.0f;   // s the death card holds the title screen
+    static constexpr float DEATH_CARD = 12.0f;  // s the death card holds the title screen: the tape, then the words
     static constexpr float DEATH_CARD_HOLD = 1.6f;   // s of it no key can dismiss
     // Health. One hit is survivable and a second before healing is not: two
     // hits are past zero, and REGEN_DELAY + 0.6 / REGEN_RATE (16 s) untouched
