@@ -543,8 +543,9 @@ byte-identical. How it fits together, and what will bite:
   (`floor((y + 0.3) / H)`), lights OPENUP cells with a second pass over the
   storey above's fittings — the ones that exist up there and are missing here,
   since a hole above is an opening below — and hashes each storey's tubes with
-  its own offset (`storeyOffset` ⇔ `storeyHashOffset` in core/layout.cpp:
-  change both). `lightAtCPU` mirrors the lighting through `StoreyLightCPU`, looking
+  its own offset (`storeyOffset`, whose numbers `worldFragmentShader` writes
+  in from core's `STOREY_HASH_STEP` and `STOREY_HASH_SPAN`, which
+  `storeyHashOffset` uses). `lightAtCPU` mirrors the lighting through `StoreyLightCPU`, looking
   bit 3 up per fitting, which is fine on the CPU.
 - **Where the frame goes, and why it is shaped like this.** Looking bit 3 up per
   fitting in the shader cost 13% of the frame everywhere, so bit 6 gates it and

@@ -84,9 +84,9 @@ vec4 gChan = vec4(1.0, 0.0, 0.0, 0.0);
 vec4 chanFor(int rel){
     return vec4(rel == 0 ? 1.0 : 0.0, rel == -1 ? 1.0 : 0.0, rel == 1 ? 1.0 : 0.0, 0.0);
 }
-// The per-storey offset into the tube hash. MUST match storeyHashOffset() in
-// core/layout.cpp. Bounded, because sin() loses the hash at large arguments.
-float storeyOffset(float st){ return fract(st * 0.6180339) * 97.0; }
+// The per-storey offset into the tube hash: storeyHashOffset() in core, whose
+// numbers worldFragmentShader() writes in. Bounded, because sin() loses the hash.
+float storeyOffset(float st){ return fract(st * @STOREY_HASH_STEP@) * @STOREY_HASH_SPAN@; }
 
 // Half-width of one ceiling diffuser: PANEL_HALF in core/layout.h, which the
 // mesher and lightAtCPU read too. worldFragmentShader() writes the number in,
@@ -920,7 +920,14 @@ static std::string glslFloat(float v) {
 
 std::string worldFragmentShader() {
     std::string src = WORLD_FS_TEMPLATE;
-    const std::string token = "@PANEL_HALF@";
-    src.replace(src.find(token), token.size(), glslFloat(PANEL_HALF));
+    const struct { const char *token; float value; } numbers[] = {
+        { "@PANEL_HALF@", PANEL_HALF },
+        { "@STOREY_HASH_STEP@", STOREY_HASH_STEP },
+        { "@STOREY_HASH_SPAN@", STOREY_HASH_SPAN },
+    };
+    for (const auto &n : numbers) {
+        const std::string token = n.token;
+        src.replace(src.find(token), token.size(), glslFloat(n.value));
+    }
     return src;
 }

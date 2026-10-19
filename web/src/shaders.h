@@ -7,6 +7,7 @@
 extern const char *WORLD_VS;
 extern const char *POST_FS;
 extern const char *TAPE_FS;   // the camcorder: its viewfinder and its tape played back
-// The world fragment shader with core's numbers written in (PANEL_HALF).
+// The world fragment shader with core's numbers written in (PANEL_HALF and
+// the storey hash offset).
 // Load this, never the template it is built from.
 std::string worldFragmentShader();

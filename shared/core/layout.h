@@ -188,8 +188,11 @@ bool cellHasCeiling(World &w, int gi, int gk);
 // The tube hash the shader's lhash() and lightAtCPU use, 0..1.
 float tubeHash(float gx, float gz);
 // Each storey's tubes fail in their own places: the tube hash is offset per
-// storey. Bounded, because the shader's sin() loses the hash at large
-// arguments. Storey 0 is offset 0. Must match storeyOffset() in shaders.cpp.
+// storey, fract(s * STOREY_HASH_STEP) * STOREY_HASH_SPAN. Bounded, because the
+// shader's sin() loses the hash at large arguments. Storey 0 is offset 0. The
+// shader's storeyOffset() gets both numbers written in by worldFragmentShader().
+constexpr float STOREY_HASH_STEP = 0.6180339f;
+constexpr float STOREY_HASH_SPAN = 97.0f;
 float storeyHashOffset(int s);
 // A faulty fitting's output at time t, seconds, as the shader's lightState
 // stutters it: 1, or 0.62 for the moments its gate is open and its noise low.
