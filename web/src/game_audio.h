@@ -17,6 +17,10 @@ struct GameAudio {
     // they underrun and repeat their last buffer. The growl, hiss and
     // whispers fall silent.
     void holdPaused(const AmbienceMix &mix, const LoopCue &loops);
+    // A PLAY heard again off the camcorder's tape, its pitch and volume scaled.
+    // It plays on an alias of the clip, so what it is given does not stay on
+    // the clip the rules play.
+    void echo(const AudioEvent &e, float pitch, float volume);
 
 private:
     // One raylib Sound per clip, by Sfx and variant (port/sounds.h). The
@@ -24,6 +28,7 @@ private:
     // sight.
     Sound clips[SFX_COUNT][SFX_MAX_VARIANTS]{};
     Sound sndVoice{};
+    Sound echoes[SFX_COUNT][SFX_MAX_VARIANTS]{};   // aliases of `clips`, made on first echo
     // Looped recordings: the muffled water while your head is under, and LEVEL
     // FUN's music. Both stream and loop; volumes are eased.
     Music musUnderwater{}, musParty{};

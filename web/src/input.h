@@ -25,6 +25,9 @@ float webMoveScale();
 // decides when an aim is legal, so it needs a way to drop a latch it has
 // refused — otherwise the button sits lit over a gun that never comes up.
 void webReleaseAim();
+// The CAM button is lit while the camcorder is up; the game decides that, not
+// the finger, so it is told rather than working it out.
+void webLightCam(bool on);
 
 bool    inKeyDown(int key);
 bool    inKeyPressed(int key);
@@ -46,6 +49,7 @@ bool    webStartGesture();
 inline void    webInputPoll() {}
 inline float   webMoveScale() { return 1.0f; }
 inline void    webReleaseAim() {}
+inline void    webLightCam(bool) {}
 inline bool    inTouchActive() { return false; }
 inline bool    webStartGesture() { return false; }
 

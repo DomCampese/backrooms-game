@@ -5,3 +5,4 @@
 extern const char *WORLD_VS;
 extern const char *WORLD_FS;
 extern const char *POST_FS;
+extern const char *TAPE_FS;   // the camcorder: its viewfinder and its tape played back
