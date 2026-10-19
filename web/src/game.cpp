@@ -84,7 +84,7 @@ void Game::init() {
     neutralDetail = LoadTextureFromImage(neutral);
     UnloadImage(neutral);
 
-    worldShader = LoadShaderFromMemory(WORLD_VS, WORLD_FS);
+    worldShader = LoadShaderFromMemory(WORLD_VS, worldFragmentShader().c_str());
     // A failed compile silently falls back to raylib's default shader, which
     // renders a plausible-looking but completely wrong scene. Say so instead.
     if (worldShader.id == rlGetShaderIdDefault())
