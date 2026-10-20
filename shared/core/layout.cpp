@@ -412,8 +412,8 @@ float tubeStutter(float seed, float t) {
 }
 
 float storeyHashOffset(int s) {
-    float t = (float)s * 0.6180339f;
-    return (t - floorf(t)) * 97.0f;
+    float t = (float)s * STOREY_HASH_STEP;
+    return (t - floorf(t)) * STOREY_HASH_SPAN;
 }
 
 ChunkLayout chunkLayout(World &w, int cx, int cz) {

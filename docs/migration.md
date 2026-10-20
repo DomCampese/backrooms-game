@@ -221,7 +221,8 @@ Still coupled, and why:
 - Lighting constants the GLSL still copies from core: the occupancy bits, the
   tube hash (`tubeHash` in core, `lhash` in GLSL). The panel half-size is
   written into the shader from core's `PANEL_HALF` when it is loaded
-  (`worldFragmentShader`). The light plane is core's `LIGHT_DROP` everywhere on the C++ side,
+  (`worldFragmentShader`), and so are the storey hash offset's numbers
+  (`STOREY_HASH_STEP`, `STOREY_HASH_SPAN`). The light plane is core's `LIGHT_DROP` everywhere on the C++ side,
   the mesher, `uLY` and every `lightAtCPU` call included.
 - The render loop reads `ChunkData` directly for the stairwell landing lights
   (`nfeat`, `feats`).
