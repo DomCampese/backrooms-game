@@ -71,9 +71,9 @@ float lightAtCPU(float x, float y, float z, float blackout,
             if (po & 8) continue;                        // no fitting: it would hang in an opening
             if (layer == 1 && !(po & 32)) continue;      // above you, but over floor, not the hole
         }
-        float h = tubeHash(gx + so, gz + so * 1.7f);
+        float h = tubeHash(gx + so, gz + so * TUBE_STOREY_SKEW);
         if (h < dead) continue;
-        float out = 1.0f - vary * (h * 53.7f - floorf(h * 53.7f));   // same spread as lightState()
+        float out = 1.0f - vary * (h * TUBE_OUTPUT_SPREAD - floorf(h * TUBE_OUTPUT_SPREAD));   // same spread as lightState()
         if (lx >= gMaskCPU[0] && lx <= gMaskCPU[2] && lz >= gMaskCPU[1] && lz <= gMaskCPU[3]) continue;
         // the panel is a rectangle, and the shader shades from the point on it
         // closest to the surface — mirror that, or a sprite standing under a

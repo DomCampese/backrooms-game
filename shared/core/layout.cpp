@@ -380,11 +380,11 @@ void fittings(World &w, const ChunkData &d, int cx, int cz, std::vector<LightFit
             f.ceilingY = w.ceilY((int)floorf(lx / CELL), (int)floorf(lz / CELL));
             f.pos = { lx, f.ceilingY - LIGHT_DROP, lz };
             f.turned = (ih((int)floorf(lx / ls), (int)floorf(lz / ls), w.sseed() ^ 0xBA77u) & 1) != 0;
-            float h = tubeHash((float)gx + so, (float)gz + so * 1.7f);
+            float h = tubeHash((float)gx + so, (float)gz + so * TUBE_STOREY_SKEW);
             f.dead = h < rules.dead;
-            f.output = 1.0f - rules.vary * (h * 53.7f - floorf(h * 53.7f));
+            f.output = 1.0f - rules.vary * (h * TUBE_OUTPUT_SPREAD - floorf(h * TUBE_OUTPUT_SPREAD));
             f.faulty = h > 1.0f - rules.faulty;
-            f.stutterSeed = h * 97.31f - floorf(h * 97.31f);
+            f.stutterSeed = h * TUBE_STUTTER_SPREAD - floorf(h * TUBE_STUTTER_SPREAD);
             out.push_back(f);
         }
 }
@@ -400,7 +400,7 @@ bool cellHasCeiling(World &w, int gi, int gk) {
 }
 
 float tubeHash(float gx, float gz) {
-    float v = portableSin(gx * 127.1f + gz * 311.7f) * 43758.5453f;
+    float v = portableSin(gx * TUBE_HASH_X + gz * TUBE_HASH_Z) * TUBE_HASH_SCALE;
     return v - floorf(v);
 }
 

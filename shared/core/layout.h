@@ -112,9 +112,9 @@ struct LightFitting {
     FittingGap gap;
     bool turned;             // a Level 1 batten runs along x
     bool dead;               // hash below LevelRules::dead: never lit
-    float output;            // 1 - vary * fract(hash * 53.7): part output
+    float output;            // 1 - vary * fract(hash * TUBE_OUTPUT_SPREAD): part output
     bool faulty;             // hash above 1 - LevelRules::faulty: stutters
-    float stutterSeed;       // fract(hash * 97.31): when a faulty tube stutters (tubeStutter)
+    float stutterSeed;       // fract(hash * TUBE_STUTTER_SPREAD): when a faulty tube stutters (tubeStutter)
 };
 
 enum class OpeningKind : uint8_t { Doorway, LockedDoor, Exit, CursedExit, Window, Rail };
@@ -185,7 +185,18 @@ ChunkLayout chunkLayout(World &w, int cx, int cz);
 bool cellHasFloor(World &w, int gi, int gk);
 bool cellHasCeiling(World &w, int gi, int gk);
 
-// The tube hash the shader's lhash() and lightAtCPU use, 0..1.
+// The tube hash the shader's lhash() and lightAtCPU use, 0..1:
+// fract(sin(gx * TUBE_HASH_X + gz * TUBE_HASH_Z) * TUBE_HASH_SCALE). A storey's
+// offset so moves the fitting at (gx, gz) to (gx + so, gz + so * TUBE_STOREY_SKEW)
+// before hashing; its part output is 1 - vary * fract(h * TUBE_OUTPUT_SPREAD), and
+// its stutter seed fract(h * TUBE_STUTTER_SPREAD). worldFragmentShader() writes
+// all five into the GLSL.
+constexpr float TUBE_HASH_X = 127.1f;
+constexpr float TUBE_HASH_Z = 311.7f;
+constexpr float TUBE_HASH_SCALE = 43758.5453f;
+constexpr float TUBE_STOREY_SKEW = 1.7f;
+constexpr float TUBE_OUTPUT_SPREAD = 53.7f;
+constexpr float TUBE_STUTTER_SPREAD = 97.31f;
 float tubeHash(float gx, float gz);
 // Each storey's tubes fail in their own places: the tube hash is offset per
 // storey, fract(s * STOREY_HASH_STEP) * STOREY_HASH_SPAN. Bounded, because the
