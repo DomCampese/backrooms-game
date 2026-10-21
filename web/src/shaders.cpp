@@ -98,7 +98,7 @@ const float PANEL_HALF = @PANEL_HALF@;
 // lit by the same room the surface is — set once per fragment, read at the end.
 float gLightLum = 0.0;
 
-float lhash(vec2 g){ return fract(sin(dot(g, vec2(127.1,311.7)))*43758.5453123); }
+float lhash(vec2 g){ return fract(sin(dot(g, vec2(@TUBE_HASH_X@,@TUBE_HASH_Z@)))*@TUBE_HASH_SCALE@); }
 float vnoise(vec2 p){
     vec2 i = floor(p), f = fract(p);
     f = f*f*(3.0-2.0*f);
@@ -116,13 +116,13 @@ vec3 detailNormal(vec3 N, vec2 slope, vec3 dpdx, vec3 dpdy, vec2 duvdx, vec2 duv
     return normalize(N - (T * slope.x + B * slope.y) * inv);
 }
 float lightState(vec2 g, float so){
-    float h = lhash(g + vec2(so, so * 1.7));
+    float h = lhash(g + vec2(so, so * @TUBE_STOREY_SKEW@));
     // Not every tube that works works well: some run at part output, a
     // spread uVary wide. levels.cpp's lightAtCPU applies the same factor.
-    float s = 1.0 - uVary * fract(h*53.7);
+    float s = 1.0 - uVary * fract(h*@TUBE_OUTPUT_SPREAD@);
     // Keep this arithmetic-only: desktop ANGLE can corrupt fragments when
     // the reflected panel's light state adds nested divergent control flow.
-    float fh = fract(h*97.31);
+    float fh = fract(h*@TUBE_STUTTER_SPREAD@);
     float gate = fract(sin(floor(uTime*0.45+fh*37.0)*12.9898)*43758.5453);
     float n = fract(sin(uTime*(7.0+fh*10.0) + fh*211.0)*43758.5453);
     float faulty = 1.0 - step(h, 1.0 - uFaulty);
@@ -924,6 +924,12 @@ std::string worldFragmentShader() {
         { "@PANEL_HALF@", PANEL_HALF },
         { "@STOREY_HASH_STEP@", STOREY_HASH_STEP },
         { "@STOREY_HASH_SPAN@", STOREY_HASH_SPAN },
+        { "@TUBE_HASH_X@", TUBE_HASH_X },
+        { "@TUBE_HASH_Z@", TUBE_HASH_Z },
+        { "@TUBE_HASH_SCALE@", TUBE_HASH_SCALE },
+        { "@TUBE_STOREY_SKEW@", TUBE_STOREY_SKEW },
+        { "@TUBE_OUTPUT_SPREAD@", TUBE_OUTPUT_SPREAD },
+        { "@TUBE_STUTTER_SPREAD@", TUBE_STUTTER_SPREAD },
     };
     for (const auto &n : numbers) {
         const std::string token = n.token;
