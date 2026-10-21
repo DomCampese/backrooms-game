@@ -206,6 +206,18 @@ constexpr float STOREY_HASH_STEP = 0.6180339f;
 constexpr float STOREY_HASH_SPAN = 97.0f;
 float storeyHashOffset(int s);
 // A faulty fitting's output at time t, seconds, as the shader's lightState
-// stutters it: 1, or 0.62 for the moments its gate is open and its noise low.
-// Change one, change both.
+// stutters it: 1, or TUBE_STUTTER_DIP while its gate is open and its buzz low.
+// The gate is a hash of the window, TUBE_STUTTER_RATE windows a second, open
+// above TUBE_STUTTER_OPEN; the buzz runs at TUBE_BUZZ_BASE + seed *
+// TUBE_BUZZ_SPREAD and is low below TUBE_BUZZ_DUTY. worldFragmentShader()
+// writes all of these into the GLSL.
+constexpr float TUBE_STUTTER_RATE = 0.45f;
+constexpr float TUBE_STUTTER_PHASE = 37.0f;
+constexpr float TUBE_STUTTER_HASH = 12.9898f;
+constexpr float TUBE_STUTTER_OPEN = 0.74f;
+constexpr float TUBE_STUTTER_DIP = 0.62f;
+constexpr float TUBE_BUZZ_BASE = 7.0f;
+constexpr float TUBE_BUZZ_SPREAD = 10.0f;
+constexpr float TUBE_BUZZ_PHASE = 211.0f;
+constexpr float TUBE_BUZZ_DUTY = 0.5f;
 float tubeStutter(float stutterSeed, float t);

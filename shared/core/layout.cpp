@@ -406,9 +406,11 @@ float tubeHash(float gx, float gz) {
 
 float tubeStutter(float seed, float t) {
     auto fract = [](float v) { return v - floorf(v); };
-    float gate = fract(portableSin(floorf(t * 0.45f + seed * 37.0f) * 12.9898f) * 43758.5453f);
-    float noise = fract(portableSin(t * (7.0f + seed * 10.0f) + seed * 211.0f) * 43758.5453f);
-    return gate > 0.74f && noise < 0.5f ? 0.62f : 1.0f;
+    float gate = fract(portableSin(floorf(t * TUBE_STUTTER_RATE + seed * TUBE_STUTTER_PHASE) * TUBE_STUTTER_HASH)
+                       * TUBE_HASH_SCALE);
+    float noise = fract(portableSin(t * (TUBE_BUZZ_BASE + seed * TUBE_BUZZ_SPREAD) + seed * TUBE_BUZZ_PHASE)
+                        * TUBE_HASH_SCALE);
+    return gate > TUBE_STUTTER_OPEN && noise < TUBE_BUZZ_DUTY ? TUBE_STUTTER_DIP : 1.0f;
 }
 
 float storeyHashOffset(int s) {

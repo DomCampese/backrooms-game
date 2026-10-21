@@ -2,6 +2,7 @@
 #include "core/layout.h"
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 // The shader bodies below are shared verbatim by both targets: GLSL 330 and
 // GLSL ES 3.00 agree on everything they use (in/out, texture(), texelFetch,
@@ -123,11 +124,11 @@ float lightState(vec2 g, float so){
     // Keep this arithmetic-only: desktop ANGLE can corrupt fragments when
     // the reflected panel's light state adds nested divergent control flow.
     float fh = fract(h*@TUBE_STUTTER_SPREAD@);
-    float gate = fract(sin(floor(uTime*0.45+fh*37.0)*12.9898)*43758.5453);
-    float n = fract(sin(uTime*(7.0+fh*10.0) + fh*211.0)*43758.5453);
+    float gate = fract(sin(floor(uTime*@TUBE_STUTTER_RATE@+fh*@TUBE_STUTTER_PHASE@)*@TUBE_STUTTER_HASH@)*@TUBE_HASH_SCALE@);
+    float n = fract(sin(uTime*(@TUBE_BUZZ_BASE@+fh*@TUBE_BUZZ_SPREAD@) + fh*@TUBE_BUZZ_PHASE@)*@TUBE_HASH_SCALE@);
     float faulty = 1.0 - step(h, 1.0 - uFaulty);
-    float flicker = faulty * (1.0 - step(gate, 0.74));
-    s *= mix(1.0, 0.62 + 0.38*step(0.5, n), flicker);
+    float flicker = faulty * (1.0 - step(gate, @TUBE_STUTTER_OPEN@));
+    s *= mix(1.0, mix(@TUBE_STUTTER_DIP@, 1.0, step(@TUBE_BUZZ_DUTY@, n)), flicker);
     vec2 pc = g*uLS + uLS*0.5;
     float masked = step(uRoomMask.x, pc.x) * step(pc.x, uRoomMask.z)
                  * step(uRoomMask.y, pc.y) * step(pc.y, uRoomMask.w);
@@ -906,12 +907,14 @@ void main(){
 
 // A float as GLSL source: the shortest decimal that reads back as the same
 // float, with a decimal point, because GLSL ES does not convert an int
-// literal to float.
+// literal to float. %g at too few digits rounds 10 to 1e+01, which reads back
+// as the same float and is legal GLSL but not how anyone would write it, so a
+// digit count that needs an exponent does not count as shortest.
 static std::string glslFloat(float v) {
     char buf[32];
     for (int digits = 1; digits <= 9; digits++) {
         snprintf(buf, sizeof buf, "%.*g", digits, v);
-        if (strtof(buf, nullptr) == v) break;
+        if (strtof(buf, nullptr) == v && (!strchr(buf, 'e') || digits == 9)) break;
     }
     std::string out = buf;
     if (out.find_first_of(".e") == std::string::npos) out += ".0";
@@ -930,10 +933,22 @@ std::string worldFragmentShader() {
         { "@TUBE_STOREY_SKEW@", TUBE_STOREY_SKEW },
         { "@TUBE_OUTPUT_SPREAD@", TUBE_OUTPUT_SPREAD },
         { "@TUBE_STUTTER_SPREAD@", TUBE_STUTTER_SPREAD },
+        { "@TUBE_STUTTER_RATE@", TUBE_STUTTER_RATE },
+        { "@TUBE_STUTTER_PHASE@", TUBE_STUTTER_PHASE },
+        { "@TUBE_STUTTER_HASH@", TUBE_STUTTER_HASH },
+        { "@TUBE_STUTTER_OPEN@", TUBE_STUTTER_OPEN },
+        { "@TUBE_STUTTER_DIP@", TUBE_STUTTER_DIP },
+        { "@TUBE_BUZZ_BASE@", TUBE_BUZZ_BASE },
+        { "@TUBE_BUZZ_SPREAD@", TUBE_BUZZ_SPREAD },
+        { "@TUBE_BUZZ_PHASE@", TUBE_BUZZ_PHASE },
+        { "@TUBE_BUZZ_DUTY@", TUBE_BUZZ_DUTY },
     };
     for (const auto &n : numbers) {
-        const std::string token = n.token;
-        src.replace(src.find(token), token.size(), glslFloat(n.value));
+        // A number can be written in more than once: the stutter's hashes
+        // scale by the tube hash's TUBE_HASH_SCALE.
+        const std::string token = n.token, value = glslFloat(n.value);
+        for (size_t at = src.find(token); at != std::string::npos; at = src.find(token, at + value.size()))
+            src.replace(at, token.size(), value);
     }
     return src;
 }
