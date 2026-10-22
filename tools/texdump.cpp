@@ -4,7 +4,7 @@
 //   tools/sandbox-build.sh texdump
 //   ./texdump out/                # every texture
 //   ./texdump out/ carpet ceiling # only the ones whose name contains a filter
-//   ./texdump --unreal dir/       # the surfaces and looks.json, for the Unreal import
+//   ./texdump --unreal dir/ [revolver.glb]   # what the Unreal import needs, and world.json
 //
 // Why it exists: a capture shows you a texture through the lighting, the tone
 // curve, the fog and the post pass, which is the wrong place to look for a seam
@@ -22,6 +22,7 @@
 // repeat is in the middle of the picture instead of at its edges.
 #include "raylib.h"
 #include "../shared/port/levels.h"
+#include "../shared/port/model.h"
 #include "../web/src/textures.h"
 #include <chrono>
 #include <cstdio>
@@ -107,55 +108,125 @@ static void sprite(const char *name, Texture2D (*make)()) {
     dump(name, make(), false);
 }
 
-static void putVec(FILE *f, const char *key, Vec3 v) {
-    fprintf(f, "\"%s\": [%.4f, %.4f, %.4f], ", key, v.x, v.y, v.z);
+// How a texture is sampled in the Web build, which the Unreal import copies:
+// mipmapped trilinear (finishTexture's tiled, the can, the deck, the
+// revolver's maps) or plain bilinear, and repeating or clamped.
+struct Sampling { bool mips, clamp; };
+static const Sampling TILED = { true, false }, FLAT = { false, false }, CLAMPED = { false, true };
+
+static FILE *gJson;
+static bool gFirst = true;
+static void exported(const char *name, Texture2D t, Sampling s) {
+    dump(name, t, false);
+    fprintf(gJson, "%s\n    {\"name\": \"%s\", \"mips\": %s, \"clamp\": %s}", gFirst ? "" : ",", name,
+            s.mips ? "true" : "false", s.clamp ? "true" : "false");
+    gFirst = false;
+}
+static Texture2D imageTexture(Image img) {
+    Texture2D t = LoadTextureFromImage(img);
+    UnloadImage(img);
+    return t;
+}
+
+// The revolver's maps as the Web build draws them (web/src/model_asset.cpp):
+// each material's base colour, and its detail map packed from the normal and
+// metallic-roughness images by port/model.h's glbDetailMap.
+static bool exportRevolver(const char *path) {
+    int size = 0;
+    unsigned char *data = LoadFileData(path, &size);
+    GlbModel glb;
+    std::string error;
+    if (!data || !loadGlb(data, (size_t)size, glb, error)) {
+        fprintf(stderr, "texdump: %s: %s\n", path, data ? error.c_str() : "cannot read");
+        if (data) UnloadFileData(data);
+        return false;
+    }
+    auto image = [&](int i) {
+        const GlbModel::Image &im = glb.images[(size_t)i];
+        return LoadImageFromMemory(im.mime == "image/png" ? ".png" : ".jpg", data + im.offset, (int)im.size);
+    };
+    for (size_t m = 0; m < glb.materials.size(); m++) {
+        const GlbMaterial &mat = glb.materials[m];
+        char name[64];
+        snprintf(name, sizeof name, "revolver_%zu", m);
+        exported(name, imageTexture(mat.baseColour >= 0 ? image(mat.baseColour) : GenImageColor(1, 1, WHITE)), TILED);
+        Image n = mat.normal >= 0 ? image(mat.normal) : GenImageColor(1, 1, { 128, 128, 255, 255 });
+        Image r = mat.metalRough >= 0 ? image(mat.metalRough) : GenImageColor(n.width, n.height, { 255, 255, 0, 255 });
+        if (r.width != n.width || r.height != n.height) ImageResize(&r, n.width, n.height);
+        Color *nc = LoadImageColors(n), *rc = LoadImageColors(r);
+        glbDetailMap((const uint8_t *)nc, (const uint8_t *)rc, n.width * n.height, (uint8_t *)nc);
+        Image packed = { nc, n.width, n.height, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
+        snprintf(name, sizeof name, "revolver_%zu_detail", m);
+        exported(name, LoadTextureFromImage(packed), TILED);
+        UnloadImageColors(nc);
+        UnloadImageColors(rc);
+        UnloadImage(n);
+        UnloadImage(r);
+    }
+    UnloadFileData(data);
+    return true;
 }
 
 // What the Unreal editor imports (unreal/Plugins/Backrooms/Content/Python/
-// backrooms_looks.py): each surface and its detail map, the actors' sprite
-// sheets, and looks.json, which
-// says which surfaces each level uses, at what scale, under what light and fog.
-// The numbers are LEVELS' and LEVEL_SURFACES', so the two builds read one table.
-static int dumpForUnreal() {
+// backrooms_looks.py): every texture the Web build binds when it draws the
+// world (each surface and its detail map, the atlases, the objects' maps, the
+// neutral detail map, the particle, the actors' sheets and the revolver's
+// maps), and world.json, which says how each is sampled and gives the
+// numbers worldFragmentShader() writes into the GLSL, for the HLSL's defines.
+static int dumpForUnreal(const char *revolver) {
+    std::string path = gOut + "/world.json";
+    gJson = fopen(path.c_str(), "w");
+    if (!gJson) { fprintf(stderr, "texdump: cannot write %s\n", path.c_str()); return 1; }
+    fprintf(gJson, "{\"defines\": {");
+    const struct { const char *name; float value; } numbers[] = {
+        { "PANEL_HALF", PANEL_HALF }, { "STOREY_HASH_STEP", STOREY_HASH_STEP }, { "STOREY_HASH_SPAN", STOREY_HASH_SPAN },
+        { "TUBE_HASH_X", TUBE_HASH_X }, { "TUBE_HASH_Z", TUBE_HASH_Z }, { "TUBE_HASH_SCALE", TUBE_HASH_SCALE },
+        { "TUBE_STOREY_SKEW", TUBE_STOREY_SKEW }, { "TUBE_OUTPUT_SPREAD", TUBE_OUTPUT_SPREAD },
+        { "TUBE_STUTTER_SPREAD", TUBE_STUTTER_SPREAD }, { "TUBE_STUTTER_RATE", TUBE_STUTTER_RATE },
+        { "TUBE_STUTTER_PHASE", TUBE_STUTTER_PHASE }, { "TUBE_STUTTER_HASH", TUBE_STUTTER_HASH },
+        { "TUBE_STUTTER_OPEN", TUBE_STUTTER_OPEN }, { "TUBE_STUTTER_DIP", TUBE_STUTTER_DIP },
+        { "TUBE_BUZZ_BASE", TUBE_BUZZ_BASE }, { "TUBE_BUZZ_SPREAD", TUBE_BUZZ_SPREAD },
+        { "TUBE_BUZZ_PHASE", TUBE_BUZZ_PHASE }, { "TUBE_BUZZ_DUTY", TUBE_BUZZ_DUTY },
+    };
+    for (size_t i = 0; i < sizeof numbers / sizeof numbers[0]; i++)
+        fprintf(gJson, "%s\n    \"BR_%s\": %.9g", i ? "," : "", numbers[i].name, numbers[i].value);
+    fprintf(gJson, "\n  },\n  \"textures\": [");
     for (int k = 0; k < SURF_COUNT; k++) {
         Surface sf = timed([k] { return makeSurface((SurfSlot)k); });
         printf("%-16s generated in %.0f ms\n", SURF_NAMES[k], gGenMs);
-        dump(SURF_NAMES[k], sf.albedo, false);
-        dump((std::string(SURF_NAMES[k]) + "_detail").c_str(), sf.detail, false);
+        exported(SURF_NAMES[k], sf.albedo, TILED);
+        exported((std::string(SURF_NAMES[k]) + "_detail").c_str(), sf.detail, TILED);
     }
-    // The actors' sheets (port/sheets.h has their layout).
-    dump("clark", makeClarkTex(), false);
-    dump("smiler", makeSmilerTex(false), false);
-    dump("smiler_glow", makeSmilerTex(true), false);
-    dump("partygoer", makePartygoerTex(), false);
-    dump("dog", makeDogTex(), false);
-    std::string path = gOut + "/looks.json";
-    FILE *f = fopen(path.c_str(), "w");
-    if (!f) { fprintf(stderr, "texdump: cannot write %s\n", path.c_str()); return 1; }
-    fprintf(f, "{\"floorTileM\": %.4f, \"wallTileM\": %.4f, \"levels\": [\n", FLOOR_TILE_M, WALL_TILE_M);
-    for (int lv = 0; lv < NLEVELS; lv++) {
-        const LevelCfg &c = LEVELS[lv];
-        const LevelSurfaces &set = LEVEL_SURFACES[lv];
-        fprintf(f, "  {\"name\": \"%s\", \"floor\": \"%s\", \"ceiling\": \"%s\", \"walls\": \"%s\", ", c.name,
-                SURF_NAMES[set.floor], SURF_NAMES[set.ceiling], SURF_NAMES[set.walls]);
-        fprintf(f, "\"wallTileV\": %.4f, \"wallH\": %.4f, \"lightPitch\": %.4f, ", wallTileV(lv), c.wallH, c.ls);
-        putVec(f, "lightColour", c.lightCol);
-        putVec(f, "ambient", c.amb);
-        putVec(f, "fogColour", c.fogCol);
-        fprintf(f, "\"lightMul\": %.4f, \"fogDensity\": %.4f, \"gloss\": %.4f}%s\n", c.lightMul, c.fogDen, c.gloss,
-                lv + 1 < NLEVELS ? "," : "");
-    }
-    fprintf(f, "]}\n");
-    fclose(f);
+    Texture2D props = makePropsTex();
+    exported("props", props, TILED);
+    exported("props_detail", makePropDetail(props), TILED);
+    exported("fixtures", makeFixturesTex(), FLAT);
+    exported("scrawl", makeScrawlTex(), FLAT);
+    exported("ao", makeAOStripTex(), CLAMPED);
+    exported("can", makeAlmondWrapTex(), TILED);
+    exported("deck", makeDeckTex(), TILED);
+    // game.cpp's neutral detail map: alpha 250, level-relative gloss, no relief
+    exported("neutral", imageTexture(GenImageColor(1, 1, { 128, 128, 255, 250 })), FLAT);
+    exported("particle", makeParticleTex(), FLAT);
+    // The actors' sheets (port/sheets.h has their layout), clamped so the
+    // last column of frames does not sample the first.
+    exported("clark", makeClarkTex(), CLAMPED);
+    exported("smiler", makeSmilerTex(false), CLAMPED);
+    exported("smiler_glow", makeSmilerTex(true), CLAMPED);
+    exported("partygoer", makePartygoerTex(), CLAMPED);
+    exported("dog", makeDogTex(), CLAMPED);
+    const bool gun = exportRevolver(revolver);
+    fprintf(gJson, "\n  ]\n}\n");
+    fclose(gJson);
     printf("wrote %s\n", path.c_str());
-    return 0;
+    return gun ? 0 : 1;
 }
 
 int main(int argc, char **argv) {
     SetTraceLogLevel(LOG_WARNING);
     if (argc > 2 && strcmp(argv[1], "--unreal") == 0) {
         gOut = argv[2];
-        return dumpForUnreal();
+        return dumpForUnreal(argc > 3 ? argv[3] : "assets/models/revolver.glb");
     }
     if (argc > 1) gOut = argv[1];
     for (int i = 2; i < argc; i++) gFilters.push_back(argv[i]);

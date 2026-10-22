@@ -59,3 +59,15 @@ struct StoreyLightCPU {
     int occN = 0, originI = 0, originK = 0;
 };
 void setStoreyLightCPU(const StoreyLightCPU &s);
+
+// Every world surface the Web build paints (web/src/surfaces.cpp), by slot.
+// Levels share slots (the Red Halls reuse Level 1's slab; the pool ceiling is
+// its floor tile), so a slot is generated once.
+enum SurfSlot { SURF_CARPET, SURF_BOARDS, SURF_PAPER, SURF_SLAB, SURF_SOFFIT, SURF_CONCWALL,
+                SURF_POOLFLOOR, SURF_POOLWALL, SURF_BRICK, SURF_BANQUET, SURF_PARTYCEIL,
+                SURF_PARTYWALL, SURF_COUNT };
+// texdump's file names, and the Unreal import's.
+extern const char *const SURF_NAMES[SURF_COUNT];
+// What each level puts on its floors, ceilings and walls.
+struct LevelSurfaces { SurfSlot floor, ceiling, walls; };
+extern const LevelSurfaces LEVEL_SURFACES[NLEVELS];

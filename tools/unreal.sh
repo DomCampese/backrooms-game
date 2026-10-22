@@ -54,8 +54,8 @@ build() {
 surfaces() {
     make -C "$ROOT" texdump
     mkdir -p "$SURFACES"
-    "$ROOT/texdump" --unreal "$SURFACES" >/dev/null
-    echo "unreal.sh: wrote the surfaces and looks.json to $SURFACES"
+    "$ROOT/texdump" --unreal "$SURFACES" "$ROOT/assets/models/revolver.glb" >/dev/null
+    echo "unreal.sh: wrote the textures and world.json to $SURFACES"
 }
 
 case "${1:-build}" in

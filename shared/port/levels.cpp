@@ -23,6 +23,20 @@ const LevelCfg LEVELS[NLEVELS] = {
 const float SURF_MACRO[NLEVELS] = { 0.05f, 0.08f, 0.015f, 0.07f, 0.06f };
 const float CEIL_BOARD[NLEVELS] = { 2.0f / 3.0f, 0.0f, 0.0f, 0.0f, 0.5f };
 
+const char *const SURF_NAMES[SURF_COUNT] = {
+    "carpet", "ceiling", "wallpaper", "concfloor", "concceil", "concwall",
+    "poolfloor", "poolwall", "brick", "partycarpet", "partyceil", "partywall",
+};
+
+const LevelSurfaces LEVEL_SURFACES[NLEVELS] = {
+    { SURF_CARPET, SURF_BOARDS, SURF_PAPER },
+    { SURF_SLAB, SURF_SOFFIT, SURF_CONCWALL },
+    { SURF_POOLFLOOR, SURF_POOLFLOOR, SURF_POOLWALL },   // floor tile on the ceiling: both map 2 m
+    { SURF_SLAB, SURF_SOFFIT, SURF_BRICK },              // Level 1's slab, in red light
+    { SURF_BANQUET, SURF_PARTYCEIL, SURF_PARTYWALL },
+};
+
+
 // -------------------------------------------------- CPU-side light estimate
 // mirrors the shader's hash so billboard tinting matches the room lighting.
 // Keep this in step with roomLight()/tonemap() in shaders.cpp: the two are one

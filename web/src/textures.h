@@ -5,6 +5,7 @@
 #include "core/level_rules.h"
 #include "port/sheets.h"
 #include "port/atlas.h"
+#include "port/levels.h"
 
 // A world surface: its colour, and the detail map the shader reads beside it
 // (texture1: packed tangent slopes in RG, gloss mask in B, alpha 255). Both
@@ -41,17 +42,8 @@ Surface makePartyWallSurface();      // LEVEL FUN =): party-print vinyl, bunting
 Surface makePartyCarpetSurface();    // LEVEL FUN =): patterned banquet-hall carpet
 Surface makePartyCeilSurface();      // LEVEL FUN =): black acoustic board on black grid
 
-// Every world surface, by slot. Levels share slots (the Red Halls reuse Level 1's
-// slab; the pool ceiling is its floor tile), so a slot is generated once.
-enum SurfSlot { SURF_CARPET, SURF_BOARDS, SURF_PAPER, SURF_SLAB, SURF_SOFFIT, SURF_CONCWALL,
-                SURF_POOLFLOOR, SURF_POOLWALL, SURF_BRICK, SURF_BANQUET, SURF_PARTYCEIL,
-                SURF_PARTYWALL, SURF_COUNT };
-// texdump's file names, and the Unreal import's.
-extern const char *const SURF_NAMES[SURF_COUNT];
+// Every world surface, by slot (SurfSlot and LEVEL_SURFACES are port/levels.h's).
 Surface makeSurface(SurfSlot slot);
-// What each level puts on its floors, ceilings and walls.
-struct LevelSurfaces { SurfSlot floor, ceiling, walls; };
-extern const LevelSurfaces LEVEL_SURFACES[NLEVELS];
 // The tile sizes (FLOOR_TILE_M, WALL_TILE_M, wallTileV) are port/atlas.h's.
 Texture2D makeAOStripTex();        // gradient strip for baked contact-shadow decals
 Texture2D makeDogTex();            // THE RED HALLS: whatever the pack is, seen side-on
