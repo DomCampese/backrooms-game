@@ -1,20 +1,20 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-#include "BackroomsTypes.h"
+#include "port/draw.h"
 #include <vector>
 #include "BackroomsSceneActor.generated.h"
 
-struct SceneItem;
-class UBackroomsLevelLook;
-class UInstancedStaticMeshComponent;
+class UBackroomsRender;
+class UProceduralMeshComponent;
 
-// Draws what the sim puts in the world each frame (shared/port/scene.h): pickups,
-// crates, the tape deck, flares, chalk, balloons, the hunter and the pack. One
-// instanced mesh per kind (and per colour for balloons and confetti), with the
-// level look's mesh or a plain shape at the thing's real size. The subsystem
-// spawns one and updates it after every step.
-UCLASS(Blueprintable, Transient)
+// Draws, each frame, what the Web build draws round the chunks
+// (shared/port/draw.h): the loose objects through the world shader, and
+// raylib's unlit shapes and billboards (the hunter, the pack, flares, coins,
+// balloons, chalk, rounds in flight, impacts, the mist, the muzzle flash) lit
+// as render.cpp lights them. One procedural mesh, a section per material,
+// rebuilt every frame in the world's coordinates.
+UCLASS(Transient)
 class BACKROOMS_API ABackroomsSceneActor : public AActor
 {
 	GENERATED_BODY()
@@ -22,16 +22,13 @@ class BACKROOMS_API ABackroomsSceneActor : public AActor
 public:
 	ABackroomsSceneActor();
 
-	// Items are in the sim's frame; Origin places that frame (the storey the
-	// player is on) in the world.
-	void Show(const std::vector<SceneItem>& Items, const UBackroomsLevelLook* Look, const FVector& Origin);
+	// Draws are in the sim's frame, which Origin places in the world; those
+	// from FirstHeld on are in hand, which the room does not shadow. View is
+	// the eye billboards face as raylib's do.
+	void Show(const std::vector<SceneDraw>& Draws, size_t FirstHeld, const SimView& View, const UBackroomsRender& Render,
+		const FVector& Origin);
 
 private:
-	UInstancedStaticMeshComponent* Instances(EBackroomsItem Kind, uint8 Colour, const UBackroomsLevelLook* Look);
-
-	// Keyed by kind * 256 + colour; rebuilt when the look changes.
-	UPROPERTY(Transient)
-	TMap<int32, TObjectPtr<UInstancedStaticMeshComponent>> ByKind;
-	UPROPERTY(Transient)
-	TObjectPtr<const UBackroomsLevelLook> ShownLook;
+	UPROPERTY(VisibleAnywhere, Category = "Backrooms")
+	TObjectPtr<UProceduralMeshComponent> Mesh;
 };

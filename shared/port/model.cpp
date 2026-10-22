@@ -108,18 +108,18 @@ Vec3 v3lerp(Vec3 a, Vec3 b, float t) { return { a.x + t * (b.x - a.x), a.y + t *
 Vec3 v3mul(Vec3 a, Vec3 b) { return { a.x * b.x, a.y * b.y, a.z * b.z }; }
 Vec3 v3add(Vec3 a, Vec3 b) { return { a.x + b.x, a.y + b.y, a.z + b.z }; }
 
-Quat qnormalize(Quat q) {
+GlbQuat qnormalize(GlbQuat q) {
     float length = sqrtf(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
     if (length == 0.0f) length = 1.0f;
     float il = 1.0f / length;
     return { q.x * il, q.y * il, q.z * il, q.w * il };
 }
-Quat qnlerp(Quat a, Quat b, float t) {
-    Quat r = { a.x + t * (b.x - a.x), a.y + t * (b.y - a.y), a.z + t * (b.z - a.z), a.w + t * (b.w - a.w) };
+GlbQuat qnlerp(GlbQuat a, GlbQuat b, float t) {
+    GlbQuat r = { a.x + t * (b.x - a.x), a.y + t * (b.y - a.y), a.z + t * (b.z - a.z), a.w + t * (b.w - a.w) };
     return qnormalize(r);
 }
-Quat qslerp(Quat q1, Quat q2, float amount) {
-    Quat result = { 0, 0, 0, 0 };
+GlbQuat qslerp(GlbQuat q1, GlbQuat q2, float amount) {
+    GlbQuat result = { 0, 0, 0, 0 };
     float cosHalfTheta = q1.x * q2.x + q1.y * q2.y + q1.z * q2.z + q1.w * q2.w;
     if (cosHalfTheta < 0) {
         q2.x = -q2.x; q2.y = -q2.y; q2.z = -q2.z; q2.w = -q2.w;
@@ -141,8 +141,8 @@ Quat qslerp(Quat q1, Quat q2, float amount) {
     }
     return result;
 }
-Quat qinvert(Quat q) {
-    Quat r = q;
+GlbQuat qinvert(GlbQuat q) {
+    GlbQuat r = q;
     float lengthSq = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
     if (lengthSq != 0.0f) {
         float inv = 1.0f / lengthSq;
@@ -177,7 +177,7 @@ Mat matScale(Vec3 s) {
     r.m[0] = s.x; r.m[5] = s.y; r.m[10] = s.z;
     return r;
 }
-Mat matFromQuat(Quat q) {
+Mat matFromQuat(GlbQuat q) {
     Mat r = matIdentity();
     float a2 = q.x * q.x, b2 = q.y * q.y, c2 = q.z * q.z;
     float ac = q.x * q.z, ab = q.x * q.y, bc = q.y * q.z;
@@ -269,18 +269,18 @@ bool channelAt(const Channel &ch, float time, float *out, int n) {
         Vec3 r = v3lerp(a, b, t);
         out[0] = r.x; out[1] = r.y; out[2] = r.z;
     } else {
-        Quat a = { readFloat(ch.output, keyframe, 0), readFloat(ch.output, keyframe, 1), readFloat(ch.output, keyframe, 2),
+        GlbQuat a = { readFloat(ch.output, keyframe, 0), readFloat(ch.output, keyframe, 1), readFloat(ch.output, keyframe, 2),
                    readFloat(ch.output, keyframe, 3) };
-        Quat b = { readFloat(ch.output, keyframe + 1, 0), readFloat(ch.output, keyframe + 1, 1),
+        GlbQuat b = { readFloat(ch.output, keyframe + 1, 0), readFloat(ch.output, keyframe + 1, 1),
                    readFloat(ch.output, keyframe + 1, 2), readFloat(ch.output, keyframe + 1, 3) };
-        Quat r = qslerp(a, b, t);
+        GlbQuat r = qslerp(a, b, t);
         out[0] = r.x; out[1] = r.y; out[2] = r.z; out[3] = r.w;
     }
     return true;
 }
 
-Pose nodePose(const Json &node) {
-    Pose p = { { 0, 0, 0 }, { 0, 0, 0, 1 }, { 1, 1, 1 } };
+GlbPose nodePose(const Json &node) {
+    GlbPose p = { { 0, 0, 0 }, { 0, 0, 0, 1 }, { 1, 1, 1 } };
     const Json &t = node["translation"], &r = node["rotation"], &s = node["scale"];
     if (t.items.size() == 3) p.translation = { t.at(0).real(0), t.at(1).real(0), t.at(2).real(0) };
     if (r.items.size() == 4) p.rotation = { r.at(0).real(0), r.at(1).real(0), r.at(2).real(0), r.at(3).real(1) };
@@ -289,7 +289,7 @@ Pose nodePose(const Json &node) {
 }
 
 // BuildPoseFromParentJoints, for one bone whose parent is already done.
-void composeWithParent(Pose &child, const Pose &parent) {
+void composeWithParent(GlbPose &child, const GlbPose &parent) {
     child.rotation = quatMultiply(parent.rotation, child.rotation);
     child.translation = quatRotate(child.translation, parent.rotation);
     child.translation = v3add(child.translation, parent.translation);
@@ -300,7 +300,7 @@ constexpr float ANIM_STEP_MS = 17.0f;   // raylib's GLTF_ANIMDELAY
 
 }   // namespace
 
-Vec3 quatRotate(Vec3 v, Quat q) {
+Vec3 quatRotate(Vec3 v, GlbQuat q) {
     Vec3 r;
     r.x = v.x * (q.x * q.x + q.w * q.w - q.y * q.y - q.z * q.z) + v.y * (2 * q.x * q.y - 2 * q.w * q.z) + v.z * (2 * q.x * q.z + 2 * q.w * q.y);
     r.y = v.x * (2 * q.w * q.z + 2 * q.x * q.y) + v.y * (q.w * q.w - q.x * q.x + q.y * q.y - q.z * q.z) + v.z * (-2 * q.w * q.x + 2 * q.y * q.z);
@@ -308,15 +308,15 @@ Vec3 quatRotate(Vec3 v, Quat q) {
     return r;
 }
 
-Quat quatMultiply(Quat q1, Quat q2) {
+GlbQuat quatMultiply(GlbQuat q1, GlbQuat q2) {
     float qax = q1.x, qay = q1.y, qaz = q1.z, qaw = q1.w;
     float qbx = q2.x, qby = q2.y, qbz = q2.z, qbw = q2.w;
     return { qax * qbw + qaw * qbx + qay * qbz - qaz * qby, qay * qbw + qaw * qby + qaz * qbx - qax * qbz,
              qaz * qbw + qaw * qbz + qax * qby - qay * qbx, qaw * qbw - qax * qbx - qay * qby - qaz * qbz };
 }
 
-Quat quatFromAxisAngle(Vec3 axis, float angle) {
-    Quat result = { 0.0f, 0.0f, 0.0f, 1.0f };
+GlbQuat quatFromAxisAngle(Vec3 axis, float angle) {
+    GlbQuat result = { 0.0f, 0.0f, 0.0f, 1.0f };
     float axisLength = sqrtf(axis.x * axis.x + axis.y * axis.y + axis.z * axis.z);
     if (axisLength != 0.0f) {
         angle *= 0.5f;
@@ -383,9 +383,9 @@ bool loadGlb(const uint8_t *data, size_t size, GlbModel &out, std::string &error
         // world pose: the node's own, composed up through every ancestor
         std::vector<int> chain;
         for (int n = jointNodes[k]; n >= 0; n = nodeParent[(size_t)n]) chain.push_back(n);
-        Pose world = nodePose(nodes.at((size_t)chain.back()));
+        GlbPose world = nodePose(nodes.at((size_t)chain.back()));
         for (size_t c = chain.size() - 1; c-- > 0;) {
-            Pose p = nodePose(nodes.at((size_t)chain[c]));
+            GlbPose p = nodePose(nodes.at((size_t)chain[c]));
             composeWithParent(p, world);
             world = p;
         }
@@ -455,9 +455,9 @@ bool loadGlb(const uint8_t *data, size_t size, GlbModel &out, std::string &error
         const int frames = (int)(duration * 1000.0f / ANIM_STEP_MS) + 1;
         for (int f = 0; f < frames; f++) {
             float time = ((float)f * ANIM_STEP_MS) / 1000.0f;
-            std::vector<Pose> pose(jointNodes.size());
+            std::vector<GlbPose> pose(jointNodes.size());
             for (size_t k = 0; k < jointNodes.size(); k++) {
-                Pose p = nodePose(nodes.at((size_t)jointNodes[k]));
+                GlbPose p = nodePose(nodes.at((size_t)jointNodes[k]));
                 float v[4];
                 if (trans[k].present && channelAt(trans[k], time, v, 3)) p.translation = { v[0], v[1], v[2] };
                 if (rot[k].present && channelAt(rot[k], time, v, 4)) p.rotation = { v[0], v[1], v[2], v[3] };
@@ -497,7 +497,7 @@ int glbBone(const GlbModel &m, const char *name) {
     return -1;
 }
 
-void glbSample(const GlbModel &m, int clip, float progress, std::vector<Pose> &out) {
+void glbSample(const GlbModel &m, int clip, float progress, std::vector<GlbPose> &out) {
     const GlbClip &c = m.clips[(size_t)clip];
     const int frames = (int)c.frames.size();
     float frame = clampf(progress, 0.0f, 1.0f) * (frames - 1);
@@ -505,23 +505,23 @@ void glbSample(const GlbModel &m, int clip, float progress, std::vector<Pose> &o
     float f = frame - a;
     out.resize(m.bones.size());
     for (size_t i = 0; i < m.bones.size(); i++) {
-        const Pose &x = c.frames[(size_t)a][i], &y = c.frames[(size_t)b][i];
+        const GlbPose &x = c.frames[(size_t)a][i], &y = c.frames[(size_t)b][i];
         out[i] = { v3lerp(x.translation, y.translation, f), qslerp(x.rotation, y.rotation, f), v3lerp(x.scale, y.scale, f) };
     }
 }
 
-void glbSkin(const GlbModel &m, const std::vector<Pose> &pose, int prim, std::vector<float> &pos,
+void glbSkin(const GlbModel &m, const std::vector<GlbPose> &pose, int prim, std::vector<float> &pos,
              std::vector<float> &normal) {
     // UpdateModelAnimationBones: rotate, then translate, then scale
     std::vector<Mat> bones(m.bones.size());
     for (size_t b = 0; b < m.bones.size(); b++) {
-        const Pose &in = m.bindPose[b], &o = pose[b];
+        const GlbPose &in = m.bindPose[b], &o = pose[b];
         Vec3 negT = { -in.translation.x, -in.translation.y, -in.translation.z };
         Vec3 invTranslation = quatRotate(negT, qinvert(in.rotation));
-        Quat invRotation = qinvert(in.rotation);
+        GlbQuat invRotation = qinvert(in.rotation);
         Vec3 invScale = { 1.0f / in.scale.x, 1.0f / in.scale.y, 1.0f / in.scale.z };
         Vec3 boneTranslation = v3add(quatRotate(v3mul(o.scale, invTranslation), o.rotation), o.translation);
-        Quat boneRotation = quatMultiply(o.rotation, invRotation);
+        GlbQuat boneRotation = quatMultiply(o.rotation, invRotation);
         Vec3 boneScale = v3mul(o.scale, invScale);
         bones[b] = matMultiply(matMultiply(matFromQuat(boneRotation), matTranslate(boneTranslation)), matScale(boneScale));
     }

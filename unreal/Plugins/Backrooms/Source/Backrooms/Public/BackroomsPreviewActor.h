@@ -3,12 +3,11 @@
 #include "GameFramework/Actor.h"
 #include "BackroomsPreviewActor.generated.h"
 
-class UBackroomsLevelLook;
-class UInstancedStaticMeshComponent;
+class UBackroomsRender;
 class UProceduralMeshComponent;
 
-// Shows the generated maze in the editor viewport, without pressing Play, for
-// working on a level's look and lighting. Drop one into a map; it builds the
+// Shows the generated maze in the editor viewport, without pressing Play, drawn
+// as the game draws it (every tube lit, no torch). Drop one into a map; it builds the
 // chunks round wherever it stands, at the height the game puts them (storey s
 // at s pitches up, world origin where the game's is), so anything placed
 // beside it lines up with the game. It removes itself when play begins, where
@@ -37,10 +36,6 @@ public:
 	// Also the storeys above and below, where the level has storeys.
 	UPROPERTY(EditAnywhere, Category = "Backrooms")
 	bool bNeighbourStoreys = false;
-	// Tries a look out here; empty uses the level's look from the project
-	// settings, and that empty draws the greybox.
-	UPROPERTY(EditAnywhere, Category = "Backrooms")
-	TObjectPtr<UBackroomsLevelLook> Look;
 	// Rebuild whenever a property changes or the actor moves. Turn off while
 	// dragging a large preview about.
 	UPROPERTY(EditAnywhere, Category = "Backrooms")
@@ -58,5 +53,5 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UProceduralMeshComponent>> Meshes;
 	UPROPERTY(Transient)
-	TArray<TObjectPtr<UInstancedStaticMeshComponent>> Instances;
+	TObjectPtr<UBackroomsRender> Render;
 };

@@ -1,13 +1,13 @@
-"""Imports the repository's models and recorded sounds into the Unreal project,
-and has backrooms_looks.py build the level looks.
+"""Imports the repository's recorded sounds into the Unreal project, and has
+backrooms_world.py build the world's textures and materials.
 
-The Web build embeds assets/models/*.glb and assets/sounds/**/*.ogg; the
-Unreal build imports the same files, so there is one copy of each. The editor
-runs init_unreal.py when it opens the project, and that imports anything
-missing. To import again after a file changes, run in the editor's Python
-console (Output Log, Python):
+The Web build embeds assets/sounds/**/*.ogg; the Unreal build imports the
+same files, so there is one copy of each. The revolver is not imported: the
+game reads assets/models/revolver.glb itself and poses it as the Web build
+does (shared/port/revolver.h). The editor runs init_unreal.py when it opens the
+project, and that imports anything missing. To import again after a file
+changes, run in the editor's Python console (Output Log, Python):
 
-    import backrooms_import; backrooms_import.import_revolver()
     import backrooms_import; backrooms_import.import_sounds()
 
 The paths here are the defaults in Project Settings > Game > Backrooms.
@@ -16,17 +16,7 @@ import os
 
 import unreal
 
-import backrooms_looks
-
-REVOLVER_DIR = "/Game/Backrooms/Revolver"
-REVOLVER_MESH = REVOLVER_DIR + "/SK_Revolver"
-# The GLB's clip names, lower case, and the names the settings look for.
-REVOLVER_CLIPS = {
-    "idle": "A_Revolver_Idle",
-    "reload": "A_Revolver_Reload",
-    "shoot": "A_Revolver_Shoot",
-}
-
+import backrooms_world
 
 SOUND_DIR = "/Game/Backrooms/Sounds"
 # The recordings the game loops (UNDERWATER_RECORDING and PARTY_RECORDING in
@@ -37,51 +27,6 @@ SOUND_LOOPS = {"underwater", "level_fun"}
 def repo_file(*parts):
     project = unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_dir())
     return os.path.normpath(os.path.join(project, "..", *parts))
-
-
-def missing_revolver():
-    names = [REVOLVER_MESH] + [REVOLVER_DIR + "/" + n for n in REVOLVER_CLIPS.values()]
-    return [n for n in names if not unreal.EditorAssetLibrary.does_asset_exist(n)]
-
-
-def import_revolver():
-    source = repo_file("assets", "models", "revolver.glb")
-    if not os.path.exists(source):
-        unreal.log_error("Backrooms: no revolver at " + source)
-        return False
-    task = unreal.AssetImportTask()
-    task.filename = source
-    task.destination_path = REVOLVER_DIR
-    task.automated = True
-    task.replace_existing = True
-    task.save = False
-    unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks([task])
-
-    # The importer names assets after the file and the clips; give them the
-    # names the settings expect.
-    for path in unreal.EditorAssetLibrary.list_assets(REVOLVER_DIR, recursive=True, include_folder=False):
-        package = path.split(".")[0]
-        asset = unreal.EditorAssetLibrary.load_asset(package)
-        target = None
-        if isinstance(asset, unreal.SkeletalMesh):
-            target = REVOLVER_MESH
-        elif isinstance(asset, unreal.AnimSequence):
-            name = asset.get_name().lower()
-            for clip, wanted in REVOLVER_CLIPS.items():
-                if clip in name:
-                    target = REVOLVER_DIR + "/" + wanted
-        if target and package != target:
-            if unreal.EditorAssetLibrary.does_asset_exist(target):
-                unreal.EditorAssetLibrary.delete_asset(target)
-            unreal.EditorAssetLibrary.rename_asset(package, target)
-    unreal.EditorAssetLibrary.save_directory(REVOLVER_DIR, only_if_is_dirty=False, recursive=True)
-
-    left = missing_revolver()
-    if left:
-        unreal.log_error("Backrooms: the revolver import did not make " + ", ".join(left))
-        return False
-    unreal.log("Backrooms: imported the revolver to " + REVOLVER_DIR)
-    return True
 
 
 def sound_files():
@@ -131,20 +76,14 @@ def import_sounds():
 
 
 def import_missing():
-    left = missing_revolver()
-    if left:
-        unreal.log("Backrooms: importing the revolver; missing " + ", ".join(left))
-        import_revolver()
-    else:
-        unreal.log("Backrooms: the revolver is already imported in " + REVOLVER_DIR)
     if missing_sounds():
         unreal.log("Backrooms: importing assets/sounds")
         import_sounds()
     else:
         unreal.log("Backrooms: the sounds are already imported in " + SOUND_DIR)
-    why = backrooms_looks.stale()
+    why = backrooms_world.stale()
     if why:
-        unreal.log("Backrooms: building the level looks; " + why)
-        backrooms_looks.build_looks()
-    elif backrooms_looks.read_looks():
-        unreal.log("Backrooms: the level looks are up to date in " + backrooms_looks.LOOK_DIR)
+        unreal.log("Backrooms: building the world's materials; " + why)
+        backrooms_world.build()
+    elif backrooms_world.read_world():
+        unreal.log("Backrooms: the world's materials are up to date in " + backrooms_world.WORLD_DIR)

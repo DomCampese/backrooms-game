@@ -1,5 +1,5 @@
 // Automation tests: core's contract, the sim's recorded traces, the coordinate
-// conversion, the greybox and the sound mixer, run by this engine's compiler
+// conversion, the chunk mesher and the sound mixer, run by this engine's compiler
 // and libm. Session
 // Frontend > Automation, filter "Backrooms", or from the command line:
 //   UnrealEditor-Cmd BackroomsGame.uproject -ExecCmds="Automation RunTests Backrooms; Quit" -unattended -nullrhi
@@ -11,7 +11,7 @@
 #include "BackroomsCoords.h"
 #include "contract_lib.h"
 #include "core/level_rules.h"
-#include "port/greybox.h"
+#include "port/chunk_mesh.h"
 #include "port/mixer.h"
 #include "sim/trace.h"
 
@@ -109,10 +109,11 @@ bool FBackroomsCoordsTest::RunTest(const FString& Parameters)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBackroomsGreyboxTest, "Backrooms.Port.Greybox",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBackroomsChunkMeshTest, "Backrooms.Port.ChunkMesh",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
-bool FBackroomsGreyboxTest::RunTest(const FString& Parameters)
+// What the chunk actors draw: the Web build's mesher, every level's origin chunk.
+bool FBackroomsChunkMeshTest::RunTest(const FString& Parameters)
 {
 	for (int32 Level = 0; Level < NLEVELS; Level++)
 	{
@@ -120,19 +121,28 @@ bool FBackroomsGreyboxTest::RunTest(const FString& Parameters)
 		W.level = Level;
 		W.wallH = LEVEL_RULES[Level].wallH;
 		W.storeyH = LEVEL_RULES[Level].storeyH;
-		const GreyboxMesh Mesh = greyboxChunk(W, 0, 0);
-		TestTrue(FString::Printf(TEXT("level %d has geometry"), Level), Mesh.triangles() > 0);
-		for (const GreyboxMesh::Section& Section : Mesh.sections)
+		ChunkGeometry Geometry;
+		bakeChunkGeometry(W, 0, 0, Geometry);
+		size_t Triangles = 0;
+		for (const MB& Part : Geometry.parts)
 		{
-			for (uint32_t I : Section.index)
+			Triangles += Part.idx.size() / 3;
+			const size_t Vertices = Part.v.size() / 3;
+			if (Part.c.size() != Vertices * 4 || Part.uv.size() != Vertices * 2 || Part.n.size() != Vertices * 3)
 			{
-				if (I >= Section.pos.size())
+				AddError(FString::Printf(TEXT("level %d: a part's arrays disagree"), Level));
+				return false;
+			}
+			for (unsigned short I : Part.idx)
+			{
+				if (I >= Vertices)
 				{
-					AddError(FString::Printf(TEXT("level %d: index %u past %d vertices"), Level, I, (int32)Section.pos.size()));
+					AddError(FString::Printf(TEXT("level %d: index %u past %d vertices"), Level, I, (int32)Vertices));
 					return false;
 				}
 			}
 		}
+		TestTrue(FString::Printf(TEXT("level %d has geometry"), Level), Triangles > 0);
 	}
 	return true;
 }

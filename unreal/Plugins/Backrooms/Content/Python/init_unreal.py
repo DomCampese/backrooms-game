@@ -1,6 +1,7 @@
-"""Runs when the editor opens the project: imports the repository's models and
-recorded sounds if the project does not have them yet, and builds the level
-looks from the game's surfaces if they changed (backrooms_import.py). It waits for the
+"""Runs when the editor opens the project: imports the repository's recorded
+sounds if the project does not have them yet, and builds the world's
+textures and materials from the Web build's if they changed
+(backrooms_import.py). It waits for the
 first editor tick, so the asset registry and the importers are up.
 
 Unreal also runs this file when the editor binary runs the game (-game, as

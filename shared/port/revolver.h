@@ -20,7 +20,7 @@ struct RevolverModel {
 private:
     int idle = -1, reload = -1, shoot = -1, handle = -1;
     std::vector<int> spinning;
-    std::vector<Pose> current;
+    std::vector<GlbPose> current;
     int lastClip = -1, lastAmmo = -1;
     float lastProgress = -1;
 };

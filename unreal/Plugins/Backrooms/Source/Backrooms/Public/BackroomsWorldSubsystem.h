@@ -10,22 +10,20 @@ struct InputFrame;
 struct TraceWriter;
 struct SolidTracer;
 class ABackroomsChunkActor;
-class UBackroomsLevelLook;
-class APointLight;
 class ABackroomsSceneActor;
 class ABackroomsHeldActor;
-class ABackroomsLightsActor;
-class ABackroomsSpriteActor;
+class UBackroomsRender;
 class UBackroomsSound;
 
 // Owns the game: one Sim (the rules, and core's World inside it) for this
-// Unreal world. Streams the world's chunks round the player as greybox actors
-// (M2 in docs/unreal-handoff.md), each storey at its own height, and in a run
-// steps the sim once a frame from the controller's input (M4).
+// Unreal world. Streams the world's chunks round the player, each storey at
+// its own height, and draws them and what the sim puts among them as the Web
+// build draws them (UBackroomsRender); in a run steps the sim once a frame
+// from the controller's input.
 //
 // Two modes. A run is the game: the sim moves the player and the camera
 // follows it. A free camera only streams a level round wherever the camera
-// flies, for looking at the greybox.
+// flies, for looking round a level.
 UCLASS()
 class BACKROOMS_API UBackroomsWorldSubsystem : public UTickableWorldSubsystem
 {
@@ -78,15 +76,10 @@ private:
 	void BuildChunk(const FIntVector& Key);
 	void DropChunk(const FIntVector& Key);
 	void DropAll();
-	// Moves the pickups, crates, hunter and the rest to where the sim has them,
-	// and the revolver in hand. Camera is where the camera is, which the
-	// actors' billboards face.
-	void ShowScene(const FVector& Camera);
-	// Lights the fittings round At (metres, in the current storey's frame) and
-	// sets the level's fog.
-	void ShowLights(const Vec3& At);
-	// The level's look from the project settings, loaded once per level.
-	const UBackroomsLevelLook* CurrentLook();
+	// The frame's light and what the sim puts in the world: the world
+	// shader's uniforms for an eye at Eye (metres, the current storey's
+	// frame), then in a run the scene and the revolver.
+	void ShowFrame(const Vec3& Eye);
 
 	// Not UObjects: owned here, freed by Deinitialize.
 	Sim* Game = nullptr;
@@ -99,22 +92,14 @@ private:
 	// Keyed by (cx, cz, storey).
 	UPROPERTY()
 	TMap<FIntVector, TObjectPtr<ABackroomsChunkActor>> Chunks;
-	// Follows the camera, so a greybox with no fittings lit is still visible.
 	UPROPERTY()
-	TObjectPtr<APointLight> CameraLight;
+	TObjectPtr<UBackroomsRender> Render;
 	UPROPERTY()
 	TObjectPtr<ABackroomsSceneActor> Scene;
 	UPROPERTY()
 	TObjectPtr<ABackroomsHeldActor> Hand;
-	UPROPERTY()
-	TObjectPtr<ABackroomsLightsActor> Lights;
-	UPROPERTY()
-	TObjectPtr<ABackroomsSpriteActor> Sprites;
-	UPROPERTY()
-	TObjectPtr<UBackroomsLevelLook> Look;
 	// A run's sound; none in a free camera.
 	UPROPERTY()
 	TObjectPtr<UBackroomsSound> Sound;
-	int32 LookLevel = -1;
 	float SinceUnload = 0.0f;
 };

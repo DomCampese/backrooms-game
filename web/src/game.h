@@ -78,7 +78,7 @@ struct Game {
     // The light-occlusion grid the shader marches: the floorplan round you,
     // OCC_N cells wide, recentred as you walk. Four bytes a cell
     // (World::buildOccupancy): your storey, the one below, the one above.
-    static constexpr int OCC_N = 64;
+    static constexpr int OCC_N = OCC_CELLS;
     std::vector<unsigned char> occBuf;
     int occOriginI = 0, occOriginK = 0;
     bool occValid = false;

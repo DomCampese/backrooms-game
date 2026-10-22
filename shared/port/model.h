@@ -15,9 +15,9 @@
 #include <string>
 #include <vector>
 
-struct Quat { float x, y, z, w; };
+struct GlbQuat { float x, y, z, w; };
 // raylib's Transform.
-struct Pose { Vec3 translation; Quat rotation; Vec3 scale; };
+struct GlbPose { Vec3 translation; GlbQuat rotation; Vec3 scale; };
 
 struct GlbPrimitive {
     std::vector<float> pos, normal, uv;    // 3, 3 and 2 a vertex
@@ -31,7 +31,7 @@ struct GlbMaterial { int baseColour = -1, normal = -1, metalRough = -1; };   // 
 
 struct GlbClip {
     std::string name;
-    std::vector<std::vector<Pose>> frames;   // a pose per 17 ms, a Pose per bone
+    std::vector<std::vector<GlbPose>> frames;   // a pose per 17 ms, a GlbPose per bone
 };
 
 struct GlbModel {
@@ -45,7 +45,7 @@ struct GlbModel {
     // The skin's joints, raylib's bones.
     std::vector<std::string> bones;
     std::vector<int> parent;
-    std::vector<Pose> bindPose;
+    std::vector<GlbPose> bindPose;
     std::vector<GlbClip> clips;
 };
 
@@ -55,10 +55,10 @@ int glbClip(const GlbModel &m, const char *name);
 int glbBone(const GlbModel &m, const char *name);
 // The pose `progress` (0..1) through a clip, blended between its two nearest
 // samples (ModelAsset::sample).
-void glbSample(const GlbModel &m, int clip, float progress, std::vector<Pose> &out);
+void glbSample(const GlbModel &m, int clip, float progress, std::vector<GlbPose> &out);
 // One primitive skinned to a pose, as raylib 5.5's UpdateModelAnimation
 // with ModelAsset::update's correction to its normals.
-void glbSkin(const GlbModel &m, const std::vector<Pose> &pose, int prim, std::vector<float> &pos,
+void glbSkin(const GlbModel &m, const std::vector<GlbPose> &pose, int prim, std::vector<float> &pos,
              std::vector<float> &normal);
 
 // The world shader's object detail map from a glTF material's normal and
@@ -68,6 +68,6 @@ void glbSkin(const GlbModel &m, const std::vector<Pose> &pose, int prim, std::ve
 void glbDetailMap(const uint8_t *normal, const uint8_t *metalRough, int pixels, uint8_t *out);
 
 // raymath's, operation for operation.
-Vec3 quatRotate(Vec3 v, Quat q);
-Quat quatMultiply(Quat a, Quat b);
-Quat quatFromAxisAngle(Vec3 axis, float angle);
+Vec3 quatRotate(Vec3 v, GlbQuat q);
+GlbQuat quatMultiply(GlbQuat a, GlbQuat b);
+GlbQuat quatFromAxisAngle(Vec3 axis, float angle);

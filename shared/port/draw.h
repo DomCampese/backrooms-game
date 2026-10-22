@@ -31,6 +31,12 @@ struct FrameLight {
     float ir;              // uIR: the camcorder's infrared lamp
 };
 
+// The world shader's shadow grid (World::buildOccupancy, texture2): OCC_CELLS
+// a side round the player, rebuilt once the player is OCC_RECENTRE cells off
+// where it was built or the walls change.
+constexpr int OCC_CELLS = 64;
+constexpr int OCC_RECENTRE = 6;
+
 // `ir` is the camcorder's lamp (Camcorder::irLamp in the Web build; 0 where
 // there is none). Also hands the room mask and lamp to lightAtCPU.
 FrameLight frameLight(Sim &sim, float now, float ir);

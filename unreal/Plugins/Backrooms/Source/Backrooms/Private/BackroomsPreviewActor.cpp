@@ -1,9 +1,7 @@
 #include "BackroomsPreviewActor.h"
 #include "BackroomsChunkBuild.h"
 #include "BackroomsCoords.h"
-#include "BackroomsLevelLook.h"
-#include "BackroomsSettings.h"
-#include "Components/InstancedStaticMeshComponent.h"
+#include "BackroomsRender.h"
 #include "Components/SceneComponent.h"
 #include "Engine/World.h"
 #include "ProceduralMeshComponent.h"
@@ -34,13 +32,6 @@ void ABackroomsPreviewActor::BeginPlay()
 
 void ABackroomsPreviewActor::Clear()
 {
-	for (const TObjectPtr<UInstancedStaticMeshComponent>& Component : Instances)
-	{
-		if (Component)
-		{
-			Component->DestroyComponent();
-		}
-	}
 	for (const TObjectPtr<UProceduralMeshComponent>& Component : Meshes)
 	{
 		if (Component)
@@ -48,7 +39,6 @@ void ABackroomsPreviewActor::Clear()
 			Component->DestroyComponent();
 		}
 	}
-	Instances.Reset();
 	Meshes.Reset();
 }
 
@@ -56,7 +46,15 @@ void ABackroomsPreviewActor::Rebuild()
 {
 	Clear();
 	const int32 Lv = FMath::Clamp(Level, 0, NLEVELS - 1);
-	const UBackroomsLevelLook* LevelLook = Look ? Look.Get() : GetDefault<UBackroomsSettings>()->LookFor(Lv);
+	if (!Render)
+	{
+		Render = NewObject<UBackroomsRender>(this);
+	}
+	if (!Render->Load())
+	{
+		return;
+	}
+	Render->ApplyLevel(Lv);
 	TUniquePtr<World> Maze = MakeUnique<World>();
 	Maze->seed = (uint32)Seed;
 	Maze->level = Lv;
@@ -67,6 +65,9 @@ void ABackroomsPreviewActor::Rebuild()
 	Maze->setStorey(Base);
 
 	const Vec3 At = BackroomsCoords::FromUnreal(GetActorLocation());
+	Render->UpdateOccupancy(*Maze, At.x, At.z, true);
+	Render->Frame(GetWorld(), UBackroomsRender::Still(), { At.x, Maze->floorY(cellOf(At.x), cellOf(At.z)) + 1.6f, At.z },
+		0.0f, 0.0f, 0.0f);
 	const int32 Pcx = fdiv(cellOf(At.x), CCELLS), Pcz = fdiv(cellOf(At.z), CCELLS);
 	const int32 Rel = bNeighbourStoreys && Maze->storeyH > 0.0f ? 1 : 0;
 	for (int32 S = Base - Rel; S <= Base + Rel; S++)
@@ -85,7 +86,7 @@ void ABackroomsPreviewActor::Rebuild()
 				Mesh->SetWorldTransform(FTransform(FVector(0.0, 0.0, BackroomsCoords::StoreyZ(S, Maze->storeyH))));
 				Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 				Mesh->RegisterComponent();
-				BackroomsChunkBuild::Build(*Maze, Pcx + Dx, Pcz + Dz, LevelLook, *Mesh, false, Instances);
+				BackroomsChunkBuild::Build(*Maze, Pcx + Dx, Pcz + Dz, *Render, *Mesh, false);
 				Meshes.Add(Mesh);
 			}
 		}

@@ -4,7 +4,7 @@
 #include <cstring>
 
 namespace {
-Vec3 transformPoint(Vec3 v, const Pose &t) {
+Vec3 transformPoint(Vec3 v, const GlbPose &t) {
     Vec3 s = { v.x * t.scale.x, v.y * t.scale.y, v.z * t.scale.z };
     Vec3 r = quatRotate(s, t.rotation);
     return { r.x + t.translation.x, r.y + t.translation.y, r.z + t.translation.z };
@@ -37,13 +37,13 @@ bool RevolverModel::pose(float reloadT, float gunCd, int ammo) {
     if (clip == lastClip && p.progress == lastProgress && ammo == lastAmmo) return false;
     lastClip = clip; lastProgress = p.progress; lastAmmo = ammo;
     glbSample(glb, clip, p.progress, current);
-    const Pose root = current[(size_t)handle];
+    const GlbPose root = current[(size_t)handle];
     muzzle = transformPoint(REVOLVER_MUZZLE, root);
     const Vec3 pivot = transformPoint(REVOLVER_DRUM_PIVOT, root);
     const Vec3 axis = quatRotate({ 0, 0, 1 }, root.rotation);
-    const Quat rotation = quatFromAxisAngle(axis, p.drumTurns * 3.14159265358979323846f / 3);
+    const GlbQuat rotation = quatFromAxisAngle(axis, p.drumTurns * 3.14159265358979323846f / 3);
     for (int bone : spinning) {
-        Pose &t = current[(size_t)bone];
+        GlbPose &t = current[(size_t)bone];
         Vec3 off = { t.translation.x - pivot.x, t.translation.y - pivot.y, t.translation.z - pivot.z };
         Vec3 r = quatRotate(off, rotation);
         t.translation = { pivot.x + r.x, pivot.y + r.y, pivot.z + r.z };

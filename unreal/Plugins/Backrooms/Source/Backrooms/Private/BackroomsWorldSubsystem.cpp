@@ -2,15 +2,11 @@
 #include "BackroomsChunkActor.h"
 #include "BackroomsCoords.h"
 #include "BackroomsHeldActor.h"
-#include "BackroomsLevelLook.h"
-#include "BackroomsLightsActor.h"
+#include "BackroomsRender.h"
 #include "BackroomsSceneActor.h"
 #include "BackroomsSettings.h"
-#include "BackroomsSpriteActor.h"
 #include "BackroomsSound.h"
 #include "Camera/PlayerCameraManager.h"
-#include "Components/PointLightComponent.h"
-#include "Engine/PointLight.h"
 #include "Engine/World.h"
 #include "Math/RotationMatrix.h"
 #include "GameFramework/PlayerController.h"
@@ -20,8 +16,7 @@
 #include "Misc/Parse.h"
 #include "Stats/Stats.h"
 #include "core/level_rules.h"
-#include "port/scene.h"
-#include "port/sprites.h"
+#include "port/draw.h"
 #include "port/view.h"
 #include "sim/start.h"
 #include "sim/trace.h"
@@ -38,7 +33,7 @@ constexpr float OpeningYaw = 0.8f;
 constexpr float MaxDt = 0.05f;
 
 // Bullets against level geometry: a line trace against the chunk actors, which
-// carry complex collision of the greybox. The ray is in the sim's frame, the
+// carry complex collision of the chunk mesh. The ray is in the sim's frame, the
 // storey the player is on.
 struct FUnrealTracer final : SolidTracer
 {
@@ -201,7 +196,6 @@ void UBackroomsWorldSubsystem::FinishFrame(bool bPaused)
 	}
 	Game->audio.clear();
 	Game->dropAimLatch = false;
-	Game->shadowsStale = false;
 	Game->recordsChanged = false;
 }
 
@@ -231,16 +225,6 @@ void UBackroomsWorldSubsystem::FreeSim()
 	{
 		Hand->Destroy();
 		Hand = nullptr;
-	}
-	if (Lights)
-	{
-		Lights->Destroy();
-		Lights = nullptr;
-	}
-	if (Sprites)
-	{
-		Sprites->Destroy();
-		Sprites = nullptr;
 	}
 	if (Sound)
 	{
@@ -293,31 +277,21 @@ void UBackroomsWorldSubsystem::Tick(float DeltaTime)
 		return;
 	}
 	const FVector Camera = Controller->PlayerCameraManager->GetCameraLocation();
-	if (!CameraLight && GetDefault<UBackroomsSettings>()->bCameraLight)
+	if (!Render)
 	{
-		FActorSpawnParameters Params;
-		Params.ObjectFlags |= RF_Transient;
-		CameraLight = GetWorld()->SpawnActor<APointLight>(Camera, FRotator::ZeroRotator, Params);
-		if (CameraLight)
-		{
-			CameraLight->SetMobility(EComponentMobility::Movable);
-			UPointLightComponent* Light = CameraLight->PointLightComponent;
-			Light->SetIntensityUnits(ELightUnits::Candelas);
-			Light->SetIntensity(60.0f);
-			Light->SetAttenuationRadius(4000.0f);
-			Light->SetCastShadows(false);
-		}
+		Render = NewObject<UBackroomsRender>(this);
 	}
-	if (CameraLight)
+	// Without the editor's materials nothing is drawn; Load has said why.
+	if (!Render->Load())
 	{
-		CameraLight->SetActorLocation(Camera);
+		return;
 	}
+	Render->ApplyLevel(Game->world.level);
 	if (bRun)
 	{
 		// The sim owns which storey is current (it rebases as you climb).
 		StreamAround(BackroomsCoords::ToUnreal({ Game->px, 0.0f, Game->pz }), Game->world.storey, DeltaTime);
-		ShowScene(Camera);
-		ShowLights(simView(*Game).eye);
+		ShowFrame(simView(*Game).eye);
 	}
 	else
 	{
@@ -329,7 +303,7 @@ void UBackroomsWorldSubsystem::Tick(float DeltaTime)
 			Game->world.setStorey(Storey);
 		}
 		StreamAround(Camera, Storey, DeltaTime);
-		ShowLights(BackroomsCoords::FromUnreal(Camera - StoreyOrigin()));
+		ShowFrame(BackroomsCoords::FromUnreal(Camera - StoreyOrigin()));
 	}
 }
 
@@ -404,7 +378,6 @@ void UBackroomsWorldSubsystem::StreamAround(const FVector& Focus, int32 Storey, 
 void UBackroomsWorldSubsystem::BuildChunk(const FIntVector& Key)
 {
 	World& Maze = Game->world;
-	const UBackroomsLevelLook* LevelLook = CurrentLook();
 	UClass* ChunkClass = GetDefault<UBackroomsSettings>()->ChunkClass.LoadSynchronous();
 	if (!ChunkClass)
 	{
@@ -417,20 +390,16 @@ void UBackroomsWorldSubsystem::BuildChunk(const FIntVector& Key)
 		GetWorld()->SpawnActor<ABackroomsChunkActor>(ChunkClass, Origin, FRotator::ZeroRotator, Params);
 	if (Actor)
 	{
+		// The shadow grid holds the storeys above and below as they are loaded:
+		// a chunk of one arriving means rebuilding it (Game::streamChunks).
+		if (Key.Z != Maze.storey)
+		{
+			Render->InvalidateOccupancy();
+		}
 		StoreyScope Scope(Maze, Key.Z);
-		Actor->Build(Maze, Key.X, Key.Y, LevelLook);
+		Actor->Build(Maze, Key.X, Key.Y, *Render);
 		Chunks.Add(Key, Actor);
 	}
-}
-
-const UBackroomsLevelLook* UBackroomsWorldSubsystem::CurrentLook()
-{
-	if (LookLevel != Game->world.level)
-	{
-		LookLevel = Game->world.level;
-		Look = GetDefault<UBackroomsSettings>()->LookFor(LookLevel);
-	}
-	return Look;
 }
 
 FBackroomsHudState UBackroomsWorldSubsystem::GetHud() const
@@ -480,10 +449,6 @@ void UBackroomsWorldSubsystem::DropChunk(const FIntVector& Key)
 	{
 		Actor->Destroy();
 	}
-	if (Lights)
-	{
-		Lights->Forget(Key);
-	}
 }
 
 void UBackroomsWorldSubsystem::DropAll()
@@ -496,14 +461,31 @@ void UBackroomsWorldSubsystem::DropAll()
 		}
 	}
 	Chunks.Reset();
-	if (Lights)
-	{
-		Lights->ForgetAll();
-	}
 }
 
-void UBackroomsWorldSubsystem::ShowScene(const FVector& Camera)
+void UBackroomsWorldSubsystem::ShowFrame(const Vec3& Eye)
 {
+	Sim& S = *Game;
+	World& Maze = S.world;
+	Render->UpdateOccupancy(Maze, bRun ? S.px : Eye.x, bRun ? S.pz : Eye.z, S.shadowsStale);
+	S.shadowsStale = false;
+	const float T = (float)Now();
+	if (!bRun)
+	{
+		// A free camera has no blackouts, torch or nerves.
+		FrameLight Still = UBackroomsRender::Still();
+		Still.time = T;
+		Render->Frame(GetWorld(), Still, Eye, 0.0f, 0.0f, 0.0f);
+		Render->ShowPost(GetWorld());
+		return;
+	}
+	// The Web build has no camcorder here: its infrared lamp is off.
+	const FrameLight Light = frameLight(S, T, 0.0f);
+	const float Water = S.level == 2 && Maze.poolAt(cellOf(S.px), cellOf(S.pz))
+		? FMath::Clamp((WATER_Y - S.eyeY) * 8.0f, 0.0f, 1.0f) : 0.0f;
+	Render->Frame(GetWorld(), Light, Eye, S.fear, Water, S.migraine);
+	Render->ShowPost(GetWorld());
+
 	FActorSpawnParameters Params;
 	Params.ObjectFlags |= RF_Transient;
 	if (!Scene)
@@ -514,49 +496,15 @@ void UBackroomsWorldSubsystem::ShowScene(const FVector& Camera)
 	{
 		Hand = GetWorld()->SpawnActor<ABackroomsHeldActor>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
 	}
-	if (!Sprites)
+	if (!Scene || !Hand)
 	{
-		Sprites = GetWorld()->SpawnActor<ABackroomsSpriteActor>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
+		return;
 	}
-	const UBackroomsLevelLook* LevelLook = CurrentLook();
-	std::vector<SceneItem> Items = simScene(*Game);
-	if (Sprites)
-	{
-		// What the sprites draw, the scene actor does not.
-		Items.erase(std::remove_if(Items.begin(), Items.end(),
-			[this, LevelLook](const SceneItem& Item) { return Sprites->Draws((EBackroomsItem)Item.kind, LevelLook); }),
-			Items.end());
-		Sprites->Show(actorSprites(*Game), LevelLook, Camera, StoreyOrigin());
-	}
-	if (Scene)
-	{
-		Scene->Show(Items, LevelLook, StoreyOrigin());
-	}
-	if (Hand)
-	{
-		Hand->Show(*Game, CurrentLook(), StoreyOrigin());
-	}
-}
-
-void UBackroomsWorldSubsystem::ShowLights(const Vec3& At)
-{
-	if (!Lights)
-	{
-		FActorSpawnParameters Params;
-		Params.ObjectFlags |= RF_Transient;
-		Lights = GetWorld()->SpawnActor<ABackroomsLightsActor>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
-	}
-	if (Lights)
-	{
-		// A free camera has no blackouts and no nerves.
-		ABackroomsLightsActor::FMoment Moment;
-		Moment.Now = (float)Now();
-		if (bRun)
-		{
-			Moment.Blackout = Game->blackoutCur;
-			Moment.Fear = Game->fear;
-			Moment.Migraine = Game->migraine;
-		}
-		Lights->Show(Game->world, At, CurrentLook(), Moment, StoreyOrigin());
-	}
+	std::vector<SceneDraw> Draws;
+	sceneDraws(S, Light, T, Draws);
+	const size_t FirstHeld = Draws.size();
+	const SimView View = simView(S);
+	heldDraws(S, View, T, Draws);
+	Hand->Show(S, *Render, StoreyOrigin(), Draws);
+	Scene->Show(Draws, FirstHeld, View, *Render, StoreyOrigin());
 }
