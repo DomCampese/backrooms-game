@@ -4,6 +4,7 @@
 #include "atlas.h"     // FIXTURES and the vending machine's door: where each sits in the atlas
 #include "palette.h"
 #include "../core/hash.h"
+#include "../core/floorplan.h"
 #include "../core/layout.h"
 #include "../core/level_rules.h"
 #include <algorithm>
@@ -1158,8 +1159,8 @@ static void addFitting(MB &pr, MB &ce, const LightFitting &lf, int level) {
 }
 
 void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
-    ChunkData &d = w.data(cx, cz);
     const ChunkLayout L = chunkLayout(w, cx, cz);
+    const ChunkFloorplan F = chunkFloorplan(w, cx, cz);
     MB fl, ce, pr, wt, scr, gl, ao, fx;
     WallBuilder wa;
     float wx = cx * CHUNK, wz = cz * CHUNK;
@@ -1217,40 +1218,31 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
     if (w.level == 2) {
         Rgba water = { 72, 172, 162, 128 };
         for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
-            int ci = cx*CCELLS+i, ck = cz*CCELLS+kk;
-            float gx = wx + i*CELL, gz = wz + kk*CELL, fy = w.floorY(ci,ck);
+            const FloorCell &c = F.cells[i][kk];
+            float gx = wx + i*CELL, gz = wz + kk*CELL, fy = c.y;
             fl.quad({gx,fy,gz},{gx+CELL,fy,gz},{gx+CELL,fy,gz+CELL},{gx,fy,gz+CELL},{0,1,0},
                     {gx/2,gz/2},{(gx+CELL)/2,gz/2},{(gx+CELL)/2,(gz+CELL)/2},{gx/2,(gz+CELL)/2},wcol);
-            // Emit only the high side of a riser. Neighbour heights come from the world,
-            // across chunk seams, so seams grow no false walls.
-            auto skirt = [&](float x0,float z0,float x1,float z1,float low,Vec3 n) {
-                if (low >= fy) return;
-                fl.quad({x0,fy,z0},{x1,fy,z1},{x1,low,z1},{x0,low,z0},n,
-                        {(x0+z0)/2,-fy/2},{(x1+z1)/2,-fy/2},
-                        {(x1+z1)/2,-low/2},{(x0+z0)/2,-low/2},wcol);
-            };
-            skirt(gx,gz,gx+CELL,gz,w.floorY(ci,ck-1),{0,0,-1});
-            skirt(gx+CELL,gz+CELL,gx,gz+CELL,w.floorY(ci,ck+1),{0,0,1});
-            skirt(gx,gz+CELL,gx,gz,w.floorY(ci-1,ck),{-1,0,0});
-            skirt(gx+CELL,gz,gx+CELL,gz+CELL,w.floorY(ci+1,ck),{1,0,0});
-            if (d.pool[i][kk])
+            // Tiled risers, the floorplan's: each cell's high side of a step.
+            for (const Riser &r : F.risersIn(i, kk))
+                fl.quad({r.x0,r.hi,r.z0},{r.x1,r.hi,r.z1},{r.x1,r.lo,r.z1},{r.x0,r.lo,r.z0},{r.nx,0,r.nz},
+                        {(r.x0+r.z0)/2,-r.hi/2},{(r.x1+r.z1)/2,-r.hi/2},
+                        {(r.x1+r.z1)/2,-r.lo/2},{(r.x0+r.z0)/2,-r.lo/2},wcol);
+            if (c.pool)
                 wt.quad({gx,WATER_Y,gz},{gx+CELL,WATER_Y,gz},{gx+CELL,WATER_Y,gz+CELL},{gx,WATER_Y,gz+CELL},{0,1,0},
                         {0,0},{1,0},{1,1},{0,1},water);
         }
         // Elliptical vaults over the openings in the central partitions, lowest point
-        // 4.6 m up. Collision is the full-height piers already in the wall grid.
-        for (int axis=0; axis<2; ++axis) for (int start : {3,11}) {
-            // Only where the partition is there with this opening in it: grand halls have
-            // no partition, and an arch there would hang over open water.
-            auto wallAt = [&](int t) { return axis ? d.wallW[8][t] : d.wallN[t][8]; };
-            if (wallAt(start - 1) != WALL_SOLID || wallAt(start + 3) != WALL_SOLID) continue;
+        // ARCH_SPRING up, where the floorplan has them. Collision is the full-height
+        // piers already in the wall grid.
+        for (const Arch &arch : F.arches) {
+            const int axis = arch.axis, start = arch.start;
             auto pos = [&](float t,float y,float depth) -> Vec3 {
                 return axis ? Vec3{wx+16+depth,y,wz+t} : Vec3{wx+t,y,wz+16+depth};
             };
-            for (int n=0;n<24;++n) {
-                float t0=start*CELL+6.0f*n/24, t1=start*CELL+6.0f*(n+1)/24;
+            for (int n=0;n<ARCH_SEGMENTS;++n) {
+                float t0=start*CELL+6.0f*n/ARCH_SEGMENTS, t1=start*CELL+6.0f*(n+1)/ARCH_SEGMENTS;
                 auto archY = [&](float t) { float u=(t-(start*CELL+3))/3;
-                    return 4.6f+2.4f*sqrtf(std::max(0.0f,1-u*u)); };
+                    return ARCH_SPRING+ARCH_RISE*sqrtf(std::max(0.0f,1-u*u)); };
                 float y0=archY(t0),y1=archY(t1);
                 for (float side : {-WT,WT}) {
                     Vec3 normal=axis ? Vec3{side/WT,0,0}:Vec3{0,0,side/WT};
@@ -1279,12 +1271,12 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
         };
         for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
             float gx = wx + i * CELL, gz = wz + kk * CELL;
-            float fy = d.elev[i][kk] * ELEV_UNIT;
-            // the Manila Room lays its own floorboards (addManilaRoom)
-            if (d.manila && i >= MANILA_LO && i <= MANILA_HI && kk >= MANILA_LO && kk <= MANILA_HI) continue;
-            // A hole has no floor, and a flight builds its own treads (the flights, below).
-            if (d.vflag[i][kk] & (VF_HOLE | VF_STAIR)) continue;
-            if (w.level == 0 && w.softAt(cx * CCELLS + i, cz * CCELLS + kk)) {
+            const FloorCell &c = F.cells[i][kk];
+            float fy = c.y;
+            // The Manila Room lays its own floorboards (addManilaRoom); a hole has no
+            // floor, and a flight builds its own treads (the flights, below).
+            if (c.floor == FloorKind::Boards || c.floor == FloorKind::Hole || c.floor == FloorKind::Stair) continue;
+            if (c.floor == FloorKind::Soft) {
                 // A rotten patch: the cell is built as a shallow bowl, darkening toward the
                 // middle. SOFT_DEPTH and the falloff are World::softDip, which groundAt also
                 // walks, so the dip drawn is the dip stood in.
@@ -1316,21 +1308,10 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
             } else
             fl.quad({gx,fy,gz},{gx+CELL,fy,gz},{gx+CELL,fy,gz+CELL},{gx,fy,gz+CELL},{0,1,0},
                     {gx/2,gz/2},{(gx+CELL)/2,gz/2},{(gx+CELL)/2,(gz+CELL)/2},{gx/2,(gz+CELL)/2},wcol);
-            if (d.elev[i][kk] == 0) continue;
-            // heights across chunk seams, so terraces over a seam grow no phantom risers
-            auto hgt = [&](int a, int b) { return w.floorY(cx * CCELLS + a, cz * CCELLS + b); };
-            float hN = hgt(i, kk - 1), hS = hgt(i, kk + 1), hW = hgt(i - 1, kk), hE = hgt(i + 1, kk);
-            // each shared riser is drawn once: by this cell when the neighbour is flat
-            // (elev 0 cells stop above), otherwise by the lower cell of the pair
-            if (hN < fy && hN == 0.0f) stepEdge(gx, gz, gx + CELL, gz, fy, hN, 0, -1);
-            else if (hN > fy) stepEdge(gx, gz, gx + CELL, gz, hN, fy, 0, 1);
-            if (hS < fy && hS == 0.0f) stepEdge(gx, gz + CELL, gx + CELL, gz + CELL, fy, hS, 0, 1);
-            else if (hS > fy) stepEdge(gx, gz + CELL, gx + CELL, gz + CELL, hS, fy, 0, -1);
-            if (hW < fy && hW == 0.0f) stepEdge(gx, gz, gx, gz + CELL, fy, hW, -1, 0);
-            else if (hW > fy) stepEdge(gx, gz, gx, gz + CELL, hW, fy, 1, 0);
-            if (hE < fy && hE == 0.0f) stepEdge(gx + CELL, gz, gx + CELL, gz + CELL, fy, hE, 1, 0);
-            else if (hE > fy) stepEdge(gx + CELL, gz, gx + CELL, gz + CELL, hE, fy, -1, 0);
-            if (w.level == 1) {
+            // The floorplan's risers, each once (by this cell when the neighbour is flat,
+            // otherwise by the lower cell of the pair), across chunk seams too.
+            for (const Riser &r : F.risersIn(i, kk)) stepEdge(r.x0, r.z0, r.x1, r.z1, r.hi, r.lo, r.nx, r.nz);
+            {
                 // Safety edging along every drop off a loading dock: yellow and black, 100 mm
                 // wide, 250 mm stripes, just in from the lip.
                 auto edging = [&](float ex0, float ez0, float ex1, float ez1, float inx, float inz) {
@@ -1348,75 +1329,39 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
                         else                                           fx.quad(dd2, c, b, a, {0,1,0}, uv, uv, uv, uv, col);
                     }
                 };
-                if (hN < fy) edging(gx, gz, gx + CELL, gz, 0, 1);
-                if (hS < fy) edging(gx, gz + CELL, gx + CELL, gz + CELL, 0, -1);
-                if (hW < fy) edging(gx, gz, gx, gz + CELL, 1, 0);
-                if (hE < fy) edging(gx + CELL, gz, gx + CELL, gz + CELL, -1, 0);
+                for (const Lip &l : F.lipsIn(i, kk)) edging(l.x0, l.z0, l.x1, l.z1, l.inx, l.inz);
             }
         }
     }
-    // Per-cell ceiling height, greedy-meshed: a flat chunk is one quad. A quad per
-    // cell cost 4% of the frame on the software rasteriser for 5% of cells that
-    // step. UVs are world-space, so the tile grid runs across merged quads.
+    // The ceiling as the floorplan's merged rectangles: a flat chunk is one quad. A
+    // quad per cell cost 4% of the frame on the software rasteriser for 5% of cells
+    // that step. UVs are world-space, so the tile grid runs across merged quads.
     {
-        float cyc[CCELLS][CCELLS];
-        for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++)
-            cyc[i][kk] = w.ceilY(cx * CCELLS + i, cz * CCELLS + kk);
-        bool done[CCELLS][CCELLS] = {};
         // A cell open to the storey above has no ceiling here; the storey above's
         // chunk draws what you see.
-        for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++)
-            if (d.vflag[i][kk] & VF_OPENUP) done[i][kk] = true;
-        for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
-            if (done[i][kk]) continue;
-            float cy = cyc[i][kk];
-            int i1x = i;                                  // grow along x first
-            while (i1x + 1 < CCELLS && !done[i1x + 1][kk] && cyc[i1x + 1][kk] == cy) i1x++;
-            int k1z = kk;                                 // then take whole rows down z
-            while (k1z + 1 < CCELLS) {
-                bool ok = true;
-                for (int a = i; a <= i1x && ok; a++) ok = !done[a][k1z + 1] && cyc[a][k1z + 1] == cy;
-                if (!ok) break;
-                k1z++;
-            }
-            for (int a = i; a <= i1x; a++) for (int b = kk; b <= k1z; b++) done[a][b] = true;
-            float x0 = wx + i * CELL, x1 = wx + (i1x + 1) * CELL;
-            float z0 = wz + kk * CELL, z1 = wz + (k1z + 1) * CELL;
+        for (const CeilingRect &r : F.ceiling) {
+            const float x0 = r.x0, x1 = r.x1, z0 = r.z0, z1 = r.z1, cy = r.y;
             ce.quad({x0,cy,z0},{x0,cy,z1},{x1,cy,z1},{x1,cy,z0},{0,-1,0},
                     {x0/2,z0/2},{x0/2,z1/2},{x1/2,z1/2},{x1/2,z0/2},ccol);
         }
-        // Where the neighbour's ceiling is higher, close the slot with a soffit, or
-        // you see out of the building. Only the lower cell of a pair draws it, so a
-        // shared edge is drawn once, across chunk seams too.
-        for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
-            float gx = wx + i * CELL, gz = wz + kk * CELL;
-            int gi = cx * CCELLS + i, gk = cz * CCELLS + kk;
-            float cy = cyc[i][kk];
-            if (d.vflag[i][kk] & VF_OPENUP) continue;   // no ceiling of its own to close off
-            auto soffit = [&](float ax, float az, float bx2, float bz2, float hi, int ni, int nk, uint8_t edge) {
-                if (hi <= cy + 1e-4f) return;
-                if (w.storeyH > 0.0f && (w.vflagAt(ni, nk) & VF_OPENUP)) {
-                    // The edge of an opening into the storey above: a papered bulkhead up past
-                    // the void over the tiles to the floor above. A wall or door head on the same
-                    // line already covers it.
-                    if (blocksEdge(edge) && edge != WALL_RAIL) return;
-                    if (edge == WALL_DOOR || edge == WALL_EXIT) return;
-                    float along0 = (ax == bx2) ? az : ax, along1 = (ax == bx2) ? bz2 : bx2;
-                    // From the tile's middle, so no baseboard runs under the floor above.
-                    auto fv = [&](float y) { return 1 - (y - 2.25f) / wa.tileV; };
-                    wa.quad({ax,cy,az},{bx2,cy,bz2},{bx2,hi,bz2},{ax,hi,az},
-                            {(bz2-az)/CELL,0,(ax-bx2)/CELL},
-                            {along0/3,fv(cy)},{along1/3,fv(cy)},{along1/3,fv(hi)},{along0/3,fv(hi)},wcol);
-                    return;
-                }
-                ce.quad({ax,cy,az},{bx2,cy,bz2},{bx2,hi,bz2},{ax,hi,az},
+        // Where the neighbour's ceiling is higher, the floorplan's soffit closes the
+        // slot, or you see out of the building.
+        for (const Soffit &so : F.soffits) {
+            const float ax = so.ax, az = so.az, bx2 = so.bx, bz2 = so.bz, cy = so.lo, hi = so.hi;
+            if (so.bulkhead) {
+                // The edge of an opening into the storey above: a papered bulkhead up past
+                // the void over the tiles to the floor above.
+                float along0 = (ax == bx2) ? az : ax, along1 = (ax == bx2) ? bz2 : bx2;
+                // From the tile's middle, so no baseboard runs under the floor above.
+                auto fv = [&](float y) { return 1 - (y - 2.25f) / wa.tileV; };
+                wa.quad({ax,cy,az},{bx2,cy,bz2},{bx2,hi,bz2},{ax,hi,az},
                         {(bz2-az)/CELL,0,(ax-bx2)/CELL},
-                        {(ax+az)/2,0},{(bx2+bz2)/2,0},{(bx2+bz2)/2,(hi-cy)/2},{(ax+az)/2,(hi-cy)/2},ccol);
-            };
-            soffit(gx, gz, gx + CELL, gz, w.ceilY(gi, gk - 1), gi, gk - 1, w.wallNVal(gi, gk));
-            soffit(gx + CELL, gz + CELL, gx, gz + CELL, w.ceilY(gi, gk + 1), gi, gk + 1, w.wallNVal(gi, gk + 1));
-            soffit(gx, gz + CELL, gx, gz, w.ceilY(gi - 1, gk), gi - 1, gk, w.wallWVal(gi, gk));
-            soffit(gx + CELL, gz, gx + CELL, gz + CELL, w.ceilY(gi + 1, gk), gi + 1, gk, w.wallWVal(gi + 1, gk));
+                        {along0/3,fv(cy)},{along1/3,fv(cy)},{along1/3,fv(hi)},{along0/3,fv(hi)},wcol);
+                continue;
+            }
+            ce.quad({ax,cy,az},{bx2,cy,bz2},{bx2,hi,bz2},{ax,hi,az},
+                    {(bz2-az)/CELL,0,(ax-bx2)/CELL},
+                    {(ax+az)/2,0},{(bx2+bz2)/2,0},{(bx2+bz2)/2,(hi-cy)/2},{(ax+az)/2,(hi-cy)/2},ccol);
         }
     }
     // Light fittings. The layout leaves out the Manila Room's (the shader masks the
@@ -1440,28 +1385,23 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
     };
     for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
         float gx = wx + i * CELL, gz = wz + kk * CELL;
-        int gi0 = cx * CCELLS + i, gk0 = cz * CCELLS + kk;
+        const FloorCell &cell = F.cells[i][kk];
+        const FloorEdge &en = cell.north, &ew = cell.west;
         // A wall between two cells of different heights runs from the lower floor to
         // the higher ceiling, or a step leaves a gap under it on one side and a slot over
         // it on the other. Everything fixed to it (sill, door head, architrave) is
         // measured off that base.
-        float fyc = w.floorY(gi0, gk0), cyc = w.ceilY(gi0, gk0);
-        float nb = std::min(w.floorY(gi0, gk0 - 1), w.floorY(gi0, gk0));
-        float nt = std::max(w.ceilY(gi0, gk0 - 1), w.ceilY(gi0, gk0));
-        float wb = std::min(w.floorY(gi0 - 1, gk0), w.floorY(gi0, gk0));
-        float wt2 = std::max(w.ceilY(gi0 - 1, gk0), w.ceilY(gi0, gk0));
-        // Through the accessors, never the raw arrays: the overlays (shifted walls,
-        // unlocked doors) land there, and collision reads them too. Read raw, an
-        // unlocked door keeps its leaf and a shifted doorway stays open on screen.
-        uint8_t nv = w.wallNVal(gi0, gk0);
+        float fyc = cell.y, cyc = cell.ceilY;
+        float nb = en.base, nt = en.top, wb = ew.base, wt2 = ew.top;
+        // The floorplan reads walls through the accessors, never the raw arrays: the
+        // overlays (shifted walls, unlocked doors) land there, and collision reads them
+        // too. Read raw, an unlocked door keeps its leaf and a shifted doorway stays
+        // open on screen.
+        uint8_t nv = en.wall;
         // Which sides of this cell's edges have a floor (for skirting and creases) and
         // a ceiling (for creases); trim drawn where there is none hangs in air.
-        const bool flN = cellHasFloor(w, gi0, gk0), flS = cellHasFloor(w, gi0, gk0 - 1),
-                   flW = cellHasFloor(w, gi0 - 1, gk0);
-        const bool clN = cellHasCeiling(w, gi0, gk0), clS = cellHasCeiling(w, gi0, gk0 - 1),
-                   clW = cellHasCeiling(w, gi0 - 1, gk0);
-        // A neighbour's end cap is buried in the next wall along, but not in a thinner rail.
-        auto buries = [](uint8_t v) { return blocksEdge(v) && v != WALL_RAIL; };
+        const bool flN = en.hasFloorHi, flS = en.hasFloorLo, flW = ew.hasFloorLo;
+        const bool clN = en.hasCeilHi, clS = en.hasCeilLo, clW = ew.hasCeilLo;
         // The openings in this cell's north and west edges, as the layout has them.
         const Opening *on = L.opening(i, kk, false), *ow = L.opening(i, kk, true);
         auto is = [](const Opening *op, OpeningKind k) { return op && op->kind == k; };
@@ -1473,11 +1413,11 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
             return op.kind == OpeningKind::CursedExit ? Rgba{ 255, 60, 40, 70 } : Rgba{ 255, 248, 225, 70 };
         };
         if (is(on, OpeningKind::Rail)) railEdge(*on);
-        // Faces that look into a hole in this storey's floor (voidFace).
-        auto holeAt = [&](int a, int b) { return w.storeyH > 0.0f && (w.vflagAt(a, b) & VF_HOLE); };
+        // addBoxSides' masks: buried end caps (bits 2-3 on an x-running wall, 0-1 on a
+        // z-running one) and faces that look into a hole (bits 0-1, 2-3).
         if (nv == WALL_SOLID) {
-            int sk = (buries(w.wallNVal(gi0 - 1, gk0)) ? 4 : 0) | (buries(w.wallNVal(gi0 + 1, gk0)) ? 8 : 0);
-            int vfN = (holeAt(gi0, gk0 - 1) ? 1 : 0) | (holeAt(gi0, gk0) ? 2 : 0);
+            int sk = en.buried << 2;
+            int vfN = en.voidFaces;
             addBoxSides(wa, gx - WT, nb, gz - WT, gx + CELL + WT, nt, gz + WT, false, sk, RGBA_WHITE, vfN);
         }
         else if (is(on, OpeningKind::Window)) addWindowN(wa, gl, *on, gx, gz, nb, nt, w.level);
@@ -1536,11 +1476,11 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
                             gx + 1.50f, fy0 + 1.07f, zf + TRIM_T, LOCK_COL);
             }
         }
-        uint8_t wv = w.wallWVal(gi0, gk0);
+        uint8_t wv = ew.wall;
         if (is(ow, OpeningKind::Rail)) railEdge(*ow);
         if (wv == WALL_SOLID) {
-            int sk = (buries(w.wallWVal(gi0, gk0 - 1)) ? 1 : 0) | (buries(w.wallWVal(gi0, gk0 + 1)) ? 2 : 0);
-            int vfW = (holeAt(gi0 - 1, gk0) ? 4 : 0) | (holeAt(gi0, gk0) ? 8 : 0);
+            int sk = ew.buried;
+            int vfW = ew.voidFaces << 2;
             addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wt2, gz + CELL + WT, false, sk, RGBA_WHITE, vfW);
         }
         else if (is(ow, OpeningKind::Window)) addWindowW(wa, gl, *ow, gx, gz, wb, wt2, w.level);
@@ -1596,12 +1536,12 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
             // separate obstacle.
             Rgba trim = w.level == 0 ? Rgba{91, 71, 39, 254} : Rgba{67, 41, 34, 254};
             if (nv == WALL_SOLID) {
-                float tS = w.floorY(gi0, gk0 - 1), tN = w.floorY(gi0, gk0);
+                float tS = en.floorLo, tN = en.floorHi;
                 if (flS) addSolidBox(pr, gx, tS, gz-WT-0.025f, gx+CELL, tS + 0.13f, gz-WT, trim);
                 if (flN) addSolidBox(pr, gx, tN, gz+WT, gx+CELL, tN + 0.13f, gz+WT+0.025f, trim);
             }
             if (wv == WALL_SOLID) {
-                float tW = w.floorY(gi0 - 1, gk0), tE = w.floorY(gi0, gk0);
+                float tW = ew.floorLo, tE = ew.floorHi;
                 if (flW) addSolidBox(pr, gx-WT-0.025f, tW, gz, gx-WT, tW + 0.13f, gz+CELL, trim);
                 if (flN) addSolidBox(pr, gx+WT, tE, gz, gx+WT+0.025f, tE + 0.13f, gz+CELL, trim);
             }
@@ -1613,10 +1553,10 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
         bool nvWall = (blocksEdge(nv) && nv != WALL_RAIL);
         bool wvWall = (blocksEdge(wv) && wv != WALL_RAIL);
         if (nvWall) {
-            float fyS = w.floorY(gi0, gk0 - 1) + 0.005f, fyN = w.floorY(gi0, gk0) + 0.005f;
+            float fyS = en.floorLo + 0.005f, fyN = en.floorHi + 0.005f;
             // Ceiling creases follow each side's own ceiling, or they hang in the air
             // under a raised one.
-            float cyS = w.ceilY(gi0, gk0 - 1) - 0.005f, cyN = w.ceilY(gi0, gk0) - 0.005f;
+            float cyS = en.ceilLo - 0.005f, cyN = en.ceilHi - 0.005f;
             // exactly one cell long, so neighbours butt without a double blend
             float x0 = gx, x1 = gx + CELL;
             if (flS) aoStrip({ x0, fyS, gz - WT }, { x1, fyS, gz - WT }, { 0, 0, -AOW }, { 0, 1, 0 }, 0);          // floor, -z side
@@ -1629,8 +1569,8 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
             if (clN) aoStrip({ x0, cyN + 0.005f, gz + WT + 0.006f }, { x1, cyN + 0.005f, gz + WT + 0.006f }, { 0, -AOH, 0 }, { 0, 0, 1 }, AOC);
         }
         if (wvWall) {
-            float fyW = w.floorY(gi0 - 1, gk0) + 0.005f, fyE = w.floorY(gi0, gk0) + 0.005f;
-            float cyW = w.ceilY(gi0 - 1, gk0) - 0.005f, cyE = w.ceilY(gi0, gk0) - 0.005f;
+            float fyW = ew.floorLo + 0.005f, fyE = ew.floorHi + 0.005f;
+            float cyW = ew.ceilLo - 0.005f, cyE = ew.ceilHi - 0.005f;
             float z0 = gz, z1 = gz + CELL;
             if (flW) aoStrip({ gx - WT, fyW, z0 }, { gx - WT, fyW, z1 }, { -AOW, 0, 0 }, { 0, 1, 0 }, 0);
             if (flN) aoStrip({ gx + WT, fyE, z0 }, { gx + WT, fyE, z1 }, { AOW, 0, 0 }, { 0, 1, 0 }, 0);
@@ -1645,7 +1585,7 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
         // 254, in their own mesh because the props mesh is the largest and uses 16-bit
         // indices with no overflow check), conduit and scrawl.
         addCellFixtures(i, kk, FixtureStage::Walls);
-        if (d.pillar[i][kk]) {
+        if (cell.pillar) {
             addBoxSides(wa, gx + PILLAR_LO, fyc, gz + PILLAR_LO, gx + PILLAR_HI, cyc, gz + PILLAR_HI);
             addCellFixtures(i, kk, FixtureStage::Pillar);
             addContactShadow(ao, gx + 1.0f, gz + 1.0f, fyc, 0.0f, 0.58f, 0.58f);
@@ -1666,39 +1606,28 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
     // ---- the flights rising from this storey (stampFeature has the plan). Steps
     // belong to the storey they stand on; the storey above draws its hole, rails and
     // arrival floor.
-    for (int q = 0; q < d.nfeat; q++) {
-        const VertFeat &f = d.feats[q];
-        if (f.lo != w.qs) continue;
+    for (const Flight &flight : F.flights) {
+        const VertFeat &f = flight.feat;
         auto to = [&](float u, float y, float v) { return w.featureWorld(f, cx, cz, u, y, v); };
-        const float R = w.storeyH / 24.0f;
+        for (size_t s = 0; s < flight.steps.size(); s++) {
+            if (flight.landing && (int)s == flight.landingAfter) {
+                // An enclosed stairwell's half landing, across the shaft at the far end.
+                const float y = flight.landingY;
+                Vec3 a = to(0, y, flight.landingV0), b = to(flight.landingU1, y, flight.landingV0);
+                Vec3 c = to(flight.landingU1, y, flight.landingV1), e = to(0, y, flight.landingV1);
+                fl.quad(a, b, c, e, { 0, 1, 0 }, { a.x / 2, a.z / 2 }, { b.x / 2, b.z / 2 }, { c.x / 2, c.z / 2 },
+                        { e.x / 2, e.z / 2 }, RGBA_WHITE);
+            }
+            const FlightStep &st = flight.steps[s];
+            addStep(fl, pr, to, st.u0, st.u1, st.va, st.vb, st.y0, st.y1, st.risesPlusV, false);
+        }
         if (f.kind == VK_STAIRWELL) {
-            // Lane A: 12 risers from the foot (plain floor, drawn with the rest) to the
-            // half landing.
-            const float G = 4.0f / 12.0f;
-            Vec3 a, b, c, e;
-            for (int i = 0; i < 12; i++)
-                addStep(fl, pr, to, 0, CELL, 2 + i * G, 2 + (i + 1) * G, 0, (i + 1) * R, true, false);
-            // The half landing, across the shaft at the far end.
-            a = to(0, 12 * R, 6); b = to(2 * CELL, 12 * R, 6); c = to(2 * CELL, 12 * R, 8); e = to(0, 12 * R, 8);
-            fl.quad(a, b, c, e, { 0, 1, 0 }, { a.x / 2, a.z / 2 }, { b.x / 2, b.z / 2 }, { c.x / 2, c.z / 2 },
-                    { e.x / 2, e.z / 2 }, RGBA_WHITE);
-            // Lane B: 12 more, back toward the door above. Its top landing is the upper
-            // storey's floor, drawn by that storey.
-            for (int j = 0; j < 12; j++)
-                addStep(fl, pr, to, CELL, 2 * CELL, 6 - (j + 1) * G, 6 - j * G, 0, 12 * R + (j + 1) * R, false, false);
             // The landing light's steel body. Its tube is drawn by the renderer, because
             // it goes out in a blackout and a chunk mesh cannot.
             Vec3 lamp = w.landingLamp(f, cx, cz);
             Vec3 lo2 = to(CELL - 0.55f, lamp.y - 0.06f, 8 - WT - 0.13f), hi2 = to(CELL + 0.55f, lamp.y + 0.06f, 8 - WT);
             addSolidBox(pr, std::min(lo2.x, hi2.x), lamp.y - 0.06f, std::min(lo2.z, hi2.z),
                         std::max(lo2.x, hi2.x), lamp.y + 0.06f, std::max(lo2.z, hi2.z), Rgba{ 150, 150, 142, 254 });
-        } else if (f.kind == VK_STAIR || f.stairU >= 0) {
-            // A straight flight: 24 risers over rows 1..4, between its wall and its
-            // balustrade, which cover the steps' ends.
-            int s0 = f.kind == VK_STAIR ? 0 : f.stairU, s1 = f.kind == VK_STAIR ? f.wu - 1 : f.stairU;
-            const float G = 8.0f / 24.0f;
-            for (int i = 0; i < 24; i++)
-                addStep(fl, pr, to, s0 * CELL, (s1 + 1) * CELL, 2 + i * G, 2 + (i + 1) * G, 0, (i + 1) * R, true, false);
         }
     }
     // Pipework and valve standpipes, a second walk over the cells so a pipe run's
