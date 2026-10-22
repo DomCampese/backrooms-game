@@ -218,13 +218,16 @@ Still coupled, and why:
   `coinAt`.
 - A prop's height is written in three places: `addProp` (mesher),
   `gatherCellAABBs` (core) and `Sim::bottleShelfY`.
-- Lighting constants the GLSL still copies from core: the occupancy bits. The panel half-size is
+- No lighting constant is copied into the GLSL by hand any more; its lighting
+  arithmetic is still its own. The panel half-size is
   written into the shader from core's `PANEL_HALF` when it is loaded
   (`worldFragmentShader`), and so are the storey hash offset's numbers
   (`STOREY_HASH_STEP`, `STOREY_HASH_SPAN`) and the tube hash's (`TUBE_HASH_*`
   for `lhash`, and `TUBE_STOREY_SKEW`, `TUBE_OUTPUT_SPREAD`,
   `TUBE_STUTTER_SPREAD` for `lightState`), and the stutter's (`TUBE_STUTTER_*`,
-  `TUBE_BUZZ_*`, which `tubeStutter` uses). The light plane is core's `LIGHT_DROP` everywhere on the C++ side,
+  `TUBE_BUZZ_*`, which `tubeStutter` uses), the pillar footprint
+  (`PILLAR_LO`, `PILLAR_HI`) and the occupancy grid's bits (`OccBit`, world.h,
+  which `buildOccupancy` sets and `lightAtCPU` reads). The light plane is core's `LIGHT_DROP` everywhere on the C++ side,
   the mesher, `uLY` and every `lightAtCPU` call included.
 - The render loop reads `ChunkData` directly for the stairwell landing lights
   (`nfeat`, `feats`).

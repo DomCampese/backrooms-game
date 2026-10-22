@@ -59,7 +59,7 @@ float lightAtCPU(float x, float y, float z, float blackout,
     // sprite standing in a sunken pit is still on your storey.
     int rel = SH > 0.0f ? (int)floorf((y + SH * 0.5f) / SH) : 0;
     int ci0 = (int)floorf(x / 2.0f), ck0 = (int)floorf(z / 2.0f);
-    int layers = (SH > 0.0f && rel < 1 && (occCPU(ci0, ck0, chanOf(rel)) & 16)) ? 2 : 1;
+    int layers = (SH > 0.0f && rel < 1 && (occCPU(ci0, ck0, chanOf(rel)) & OCC_OPEN_ABOVE)) ? 2 : 1;
     for (int layer = 0; layer < layers; layer++) {
     int lrel = rel + layer;
     float lly = ly + lrel * SH, so = storeyHashOffset(gStoreyCPU.storey + lrel);
@@ -68,8 +68,8 @@ float lightAtCPU(float x, float y, float z, float blackout,
         float lx = gx * ls + ls * 0.5f, lz = gz * ls + ls * 0.5f;
         if (SH > 0.0f) {
             int po = occCPU((int)floorf(lx * 0.5f + 0.5f), (int)floorf(lz * 0.5f + 0.5f), chanOf(lrel));
-            if (po & 8) continue;                        // no fitting: it would hang in an opening
-            if (layer == 1 && !(po & 32)) continue;      // above you, but over floor, not the hole
+            if (po & OCC_NO_FITTING) continue;                        // no fitting: it would hang in an opening
+            if (layer == 1 && !(po & OCC_HOLE_CORNER)) continue;      // above you, but over floor, not the hole
         }
         float h = tubeHash(gx + so, gz + so * TUBE_STOREY_SKEW);
         if (h < dead) continue;
