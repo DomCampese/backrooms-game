@@ -321,6 +321,46 @@ still the mesher's. What will bite:
 - `./mapdump --layout CX CZ` prints a chunk's layout (use `--level`,
   `--visit`, `--storey` as for the plan).
 
+# Chunk floorplan (October 2026)
+
+`chunkFloorplan(world, cx, cz)` (shared/core/floorplan.h) says what a chunk is
+made of, as `chunkLayout` says what stands in it: each cell's floor kind,
+height, pool, pillar and ceiling; each north and west edge's wall, base and
+top, buried ends, void faces, and the floor and ceiling either side; the risers
+and the cell that draws each; Level 1's dock lips; the ceiling as merged
+rectangles; soffits and bulkheads; the flights' steps and the stairwell's
+landing; the Poolrooms' arches. The mesher and the greybox both build from it.
+What will bite:
+
+- **A new floorplan rule goes in core, and the mesher only reads it.** Which
+  cell draws a shared riser, which edges get a bulkhead, how the ceiling is
+  merged: each is decided in floorplan.cpp. A test in chunk_mesh.cpp on
+  `vflag`, `elev`, `wallNVal` or `floorY` is the pattern this replaced.
+- **The lists carry the mesher's emission order**, as the layout's do: risers
+  and lips per cell (N, S, W, E; `risersIn`, `lipsIn`), soffits per cell after
+  every ceiling rectangle, steps in the order they were laid. Reordering one
+  reorders quads in a shared builder.
+- **Risers have two owners' rules.** On Level 2 every cell draws the high side
+  of each of its steps; elsewhere a cell draws a riser when the neighbour is
+  flat, otherwise the lower cell does, and a cell with no floor of its own or
+  at height 0 draws none. A port drawing every riser from the list draws each
+  once either way.
+- **The arches read the raw wall arrays** (`d.wallW[8][t]`), as the mesher always
+  did; they are partitions the overlays never touch.
+- **`tests/golden/floorplan.txt` prints only cells that are not plain**, and
+  leaves out an open edge between plain cells, but hashes all 256 cells with
+  both edges; a failure on a `cells hash=` line with no differing cell line is
+  a plain cell or a buried bit that moved. `./mapdump --floorplan CX CZ`
+  prints one chunk.
+- The move was proved byte-identical: 2,500 chunk bakes (every array of every
+  slot, 57 M vertices a side) and 5,000 greyboxes (74 M) against the old code,
+  over every level, both visits, exits everywhere, three storeys, the Manila
+  Room and shifted and unlocked edges. The harness compiled the old
+  chunk_mesh.cpp and greybox.cpp with `-DbakeChunkGeometry=bakeChunkGeometryOld`
+  (and `-DgreyboxChunk=greyboxChunkOld -Dtriangles=trianglesOld`) beside the
+  new; no GL is needed, since both produce plain arrays. Moving any field by
+  1 mm failed it in 105 to 2,412 chunks.
+
 # Vending machine (September 2026)
 
 `PROP_VENDING` (Levels 1 and 4) was one grey box with a flat blue quad on it.
@@ -824,6 +864,7 @@ build's, in `web/src/`.
 | `core/world.{h,cpp}` | infinite maze: chunk generation, storeys, collision, line of sight, pathfinding, occupancy grid. `WallKind` / `PropKind` name the codes stored per cell. No raylib |
 | `core/level_rules.h` | per-level rules: wall height, light pitch, storey pitch, name, which tubes work, exits |
 | `core/layout.{h,cpp}` | `ChunkLayout`: a chunk's props, fixtures, light fittings and openings, decided from the seed |
+| `core/floorplan.{h,cpp}` | `ChunkFloorplan`: a chunk's floors, walls, risers, ceilings, soffits, flights and arches, as the mesher builds them |
 | `core/hash.{h,cpp}`, `core/vec.h`, `core/portable_math.{h,cpp}` | hashes, RNG, value noise; `Vec2`/`Vec3`, `TAU`, `clampf`; sin, cos, exp, atan2, hypot that round the same everywhere |
 | `sim/start.{h,cpp}`, `sim/trace.{h,cpp}` | how a run starts (`SimStart`); recording and replaying the calls on the sim |
 | `port/view.{h,cpp}`, `port/greybox.{h,cpp}` | what the camera shows of the sim (both builds draw from it); a chunk as plain boxes and quads for a port's first milestone |
