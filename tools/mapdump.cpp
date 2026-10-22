@@ -15,6 +15,7 @@
 #include "../shared/core/world.h"
 #include "../shared/core/hash.h"
 #include "../shared/core/level_rules.h"
+#include "../shared/core/floorplan.h"
 #include "../shared/core/layout.h"
 
 #include <algorithm>
@@ -50,7 +51,7 @@ struct Args {
     int level = 0, cells = 129, samples = 4000, storey = 0;
     unsigned visit = 0;
     unsigned seed = 1337;
-    bool plan = true, listExits = false, listStairs = false, layout = false;
+    bool plan = true, listExits = false, listStairs = false, layout = false, floorplan = false;
     int px = 0, pz = 0, pw = 48, ph = 32;
     int lcx = 0, lcz = 0;
 };
@@ -173,10 +174,56 @@ void printLayout(World &w, int cx, int cz) {
     }
 }
 
+// Print chunk (cx, cz)'s floorplan: what the mesher builds the floors, walls and
+// ceilings from.
+void printFloorplan(World &w, int cx, int cz) {
+    const ChunkFloorplan P = chunkFloorplan(w, cx, cz);
+    static const char *const FLOOR_NAME[] = { "flat", "soft", "boards", "stair", "hole" };
+    int kinds[5] = {}, pools = 0, pillars = 0, open = 0, walls[16] = {};
+    for (int i = 0; i < CCELLS; i++)
+        for (int k = 0; k < CCELLS; k++) {
+            const FloorCell &c = P.cells[i][k];
+            kinds[(int)c.floor]++;
+            pools += c.pool;
+            pillars += c.pillar;
+            open += !c.ceiling;
+            walls[c.north.wall & 15]++;
+            walls[c.west.wall & 15]++;
+        }
+    printf("\nfloorplan of chunk %d,%d  storey %d  (x %.0f..%.0f  z %.0f..%.0f, world metres)\n", cx, cz, P.storey,
+           cx * CHUNK, (cx + 1) * CHUNK, cz * CHUNK, (cz + 1) * CHUNK);
+    printf("  floors:");
+    for (int n = 0; n < 5; n++) printf("  %s %d", FLOOR_NAME[n], kinds[n]);
+    printf("\n  pools %d  pillars %d  open to the storey above %d\n  edges by WallKind:", pools, pillars, open);
+    for (int n = 0; n < 16; n++)
+        if (walls[n]) printf("  %d: %d", n, walls[n]);
+    printf("\n\nrisers (%zu)\n", P.risers.size());
+    for (const Riser &r : P.risers)
+        printf("  cell %2d,%2d  %7.2f %7.2f -> %7.2f %7.2f  %5.2f..%5.2f  facing %+.0f %+.0f\n", r.i, r.k, r.x0, r.z0,
+               r.x1, r.z1, r.lo, r.hi, r.nx, r.nz);
+    printf("\ndock lips (%zu)\n", P.lips.size());
+    for (const Lip &l : P.lips)
+        printf("  cell %2d,%2d  %7.2f %7.2f -> %7.2f %7.2f  in %+.0f %+.0f\n", l.i, l.k, l.x0, l.z0, l.x1, l.z1, l.inx,
+               l.inz);
+    printf("\nceiling rectangles (%zu)\n", P.ceiling.size());
+    for (const CeilingRect &r : P.ceiling)
+        printf("  %7.2f %7.2f .. %7.2f %7.2f  at %5.2f\n", r.x0, r.z0, r.x1, r.z1, r.y);
+    printf("\nsoffits (%zu)\n", P.soffits.size());
+    for (const Soffit &o : P.soffits)
+        printf("  cell %2d,%2d  %7.2f %7.2f -> %7.2f %7.2f  %5.2f..%5.2f%s\n", o.i, o.k, o.ax, o.az, o.bx, o.bz, o.lo,
+               o.hi, o.bulkhead ? "  bulkhead" : "");
+    printf("\nflights (%zu)\n", P.flights.size());
+    for (const Flight &f : P.flights)
+        printf("  kind %d at cell %d,%d  dir %d  %zu steps, top %.2f%s\n", f.feat.kind, f.feat.x0, f.feat.z0, f.feat.dir,
+               f.steps.size(), f.steps.empty() ? 0.0f : f.steps.back().y1, f.landing ? "  half landing" : "");
+    printf("\narches (%zu)\n", P.arches.size());
+    for (const Arch &a : P.arches) printf("  axis %d  from cell %d\n", a.axis, a.start);
+}
+
 const char *usage =
     "usage: mapdump [--level N] [--seed S] [--storey N] [--cells N] [--samples N]\n"
     "               [--plan X Z W H] [--no-plan] [--list-exits] [--list-stairs]\n"
-    "               [--layout CX CZ]\n";
+    "               [--layout CX CZ] [--floorplan CX CZ]\n";
 
 }  // namespace
 
@@ -196,6 +243,7 @@ int main(int argc, char **argv) {
         else if (k == "--list-stairs") a.listStairs = true;
         else if (k == "--plan")    { a.px = num(0); a.pz = num(0); a.pw = num(48); a.ph = num(32); }
         else if (k == "--layout")  { a.layout = true; a.lcx = num(0); a.lcz = num(0); }
+        else if (k == "--floorplan") { a.floorplan = true; a.lcx = num(0); a.lcz = num(0); }
         else { fputs(usage, stderr); return 2; }
     }
 
@@ -212,11 +260,13 @@ int main(int argc, char **argv) {
     w.storeyH = (a.level >= 0 && a.level < NLEVELS) ? LEVEL_RULES[a.level].storeyH : 0.0f;
     w.setStorey(a.storey);
 
-    // A layout has heights in it, so it needs the level's real wall height.
-    if (a.layout) {
+    // A layout and a floorplan have heights in them, so they need the level's
+    // real wall height.
+    if (a.layout || a.floorplan) {
         w.wallH = LEVEL_RULES[a.level].wallH;
         printf("mapdump  level %d  seed %u  storey %d  visit %u\n", a.level, a.seed, a.storey, a.visit);
-        printLayout(w, a.lcx, a.lcz);
+        if (a.layout) printLayout(w, a.lcx, a.lcz);
+        else printFloorplan(w, a.lcx, a.lcz);
         return 0;
     }
 
