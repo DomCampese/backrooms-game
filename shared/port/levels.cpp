@@ -1,5 +1,5 @@
+#include "../core/fp_strict.h"
 #include "levels.h"
-#include "util.h"
 #include <cmath>
 
 // One row per level, after the rules it extends. Columns in declaration order:

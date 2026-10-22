@@ -21,7 +21,7 @@
 // B the gloss mask. A "_wrap" copy tiles each surface 2x2 so a seam at the
 // repeat is in the middle of the picture instead of at its edges.
 #include "raylib.h"
-#include "../web/src/levels.h"
+#include "../shared/port/levels.h"
 #include "../web/src/textures.h"
 #include <chrono>
 #include <cstdio>
@@ -107,7 +107,7 @@ static void sprite(const char *name, Texture2D (*make)()) {
     dump(name, make(), false);
 }
 
-static void putVec(FILE *f, const char *key, Vector3 v) {
+static void putVec(FILE *f, const char *key, Vec3 v) {
     fprintf(f, "\"%s\": [%.4f, %.4f, %.4f], ", key, v.x, v.y, v.z);
 }
 

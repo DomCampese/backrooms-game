@@ -6,7 +6,8 @@
 #include "sim/sim.h"
 #include "sim/trace.h"
 #include "port/view.h"
-#include "levels.h"
+#include "port/draw.h"
+#include "port/levels.h"
 #include "util.h"
 #include "vec_rl.h"
 #include "game_audio.h"
@@ -128,6 +129,6 @@ struct Game {
     void renderScene(double now);             // 3D world into the offscreen target
     void renderUI(double now);                // post pass, HUD, overlays
     void drawHeldWeapon(const Camera3D &cam);
-    void drawCan(Matrix xf);
-    void drawDeck(Matrix xf, bool lamp);
+    void drawScene(const SceneDraw &d, const Camera3D &cam);
+    std::vector<SceneDraw> sceneBuf;   // port/draw.h's draws, reused each frame
 };

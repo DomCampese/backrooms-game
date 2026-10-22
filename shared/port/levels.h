@@ -1,19 +1,21 @@
 #pragma once
-// How each level looks: light colour and output, fog, gloss, damp. The numbers
+// How each level looks: light colour and output, fog, gloss, damp. Both
+// builds read this table and lightAtCPU (the Web build's world shader and the
+// Unreal port's world material are given the same numbers). The numbers
 // the generator and the rules read (wall height, light pitch, storey pitch,
 // name, exits, which tubes work) are core's LEVEL_RULES; LevelCfg extends that
 // table, so LEVELS[lv].wallH and LEVEL_RULES[lv].wallH are one definition.
-#include "raylib.h"
-#include "core/level_rules.h"
-#include "core/layout.h"
+#include "../core/level_rules.h"
+#include "../core/layout.h"
+#include "../core/vec.h"
 
 struct LevelCfg : LevelRules {
     float lightMul;   // brightness of the ones that work
     float fogDen;     // exponential fog density
     float gloss;      // floor specular; the shader skips specular below 0.10
-    Vector3 lightCol; // colour of the fluorescents
-    Vector3 amb;      // ambient floor, so unlit corners are not pure black
-    Vector3 fogCol;   // what the fog fades to at range
+    Vec3 lightCol;    // colour of the fluorescents
+    Vec3 amb;         // ambient floor, so unlit corners are not pure black
+    Vec3 fogCol;      // what the fog fades to at range
     // World-space damp patches in the shader (uWet), and where on the 0..1
     // patch field they start (uWetFrom, carpetWetCPU): 0.60 wets about a
     // quarter of the floor, 0.78 about 1-3%.
