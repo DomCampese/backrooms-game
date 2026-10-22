@@ -311,7 +311,10 @@ still the mesher's. What will bite:
   written in by `worldFragmentShader()`, which prints each as the shortest
   decimal that reads back as the same float: `lhash`'s 43758.5453123 now reads
   43758.547 in the compiled source, and both are 43758.546875. The stutter's
-  numbers are still the GLSL's own copy of `tubeStutter`.
+  (`TUBE_STUTTER_*`, `TUBE_BUZZ_*`) are written in the same way, so
+  `tubeStutter`, Unreal's lights and the shader read one set. A number used
+  twice is replaced everywhere it appears (`TUBE_HASH_SCALE` scales all three
+  hashes), and a whole number prints as `10.0`, not `%g`'s `1e+01`.
 - **Conduit buckets the cell with unsigned division** (`gi / CONDUIT_RUN` on a
   `uint32_t`), so a negative cell's run is not `fdiv`'s. Make it signed and
   every conduit run west or north of the origin moves.
