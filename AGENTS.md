@@ -32,6 +32,16 @@ drawn"). What will bite:
 - **The world shader's core numbers reach the HLSL as defines** from
   `world.json` (`texdump --unreal`), as `worldFragmentShader()` writes them
   into the GLSL. A new `@TOKEN@` needs a row in both.
+- **The HUD is `hudDraws`** (shared/port/hud.h): what render.cpp's `renderUI`
+  draws over the world, as a list of text, rectangles, gradients and a dot in
+  window pixels, which render.cpp and `ABackroomsHUD` both draw. Text is
+  measured by the caller (`HudMeasure`: `MeasureText` in the Web build, the
+  engine's font in Unreal), so lines centre on the font that draws them. The
+  move was checked by compiling main's `renderUI` body unchanged against
+  logging stubs for raylib's draw calls and comparing its calls with the list
+  over 200,000 random sim states (5.9 M draws, none differ). Redirect raylib
+  with object-like macros (`#define DrawText logText`): a function-like one
+  breaks on the braced colours, whose commas count as arguments.
 - **Per-frame light is `frameLight`, per-frame drawing `sceneDraws`**
   (shared/port/draw.h), which render.cpp draws from too (checked: 0 pixels
   differ over seven captures). A new thing render.cpp draws round the chunks
@@ -874,6 +884,7 @@ build's, in `web/src/`.
 | `core/hash.{h,cpp}`, `core/vec.h`, `core/portable_math.{h,cpp}` | hashes, RNG, value noise; `Vec2`/`Vec3`, `TAU`, `clampf`; sin, cos, exp, atan2, hypot that round the same everywhere |
 | `sim/start.{h,cpp}`, `sim/trace.{h,cpp}` | how a run starts (`SimStart`); recording and replaying the calls on the sim |
 | `port/view.{h,cpp}`, `port/greybox.{h,cpp}` | what the camera shows of the sim (both builds draw from it); a chunk as plain boxes and quads for a port's first milestone |
+| `port/hud.{h,cpp}` | the HUD over the world (`hudDraws`): cards, meters, inventory and hints as draws in window pixels, which both builds draw |
 | `port/held.{h,cpp}`, `port/scene.{h,cpp}`, `port/sprites.{h,cpp}`, `port/sheets.h` | what is in hand, what stands loose in the world, and the actors' billboard poses and sheet layout, which both builds draw from |
 | `port/sounds.{h,cpp}`, `port/ambience.{h,cpp}`, `port/mixer.{h,cpp}` | the synthesized clips and which are recordings; the ambience synth; a software mix of the sim's `AudioEvent`s for a port |
 | `port/chunk_mesh.{h,cpp}` | the chunk mesher (`bakeChunkGeometry`), `ChunkMesh` slots |
@@ -1615,6 +1626,8 @@ Two specific ways to break the shader silently:
 
 **`TextFormat` hands back a slot in a small rotating buffer.** Four or so
 calls in, the pointer you kept from the first one now holds a later string.
+(The HUD formats into `std::string`s in port/hud.cpp now, so this bites only
+raylib code that still holds a `TextFormat` pointer.)
 The bottom-left inventory block was already close to the limit; adding one
 more row made the flare line render as the tape-player line. Draw each line
 straight off its `TextFormat` call — never collect `const char *` results and

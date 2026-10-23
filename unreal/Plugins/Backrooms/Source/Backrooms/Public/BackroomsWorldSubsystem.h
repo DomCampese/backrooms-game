@@ -53,6 +53,8 @@ public:
 	// field of view in degrees.
 	FTransform ViewTransform(float& OutFovY) const;
 	const Sim* GetSim() const { return Game; }
+	// The clock the sim is stepped with, for what is drawn from it (the HUD).
+	double SimClock() const { return Now(); }
 
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
