@@ -2,14 +2,14 @@
 // A chunk as plain boxes and quads, for a port's first milestone (M2 in
 // docs/unreal-handoff.md): floors, ceilings, walls with their openings, steps,
 // stairs, pillars, props as their collision boxes, water and light panels.
-// Built from core's accessors and chunkLayout, so it shows the world collision
+// Built from chunkFloorplan and chunkLayout, so it shows the world collision
 // and the rules see, and nothing of how the Web build dresses it.
 //
 // Engine-neutral: core and the standard library only. Positions are metres in
 // the storey's own frame (y up, y = 0 its floor), as everywhere in core. Every
 // face is emitted twice, once per winding, so an engine's front-face
 // convention and its handedness cannot hide a face.
-#include "../core/layout.h"
+#include "../core/floorplan.h"
 #include <cstdint>
 #include <vector>
 

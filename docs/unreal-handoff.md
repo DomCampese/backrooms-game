@@ -159,8 +159,8 @@ editor viewport; the pawn, controller, chunk actor and game mode are
 Blueprintable; `GetHud` feeds a UMG HUD.
 
 **The greybox** (`shared/port/greybox.{h,cpp}`, core and the standard library
-only) builds a chunk as flat-coloured boxes and quads from core's accessors and
-`chunkLayout`: floors, ceilings, steps and soffits, walls, doorways and their
+only) builds a chunk as flat-coloured boxes and quads from `chunkFloorplan`
+(the mesher's source too, since October 2026) and `chunkLayout`: floors, ceilings, steps and soffits, walls, doorways and their
 headers, windows, locked doors, exits, rails (sloped caps on flights), stairs as
 treads, pillars, props as the boxes collision gives them, water, and light
 panels (dead ones dark). Every face is emitted in both windings, so neither
@@ -197,7 +197,7 @@ must do.
 
 What to expect on the Mac:
 
-- **Contract**: should pass. Core calls no transcendental libm function: the
+- **Contract**: should pass, `floorplan.txt` (October 2026) included. Core calls no transcendental libm function: the
   tube hash's `sinf` became core's own `portableSin` on 11 October 2026
   (docs/migration.md, "Floating point").
 - **Replay**: should pass. Since 13 October 2026 the sim takes sin, cos, exp,
@@ -270,7 +270,7 @@ What the seams leave for the port, or for the Web build before it.
 |---|---|---|
 | post-process | the water warp, the fear vignette, the Web build's own tone curve | Unreal's filmic curve stands in for the Web build's ACES fit, and the ambients were tuned against that fit's toe (AGENTS.md, "Lighting"); the exposure and ambient numbers are starting points until held against captures |
 | real meshes | props, fixtures, items and actors | the looks can take a mesh for every kind; none is authored yet, so props are their collision boxes, fixtures and items plain shapes, and actors billboards |
-| floorplan geometry as data | walls, floors, ceilings, soffits, stairs, pools, arches, skirting are still built directly by `bakeChunk` | the greybox (`shared/port`) derives them from core's accessors for M2; art needs core to describe the floorplan the way `chunkLayout` describes fixtures |
+| floorplan geometry as data | done (October 2026): `chunkFloorplan` (core/floorplan.h) describes floors, walls, risers, ceilings, soffits, flights and arches, and the mesher and the greybox build from it | Unreal's chunk actors draw it through the greybox; real meshes for walls and floors (skirting, door trim, stair nosing) would be placed from it, as fixtures are from `chunkLayout` |
 | sound in Unreal | written (`UBackroomsSound`), not yet heard on the Mac | M6 |
 | lighting numbers mirrored by hand | the panel half-size and light plane are core's (`PANEL_HALF`, `LIGHT_DROP`), read by the mesher, the shader's `uLY` and `lightAtCPU` callers (game.cpp, render.cpp), the greybox and Unreal's lights, and the shader gets `PANEL_HALF`, the storey hash offset's numbers, the tube hash's and the stutter's (`tubeStutter`) written in at load | done: a port reads them from core; the GLSL's lighting arithmetic is still its own, and the occupancy bits are copied |
 | HUD strings are `const char *` sim state | shared/sim | a port maps them to its own text type |
