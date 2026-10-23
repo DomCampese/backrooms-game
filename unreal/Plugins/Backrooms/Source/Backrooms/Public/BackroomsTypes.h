@@ -1,44 +1,7 @@
 #pragma once
-// Editor-facing mirrors of core's enums, and the state a HUD reads. Each enum
-// lists core's values in core's order; BackroomsTypes.cpp asserts they agree.
+// The sim's controls as an editor enum, and the state a HUD reads.
 #include "CoreMinimal.h"
 #include "BackroomsTypes.generated.h"
-
-// GreySurface (shared/port/greybox.h): what a greybox face is.
-UENUM(BlueprintType)
-enum class EBackroomsSurface : uint8
-{
-	Floor, Ceiling, Wall, Step, Stair, Pillar, Prop, Door, Exit, CursedExit, Glass, Rail, Water, Light, DeadLight,
-	Count UMETA(Hidden)
-};
-
-// PropKind (shared/core/world.h): what stands in a cell.
-UENUM(BlueprintType)
-enum class EBackroomsProp : uint8
-{
-	None UMETA(Hidden),
-	Boxes, Cabinet, Table, FallenTile, Couch, Armoire, Lamp, Nightstand, Bed, Vending, PartyTable, Desk,
-	Shelving, Cooler, Plant, ManilaTable,
-	Count UMETA(Hidden)
-};
-
-// FixtureKind (shared/core/layout.h): what is fixed to a wall or a ceiling.
-UENUM(BlueprintType)
-enum class EBackroomsFixture : uint8
-{
-	Outlet, BrokenOutlet, Switch, Grille, ExitSign, Diffuser, Sprinkler, Conduit, Scrawl, LiftDoor, Spall,
-	PillarSpall, Pipe, Valve, Streamer, ManilaRoom,
-	Count UMETA(Hidden)
-};
-
-// SceneKind (shared/port/scene.h): what stands in the world besides its chunks.
-UENUM(BlueprintType)
-enum class EBackroomsItem : uint8
-{
-	AlmondWater, Doubloon, Battery, Tape, Key, Crate, CrateOpen, Deck, Coin, Flare, Chalk, Balloon, Confetti,
-	Impact, Hunter, Dog,
-	Count UMETA(Hidden)
-};
 
 // The sim's controls (InputFrame, shared/sim/input_frame.h), one Enhanced Input
 // action each.

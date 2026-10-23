@@ -21,21 +21,6 @@ static Matrix heldMatrix(const HeldFrame &f) {
     return m;
 }
 
-// How hard one flare is burning right now: a fast flare-up as the cap comes
-// off, a fade over the last second and a half, and the flicker on top. Both
-// the point light and the halo spheres read it, so a flare that is nearly out
-// dims in the room and in its own glow together.
-static float flareGlow(const FlareProj &f, float flick) {
-    return clampf((Sim::FLAREBURN - f.burn) * 6.0f, 0, 1) * clampf(f.burn / Sim::FLAREFADE, 0, 1) * flick;
-}
-
-// Where a sprite's frame sits on its sheet, pixels.
-static Rectangle spriteRect(const ActorSprite &sp, int frame) {
-    if (sp.sheet == SpriteSheet::Dog)
-        return { (float)frame * DOG_FRAME_W, 0, (float)DOG_FRAME_W, (float)DOG_FRAME_H };
-    return { (float)frame * ENT_FRAME_W, (float)sp.row * ENT_FRAME_H, (float)ENT_FRAME_W, (float)ENT_FRAME_H };
-}
-
 // Every size and offset on the HUD was authored against the 1440x850 window the
 // game opens in, and only the title card ever branched on resolution — so on a
 // 4K display the whole thing shrank to an unreadable smear along the edges.
@@ -99,7 +84,6 @@ void Game::renderScene(double now) {
     if (captureTime >= 0) now = captureTime;
     // ---- render 3D scene into rt
     int pcx = fdiv(cellOf(sim.px), CCELLS), pcz = fdiv(cellOf(sim.pz), CCELLS);
-    int pci = cellOf(sim.px), pck = cellOf(sim.pz);
     Camera3D cam = {};
     const SimView view = simView(sim);
     cam.position = toRl(view.eye);
@@ -110,91 +94,21 @@ void Game::renderScene(double now) {
 
     float timeF = (float)now;
     Vector3 viewPos = cam.position;
-    SetShaderValue(worldShader, locTime, &timeF, SHADER_UNIFORM_FLOAT);
-    float boSend = sim.blackoutCur * (sim.whisperT > 0 ? 0.86f : 1.0f);   // lights sag while it whispers
-    SetShaderValue(worldShader, locBlackout, &boSend, SHADER_UNIFORM_FLOAT);
+    const FrameLight light = frameLight(sim, timeF, camcorder.irLamp());
+    SetShaderValue(worldShader, locTime, &light.time, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(worldShader, locBlackout, &light.blackout, SHADER_UNIFORM_FLOAT);
     SetShaderValue(worldShader, locViewPos, &viewPos, SHADER_UNIFORM_VEC3);
-    float flashSend = sim.flashCur;
-    if (sim.flashOn && sim.battery < 0.15f) {   // the battery's dying: a warning flicker before it goes dark
-        float lowFlick = 0.55f + 0.45f * sinf(timeF * 19.0f) * sinf(timeF * 31.0f + 1.7f);
-        flashSend *= clampf(sim.battery / 0.15f, 0.15f, 1.0f) * (0.7f + 0.3f * lowFlick);
-    }
-    SetShaderValue(worldShader, locFlash, &flashSend, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(worldShader, locFlashDir, &sim.fwd, SHADER_UNIFORM_VEC3);
-    float irSend = camcorder.irLamp();
-    SetShaderValue(worldShader, locIR, &irSend, SHADER_UNIFORM_FLOAT);
-    float flick = 0.91f + 0.09f * sinf(timeF * 31.0f) * sinf(timeF * 47.3f + 1.3f);
-    // The shader carries one flare point light, so several fires on the floor
-    // become the one with the most presence at your feet — the others still
-    // burn, ward and hiss, they just don't each get a light of their own.
-    // Presence rather than distance: a guttering flare underfoot must not hold
-    // the light off a fresh one up the hall. See Sim::dominantFlare.
-    const FlareProj *lead = sim.dominantFlare(sim.px, sim.pz);
-    float flareInt = lead ? flareGlow(*lead, flick) : 0.0f;
-    Vector3 flarePos = lead ? Vector3{ lead->x, lead->y + 0.06f, lead->z }
-                            : Vector3{ sim.px, sim.eyeY, sim.pz };
-    if (!lead && sim.muzzleT > 0) {   // muzzle flash borrows the flare point light
-        flareInt = sim.muzzleT / Sim::MUZZLE_FLASH * 1.3f;
-        flarePos = { sim.px + sim.f2x * 0.6f, sim.eyeY - 0.05f, sim.pz + sim.f2z * 0.6f };
-    }
-    SetShaderValue(worldShader, locFlarePos, &flarePos, SHADER_UNIFORM_VEC3);
-    SetShaderValue(worldShader, locFlareInt, &flareInt, SHADER_UNIFORM_FLOAT);
-    // the hunter's pool of dead light travels with it
-    Vector3 entPos = { sim.ent.x, sim.ent.dispY + 1.0f, sim.ent.z };
-    float entDarkSend = (sim.ent.st == EState::Hidden) ? 0.0f : sim.entDarkCur;
-    SetShaderValue(worldShader, locEntPos, &entPos, SHADER_UNIFORM_VEC3);
-    SetShaderValue(worldShader, locEntDark, &entDarkSend, SHADER_UNIFORM_FLOAT);
-    // ...and it's solid: a beam that catches it throws its shadow down the hall
-    float entBlock = (sim.ent.st == EState::Hidden || sim.ent.st == EState::Die) ? 0.0f : 1.0f;
-    SetShaderValue(worldShader, locEntBlock, &entBlock, SHADER_UNIFORM_FLOAT);
-    // The nearest enclosed stairwell's landing light, in this storey's frame:
-    // the one rising from here, or the one arriving here whose landing is a
-    // storey down. The tray grid has no fitting over an opening, so without
-    // this a stair shaft is lit only by what falls down it from 7 m up.
-    Vector3 wellLamp = { 0, 0, 0 };
-    float wellD2 = 1e30f;
-    if (sim.world.storeyH > 0.0f) {
-        for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
-            int cx = pcx + dx, cz = pcz + dz;
-            auto it = sim.world.chunks.find(World::key(cx, cz));
-            if (it == sim.world.chunks.end()) continue;
-            const ChunkData &cd = it->second;
-            for (int q = 0; q < cd.nfeat; q++) {
-                const VertFeat &f = cd.feats[q];
-                if (f.kind != VK_STAIRWELL) continue;
-                Vector3 lp = toRl(sim.world.landingLamp(f, cx, cz));
-                lp.y += (f.lo - sim.world.storey) * sim.world.storeyH;
-                float d2 = (lp.x - sim.px) * (lp.x - sim.px) + (lp.y - sim.eyeY) * (lp.y - sim.eyeY) + (lp.z - sim.pz) * (lp.z - sim.pz);
-                if (d2 < wellD2) { wellD2 = d2; wellLamp = lp; }
-            }
-        }
-    }
-    {   // the Manila Room, when one is near: its tubes out, its chandelier on.
-        // An inverted rectangle masks nothing. The chandelier ignores the
-        // blackouts — it is the one light down here that does — and wavers
-        // like an old filament rather than stuttering like a tube.
-        float mask[4] = { 1e6f, 1e6f, -1e6f, -1e6f }, lamp[4] = { 0, 0, 0, 0 };
-        Vector3 lampCol = { 1.0f, 0.70f, 0.42f };
-        float manD2 = sim.manilaNear ? (sim.manilaX - sim.px) * (sim.manilaX - sim.px) + (sim.manilaZ - sim.pz) * (sim.manilaZ - sim.pz) : 1e30f;
-        if (sim.manilaNear) {
-            mask[0] = sim.manilaX - 4.0f; mask[1] = sim.manilaZ - 4.0f; mask[2] = sim.manilaX + 4.0f; mask[3] = sim.manilaZ + 4.0f;
-        }
-        if (sim.manilaNear && manD2 <= wellD2) {
-            float waver = 0.96f + 0.04f * sinf((float)now * 7.3f) * sinf((float)now * 2.9f + 1.1f);
-            lamp[0] = sim.manilaX; lamp[1] = sim.world.ceilY(cellOf(sim.manilaX), cellOf(sim.manilaZ)) - 0.80f;
-            lamp[2] = sim.manilaZ; lamp[3] = 1.0f * waver;
-        } else if (wellD2 < 22.0f * 22.0f) {
-            // A tube like any other: it goes out in a blackout and stutters
-            // with the rest, rather than holding on the way the chandelier does.
-            lamp[0] = wellLamp.x; lamp[1] = wellLamp.y; lamp[2] = wellLamp.z;
-            lamp[3] = 0.95f * sim.blackoutCur * flick;
-            lampCol = { 0.95f, 0.93f, 0.80f };
-        }
-        SetShaderValue(worldShader, locRoomMask, mask, SHADER_UNIFORM_VEC4);
-        SetShaderValue(worldShader, locLamp, lamp, SHADER_UNIFORM_VEC4);
-        SetShaderValue(worldShader, locLampCol, &lampCol, SHADER_UNIFORM_VEC3);
-        setLightExtrasCPU(mask, lamp);
-    }
+    SetShaderValue(worldShader, locFlash, &light.flash, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(worldShader, locFlashDir, &light.flashDir, SHADER_UNIFORM_VEC3);
+    SetShaderValue(worldShader, locIR, &light.ir, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(worldShader, locFlarePos, &light.flarePos, SHADER_UNIFORM_VEC3);
+    SetShaderValue(worldShader, locFlareInt, &light.flareInt, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(worldShader, locEntPos, &light.entPos, SHADER_UNIFORM_VEC3);
+    SetShaderValue(worldShader, locEntDark, &light.entDark, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(worldShader, locEntBlock, &light.entBlock, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(worldShader, locRoomMask, light.roomMask, SHADER_UNIFORM_VEC4);
+    SetShaderValue(worldShader, locLamp, light.lamp, SHADER_UNIFORM_VEC4);
+    SetShaderValue(worldShader, locLampCol, &light.lampCol, SHADER_UNIFORM_VEC3);
     Vector2 occOrigin = { (float)occOriginI, (float)occOriginK };
     float occN = occValid ? (float)OCC_N : 0.0f;
     SetShaderValue(worldShader, locOccOrigin, &occOrigin, SHADER_UNIFORM_VEC2);
@@ -341,315 +255,11 @@ void Game::renderScene(double now) {
             DrawMesh(chunk.meshes[MESH_GLASS], mats[MAT_FLOOR], xf);
     }
     setDrawRel(0.0f);   // everything drawn after the chunks is on your storey
-    // Stairwell landing lights: the tube on each batten near you, as bright as
-    // the tubes are tonight (blackoutCur), drawn here because a chunk mesh
-    // cannot go out. The one nearest is also the shader's uLamp.
-    if (sim.world.storeyH > 0.0f) {
-        for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
-            auto it = sim.world.chunks.find(World::key(pcx + dx, pcz + dz));
-            if (it == sim.world.chunks.end()) continue;
-            for (int q = 0; q < it->second.nfeat; q++) {
-                const VertFeat &f = it->second.feats[q];
-                if (f.kind != VK_STAIRWELL) continue;
-                float yo = (f.lo - sim.world.storey) * sim.world.storeyH;
-                Vector3 c = toRl(sim.world.featureWorld(f, pcx + dx, pcz + dz, CELL, sim.world.storeyH * 0.5f + 2.25f - 0.065f + yo,
-                                               4 * CELL - WT - 0.145f));
-                Vector3 e = toRl(sim.world.featureWorld(f, pcx + dx, pcz + dz, CELL + 1.0f, 0, 0));
-                Vector3 o = toRl(sim.world.featureWorld(f, pcx + dx, pcz + dz, CELL, 0, 0));
-                bool alongX = fabsf(e.x - o.x) > 0.5f;
-                unsigned char g8 = cl8(60 + 195 * sim.blackoutCur * flick);
-                DrawCube(c, alongX ? 0.96f : 0.035f, 0.035f, alongX ? 0.035f : 0.96f, { g8, g8, cl8(g8 * 0.92f), 255 });
-            }
-        }
-    }
-    // small props draw with raylib's unlit default shader, so estimate the room
-    // light at each one (plus flare/muzzle glow) — no more balloons shining
-    // through a blackout
-    const LevelCfg &lc = LEVELS[sim.level];
-    float ambLumP = (lc.amb.x + lc.amb.y + lc.amb.z) / 3.0f;
-    float edSend = (sim.ent.st == EState::Hidden) ? 0.0f : sim.entDarkCur;
-    // The camcorder's infrared lamp on what is drawn unlit, as the world shader has it.
-    auto irLum = [&](float x, float y, float z) {
-        if (irSend <= 0.01f) return 0.0f;
-        float dx = x - sim.px, dy = y - sim.eyeY, dz = z - sim.pz;
-        float d2 = dx * dx + dy * dy + dz * dz, d = sqrtf(d2) + 1e-4f;
-        float ahead = fmaxf((dx * sim.fwd.x + dy * sim.fwd.y + dz * sim.fwd.z) / d, 0.0f);
-        return irSend * (0.30f + 0.70f * ahead * ahead * ahead) * 6.0f / (1.0f + 0.14f * d2);
-    };
-    auto propLum = [&](float x, float y, float z) {
-        float lum = lightAtCPU(x, y, z, sim.blackoutCur, lc.ls, lc.wallH - LIGHT_DROP, lc.dead, lc.lightMul, ambLumP,
-                               sim.ent.x, sim.ent.z, edSend, lc.vary);
-        if (flareInt > 0.01f) {
-            float fx = x - flarePos.x, fy = y - flarePos.y, fz = z - flarePos.z;
-            lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fx * fx + fy * fy + fz * fz)), 0.0f, 1.0f);
-        }
-        lum = clampf(lum + irLum(x, y, z), 0.0f, 1.0f);
-        return 0.18f + 0.82f * lum;   // a hint of form survives the dark
-    };
-    auto lit = [](Color c, float f) {
-        return Color{ cl8(c.r * f), cl8(c.g * f), cl8(c.b * f), c.a };
-    };
-    // What stands in the world, placed by the same rules the sim tests
-    // (simScene); only the look, the bob and the sway are decided here.
-    for (const SceneItem &it : simScene(sim)) {
-        const int a = it.gi, b = it.gk;
-        const float x = it.pos.x, gy = it.pos.y, z = it.pos.z;
-        switch (it.kind) {
-        case SceneKind::Crate:
-        case SceneKind::CrateOpen: {
-            Matrix xf = MatrixMultiply(MatrixRotateY(-it.yaw), MatrixTranslate(x, gy, z));
-            DrawMesh(crateMesh, mats[MAT_PROPS], xf);
-            if (it.kind == SceneKind::Crate)
-                DrawMesh(crateLidMesh, mats[MAT_PROPS], MatrixMultiply(MatrixTranslate(0, 0.564f, 0), xf));
-            else   // prised off and leaned against the side
-                DrawMesh(crateLidMesh, mats[MAT_PROPS],
-                         MatrixMultiply(MatrixMultiply(MatrixRotateX(1.35f), MatrixTranslate(0, 0.02f, 0.42f)), xf));
-            break;
-        }
-        case SceneKind::AlmondWater:   // the mesh's base is at y = 0, and pos is on the floor or the shelf
-            drawCan(MatrixMultiply(MatrixRotateY(-it.yaw), MatrixTranslate(x, gy, z)));
-            break;
-        case SceneKind::Doubloon: {
-            float bob = sinf((float)now * 2.0f + a * 1.7f + b) * 0.03f;
-            DrawCylinder({ x, gy + 0.06f + bob, z }, 0.085f, 0.085f, 0.024f, 12,
-                         lit({ 234, 188, 74, 255 }, propLum(x, gy + 0.15f, z)));
-            break;
-        }
-        case SceneKind::Battery: {   // standing on end
-            float pl = propLum(x, gy + 0.15f, z);
-            DrawCube({ x, gy + 0.05f, z }, 0.06f, 0.10f, 0.06f, lit({ 70, 150, 90, 255 }, pl));
-            DrawCylinder({ x, gy + 0.10f, z }, 0.018f, 0.018f, 0.02f, 8, lit({ 200, 180, 90, 255 }, pl));
-            break;
-        }
-        case SceneKind::Tape: {   // a cassette, label up, two hubs showing
-            float pl = propLum(x, gy + 0.15f, z);
-            float bob = sinf((float)now * 1.6f + a * 2.1f + b) * 0.02f;
-            DrawCube({ x, gy + 0.02f + bob, z }, 0.11f, 0.04f, 0.07f, lit({ 40, 38, 42, 255 }, pl));
-            DrawCube({ x, gy + 0.041f + bob, z }, 0.075f, 0.001f, 0.05f, lit({ 210, 202, 182, 255 }, pl));
-            DrawCylinder({ x - 0.028f, gy + 0.041f + bob, z }, 0.014f, 0.014f, 0.002f, 8, lit({ 30, 28, 30, 255 }, pl));
-            DrawCylinder({ x + 0.028f, gy + 0.041f + bob, z }, 0.014f, 0.014f, 0.002f, 8, lit({ 30, 28, 30, 255 }, pl));
-            break;
-        }
-        case SceneKind::Key: {   // a brass mortice key, bit up, turning slowly
-            float bob = sinf((float)now * 1.9f + a * 1.3f + b) * 0.025f;
-            float spin = (float)now * 0.8f + a;
-            Color brass = lit({ 214, 172, 86, 255 }, propLum(x, gy + 0.15f, z));
-            float y = gy + 0.055f + bob;
-            // bow, shank, bit — small, so it reads by its glint and its turn
-            // rather than by its outline at four metres.
-            DrawCylinderEx({ x, y, z }, { x, y + 0.012f, z }, 0.035f, 0.035f, 10, brass);
-            DrawCube({ x + cosf(spin) * 0.045f, y, z + sinf(spin) * 0.045f }, 0.09f, 0.012f, 0.012f, brass);
-            DrawCube({ x + cosf(spin) * 0.082f, y + 0.014f, z + sinf(spin) * 0.082f }, 0.022f, 0.028f, 0.012f, brass);
-            break;
-        }
-        case SceneKind::Deck:   // wherever you set it down, facing the way you threw it
-            drawDeck(MatrixMultiply(MatrixRotateY(-it.yaw), MatrixTranslate(x, gy, z)), it.variant != 0);
-            break;
-        case SceneKind::Coin: {   // gy is the floor they fell on, in this storey's frame
-            float bob = sinf((float)now * 2.4f + x) * 0.03f;
-            DrawCylinder({ x, gy + 0.06f + bob, z }, 0.085f, 0.085f, 0.024f, 12,
-                         lit({ 234, 188, 74, 255 }, propLum(x, gy + 0.1f, z)));
-            break;
-        }
-        case SceneKind::Balloon:
-            if (it.index == 0) {   // nosing against the ceiling, string hanging down
-                float by = gy + sinf((float)now * 0.8f + a * 1.3f + b * 2.1f) * 0.05f;
-                float pl = propLum(x, by, z) * 0.85f;
-                DrawSphere({ x, by, z }, 0.17f, lit(PARTY[it.variant], pl));
-                DrawCylinderEx({ x, by - 0.15f, z }, { x + 0.04f, by - 0.95f, z + 0.02f },
-                               0.005f, 0.005f, 4, lit({ 190, 185, 175, 150 }, pl));
-            } else {   // one of a bunch tied to a party table
-                float bx = x + sinf((float)now * 0.9f + a * 1.7f + (it.index - 1) * 2.3f) * 0.04f;
-                float pl = propLum(bx, gy, z) * 0.9f;
-                DrawSphere({ bx, gy, z }, 0.15f, lit(PARTY[it.variant], pl));
-                DrawCylinderEx({ bx, gy - 0.13f, z }, { it.anchor.x + 0.02f, it.anchor.y + 0.02f, it.anchor.z },
-                               0.004f, 0.004f, 4, lit({ 200, 195, 185, 150 }, pl));
-            }
-            break;
-        case SceneKind::Confetti: {   // bursts still tumbling to the carpet
-            float fade = clampf(it.amount * 1.6f, 0, 1);
-            Color base = PARTY[it.variant];
-            DrawCube({ x, gy, z }, 0.05f, 0.05f, 0.05f,
-                     lit({ base.r, base.g, base.b, (unsigned char)(255 * fade) }, propLum(x, gy, z)));
-            break;
-        }
-        case SceneKind::Chalk: {
-            // The stranger's chalk has been down longer than yours: duller, yellower,
-            // further gone. Same arrow, so it reads as a mark first and as somebody
-            // else's a moment later, which is the order that lands.
-            const Vector3 cm = toRl(it.pos);
-            Color cc = it.variant ? lit({228,228,218,210}, propLum(cm.x,cm.y+0.1f,cm.z))
-                                  : lit({186,180,156,150}, propLum(cm.x,cm.y+0.1f,cm.z));
-            Vector3 along{cosf(it.yaw),0,sinf(it.yaw)}, side{-along.z,0,along.x};
-            Vector3 tip = Vector3Add(cm,Vector3Scale(along,0.25f));
-            Vector3 tail = Vector3Subtract(cm,Vector3Scale(along,0.25f));
-            Vector3 shoulder = Vector3Add(cm,Vector3Scale(along,0.04f));
-            DrawCylinderEx(tail,tip,0.011f,0.011f,4,cc);
-            DrawCylinderEx(tip,Vector3Add(shoulder,Vector3Scale(side,0.17f)),0.011f,0.011f,4,cc);
-            DrawCylinderEx(tip,Vector3Subtract(shoulder,Vector3Scale(side,0.17f)),0.011f,0.011f,4,cc);
-            break;
-        }
-        default:   // flares, impacts and the actors are drawn below, from the sim
-            break;
-        }
-    }
-    if (sim.wayOpen()) {   // enough doubloons: real exits burn green — the way out
-        float pulse = 0.7f + 0.3f * sinf((float)now * 3.0f);
-        for (int dx = -6; dx <= 6; dx++) for (int dz = -6; dz <= 6; dz++) {
-            int i = pci + dx, k = pck + dz;
-            float doorX = 0, doorZ = 0;
-            if (sim.world.wallNVal(i, k) == WALL_EXIT) { doorX = i * CELL + 1.0f; doorZ = k * CELL; }
-            else if (sim.world.wallWVal(i, k) == WALL_EXIT) { doorX = i * CELL; doorZ = k * CELL + 1.0f; }
-            else continue;
-            if (sim.world.cursedExit(i, k)) continue;   // cursed doors stay a trap, never green
-            Vector3 gp = { doorX, 1.15f, doorZ };
-            DrawSphere(gp, 0.34f, { 150, 255, 170, (unsigned char)(150 * pulse) });   // bright core
-            DrawSphere(gp, 0.62f, { 90, 255, 120, (unsigned char)(95 * pulse) });
-            DrawSphere(gp, 1.35f, { 60, 235, 110, (unsigned char)(40 * pulse) });     // wide halo
-        }
-    }
-    if (sim.level == 3) {   // valve wheels on their standpipes: red while open, green once shut
-        for (int dx = -7; dx <= 7; dx++) for (int dz = -7; dz <= 7; dz++) {
-            int a = pci + dx, b = pck + dz;
-            if (!sim.world.valveAt(a, b)) continue;
-            float vx = a * CELL + 1.0f, vz = b * CELL + 1.0f;
-            float wy = sim.world.floorY(a, b) + 1.13f;
-            bool shut = sim.valvesTurned.count(Sim::cellKey2(a, b)) > 0;
-            float pl = propLum(vx, wy, vz);
-            Color rim = shut ? Color{ 96, 210, 128, 255 } : Color{ 196, 62, 48, 255 };
-            // a handwheel lying flat on a vertical pipe: rim, punched centre, hub
-            DrawCylinderEx({ vx, wy - 0.022f, vz }, { vx, wy + 0.022f, vz }, 0.21f, 0.21f, 12, lit(rim, pl));
-            DrawCylinderEx({ vx, wy - 0.03f, vz }, { vx, wy + 0.03f, vz }, 0.125f, 0.125f, 12,
-                           lit({ 84, 60, 44, 255 }, pl));
-            DrawCylinderEx({ vx, wy - 0.05f, vz }, { vx, wy + 0.05f, vz }, 0.045f, 0.045f, 8,
-                           lit({ 122, 96, 70, 255 }, pl));
-        }
-    }
-    for (int i = 0; i < Sim::MAXDOGS; i++) {   // the pack, low and wide against the red
-        ActorSprite sp;
-        if (!dogSprite(sim, i, sp)) continue;
-        float ddx = sp.litAt.x - sim.px, ddz = sp.litAt.z - sim.pz;
-        float dd = sqrtf(ddx * ddx + ddz * ddz);
-        const LevelCfg &c = LEVELS[sim.level];
-        float ambLum = (c.amb.x + c.amb.y + c.amb.z) / 3.0f;
-        float lum = lightAtCPU(sp.litAt.x, sp.litAt.y, sp.litAt.z, sim.blackoutCur,
-                               c.ls, c.wallH - LIGHT_DROP, c.dead, c.lightMul, ambLum, 0, 0, 0, c.vary);
-        if (sim.flashCur > 0.05f) {
-            float d2 = dd * dd + 1e-4f;
-            float cone = powf(fmaxf((ddx * sim.fwd.x + ddz * sim.fwd.z) / (dd + 1e-4f), 0.0f), 26.0f);
-            lum = clampf(lum + sim.flashCur * cone * 7.5f / (1.0f + 0.10f * d2), 0.0f, 1.0f);
-        }
-        if (flareInt > 0.01f) {
-            float fx = sp.litAt.x - flarePos.x, fz = sp.litAt.z - flarePos.z;
-            lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fx * fx + fz * fz)), 0.0f, 1.0f);
-        }
-        lum = clampf(lum + irLum(sp.litAt.x, sp.litAt.y, sp.litAt.z), 0.0f, 1.0f);
-        unsigned char l8 = cl8(40 + 215 * lum);
-        unsigned char al = cl8(255 * clampf(expf(-dd * c.fogDen) * 1.6f, 0, 1) * sp.fade);
-        DrawBillboardRec(cam, texDog, spriteRect(sp, sp.frame0), toRl(sp.centre), { sp.w, sp.h },
-                         { l8, l8, l8, cl8(al * (1.0f - sp.blend)) });
-        DrawBillboardRec(cam, texDog, spriteRect(sp, sp.frame1), toRl(sp.centre), { sp.w, sp.h },
-                         { l8, l8, l8, cl8(al * sp.blend) });
-    }
-    for (const FlareProj &f : sim.litFlares) {   // each flare: hot core, orange halo, stub of a body
-        if (!f.active) continue;
-        // its own glow, not the point light's — that one belongs to whichever
-        // flare is nearest you, and would size every other halo wrongly
-        float glow = flareGlow(f, flick);
-        Vector3 fp = { f.x, f.y + 0.05f, f.z };
-        DrawCylinder({ f.x, f.y - 0.03f, f.z }, 0.018f, 0.022f, 0.09f, 8, { 130, 30, 22, 255 });
-        DrawSphere(fp, 0.035f + 0.012f * flick, { 255, 240, 208, 255 });
-        DrawSphere(fp, 0.13f, { 255, 120, 40, (unsigned char)(90 * glow) });
-        DrawSphere(fp, 0.30f, { 255, 70, 20, (unsigned char)(28 * glow) });
-    }
-    if (ActorSprite sp; hunterSprite(sim, sp)) {
-        const LevelCfg &c = LEVELS[sim.level];
-        float ambLum = (c.amb.x + c.amb.y + c.amb.z) / 3.0f;
-        float lum = lightAtCPU(sp.litAt.x, sp.litAt.y, sp.litAt.z, sim.blackoutCur,
-                               c.ls, c.wallH - LIGHT_DROP, c.dead, c.lightMul, ambLum,
-                               sim.ent.x, sim.ent.z, sim.entDarkCur, c.vary);   // it stands in its own pool of dead light
-        if (sim.flashCur > 0.05f) {   // flashlight picks him out of the dark
-            float vx2 = sim.ent.x - sim.px, vz2 = sim.ent.z - sim.pz;
-            float d2 = vx2 * vx2 + vz2 * vz2 + 1e-4f, dl = sqrtf(d2);
-            float cone = powf(fmaxf((vx2 * sim.fwd.x + vz2 * sim.fwd.z) / dl, 0.0f), 26.0f);
-            lum = clampf(lum + sim.flashCur * cone * 7.5f / (1.0f + 0.10f * d2), 0.0f, 1.0f);
-        }
-        if (flareInt > 0.01f) {   // flare glow (or muzzle flash) reaches him too
-            float fvx = sim.ent.x - flarePos.x, fvz = sim.ent.z - flarePos.z;
-            lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fvx * fvx + fvz * fvz)), 0.0f, 1.0f);
-        }
-        lum = clampf(lum + irLum(sp.litAt.x, sp.litAt.y, sp.litAt.z), 0.0f, 1.0f);
-        float fogf = expf(-sim.entDist * c.fogDen);
-        unsigned char lum8 = cl8(40 + 215 * lum);
-        unsigned char al = cl8(255 * clampf(fogf * 1.6f, 0, 1) * sp.fade);
-        Texture2D &spr = sp.sheet == SpriteSheet::Partygoer ? texPartygoer
-                       : sp.sheet == SpriteSheet::Clark ? texClark : texEntity;
-        Vector3 epos = toRl(sp.centre);
-        DrawBillboardRec(cam, spr, spriteRect(sp, sp.frame0), epos, { sp.w, sp.h },
-                         { lum8, lum8, lum8, cl8(al * (1.0f - sp.blend)) });
-        DrawBillboardRec(cam, spr, spriteRect(sp, sp.frame1), epos, { sp.w, sp.h },
-                         { lum8, lum8, lum8, cl8(al * sp.blend) });
-        if (sp.glow) {   // the Smiler's eyes and grin carry their own light
-            unsigned char ga = cl8(255 * clampf(fogf * 2.2f, 0, 1) * sp.fade);
-            DrawBillboardRec(cam, texEntityGlow, spriteRect(sp, sp.frame0), epos, { sp.w, sp.h },
-                             { 255, 255, 255, cl8(ga * (1.0f - sp.blend)) });
-            DrawBillboardRec(cam, texEntityGlow, spriteRect(sp, sp.frame1), epos, { sp.w, sp.h },
-                             { 255, 255, 255, cl8(ga * sp.blend) });
-        }
-    }
-    for (const Sim::Bullet &b : sim.bullets) {
-        Vector3 pos = toRl(b.pos);
-        Vector3 tail = Vector3Subtract(pos, Vector3Scale(toRl(b.direction),
-            fminf(1.2f, Vector3Distance(pos,toRl(b.tail)))));
-        DrawCylinderEx(tail,pos,0.006f,0.009f,5,{255,211,126,220});
-        DrawSphere(pos,0.012f,{255,237,187,255});
-    }
-    if (sim.level == 1) {
-        // Level 1's "low-hanging fog with no discernable source". The level's
-        // exponential fog handles distance; this is the part that hangs: soft,
-        // wide, faint banks lying on the slab, drifting on a draught nobody can
-        // find. One per floor cell on a hashed jitter, so the same bank sits in
-        // the same place as you walk past it, lit by the room at its own spot
-        // (propLum) so it goes dark in a blackout with everything else. No
-        // depth writes, or each bank would cut a hole in the one behind it;
-        // faded out right under you so you never have a sprite in your face.
-        rlDrawRenderBatchActive();
-        rlDisableDepthMask();
-        int mci = cellOf(sim.px), mck = cellOf(sim.pz);
-        float tnow = (float)now;
-        for (int dx = -11; dx <= 11; dx++) for (int dz = -11; dz <= 11; dz++) {
-            int a = mci + dx, b = mck + dz;
-            uint32_t h = ih(a, b, 0xF06u);
-            if ((h & 3) == 0 || sim.world.pillarAt(a, b)) continue;         // three cells in four
-            float mxp = a * CELL + 1.0f + (((h >> 4) & 255) / 255.0f - 0.5f) * 1.2f + sinf(tnow * 0.07f + (h & 63)) * 0.35f;
-            float mzp = b * CELL + 1.0f + (((h >> 12) & 255) / 255.0f - 0.5f) * 1.2f + cosf(tnow * 0.05f + (h & 31)) * 0.35f;
-            float ddx = mxp - sim.px, ddz = mzp - sim.pz, d = sqrtf(ddx * ddx + ddz * ddz);
-            if (d > 22.0f || d < 1.2f) continue;
-            float fade = clampf((d - 1.2f) / 2.5f, 0.0f, 1.0f) * clampf((22.0f - d) / 6.0f, 0.0f, 1.0f);
-            float gy = sim.world.floorY(a, b);
-            float my = gy + 0.26f + ((h >> 20) & 7) * 0.03f;
-            float lum = propLum(mxp, my, mzp);
-            float breathe = 0.75f + 0.25f * sinf(tnow * 0.3f + (h >> 24));
-            Color mc = { cl8(170 * lum), cl8(178 * lum), cl8(168 * lum), cl8(78 * fade * breathe) };
-            float w = 3.0f + ((h >> 26) & 3) * 0.5f;
-            DrawBillboardRec(cam, texParticle, { 0, 0, 32, 32 }, { mxp, my, mzp }, { w, w * 0.30f }, mc);
-        }
-        rlDrawRenderBatchActive();
-        rlEnableDepthMask();
-    }
-    for (const Sim::BulletImpact &impact : sim.bulletImpacts) {
-        float age=0.24f-impact.life;
-        Color color=impact.body ? Color{125,32,24,190} : Color{211,188,144,190};
-        color.a=cl8(190*impact.life/0.24f);
-        Vector3 pos = toRl(impact.pos), normal = toRl(impact.normal);
-        DrawBillboard(cam,texParticle,pos,0.06f+age*0.7f,color);
-        for (int i=0;i<5;++i) {
-            Vector3 spread{cosf(i*2.4f)*0.7f, sinf(i*3.7f)*0.7f, sinf(i*2.4f)*0.7f};
-            Vector3 p=Vector3Add(pos,Vector3Scale(Vector3Add(normal,spread),age*1.4f));
-            p.y-=age*age*2;
-            DrawSphere(p,0.009f,color);
-        }
-    }
+    // The landing tubes, the sim's scene, the pack, the flares, the hunter and
+    // the rest, as shared/port/draw.h decides them for both builds.
+    sceneBuf.clear();
+    sceneDraws(sim, light, timeF, sceneBuf);
+    for (const SceneDraw &d : sceneBuf) drawScene(d, cam);
     // Looking through the camcorder, whatever is in the other hand is out of frame.
     const Held held = camcorder.viewing() ? Held::None : heldItem(sim);
     if (held != Held::None) {
@@ -663,13 +273,17 @@ void Game::renderScene(double now) {
         // ...and give it a floor of ambient, so a can held up in an unlit stretch
         // of corridor is still legible rather than a silhouette. Only lifts where
         // the room is genuinely dark; anywhere lit, the panels dominate this.
-        const Vector3 &la = LEVELS[sim.level].amb;
+        const Vec3 &la = LEVELS[sim.level].amb;
         Vector3 vmAmb = { fmaxf(la.x, 0.150f), fmaxf(la.y, 0.142f), fmaxf(la.z, 0.128f) };
         SetShaderValue(worldShader, locAmb, &vmAmb, SHADER_UNIFORM_VEC3);
-        // Where each is held is shared/port/held.cpp's, which the Unreal build reads too.
-        if (held == Held::Can) drawCan(heldMatrix(heldCan(sim, view)));   // both hands are busy: the deck goes away
-        else if (held == Held::Deck) drawDeck(heldMatrix(heldDeck(sim, view)), sim.deck.playing);
-        else drawHeldWeapon(cam);
+        // Where each is held is shared/port/held.cpp's, and what is drawn there
+        // port/draw.cpp's, which the Unreal build reads too.
+        if (held == Held::Revolver) drawHeldWeapon(cam);
+        else {
+            sceneBuf.clear();
+            heldDraws(sim, view, timeF, sceneBuf);
+            for (const SceneDraw &d : sceneBuf) drawScene(d, cam);
+        }
         SetShaderValue(worldShader, locOccN, &occN, SHADER_UNIFORM_FLOAT);   // both as they were
         SetShaderValue(worldShader, locAmb, &la, SHADER_UNIFORM_VEC3);
     }
@@ -683,35 +297,63 @@ void Game::drawHeldWeapon(const Camera3D &cam) {
     Vector3 right{sim.r2x, 0, sim.r2z};
     Vector3 up = Vector3Normalize(Vector3CrossProduct(right, toRl(sim.fwd)));
     const Matrix m = heldMatrix(heldWeapon(sim, simView(sim)));
-    float gloss = sim.weapon == WEAPON_REVOLVER ? 0.48f : 0.12f;
-    SetShaderValue(worldShader, locGloss, &gloss, SHADER_UNIFORM_FLOAT);
-    if (sim.weapon == WEAPON_REVOLVER) {
-        revolver.pose(sim.reloadT,sim.gunCd,sim.ammo);
-        // Its steel reflects the room (uObjRefl in the world shader); nothing
-        // else drawn has metal in its detail map, so nothing else pays for it.
-        float refl = 1.0f;
-        SetShaderValue(worldShader, locObjRefl, &refl, SHADER_UNIFORM_FLOAT);
-        revolver.draw(mats[MAT_PROPS],m);
-        refl = 0.0f;
-        SetShaderValue(worldShader, locObjRefl, &refl, SHADER_UNIFORM_FLOAT);
-    } else DrawMesh(flareMesh,mats[MAT_PROPS],m);
+    SetShaderValue(worldShader, locGloss, &REVOLVER_GLOSS, SHADER_UNIFORM_FLOAT);
+    revolver.pose(sim.reloadT,sim.gunCd,sim.ammo);
+    // Its steel reflects the room (uObjRefl in the world shader); nothing
+    // else drawn has metal in its detail map, so nothing else pays for it.
+    float refl = 1.0f;
+    SetShaderValue(worldShader, locObjRefl, &refl, SHADER_UNIFORM_FLOAT);
+    revolver.draw(mats[MAT_PROPS],m);
+    refl = 0.0f;
+    SetShaderValue(worldShader, locObjRefl, &refl, SHADER_UNIFORM_FLOAT);
     SetShaderValue(worldShader, locGloss, &LEVELS[sim.level].gloss, SHADER_UNIFORM_FLOAT);
-    if (sim.weapon == WEAPON_REVOLVER) {
-        Vector3 muzzle = Vector3Transform(revolver.muzzlePosition,m);
-        if (sim.muzzleT > 0) {
-            float life = sim.muzzleT / Sim::MUZZLE_FLASH;
-            BeginBlendMode(BLEND_ADDITIVE);
-            DrawBillboard(cam,texParticle,muzzle,0.07f*life,{255,175,70,230});
-            DrawBillboard(cam,texParticle,muzzle,0.025f*life,{255,245,190,255});
-            EndBlendMode();
-        }
-        if (sim.muzzleSmoke > 0.02f) {
-            for (int i=0;i<3;++i) {
-                Vector3 puff=Vector3Add(muzzle,Vector3Scale(up,(1-sim.muzzleSmoke)*0.025f+i*0.009f));
-                DrawBillboard(cam,texParticle,puff,0.022f+i*0.011f,
-                              {155,151,142,cl8(sim.muzzleSmoke*(55-i*12))});
-            }
-        }
+    sceneBuf.clear();
+    muzzleDraws(sim, fromRl(Vector3Transform(revolver.muzzlePosition, m)), fromRl(up), sceneBuf);
+    for (const SceneDraw &d : sceneBuf) drawScene(d, cam);
+}
+
+// One of port/draw.h's draws, with raylib: a mesh through the world shader,
+// or a shape or billboard unlit, as render.cpp has always drawn them.
+void Game::drawScene(const SceneDraw &d, const Camera3D &cam) {
+    if (d.isMesh) {
+        const MeshDraw &md = d.mesh;
+        const Mesh *meshes[(int)ObjMesh::Count] = { &crateMesh, &crateLidMesh, &canMesh, &deckMesh, &reelMesh,
+                                                    &deckLampMesh, &flareMesh };
+        const int matOf[3] = { MAT_PROPS, MAT_CAN, MAT_DECK };
+        Material &mat = mats[matOf[(int)objMat(md.mesh)]];
+        const float gloss = objGloss(md.mesh);
+        if (gloss >= 0) SetShaderValue(worldShader, locGloss, &gloss, SHADER_UNIFORM_FLOAT);
+        // colDiffuse multiplies the world shader's output: the deck's lamp breathes by it
+        const unsigned char t8 = cl8(255 * md.tint);
+        mat.maps[MATERIAL_MAP_DIFFUSE].color = { t8, t8, t8, 255 };
+        Matrix xf{};
+        xf.m0 = md.xf.x.x; xf.m1 = md.xf.x.y; xf.m2 = md.xf.x.z;
+        xf.m4 = md.xf.y.x; xf.m5 = md.xf.y.y; xf.m6 = md.xf.y.z;
+        xf.m8 = md.xf.z.x; xf.m9 = md.xf.z.y; xf.m10 = md.xf.z.z;
+        xf.m12 = md.xf.t.x; xf.m13 = md.xf.t.y; xf.m14 = md.xf.t.z; xf.m15 = 1;
+        DrawMesh(*meshes[(int)md.mesh], mat, xf);
+        mat.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
+        if (gloss >= 0) SetShaderValue(worldShader, locGloss, &LEVELS[sim.level].gloss, SHADER_UNIFORM_FLOAT);
+        return;
+    }
+    const Shape &s = d.shape;
+    const Color c = { s.colour.r, s.colour.g, s.colour.b, s.colour.a };
+    switch (s.kind) {
+    case ShapeKind::Cube: DrawCube(toRl(s.a), s.size.x, s.size.y, s.size.z, c); break;
+    case ShapeKind::Sphere: DrawSphere(toRl(s.a), s.r0, c); break;
+    case ShapeKind::Cylinder: DrawCylinder(toRl(s.a), s.r0, s.r1, s.h, s.sides, c); break;
+    case ShapeKind::CylinderEx: DrawCylinderEx(toRl(s.a), toRl(s.b), s.r0, s.r1, s.sides, c); break;
+    case ShapeKind::Billboard: {
+        const Texture2D *tex[(int)ShapeTex::Count] = { &texParticle, &texParticle, &texClark, &texEntity,
+                                                       &texEntityGlow, &texPartygoer, &texDog };
+        if (s.additive) BeginBlendMode(BLEND_ADDITIVE);
+        if (!s.depthWrite) { rlDrawRenderBatchActive(); rlDisableDepthMask(); }
+        DrawBillboardRec(cam, *tex[(int)s.tex], { s.src[0], s.src[1], s.src[2], s.src[3] }, toRl(s.a),
+                         { s.size.x, s.size.y }, c);
+        if (!s.depthWrite) { rlDrawRenderBatchActive(); rlEnableDepthMask(); }
+        if (s.additive) EndBlendMode();
+        break;
+    }
     }
 }
 
@@ -1084,34 +726,3 @@ void Game::renderUI(double now) {
     }
     EndDrawing();
 }
-
-// One can, lit by the room like every other surface. Alpha 255 on the vertices
-// puts it down the shader's textured branch.
-void Game::drawCan(Matrix xf) {
-    DrawMesh(canMesh, mats[MAT_CAN], xf);
-}
-
-// One tape player: the body, the two reels turning in the bay, and the record
-// lamp if the tape is actually running. The reels are drawn as their own mesh
-// so they can spin — a still deck and a running one have to look different at a
-// glance, since the whole decoy mechanic turns on knowing which one you left.
-void Game::drawDeck(Matrix xf, bool lamp) {
-    DrawMesh(deckMesh, mats[MAT_DECK], xf);
-    for (int i = 0; i < 2; i++) {
-        // both hubs turn the same way — the tape only travels in one direction
-        Matrix r = MatrixMultiply(MatrixRotateY(sim.deck.reel),
-                                  MatrixTranslate(i ? 0.024f : -0.024f, 0.0505f, 0.0f));
-        DrawMesh(reelMesh, mats[MAT_DECK], MatrixMultiply(r, xf));
-    }
-    if (lamp) {
-        // The lamp breathes. A steady dot of red is easy to miss on a dark floor;
-        // one that pulses is what tells you across a room that the tape you left
-        // is still running. colDiffuse multiplies the emissive branch's output,
-        // so tint the shared material for this draw and hand it straight back.
-        float pu = 0.45f + 0.55f * (0.5f + 0.5f * sinf((float)GetTime() * 4.2f));
-        mats[MAT_DECK].maps[MATERIAL_MAP_DIFFUSE].color = { cl8(255 * pu), cl8(255 * pu), cl8(255 * pu), 255 };
-        DrawMesh(deckLampMesh, mats[MAT_DECK], xf);
-        mats[MAT_DECK].maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
-    }
-}
-

@@ -1,0 +1,593 @@
+// The Web build's world fragment shader (WORLD_FS_TEMPLATE in
+// web/src/shaders.cpp), in HLSL for the Unreal port's world materials
+// (M_BackroomsWorld, built by Content/Python/backrooms_looks.py). It is a port
+// line for line: the same panels, shadow march, torch, flare, fog and tone
+// curve, so a surface comes out of it the colour it comes out of the GLSL.
+// Change one, change the other.
+//
+// Coordinates are core's: metres, y up, the current storey's floor at y = 0.
+// The material converts Unreal's position and normal before calling in.
+//
+// The numbers the GLSL has written in from core at load (PANEL_HALF, the tube
+// hash and stutter) arrive here as defines, which the material's Custom node
+// sets from looks.json (texdump --unreal writes them from core).
+#pragma once
+
+// Pixel shaders only: it takes derivatives, and the material's Custom node
+// calls it under the same test.
+#if PIXELSHADER
+
+#ifndef BR_PANEL_HALF
+#error "M_BackroomsWorld sets the BR_* defines from looks.json; rebuild it with backrooms_looks.build_looks()"
+#endif
+
+// GLSL's dFdy is up the window, HLSL's ddy down it. detailNormal's frame is
+// built from both derivatives, and its sign follows the window's handedness,
+// so the relief would light from below if this were plain ddy.
+#define BR_DFDY(x) (-ddy(x))
+
+// What raylib hands the GLSL as uniforms: the material collection
+// MPC_Backrooms (set every frame by ABackroomsLightsActor) and the instance's
+// own parameters.
+struct FBRUniforms
+{
+	float Time, Blackout, Flash, FlareInt;
+	float3 ViewPos, FlashDir, FlarePos, EntPos;
+	float EntDark, EntBlock;
+	float3 Amb, FogCol, LightCol;
+	float FogDen;
+	float LS, LY, Dead, LightMul;
+	float Gloss, Vary, Faulty, Wet, WetFrom;
+	float4 RoomMask, Lamp;
+	float3 LampCol;
+	float Macro, Board, ObjRefl, IR;
+	float2 OccOrigin;
+	float OccN;
+	float StoreyH, Storey, DrawRel;
+};
+
+// The GLSL's per-fragment globals (gRel, gChan, gLightLum, gGloss) and fragN.
+struct FBRFrag
+{
+	int Rel;
+	float4 Chan;
+	float LightLum;
+	float Gloss;
+	float3 FragN;
+};
+
+float4 BRChanFor(int Rel)
+{
+	return float4(Rel == 0 ? 1.0 : 0.0, Rel == -1 ? 1.0 : 0.0, Rel == 1 ? 1.0 : 0.0, 0.0);
+}
+
+float BRStoreyOffset(float St)
+{
+	return frac(St * BR_STOREY_HASH_STEP) * BR_STOREY_HASH_SPAN;
+}
+
+float BRHash(float2 G)
+{
+	return frac(sin(dot(G, float2(BR_TUBE_HASH_X, BR_TUBE_HASH_Z))) * BR_TUBE_HASH_SCALE);
+}
+
+float BRNoise(float2 P)
+{
+	float2 I = floor(P), F = frac(P);
+	F = F * F * (3.0 - 2.0 * F);
+	float A = BRHash(I), B = BRHash(I + float2(1, 0)), C = BRHash(I + float2(0, 1)), D = BRHash(I + float2(1, 1));
+	return lerp(lerp(A, B, F.x), lerp(C, D, F.x), F.y);
+}
+
+float3 BRDetailNormal(float3 N, float2 Slope, float3 Dpdx, float3 Dpdy, float2 Duvdx, float2 Duvdy)
+{
+	float3 Q1 = cross(Dpdy, N), Q2 = cross(N, Dpdx);
+	float3 T = Q1 * Duvdx.x + Q2 * Duvdy.x;
+	float3 B = Q1 * Duvdx.y + Q2 * Duvdy.y;
+	float Inv = rsqrt(max(max(dot(T, T), dot(B, B)), 1e-12));
+	return normalize(N - (T * Slope.x + B * Slope.y) * Inv);
+}
+
+float BRLightState(FBRUniforms U, float2 G, float So)
+{
+	float H = BRHash(G + float2(So, So * BR_TUBE_STOREY_SKEW));
+	float S = 1.0 - U.Vary * frac(H * BR_TUBE_OUTPUT_SPREAD);
+	float Fh = frac(H * BR_TUBE_STUTTER_SPREAD);
+	float Gate = frac(sin(floor(U.Time * BR_TUBE_STUTTER_RATE + Fh * BR_TUBE_STUTTER_PHASE) * BR_TUBE_STUTTER_HASH) * BR_TUBE_HASH_SCALE);
+	float Nz = frac(sin(U.Time * (BR_TUBE_BUZZ_BASE + Fh * BR_TUBE_BUZZ_SPREAD) + Fh * BR_TUBE_BUZZ_PHASE) * BR_TUBE_HASH_SCALE);
+	float Faulty = 1.0 - step(H, 1.0 - U.Faulty);
+	float Flicker = Faulty * (1.0 - step(Gate, BR_TUBE_STUTTER_OPEN));
+	S *= lerp(1.0, lerp(BR_TUBE_STUTTER_DIP, 1.0, step(BR_TUBE_BUZZ_DUTY, Nz)), Flicker);
+	float2 Pc = G * U.LS + U.LS * 0.5;
+	float Masked = step(U.RoomMask.x, Pc.x) * step(Pc.x, U.RoomMask.z)
+		* step(U.RoomMask.y, Pc.y) * step(Pc.y, U.RoomMask.w);
+	return S * U.Blackout * step(U.Dead, H) * (1.0 - Masked);
+}
+
+int BROccAtC(FBRUniforms U, Texture2D Occ, int2 C, float4 Ch)
+{
+	int2 T = C - int2(U.OccOrigin);
+	int N = int(U.OccN);
+	if (T.x < 0 || T.y < 0 || T.x >= N || T.y >= N) return 0;
+	return int(dot(Occ.Load(int3(T, 0)), Ch) * 255.0 + 0.5);
+}
+
+int BROccAt(FBRUniforms U, FBRFrag F, Texture2D Occ, int2 C)
+{
+	return BROccAtC(U, Occ, C, F.Chan);
+}
+
+bool BRPillarBlocks(FBRUniforms U, FBRFrag F, Texture2D Occ, int2 C, float2 A, float2 InvDir, float Dist)
+{
+	float2 Lo = (float2(C) * 2.0 + float2(0.42, 0.42) - A) * InvDir;
+	float2 Hi = (float2(C) * 2.0 + float2(1.58, 1.58) - A) * InvDir;
+	float2 Entry = min(Lo, Hi), Leave = max(Lo, Hi);
+	return (BROccAt(U, F, Occ, C) & 4) != 0
+		&& max(max(Entry.x, Entry.y), 0.001) < min(min(Leave.x, Leave.y), Dist - 0.001);
+}
+
+float BRLightVis(FBRUniforms U, FBRFrag F, Texture2D Occ, float2 A, float2 B)
+{
+	if (U.OccN < 1.0) return 1.0;
+	float2 D = B - A;
+	float Dist = length(D);
+	if (Dist < 0.05) return 1.0;
+	float2 Dir = D / Dist;
+	A += Dir * 0.01;
+	Dist -= 0.01;
+	int2 C = int2(floor(A / 2.0)), Ec = int2(floor(B / 2.0));
+	float2 InvDir = float2(Dir.x >= 0.0 ? 1.0 : -1.0, Dir.y >= 0.0 ? 1.0 : -1.0) / max(abs(Dir), float2(1e-6, 1e-6));
+	if (BRPillarBlocks(U, F, Occ, C, A, InvDir, Dist)) return 0.0;
+	if (all(C == Ec)) return 1.0;
+	int2 Stp = int2(sign(Dir.x), sign(Dir.y));
+	float2 Inv = 1.0 / max(abs(Dir), float2(1e-6, 1e-6));
+	float2 TDelta = 2.0 * Inv;
+	float2 TMax = abs((float2(C) + max(float2(Stp), 0.0)) * 2.0 - A) * Inv;
+	if (Stp.x == 0) TMax.x = 1e9;
+	if (Stp.y == 0) TMax.y = 1e9;
+	[loop]
+	for (int I = 0; I < 8; I++)
+	{
+		if (TMax.x < TMax.y)
+		{
+			if (TMax.x > Dist) return 1.0;
+			C.x += Stp.x;
+			if ((BROccAt(U, F, Occ, int2(Stp.x > 0 ? C.x : C.x + 1, C.y)) & 2) != 0) return 0.0;
+			TMax.x += TDelta.x;
+		}
+		else
+		{
+			if (TMax.y > Dist) return 1.0;
+			C.y += Stp.y;
+			if ((BROccAt(U, F, Occ, int2(C.x, Stp.y > 0 ? C.y : C.y + 1)) & 1) != 0) return 0.0;
+			TMax.y += TDelta.y;
+		}
+		if (BRPillarBlocks(U, F, Occ, C, A, InvDir, Dist)) return 0.0;
+		if (all(C == Ec)) return 1.0;
+	}
+	return 1.0;
+}
+
+float BRPanelVis(FBRUniforms U, FBRFrag F, Texture2D Occ, float2 Lc, float2 P, float Spread)
+{
+	float2 ToP = P - Lc;
+	float ToLen = length(ToP);
+	float2 Dir = ToLen > 0.001 ? ToP / ToLen : float2(0.0, 1.0);
+	float Vis;
+	if (Spread < 0.01)
+	{
+		Vis = BRLightVis(U, F, Occ, Lc, P);
+	}
+	else
+	{
+		float2 Q = floor((Lc + Dir * 0.01) / 2.0) * 2.0;
+		float2 Perp = float2(-Dir.y, Dir.x) * Spread;
+		float2 Ta = clamp(Lc + Perp, Q + 0.01, Q + 1.99);
+		float2 Tb = clamp(Lc - Perp, Q + 0.01, Q + 1.99);
+		Vis = 0.5 * (BRLightVis(U, F, Occ, Ta, P) + BRLightVis(U, F, Occ, Tb, P));
+	}
+	return Vis;
+}
+
+float BREntVis(FBRUniforms U, float3 A, float3 B)
+{
+	if (U.EntBlock < 0.5) return 1.0;
+	float2 D = B.xz - A.xz;
+	float L = length(D);
+	if (L < 1e-4) return 1.0;
+	float2 N = D / L;
+	float T = clamp(dot(U.EntPos.xz - A.xz, N), 0.0, L);
+	float Side = smoothstep(0.26, 0.52, distance(A.xz + N * T, U.EntPos.xz));
+	float RayY = lerp(A.y, B.y, T / L);
+	float Over = smoothstep(0.0, 0.45, RayY - (U.EntPos.y + 0.95));
+	return max(Side, Over);
+}
+
+float BRSheen(float3 N, float3 V, float3 L, float Shin)
+{
+	float Nh = max(dot(N, normalize(L + V)), 0.0);
+	float Uu = 1.0 - max(dot(V, N), 0.0), U2 = Uu * Uu;
+	float Fr = 0.045 + 0.955 * (U2 * U2 * Uu);
+	return pow(Nh, Shin) * (Shin + 8.0) * 0.03978874 * Fr;
+}
+
+float3 BRPanelSum(FBRUniforms U, FBRFrag F, Texture2D Occ, float3 P, float3 N, float2 Base, float2 ShP,
+	float OwnLY, float SoOwn, float SoUp, int OwnMask, int UpMask)
+{
+	float3 Light = float3(0.0, 0.0, 0.0);
+	int Count = UpMask != 0 ? 18 : 9;
+	[loop]
+	for (int I = 0; I < 18; I++)
+	{
+		if (I >= Count) break;
+		bool Upper = I >= 9;
+		int K = Upper ? I - 9 : I;
+		int Dx = K / 3 - 1, Dz = K - (K / 3) * 3 - 1;
+		float Ly = Upper ? OwnLY + U.StoreyH : OwnLY;
+		float On = float(((Upper ? UpMask : OwnMask) >> K) & 1);
+		float2 G = Base + float2(float(Dx), float(Dz));
+		float3 Lc = float3(G.x * U.LS + U.LS * 0.5, Ly, G.y * U.LS + U.LS * 0.5);
+		float St = BRLightState(U, G, Upper ? SoUp : SoOwn) * On;
+		if (St <= 0.001) continue;
+		if (U.EntDark > 0.01)
+		{
+			float Ed = distance(Lc.xz, U.EntPos.xz);
+			St *= lerp(1.0, smoothstep(2.0, 9.0, Ed), U.EntDark);
+		}
+		float3 Lp = float3(clamp(P.x, Lc.x - BR_PANEL_HALF, Lc.x + BR_PANEL_HALF), Ly,
+			clamp(P.z, Lc.z - BR_PANEL_HALF, Lc.z + BR_PANEL_HALF));
+		float3 Ld = Lp - P;
+		float D2 = dot(Ld, Ld);
+		float Atten = 1.0 / (1.0 + 0.22 * D2);
+		float2 Wf = 1.0 - smoothstep(float2(0.80, 0.80), float2(1.0, 1.0), abs(Lc.xz - P.xz) / (1.5 * U.LS));
+		Atten *= Wf.x * Wf.y;
+		if (Atten < 1e-5) continue;
+		if (St * Atten < 0.004) continue;
+		float L1 = abs(Lc.x - ShP.x) + abs(Lc.z - ShP.y);
+		float Sw = 1.0 - smoothstep(10.0, 15.0, L1);
+		float Vis;
+		if (Upper || Sw < 0.002)
+		{
+			Vis = 1.0;
+		}
+		else
+		{
+			float Sr2 = min(36.0, 0.5625 * U.LS * U.LS), Sr1 = min(16.0, 0.25 * U.LS * U.LS);
+			float Spread = D2 < Sr2 ? 0.45 * (1.0 - smoothstep(Sr1, Sr2, D2)) : 0.0;
+			Vis = BRPanelVis(U, F, Occ, Lc.xz, ShP, Spread);
+		}
+		Vis = lerp(1.0, Vis, Sw);
+		St *= lerp(0.18, 1.0, Vis);
+		if (St <= 0.001) continue;
+		float3 Ln = Ld * rsqrt(max(D2, 1e-6));
+		float W = clamp(BR_PANEL_HALF * rsqrt(D2 + BR_PANEL_HALF * BR_PANEL_HALF), 0.10, 0.80);
+		float Ndl = clamp((dot(N, Ln) + W) / (1.0 + W), 0.0, 1.0);
+		Light += U.LightCol * (St * Atten * Ndl * 5.4 * U.LightMul);
+	}
+	return Light;
+}
+
+float3 BRRoomLight(FBRUniforms U, inout FBRFrag F, Texture2D Occ, float3 P, float3 N)
+{
+	float2 Base = floor((P.xz - U.LS * 0.5) / U.LS + 0.5);
+	float3 Light = float3(0.0, 0.0, 0.0);
+	float3 V = normalize(U.ViewPos - P);
+	float Shin = lerp(20.0, 210.0, F.Gloss);
+	float3 R = reflect(-V, N);
+	float2 ShP = P.xz + normalize(F.FragN).xz * 0.16;
+	int Own = U.StoreyH > 0.0 ? BROccAt(U, F, Occ, int2(floor(ShP * 0.5))) : 0;
+	int OwnMask = 511, UpMask = 0;
+	if ((Own & 64) != 0)
+	{
+		int N2 = int(U.OccN);
+		int2 T = int2(Base * (U.LS * 0.5)) - int2(U.OccOrigin);
+		if (T.x >= 0 && T.y >= 0 && T.x < N2 && T.y < N2)
+		{
+			float4 M = Occ.Load(int3(T.x, T.y + N2, 0)) * 255.0;
+			int Hi = int(M.a + 0.5);
+			int Ci = int(dot(float4(0.0, 1.0, 2.0, 0.0), F.Chan) + 0.5);
+			OwnMask = int(dot(M, F.Chan) + 0.5) | (((Hi >> Ci) & 1) << 8);
+			if (F.Rel < 1 && (Own & 16) != 0)
+			{
+				float4 Uc = BRChanFor(F.Rel + 1);
+				int Cu = int(dot(float4(0.0, 1.0, 2.0, 0.0), Uc) + 0.5);
+				int UpperMask = int(dot(M, Uc) + 0.5) | (((Hi >> Cu) & 1) << 8);
+				UpMask = UpperMask & ~OwnMask & 511;
+			}
+		}
+	}
+	float OwnLY = U.LY + float(F.Rel) * U.StoreyH;
+	Light += BRPanelSum(U, F, Occ, P, N, Base, ShP, OwnLY, BRStoreyOffset(U.Storey + float(F.Rel)),
+		BRStoreyOffset(U.Storey + float(F.Rel + 1)), OwnMask, UpMask);
+	if (F.Gloss > 0.10 && R.y > 0.02)
+	{
+		float T = (OwnLY - P.y) / R.y;
+		if (T > 0.0)
+		{
+			float3 Hit = P + R * T;
+			float2 Gs = floor((Hit.xz - U.LS * 0.5) / U.LS + 0.5);
+			float St = BRLightState(U, Gs, BRStoreyOffset(U.Storey + float(F.Rel)));
+			if (St > 0.002)
+			{
+				float3 Lc = float3(Gs.x * U.LS + U.LS * 0.5, OwnLY, Gs.y * U.LS + U.LS * 0.5);
+				if (U.EntDark > 0.01)
+					St *= lerp(1.0, smoothstep(2.0, 9.0, distance(Lc.xz, U.EntPos.xz)), U.EntDark);
+				float3 Sp = float3(clamp(Hit.x, Lc.x - BR_PANEL_HALF, Lc.x + BR_PANEL_HALF), OwnLY,
+					clamp(Hit.z, Lc.z - BR_PANEL_HALF, Lc.z + BR_PANEL_HALF));
+				float3 Ld = Sp - P;
+				float D2 = dot(Ld, Ld);
+				float Lobe = BRSheen(N, V, Ld * rsqrt(max(D2, 1e-6)), Shin) * F.Gloss * St * 2.6 / (1.0 + 0.22 * D2);
+				if (Lobe > 0.002) Light += U.LightCol * (Lobe * BRLightVis(U, F, Occ, Sp.xz, ShP));
+			}
+		}
+	}
+	float Hemi = 0.5 + 0.5 * N.y;
+	float3 Amb = U.Amb * lerp(float3(1.05, 1.05, 1.05), U.LightCol * 1.75, Hemi) * (0.35 + 0.65 * U.Blackout);
+	Amb *= 1.0 + 5.5 / (1.0 + 40.0 * Amb);
+	Light += Amb;
+	if (U.EntDark > 0.01)
+	{
+		float Fd = distance(P.xz, U.EntPos.xz);
+		Light *= lerp(1.0, smoothstep(0.8, 6.5, Fd), U.EntDark);
+	}
+	// The torch and the flare cut through that dark.
+	if (U.Flash > 0.01)
+	{
+		float3 Fv = P - U.ViewPos;
+		float Fd2 = dot(Fv, Fv);
+		float3 Fn = Fv * rsqrt(max(Fd2, 1e-6));
+		float Cone = pow(max(dot(Fn, U.FlashDir), 0.0), 26.0);
+		float Sput = 0.975 + 0.025 * frac(sin(floor(U.Time * 24.0) * 12.9898) * 43758.5453);
+		float Fl = U.Flash * Cone * Sput * 7.5 / (1.0 + 0.10 * Fd2);
+		if (Fl > 0.002) Fl *= lerp(0.06, 1.0, BRLightVis(U, F, Occ, U.ViewPos.xz, ShP)) * BREntVis(U, U.ViewPos, float3(ShP.x, P.y, ShP.y));
+		float3 Fcol = float3(1.0, 0.97, 0.86) * Fl;
+		Light += Fcol * clamp(dot(N, -Fn) * 0.7 + 0.3, 0.0, 1.0);
+		if (F.Gloss > 0.10) Light += Fcol * (BRSheen(N, V, -Fn, Shin) * F.Gloss * 0.55);
+	}
+	if (U.FlareInt > 0.01)
+	{
+		float3 Lv2 = U.FlarePos - P;
+		float D2 = dot(Lv2, Lv2);
+		float Fi = U.FlareInt * 5.0 / (1.0 + 0.30 * D2);
+		if (Fi > 0.002) Fi *= lerp(0.08, 1.0, BRLightVis(U, F, Occ, U.FlarePos.xz, ShP)) * BREntVis(U, U.FlarePos, float3(ShP.x, P.y, ShP.y));
+		float3 Lf = Lv2 * rsqrt(max(D2, 1e-6));
+		float Ndl = clamp(dot(N, Lf) * 0.7 + 0.3, 0.0, 1.0);
+		float3 Fcol = float3(1.0, 0.42, 0.15) * Fi;
+		Light += Fcol * Ndl;
+		if (F.Gloss > 0.10) Light += Fcol * (BRSheen(N, V, Lf, Shin) * F.Gloss * 0.55);
+	}
+	if (U.IR > 0.01)
+	{
+		float3 Iv = P - U.ViewPos;
+		float Id2 = dot(Iv, Iv);
+		float3 Inn = Iv * rsqrt(max(Id2, 1e-6));
+		float Spread = 0.30 + 0.70 * pow(max(dot(Inn, U.FlashDir), 0.0), 3.0);
+		Light += (U.IR * Spread * 6.0 / (1.0 + 0.14 * Id2)) * clamp(dot(N, -Inn) * 0.7 + 0.3, 0.0, 1.0);
+	}
+	if (U.Lamp.w > 0.01)
+	{
+		float3 Lv3 = U.Lamp.xyz - P;
+		float D2 = dot(Lv3, Lv3);
+		if (D2 < 90.0)
+		{
+			float Li = U.Lamp.w * 3.2 / (1.0 + 0.26 * D2) * (1.0 - smoothstep(55.0, 90.0, D2));
+			Li *= BRLightVis(U, F, Occ, U.Lamp.xz, ShP);
+			float3 Ll = Lv3 * rsqrt(max(D2, 1e-6));
+			float3 Lcol = U.LampCol * Li;
+			Light += Lcol * clamp(dot(N, Ll) * 0.75 + 0.25, 0.0, 1.0);
+			if (F.Gloss > 0.10) Light += Lcol * (BRSheen(N, V, Ll, Shin) * F.Gloss * 0.6);
+		}
+	}
+	F.LightLum = dot(Light, float3(0.30, 0.59, 0.11));
+	return Light;
+}
+
+// The air lit between the eye and the fragment: the torch's cone and the
+// flare's halo, each an exact integral (one atan), no marching.
+float3 BRInScatter(FBRUniforms U, float3 Ro, float3 Rd, float D)
+{
+	float3 S = float3(0.0, 0.0, 0.0);
+	if (U.Flash > 0.01)
+	{
+		float Cone = pow(max(dot(Rd, U.FlashDir), 0.0), 26.0);
+		if (Cone > 0.001)
+		{
+			const float K = 0.31622777;
+			const float TorchScatter = 0.20;
+			S += float3(1.0, 0.97, 0.86) * (TorchScatter * U.Flash * Cone * 7.5 * atan(D * K) / K);
+		}
+	}
+	if (U.FlareInt > 0.01)
+	{
+		float3 H = U.FlarePos - Ro;
+		float B = dot(H, Rd), C = dot(H, H);
+		const float Kf = 0.30;
+		float M = sqrt(max(C - B * B + 1.0 / Kf, 1e-4));
+		S += float3(1.0, 0.42, 0.15) * (U.FlareInt * 5.0 / (Kf * M) * (atan((D - B) / M) - atan(-B / M)));
+	}
+	return S;
+}
+
+float3 BRTonemap(float3 X)
+{
+	X *= 0.70;
+	return clamp((X * (2.51 * X + 0.03)) / (X * (2.43 * X + 0.59) + 0.14), 0.0, 1.0);
+}
+
+// One fragment: what the GLSL's main() writes to finalColor (rgb, alpha),
+// before colDiffuse, which is white for everything the world shader draws.
+// FragPos and FragN are core's; FragC is the vertex colour as raylib reads it.
+float4 BRWorldFragment(FBRUniforms U, float3 FragPos, float3 FragN, float2 FragUV, float4 FragC,
+	Texture2D Tex0, SamplerState Tex0Sampler, Texture2D Tex1, SamplerState Tex1Sampler, Texture2D Occ)
+{
+	float3 Dpdx = ddx(FragPos), Dpdy = BR_DFDY(FragPos);
+	float2 Duvdx = ddx(FragUV), Duvdy = BR_DFDY(FragUV);
+	FBRFrag F;
+	F.Rel = 0;
+	F.Chan = float4(1.0, 0.0, 0.0, 0.0);
+	F.LightLum = 0.0;
+	F.Gloss = U.Gloss;
+	F.FragN = FragN;
+	if (U.StoreyH > 0.0)
+	{
+		F.Rel = int(floor(U.DrawRel + 0.5));
+		F.Chan = BRChanFor(F.Rel);
+	}
+	float3 Col;
+	float AOut = 1.0;
+	float Dist = distance(FragPos, U.ViewPos);
+	if (FragC.a < 0.62)
+	{
+		if (FragC.a < 0.1)
+		{
+			// light panel (emissive, flickers)
+			float2 G = floor((FragPos.xz - U.LS * 0.5) / U.LS + 0.5);
+			float St = BRLightState(U, G, BRStoreyOffset(U.Storey + float(F.Rel)));
+			Col = float3(0.72, 0.70, 0.65) * BRRoomLight(U, F, Occ, FragPos, float3(0.0, -1.0, 0.0)) + U.LightCol * 5.2 * St;
+			Col *= 0.93 + 0.07 * sin(FragUV.x * 33.0) * sin(FragUV.y * 33.0);
+			F.LightLum = max(F.LightLum, St);
+		}
+		else if (FragC.a < 0.3)
+		{
+			// raw emissive (exit glow)
+			Col = FragC.rgb * 3.0;
+			F.LightLum = 1.0;
+		}
+		else if (FragC.a < 0.45)
+		{
+			// window glass
+			float3 N = normalize(FragN);
+			float3 V = normalize(U.ViewPos - FragPos);
+			float Fres = pow(1.0 - abs(dot(V, N)), 3.0);
+			Col = FragC.rgb * 3.0 + BRRoomLight(U, F, Occ, FragPos, N) * 0.15;
+			Col += float3(0.55, 0.62, 0.72) * Fres;
+			AOut = 0.10 + Fres * 0.55;
+		}
+		else
+		{
+			// water surface
+			float3 N = normalize(FragN);
+			float3 V = normalize(U.ViewPos - FragPos);
+			float W1 = sin(FragPos.x * 2.3 + U.Time * 1.4) * sin(FragPos.z * 1.9 - U.Time * 1.1);
+			float W2 = sin(FragPos.x * 5.1 - U.Time * 2.2 + FragPos.z * 1.3);
+			float3 Nw = normalize(N + float3(0.055 * W2 + 0.03 * W1, 0.0, 0.045 * W1 - 0.025 * W2));
+			float3 Light = BRRoomLight(U, F, Occ, FragPos, Nw);
+			float Fres = 0.03 + 0.97 * pow(1.0 - abs(dot(V, Nw)), 5.0);
+			Col = FragC.rgb * (Light * 0.75 + U.Amb * 1.4) * (0.85 + 0.15 * W1);
+			Col += Light * Fres * 0.45;
+			AOut = 0.30 + 0.55 * Fres;
+		}
+	}
+	else
+	{
+		// Level 0's noclip walls (vertex alpha 250, 247 cursed)
+		bool Noclip = FragC.a > 0.965 && FragC.a < 0.990;
+		float2 UvT = FragUV;
+		float Tear = 0.0;
+		if (Noclip)
+		{
+			float Tick = floor(U.Time * 11.0);
+			float Band = floor(FragPos.y * 9.0 + frac(Tick * 0.37) * 4.0);
+			float Rr = frac(sin(Band * 91.7 + Tick * 7.31) * 43758.5453);
+			float Burst = step(0.62, frac(sin(floor(U.Time * 1.3) * 3.7) * 151.3));
+			float Seg = floor((FragPos.x + FragPos.z) * 3.3);
+			float Keep = step(0.30, frac(sin(Seg * 47.1 + Band * 13.7 + Tick * 3.9) * 43758.5453));
+			Tear = step(0.58, Rr) * Burst * Keep;
+			UvT.x += (Rr - 0.5) * 0.09 * Tear;
+		}
+		float4 Texel = Noclip ? Tex0.SampleGrad(Tex0Sampler, UvT, Duvdx, Duvdy) : Tex0.Sample(Tex0Sampler, FragUV);
+		float4 Detail = Tex1.Sample(Tex1Sampler, FragUV);
+		F.Gloss = Detail.a < 0.75 ? Detail.b : U.Gloss * Detail.b;
+		float3 Ng = normalize(FragN);
+		float World = step(0.99, FragC.a) * step(0.99, Detail.a);
+		float2 Mp = lerp(float2(FragPos.x + FragPos.z, FragPos.y), FragPos.xz, step(0.7, abs(Ng.y)));
+		float Wander = BRNoise(Mp * 0.45 + 11.3);
+		Texel.rgb *= 1.0 + (Wander - 0.5) * 2.0 * U.Macro * World;
+		if (U.Board > 0.0)
+		{
+			// a suspended ceiling's boards, each its own shade, the odd one stained
+			float2 Bq = FragPos.xz / U.Board;
+			float2 Bc = floor(Bq), Bf = frac(Bq);
+			float Hb = BRHash(Bc + float2(BRStoreyOffset(U.Storey + float(F.Rel)) * 3.7, 17.0));
+			float Edge = min(min(Bf.x, 1.0 - Bf.x), min(Bf.y, 1.0 - Bf.y)) * U.Board;
+			float OnBoard = smoothstep(0.016, 0.024, Edge) * step(Ng.y, -0.7) * World;
+			float3 Age = lerp(float3(1.0, 1.0, 1.0), float3(1.015, 0.995, 0.93), frac(Hb * 7.13));
+			float3 Board = Age * (1.0 + (Hb - 0.5) * 0.07);
+			float2 Sc = (Bf - float2(0.3 + 0.4 * frac(Hb * 5.3), 0.3 + 0.4 * frac(Hb * 9.1))) * U.Board;
+			float Blot = length(Sc * float2(1.0, 1.25)) + BRNoise(FragPos.xz * 8.0) * 0.085
+				- (0.07 + 0.12 * frac(Hb * 13.3));
+			float Inside = 1.0 - smoothstep(-0.004, 0.004, Blot);
+			float Ring = exp(-Blot * Blot * 12000.0) + 0.45 * exp(-(Blot + 0.032) * (Blot + 0.032) * 16000.0);
+			float Stained = step(frac(Hb * 31.7), 0.05);
+			float3 Stain = lerp(float3(1.0, 1.0, 1.0), float3(0.93, 0.88, 0.76), Inside * 0.8)
+				* lerp(float3(1.0, 1.0, 1.0), float3(0.74, 0.65, 0.52), min(Ring, 1.0) * 0.7);
+			Board *= lerp(float3(1.0, 1.0, 1.0), Stain, Stained);
+			Texel.rgb *= lerp(float3(1.0, 1.0, 1.0), Board, OnBoard);
+		}
+		float3 Nb = normalize(FragN);
+		if (FragC.a > 0.998)
+		{
+			float2 Slope = (Detail.rg * 255.0 - 128.0) / 127.0;
+			Nb = BRDetailNormal(Nb, Slope, Dpdx, Dpdy, Duvdx, Duvdy);
+		}
+		if (U.Wet > 0.0 && FragN.y > 0.7 && FragPos.y - float(F.Rel) * U.StoreyH < 0.3)
+		{
+			// Level 0's damp patches
+			float Wn = BRNoise(FragPos.xz * 0.42) * 0.62 + BRNoise(FragPos.xz * 1.35 + 17.0) * 0.38;
+			float Wet = smoothstep(U.WetFrom, U.WetFrom + 0.12, Wn) * U.Wet;
+			Texel.rgb *= lerp(float3(1.0, 1.0, 1.0), float3(0.60, 0.56, 0.48), Wet);
+			F.Gloss = max(F.Gloss, 0.62 * Wet);
+			Nb = normalize(lerp(Nb, normalize(FragN), Wet));
+		}
+		Col = Texel.rgb * FragC.rgb * BRRoomLight(U, F, Occ, FragPos, Nb);
+		// backlit print (vertex alpha 240)
+		float Backlit = step(0.93, FragC.a) * step(FragC.a, 0.955);
+		Col += Texel.rgb * FragC.rgb * (0.62 * Backlit);
+		F.LightLum = max(F.LightLum, 0.8 * Backlit);
+		if (U.ObjRefl > 0.5)
+		{
+			// the revolver's metal reflects the room
+			float IsObj = step(Detail.a, 0.75);
+			float Metal = clamp((Detail.a - 0.502) / 0.235, 0.0, 1.0) * IsObj;
+			Col *= 1.0 - 0.8 * Metal;
+			float3 Vo = normalize(U.ViewPos - FragPos);
+			float3 Ro = reflect(-Vo, Nb);
+			float Room = max(F.LightLum, 0.04);
+			float3 Walls = U.FogCol / max(dot(U.FogCol, float3(0.30, 0.59, 0.11)), 1e-3);
+			float3 Below = lerp(Walls * 0.22, Walls * 0.95, smoothstep(-0.6, 0.05, Ro.y));
+			float3 Env = Room * (lerp(Below, U.LightCol * 1.15, smoothstep(0.05, 0.7, Ro.y))
+				+ U.LightCol * pow(max(Ro.y, 0.0), lerp(3.0, 26.0, F.Gloss)) * (0.6 + 1.6 * F.Gloss));
+			float3 F0 = lerp(float3(0.04, 0.04, 0.04), min(Texel.rgb * FragC.rgb * 2.6, float3(0.95, 0.95, 0.95)), Metal);
+			float Fr = pow(1.0 - clamp(dot(Nb, Vo), 0.0, 1.0), 5.0);
+			float3 Fz = F0 + (1.0 - F0) * Fr * F.Gloss;
+			Col += Env * Fz * lerp(0.25 + 0.75 * F.Gloss, 1.0, Metal) * IsObj;
+		}
+		if (U.Gloss > 0.5 && FragPos.y < -0.13)
+		{
+			// underwater tile
+			float Depth = -0.12 - FragPos.y;
+			float C1 = sin(FragPos.x * 4.1 + sin(FragPos.z * 2.7 + U.Time) * 1.4 + U.Time * 0.8);
+			float C2 = sin(FragPos.z * 4.6 + sin(FragPos.x * 3.2 - U.Time * 0.7) - U.Time * 0.6);
+			float Caustic = pow(max(0.0, 1.0 - abs(C1 + C2) * 0.7), 12.0);
+			Col *= lerp(float3(1.0, 1.0, 1.0), float3(0.32, 0.77, 0.68), 1.0 - exp(-Depth * 0.32));
+			Col += float3(0.12, 0.24, 0.19) * Caustic * exp(-Depth * 0.22) * clamp(F.LightLum, 0.0, 1.0);
+		}
+		AOut = max(FragC.a * Texel.a, Backlit);
+		if (Noclip)
+		{
+			float Shimmer = 0.035 * sin(U.Time * 23.0 + FragPos.y * 41.0 + FragPos.x * 7.0 + FragPos.z * 7.0);
+			float3 Behind = FragC.a < 0.975 ? float3(0.55, 0.03, 0.02) : float3(1.25, 1.18, 0.95);
+			Col = lerp(Col * (1.0 + Shimmer), Behind * (0.6 + 0.4 * F.LightLum), Tear * 0.55);
+			AOut = 1.0;
+		}
+	}
+	float Fog = clamp(exp(-Dist * U.FogDen), 0.0, 1.0);
+	float3 FogC = U.FogCol * lerp(0.10, 1.0, U.Blackout) * (0.45 + 1.15 * clamp(F.LightLum, 0.0, 1.0));
+	Col = lerp(FogC, Col, Fog);
+	float3 Rd = (FragPos - U.ViewPos) / max(Dist, 1e-4);
+	Col += BRInScatter(U, U.ViewPos, Rd, Dist) * (U.FogDen * 0.10);
+	Col = BRTonemap(Col);
+	return float4(Col, AOut);
+}
+
+#endif // PIXELSHADER

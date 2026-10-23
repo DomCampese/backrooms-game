@@ -5,13 +5,8 @@
 #include "BackroomsSettings.generated.h"
 
 class ABackroomsChunkActor;
-class UAnimSequence;
-class USkeletalMesh;
-class UBackroomsLevelLook;
 class UInputAction;
 class UInputMappingContext;
-class UMaterialInterface;
-class UTexture2D;
 
 // Project Settings > Game > Backrooms. Saved to Config/DefaultGame.ini.
 UCLASS(Config = Game, DefaultConfig, meta = (DisplayName = "Backrooms"))
@@ -20,15 +15,6 @@ class BACKROOMS_API UBackroomsSettings : public UDeveloperSettings
 	GENERATED_BODY()
 
 public:
-	UBackroomsSettings();
-
-	// The look of each level, by index (0 Level 0 .. 4 LEVEL FUN). An empty slot,
-	// or one naming an asset that does not exist, is drawn as the greybox. The
-	// defaults are where the editor builds them on first open
-	// (Plugins/Backrooms/Content/Python/backrooms_looks.py).
-	UPROPERTY(Config, EditAnywhere, Category = "Look")
-	TArray<TSoftObjectPtr<UBackroomsLevelLook>> LevelLooks;
-
 	// A run started without ?seed= or ?level= on the map's options.
 	UPROPERTY(Config, EditAnywhere, Category = "Run")
 	int32 DefaultSeed = 1337;
@@ -49,25 +35,6 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Streaming")
 	TSoftClassPtr<ABackroomsChunkActor> ChunkClass;
 
-	// A light that follows the camera, for looking round a greybox with the
-	// fitting lights turned off.
-	UPROPERTY(Config, EditAnywhere, Category = "Look")
-	bool bCameraLight = false;
-
-	// Rect lights at the live fittings nearest the player, and how many of the
-	// nearest cast shadows. The raylib shader sums the 3x3 fittings round each
-	// point, nine on a level's own grid; more cover a fall-off it does not have.
-	UPROPERTY(Config, EditAnywhere, Category = "Look", meta = (ClampMin = 0, ClampMax = 64))
-	int32 FittingLights = 16;
-	UPROPERTY(Config, EditAnywhere, Category = "Look", meta = (ClampMin = 0, ClampMax = 64))
-	int32 FittingShadows = 4;
-	// A live fitting at a look's LightOutput of 1, and how far its light reaches,
-	// metres.
-	UPROPERTY(Config, EditAnywhere, Category = "Look", meta = (ClampMin = 0))
-	float FittingLumens = 3000.0f;
-	UPROPERTY(Config, EditAnywhere, Category = "Look", meta = (ClampMin = 1))
-	float FittingReach = 16.0f;
-
 	// The sim turns 0.0030 rad per raylib mouse pixel, and this multiplies
 	// Unreal's mouse delta before it gets there. At 1 the first run on a Mac
 	// turned too slowly. Flip the vertical if up and down come out reversed.
@@ -84,44 +51,11 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Input")
 	TMap<EBackroomsControl, TSoftObjectPtr<UInputAction>> InputActions;
 
-	// The revolver in hand. The editor imports assets/models/revolver.glb to
-	// these paths the first time it opens the project
-	// (Plugins/Backrooms/Content/Python/backrooms_import.py).
+	// The revolver in hand: the repository's GLB, read and posed at run time
+	// as the Web build poses it (shared/port/revolver.h), relative to the
+	// repository's root.
 	UPROPERTY(Config, EditAnywhere, Category = "Held")
-	TSoftObjectPtr<USkeletalMesh> RevolverMesh{ FSoftObjectPath(TEXT("/Game/Backrooms/Revolver/SK_Revolver.SK_Revolver")) };
-	UPROPERTY(Config, EditAnywhere, Category = "Held")
-	TSoftObjectPtr<UAnimSequence> RevolverIdle{ FSoftObjectPath(TEXT("/Game/Backrooms/Revolver/A_Revolver_Idle.A_Revolver_Idle")) };
-	UPROPERTY(Config, EditAnywhere, Category = "Held")
-	TSoftObjectPtr<UAnimSequence> RevolverReload{ FSoftObjectPath(TEXT("/Game/Backrooms/Revolver/A_Revolver_Reload.A_Revolver_Reload")) };
-	UPROPERTY(Config, EditAnywhere, Category = "Held")
-	TSoftObjectPtr<UAnimSequence> RevolverShoot{ FSoftObjectPath(TEXT("/Game/Backrooms/Revolver/A_Revolver_Shoot.A_Revolver_Shoot")) };
-	// Turns the imported mesh before it is placed. The placement reads the
-	// importer's axes from the mesh's bounds (ABackroomsHeldActor); if the gun
-	// still comes out facing the wrong way, this corrects it without a code
-	// change.
-	UPROPERTY(Config, EditAnywhere, Category = "Held")
-	FRotator RevolverMeshRotation = FRotator::ZeroRotator;
-
-	// The actors' sprite sheets and the materials that draw them
-	// (ABackroomsSpriteActor). The editor builds them from the Web build's
-	// own sheets to these paths (backrooms_looks.py); until it has, the hunter
-	// and the pack are plain shapes.
-	UPROPERTY(Config, EditAnywhere, Category = "Actors")
-	TSoftObjectPtr<UTexture2D> ClarkSheet{ FSoftObjectPath(TEXT("/Game/Backrooms/Sprites/T_clark.T_clark")) };
-	UPROPERTY(Config, EditAnywhere, Category = "Actors")
-	TSoftObjectPtr<UTexture2D> SmilerSheet{ FSoftObjectPath(TEXT("/Game/Backrooms/Sprites/T_smiler.T_smiler")) };
-	UPROPERTY(Config, EditAnywhere, Category = "Actors")
-	TSoftObjectPtr<UTexture2D> SmilerGlowSheet{ FSoftObjectPath(TEXT("/Game/Backrooms/Sprites/T_smiler_glow.T_smiler_glow")) };
-	UPROPERTY(Config, EditAnywhere, Category = "Actors")
-	TSoftObjectPtr<UTexture2D> PartygoerSheet{ FSoftObjectPath(TEXT("/Game/Backrooms/Sprites/T_partygoer.T_partygoer")) };
-	UPROPERTY(Config, EditAnywhere, Category = "Actors")
-	TSoftObjectPtr<UTexture2D> DogSheet{ FSoftObjectPath(TEXT("/Game/Backrooms/Sprites/T_dog.T_dog")) };
-	// Lit and translucent, its texture parameter "Sheet", opacity the sheet's
-	// alpha times the vertex alpha; the glow material the same, unlit.
-	UPROPERTY(Config, EditAnywhere, Category = "Actors")
-	TSoftObjectPtr<UMaterialInterface> SpriteMaterial{ FSoftObjectPath(TEXT("/Game/Backrooms/Sprites/M_BackroomsSprite.M_BackroomsSprite")) };
-	UPROPERTY(Config, EditAnywhere, Category = "Actors")
-	TSoftObjectPtr<UMaterialInterface> SpriteGlowMaterial{ FSoftObjectPath(TEXT("/Game/Backrooms/Sprites/M_BackroomsSpriteGlow.M_BackroomsSpriteGlow")) };
+	FString RevolverModel = TEXT("assets/models/revolver.glb");
 
 	// Where the editor imports assets/sounds (backrooms_import.py), keeping its
 	// folders: sounds/water/swim_1.ogg is <SoundFolder>/water/swim_1.
@@ -131,9 +65,6 @@ public:
 	// frame longer than this leaves a gap in the sound.
 	UPROPERTY(Config, EditAnywhere, Category = "Sound", meta = (ClampMin = 0.03, ClampMax = 0.5))
 	float SoundLatency = 0.1f;
-
-	// The look for a level, loaded, or null.
-	UBackroomsLevelLook* LookFor(int32 Level) const;
 
 	virtual FName GetCategoryName() const override { return TEXT("Game"); }
 };

@@ -1,84 +1,107 @@
 #include "BackroomsSceneActor.h"
 #include "BackroomsCoords.h"
-#include "BackroomsItemShapes.h"
-#include "BackroomsLevelLook.h"
-#include "Components/InstancedStaticMeshComponent.h"
-#include "Components/SceneComponent.h"
-#include "Engine/StaticMesh.h"
-#include "Materials/MaterialInterface.h"
-#include "port/scene.h"
+#include "BackroomsRender.h"
+#include "ProceduralMeshComponent.h"
+#include "port/objects.h"
 
 namespace
 {
-bool HasColours(EBackroomsItem Kind) { return Kind == EBackroomsItem::Balloon || Kind == EBackroomsItem::Confetti; }
+// One section's triangles, in Unreal's world.
+struct FBatch
+{
+	TArray<FVector> Vertices, Normals;
+	TArray<FVector2D> UVs;
+	TArray<FColor> Colours;
+	TArray<int32> Triangles;
+
+	// Part's triangles, each vertex through Xf (port/draw.h) from the sim's
+	// frame, which Origin places.
+	void Add(const MB& Part, const Xform& Xf, const FVector& Origin)
+	{
+		const int32 Base = Vertices.Num();
+		const size_t Count = Part.v.size() / 3;
+		for (size_t V = 0; V < Count; V++)
+		{
+			const float X = Part.v[V * 3], Y = Part.v[V * 3 + 1], Z = Part.v[V * 3 + 2];
+			const Vec3 P = { Xf.x.x * X + Xf.y.x * Y + Xf.z.x * Z + Xf.t.x, Xf.x.y * X + Xf.y.y * Y + Xf.z.y * Z + Xf.t.y,
+				Xf.x.z * X + Xf.y.z * Y + Xf.z.z * Z + Xf.t.z };
+			const float NX = Part.n[V * 3], NY = Part.n[V * 3 + 1], NZ = Part.n[V * 3 + 2];
+			const Vec3 N = { Xf.x.x * NX + Xf.y.x * NY + Xf.z.x * NZ, Xf.x.y * NX + Xf.y.y * NY + Xf.z.y * NZ,
+				Xf.x.z * NX + Xf.y.z * NY + Xf.z.z * NZ };
+			Vertices.Add(BackroomsCoords::ToUnreal(P) + Origin);
+			Normals.Add(BackroomsCoords::ToUnrealDirection(N).GetSafeNormal());
+			UVs.Add(FVector2D(Part.uv[V * 2], Part.uv[V * 2 + 1]));
+			Colours.Add(FColor(Part.c[V * 4], Part.c[V * 4 + 1], Part.c[V * 4 + 2], Part.c[V * 4 + 3]));
+		}
+		for (unsigned short I : Part.idx)
+		{
+			Triangles.Add(Base + I);
+		}
+	}
+};
+
+// The objects' meshes, built once.
+const MB& ObjectMesh(ObjMesh M)
+{
+	static const MB Meshes[(int32)ObjMesh::Count] = { crateMesh(), crateLidMesh(), canMesh(), deckMesh(), reelMesh(),
+		deckLampMesh(), flareMesh() };
+	return Meshes[(int32)M];
+}
 }
 
 ABackroomsSceneActor::ABackroomsSceneActor()
 {
 	PrimaryActorTick.bCanEverTick = false;
-	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
+	Mesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("Mesh"));
+	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Mesh->SetCastShadow(false);
+	RootComponent = Mesh;
 }
 
-UInstancedStaticMeshComponent* ABackroomsSceneActor::Instances(EBackroomsItem Kind, uint8 Colour,
-	const UBackroomsLevelLook* Look)
+void ABackroomsSceneActor::Show(const std::vector<SceneDraw>& Draws, size_t FirstHeld, const SimView& View,
+	const UBackroomsRender& Render, const FVector& Origin)
 {
-	const int32 Key = (int32)Kind * 256 + (HasColours(Kind) ? Colour : 0);
-	if (TObjectPtr<UInstancedStaticMeshComponent>* Found = ByKind.Find(Key))
-	{
-		return *Found;
-	}
-	const FBackroomsItemLook* Own = Look ? Look->Items.Find(Kind) : nullptr;
-	UInstancedStaticMeshComponent* Component = NewObject<UInstancedStaticMeshComponent>(this, NAME_None, RF_Transient);
-	Component->SetStaticMesh(Own && Own->Mesh ? Own->Mesh.Get() : BackroomsItemShapes::Mesh(Kind));
-	Component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	Component->SetupAttachment(RootComponent);
-	Component->RegisterComponent();
-	if (Own && Own->Material)
-	{
-		Component->SetMaterial(0, Own->Material);
-	}
-	else if (!(Own && Own->Mesh))
-	{
-		FLinearColor Party;
-		if (HasColours(Kind))
+	// Sections in the order their materials first come up, which is the
+	// order render.cpp draws in.
+	TArray<UMaterialInterface*> Order;
+	TMap<UMaterialInterface*, FBatch> Batches;
+	auto BatchFor = [&](UMaterialInterface* Material) -> FBatch& {
+		if (!Batches.Contains(Material))
 		{
-			const TArray<FLinearColor> Palette = Look && Look->PartyColours.Num() ? Look->PartyColours
-			                                                                        : UBackroomsLevelLook::DefaultPartyColours();
-			Party = Palette[Colour % Palette.Num()];
+			Order.Add(Material);
 		}
-		if (UMaterialInterface* Flat = BackroomsItemShapes::Material(Kind, this, HasColours(Kind) ? &Party : nullptr))
+		return Batches.FindOrAdd(Material);
+	};
+	const Vec3 Right = cameraRight(View);
+	const Xform Identity{};
+	MB Triangles;
+	for (size_t I = 0; I < Draws.size(); I++)
+	{
+		const SceneDraw& D = Draws[I];
+		const bool bHeld = I >= FirstHeld;
+		if (D.isMesh)
 		{
-			Component->SetMaterial(0, Flat);
+			UMaterialInterface* Material = D.mesh.mesh == ObjMesh::DeckLamp ? Render.Lamp(bHeld, D.mesh.tint)
+				: D.mesh.mesh == ObjMesh::Flare ? Render.HeldFlare()
+				: Render.Object(objMat(D.mesh.mesh), bHeld);
+			BatchFor(Material).Add(ObjectMesh(D.mesh.mesh), D.mesh.xf, Origin);
+			continue;
 		}
+		const Shape& S = D.shape;
+		int32 TexW = 1, TexH = 1;
+		shapeTexSize(S.tex, TexW, TexH);
+		Triangles = MB();
+		shapeTriangles(S, Right, TexW, TexH, Triangles);
+		UMaterialInterface* Material = S.kind == ShapeKind::Billboard ? Render.Billboard(S.tex, S.additive)
+			: Render.Shape(S.colour.a < 255);
+		BatchFor(Material).Add(Triangles, Identity, Origin);
 	}
-	ByKind.Add(Key, Component);
-	return Component;
-}
 
-void ABackroomsSceneActor::Show(const std::vector<SceneItem>& Items, const UBackroomsLevelLook* Look, const FVector& Origin)
-{
-	if (Look != ShownLook)
+	Mesh->ClearAllMeshSections();
+	for (int32 Section = 0; Section < Order.Num(); Section++)
 	{
-		for (const TPair<int32, TObjectPtr<UInstancedStaticMeshComponent>>& Entry : ByKind)
-		{
-			if (Entry.Value)
-			{
-				Entry.Value->DestroyComponent();
-			}
-		}
-		ByKind.Reset();
-		ShownLook = Look;
-	}
-	for (const TPair<int32, TObjectPtr<UInstancedStaticMeshComponent>>& Entry : ByKind)
-	{
-		Entry.Value->ClearInstances();
-	}
-	for (const SceneItem& Item : Items)
-	{
-		const EBackroomsItem Kind = (EBackroomsItem)Item.kind;
-		const FTransform Frame(BackroomsCoords::ToUnrealRotator(Item.yaw, 0.0f), BackroomsCoords::ToUnreal(Item.pos) + Origin);
-		const FBackroomsItemLook* Own = Look ? Look->Items.Find(Kind) : nullptr;
-		const FTransform Placed = (Own && Own->Mesh ? Own->Offset : BackroomsItemShapes::Fit(Kind)) * Frame;
-		Instances(Kind, Item.variant, Look)->AddInstance(Placed, true);
+		const FBatch& B = Batches[Order[Section]];
+		Mesh->CreateMeshSection(Section, B.Vertices, B.Triangles, B.Normals, B.UVs, B.Colours, TArray<FProcMeshTangent>(), false);
+		Mesh->SetMaterial(Section, Order[Section]);
 	}
 }
