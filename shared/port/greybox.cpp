@@ -81,18 +81,17 @@ struct Builder {
     }
 };
 
-// A cell's floor: flat, a flight in treads, or nothing over a hole; and the
-// water over a pool.
-void floorOf(Builder &b, World &w, int gi, int gk) {
+// A cell's floor: flat (the rotten patch and the Manila Room's boards too), a
+// flight in treads, or nothing over a hole; and the water over a pool.
+void floorOf(Builder &b, World &w, const FloorCell &cell, int gi, int gk) {
     float x0 = gi * CELL, z0 = gk * CELL;
-    uint8_t vf = w.vflagAt(gi, gk);
-    if (vf & VF_STAIR) {
-        const float s = CELL / STAIR_SUB;
+    if (cell.floor == FloorKind::Stair) {
+        const float s = CELL / STAIR_SUB, fy = cell.y;
         float y[STAIR_SUB][STAIR_SUB];
         for (int a = 0; a < STAIR_SUB; a++)
             for (int c = 0; c < STAIR_SUB; c++) {
                 float t = w.stairY(x0 + (a + 0.5f) * s, z0 + (c + 0.5f) * s);
-                y[a][c] = std::isnan(t) ? w.floorY(gi, gk) : t;
+                y[a][c] = std::isnan(t) ? fy : t;
             }
         for (int a = 0; a < STAIR_SUB; a++)
             for (int c = 0; c < STAIR_SUB; c++) {
@@ -109,40 +108,36 @@ void floorOf(Builder &b, World &w, int gi, int gk) {
             }
         return;
     }
-    if (vf & VF_HOLE) return;
-    float y = w.floorY(gi, gk), x1 = x0 + CELL, z1 = z0 + CELL;
+    if (cell.floor == FloorKind::Hole) return;
+    float y = cell.y, x1 = x0 + CELL, z1 = z0 + CELL;
     b.quad(GreySurface::Floor, { x0, y, z0 }, { x0, y, z1 }, { x1, y, z1 }, { x1, y, z0 });
-    if (w.poolAt(gi, gk))
+    if (cell.pool)
         b.quad(GreySurface::Water, { x0, WATER_Y, z0 }, { x0, WATER_Y, z1 }, { x1, WATER_Y, z1 }, { x1, WATER_Y, z0 });
 }
 
-void ceilingOf(Builder &b, World &w, int gi, int gk) {
-    if (!cellHasCeiling(w, gi, gk)) return;
-    float x0 = gi * CELL, z0 = gk * CELL, x1 = x0 + CELL, z1 = z0 + CELL, y = w.ceilY(gi, gk);
+void ceilingOf(Builder &b, const FloorCell &c, int gi, int gk) {
+    if (!c.ceiling) return;
+    float x0 = gi * CELL, z0 = gk * CELL, x1 = x0 + CELL, z1 = z0 + CELL, y = c.ceilY;
     b.quad(GreySurface::Ceiling, { x0, y, z0 }, { x1, y, z0 }, { x1, y, z1 }, { x0, y, z1 });
 }
 
 // Where two cells' floors or ceilings differ across an edge with no wall, the
 // step between them.
-void stepsOn(Builder &b, World &w, int gi, int gk, bool west) {
-    int oi = west ? gi - 1 : gi, ok = west ? gk : gk - 1;
+void stepsOn(Builder &b, const FloorEdge &e, int gi, int gk, bool west) {
     float line = west ? gi * CELL : gk * CELL, e0 = west ? gk * CELL : gi * CELL;
-    if (cellHasFloor(w, gi, gk) && cellHasFloor(w, oi, ok)) {
-        float a = w.floorY(gi, gk), c = w.floorY(oi, ok);
+    if (e.hasFloorHi && e.hasFloorLo) {
+        float a = e.floorHi, c = e.floorLo;
         b.edgeFace(GreySurface::Step, west, line, e0, e0 + CELL, std::min(a, c), std::max(a, c));
     }
-    if (cellHasCeiling(w, gi, gk) && cellHasCeiling(w, oi, ok)) {
-        float a = w.ceilY(gi, gk), c = w.ceilY(oi, ok);
+    if (e.hasCeilHi && e.hasCeilLo) {
+        float a = e.ceilHi, c = e.ceilLo;
         b.edgeFace(GreySurface::Wall, west, line, e0, e0 + CELL, std::min(a, c), std::max(a, c));
     }
 }
 
-void solidWall(Builder &b, World &w, int gi, int gk, bool west) {
-    int oi = west ? gi - 1 : gi, ok = west ? gk : gk - 1;
+void solidWall(Builder &b, const FloorEdge &e, int gi, int gk, bool west) {
     float line = west ? gi * CELL : gk * CELL, e0 = west ? gk * CELL : gi * CELL;
-    float base = std::min(w.floorY(oi, ok), w.floorY(gi, gk));
-    float top = std::max(w.ceilY(oi, ok), w.ceilY(gi, gk));
-    b.edgeBox(GreySurface::Wall, west, line, WT, e0, e0 + CELL, base, top);
+    b.edgeBox(GreySurface::Wall, west, line, WT, e0, e0 + CELL, e.base, e.top);
 }
 
 void openingWall(Builder &b, const Opening &o) {
@@ -187,21 +182,23 @@ GreyboxMesh greyboxChunk(World &w, int cx, int cz, uint32_t meshedProps) {
     m.cz = cz;
     Builder b{ m };
     const ChunkLayout L = chunkLayout(w, cx, cz);
+    const ChunkFloorplan P = chunkFloorplan(w, cx, cz);
     for (int i = 0; i < CCELLS; i++)
         for (int kk = 0; kk < CCELLS; kk++) {
             int gi = cx * CCELLS + i, gk = cz * CCELLS + kk;
-            floorOf(b, w, gi, gk);
-            ceilingOf(b, w, gi, gk);
+            const FloorCell &c = P.cells[i][kk];
+            floorOf(b, w, c, gi, gk);
+            ceilingOf(b, c, gi, gk);
             for (int west = 0; west < 2; west++) {
-                uint8_t v = west ? w.wallWVal(gi, gk) : w.wallNVal(gi, gk);
-                if (v == WALL_NONE) stepsOn(b, w, gi, gk, west != 0);
-                else if (v == WALL_SOLID) solidWall(b, w, gi, gk, west != 0);
+                const FloorEdge &e = west ? c.west : c.north;
+                if (e.wall == WALL_NONE) stepsOn(b, e, gi, gk, west != 0);
+                else if (e.wall == WALL_SOLID) solidWall(b, e, gi, gk, west != 0);
                 else if (const Opening *o = L.opening(i, kk, west != 0)) openingWall(b, *o);
             }
-            float fy = w.floorY(gi, gk);
-            if (w.pillarAt(gi, gk))
+            float fy = c.y;
+            if (c.pillar)
                 b.box(GreySurface::Pillar, gi * CELL + PILLAR_LO, fy, gk * CELL + PILLAR_LO, gi * CELL + PILLAR_HI,
-                      w.ceilY(gi, gk), gk * CELL + PILLAR_HI);
+                      c.ceilY, gk * CELL + PILLAR_HI);
             // Props are drawn as the boxes collision gives them, which gatherCellAABBs
             // appends after everything else in the cell.
             AABB boxes[MAX_NEARBY_AABBS];

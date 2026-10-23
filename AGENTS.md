@@ -16,6 +16,45 @@ The move from `src/` was checked by compiling all 44 sources before and after:
 identical assembly. The Web build also runs natively on desktop; the name is
 its role, not its only platform.
 
+# Unreal draws the Web build's world (October 2026)
+
+The Unreal port no longer lights anything with Unreal: every material is
+unlit and its colour is the Web build's (unreal/README.md, "How the world is
+drawn"). What will bite:
+
+- **Two shader copies.** `WORLD_FS`/`POST_FS` (web/src/shaders.cpp) and
+  unreal/Plugins/Backrooms/Shaders/*.ush are one shader in two languages.
+  Change one, change the other. The port was checked by compiling it with DXC
+  (DXIL and SPIR-V) and by comparing every numeric literal with the GLSL's.
+- **GLSL's dFdy runs up the window, HLSL's ddy down it.** `detailNormal`'s
+  frame takes its sign from both, so the port uses `-ddy` (`BR_DFDY`); plain
+  ddy lights every relief from below.
+- **The world shader's core numbers reach the HLSL as defines** from
+  `world.json` (`texdump --unreal`), as `worldFragmentShader()` writes them
+  into the GLSL. A new `@TOKEN@` needs a row in both.
+- **Per-frame light is `frameLight`, per-frame drawing `sceneDraws`**
+  (shared/port/draw.h), which render.cpp draws from too (checked: 0 pixels
+  differ over seven captures). A new thing render.cpp draws round the chunks
+  goes there, or Unreal does not draw it.
+- **The revolver is shared/port/revolver.h, not an imported skeletal mesh.**
+  The import never showed the reload. port/model reads the GLB and samples,
+  blends and skins it as raylib 5.5 does (bone matrices that scale after
+  translating, the normal fix in model_asset.cpp); against raylib 5.5's own
+  rmodels.c, 497,826 skinned coordinates over 63 poses were bit-identical.
+  The Web build still uses raylib's path, so a raylib upgrade there must be
+  matched in port/model.
+- **Masked, not blended.** Unreal's opaque pass cannot alpha-blend, so faces
+  the shader leaves below an alpha of 1 (vertex alpha 0.30 to 0.62, and the
+  scrawl, AO, water and glass slots) are translucent sections
+  (`BackroomsChunkBuild`); the rest are masked at 0.5.
+- **Exposure is pinned at 1** and the post material replaces the tonemapper.
+  An engine default that lights, grades or adapts (Lumen, bloom, auto
+  exposure, TSR's history) changes every pixel: Config/DefaultEngine.ini and
+  `UBackroomsRender::ShowPost` turn them off.
+- **Textures are imported as bytes**: no sRGB decode, no compression
+  (`TC_VectorDisplacementmap`), because raylib uploads them that way and the
+  shader's arithmetic, and the detail maps' slopes and alpha codes, assume it.
+
 # Camcorder and recovered tape (October 2026)
 
 web/src/camcorder.{h,cpp}, the `TAPE_FS` shader and the world shader's `uIR`.
@@ -97,22 +136,10 @@ docs/unreal-handoff.md "Next" has what is open. What will bite:
 - **`mapdump --cells` with an even number overflowed a buffer** (the window is
   `-half..half`, one more than N) and aborted with "double free or corruption".
   It now rounds up to odd; every documented command used odd sizes.
-- **The Unreal editor's enums mirror core's.** `EBackroomsProp` lists `PropKind`
-  and `EBackroomsSurface` lists `GreySurface` in the same order
-  (unreal/.../BackroomsTypes.h), and `EBackroomsItem` lists `SceneKind`
-  (shared/port/scene.h); a new prop kind, greybox surface or scene kind goes into
-  both, or a level look's meshes land on the wrong things.
 - **The revolver's placement and pose are shared/port/held.cpp's** (`heldWeapon`,
-  `revolverPose`), which render.cpp, revolver.cpp and the Unreal
-  `ABackroomsHeldActor` all read; the move was checked against a capture of
-  the old build (0 pixels over 16/255, none on the gun). The Unreal side
-  does not assume the glTF importer's axes or units: it reads them off the
-  mesh's bounds (the barrel is the longest axis, the thinnest is the GLB's x;
-  under 2 units long means metres). The gun's state (nothing imported, a
-  static mesh, missing clips, or shown and how big) is logged as
-  "Backrooms:" when it changes, and each reload logs how far the drum moved
-  in the clip and on the gun (`tools/unreal.sh log`). If it faces the wrong
-  way, `RevolverMeshRotation` in Project Settings > Game > Backrooms turns it.
+  `revolverPose`), which render.cpp, revolver.cpp and port/revolver.cpp all
+  read. `ABackroomsHeldActor` skins it on the CPU with port/revolver.h and
+  places every vertex itself, so no importer convention is involved.
 - **Sound is the Web build's mix, streamed.** The clips are PCM from
   shared/port/sounds.cpp and the bed is shared/port/ambience.cpp, which sfx.cpp,
   audio.cpp and `GameAudio` now only load into raylib; `SoundMixer`
@@ -137,11 +164,12 @@ docs/unreal-handoff.md "Next" has what is open. What will bite:
   (`-game`, `make unreal-play`). There is no editor then, and its first
   EditorAssetLibrary call crashed the game in `GetSubsystemInternal`; it now
   skips the import under `-game`.
-- **The editor imports the repository's models itself.**
-  `Plugins/Backrooms/Content/Python/init_unreal.py` runs when the editor opens
-  the project and imports any missing ones to the paths the settings name;
-  `unreal/Content/Backrooms/Revolver/` is gitignored because of it. A game run
-  from a project the editor has never opened has no gun.
+- **The editor imports the recorded sounds and the Web build's textures
+  itself.** `Plugins/Backrooms/Content/Python/init_unreal.py` runs when the
+  editor opens the project; `unreal/Content/Backrooms/Sounds` and `World` are
+  gitignored because of it. A game run from a project the editor has never
+  opened draws nothing and says so in the log. The revolver is not imported:
+  the game reads assets/models/revolver.glb itself.
 - **render.cpp draws loose things from `simScene`** (shared/port/scene.cpp):
   pickups, crates, the set-down deck, coins, balloons, confetti and chalk, in
   the order and at the reaches (`SCENE_*`) it always drew them. Flares,
@@ -151,36 +179,14 @@ docs/unreal-handoff.md "Next" has what is open. What will bite:
   it; the Unreal scene had them all turned backwards until this was found.
 - **The can and the deck in hand are `heldCan`/`heldDeck`** (shared/port/held.cpp),
   moved from render.cpp's `drawDrinkCan`/`drawHeldDeck` and checked bit for bit
-  against the old code over 200k states. `ABackroomsHeldActor` places them,
-  and a flare, with the level look's item mesh or the plain shape
-  (Private/BackroomsItemShapes.h) the scene actor uses on the floor.
-  BackroomsTypes.cpp static_asserts the ends of each list, not every entry.
-- **The level looks are built from the Web build's own surfaces.**
-  `tools/unreal.sh surfaces` (run by `make unreal-open`) writes them with
-  `texdump --unreal` to `unreal/Saved/Surfaces`, with `looks.json` from
-  `LEVEL_SURFACES` (web/src/textures.h, which `Game::applyLevelLook` reads too)
-  and `LEVELS`; the editor's `backrooms_looks.py` rebuilds the material and
-  the looks when those files change. The greybox's texture coordinates are
-  metres, so tile sizes live in the material (`FLOOR_TILE_M`, `WALL_TILE_M`,
-  `wallTileV`). `BACKROOMS_TEXTURED=1 ./greybox-view` shows the mapping
-  with raylib before anything reaches the Mac.
-- **Unreal's lights follow `chunkLayout`'s fittings** (`ABackroomsLightsActor`):
-  dead, part output and faulty come from the layout, and a faulty tube
-  stutters by core's `tubeStutter`, the shader's `lightState` formula. Change
-  one, change both.
+  against the old code over 200k states. port/draw.cpp's `heldDraws` turns them
+  into draws for both builds.
 - **The hunter's and the pack's poses are shared/port/sprites.h's**
-  (`hunterSprite`, `dogSprite`): sheet, walk frames, row, size, fade. render.cpp
-  and `ABackroomsSpriteActor` both read them; the move was checked against the
-  old inline code over 169k poses. The sheets' layout (`ENT_FRAMES`,
-  `ENT_FRAME_W`, `EntRow`, ...) is port/sheets.h, which textures.cpp paints to.
-  Lighting and fog stay each renderer's.
-- **`EBackroomsFixture` lists `FixtureKind`** (BackroomsTypes.h), as the other
-  editor enums list theirs; a new fixture kind goes into both, and gets a row
-  in `PlainOf` (BackroomsFixtureShapes.cpp) or none if it waits for a mesh.
-- **Unreal's exposure is pinned per look** (`ExposureEV100`, a post-process
-  volume in `ABackroomsLightsActor`). Without it eye adaptation lifts the Red
-  Halls to mid grey. The colour split reads `colourSplit` and `migraineThrob`
-  (shared/port/view.h), the post shader's terms; change one, change both.
+  (`hunterSprite`, `dogSprite`): sheet, walk frames, row, size, fade.
+  port/draw.cpp reads them, and lights and fogs them, for both builds; the
+  move was checked against the old inline code over 169k poses. The sheets'
+  layout (`ENT_FRAMES`, `ENT_FRAME_W`, `EntRow`, ...) is port/sheets.h, which
+  textures.cpp paints to.
 - **The layout golden (`tests/golden/layout.txt`) prints every field**, so an
   uninitialised field shows as a nondeterministic line: `Fixture::end` was
   garbage for most kinds until it was zeroed. A new field needs a value for
@@ -320,6 +326,46 @@ still the mesher's. What will bite:
   every conduit run west or north of the origin moves.
 - `./mapdump --layout CX CZ` prints a chunk's layout (use `--level`,
   `--visit`, `--storey` as for the plan).
+
+# Chunk floorplan (October 2026)
+
+`chunkFloorplan(world, cx, cz)` (shared/core/floorplan.h) says what a chunk is
+made of, as `chunkLayout` says what stands in it: each cell's floor kind,
+height, pool, pillar and ceiling; each north and west edge's wall, base and
+top, buried ends, void faces, and the floor and ceiling either side; the risers
+and the cell that draws each; Level 1's dock lips; the ceiling as merged
+rectangles; soffits and bulkheads; the flights' steps and the stairwell's
+landing; the Poolrooms' arches. The mesher and the greybox both build from it.
+What will bite:
+
+- **A new floorplan rule goes in core, and the mesher only reads it.** Which
+  cell draws a shared riser, which edges get a bulkhead, how the ceiling is
+  merged: each is decided in floorplan.cpp. A test in chunk_mesh.cpp on
+  `vflag`, `elev`, `wallNVal` or `floorY` is the pattern this replaced.
+- **The lists carry the mesher's emission order**, as the layout's do: risers
+  and lips per cell (N, S, W, E; `risersIn`, `lipsIn`), soffits per cell after
+  every ceiling rectangle, steps in the order they were laid. Reordering one
+  reorders quads in a shared builder.
+- **Risers have two owners' rules.** On Level 2 every cell draws the high side
+  of each of its steps; elsewhere a cell draws a riser when the neighbour is
+  flat, otherwise the lower cell does, and a cell with no floor of its own or
+  at height 0 draws none. A port drawing every riser from the list draws each
+  once either way.
+- **The arches read the raw wall arrays** (`d.wallW[8][t]`), as the mesher always
+  did; they are partitions the overlays never touch.
+- **`tests/golden/floorplan.txt` prints only cells that are not plain**, and
+  leaves out an open edge between plain cells, but hashes all 256 cells with
+  both edges; a failure on a `cells hash=` line with no differing cell line is
+  a plain cell or a buried bit that moved. `./mapdump --floorplan CX CZ`
+  prints one chunk.
+- The move was proved byte-identical: 2,500 chunk bakes (every array of every
+  slot, 57 M vertices a side) and 5,000 greyboxes (74 M) against the old code,
+  over every level, both visits, exits everywhere, three storeys, the Manila
+  Room and shifted and unlocked edges. The harness compiled the old
+  chunk_mesh.cpp and greybox.cpp with `-DbakeChunkGeometry=bakeChunkGeometryOld`
+  (and `-DgreyboxChunk=greyboxChunkOld -Dtriangles=trianglesOld`) beside the
+  new; no GL is needed, since both produce plain arrays. Moving any field by
+  1 mm failed it in 105 to 2,412 chunks.
 
 # Vending machine (September 2026)
 
@@ -827,6 +873,7 @@ build's, in `web/src/`.
 | `core/world.{h,cpp}` | infinite maze: chunk generation, storeys, collision, line of sight, pathfinding, occupancy grid. `WallKind` / `PropKind` name the codes stored per cell. No raylib |
 | `core/level_rules.h` | per-level rules: wall height, light pitch, storey pitch, name, which tubes work, exits |
 | `core/layout.{h,cpp}` | `ChunkLayout`: a chunk's props, fixtures, light fittings and openings, decided from the seed |
+| `core/floorplan.{h,cpp}` | `ChunkFloorplan`: a chunk's floors, walls, risers, ceilings, soffits, flights and arches, as the mesher builds them |
 | `core/hash.{h,cpp}`, `core/vec.h`, `core/portable_math.{h,cpp}` | hashes, RNG, value noise; `Vec2`/`Vec3`, `TAU`, `clampf`; sin, cos, exp, atan2, hypot that round the same everywhere |
 | `sim/start.{h,cpp}`, `sim/trace.{h,cpp}` | how a run starts (`SimStart`); recording and replaying the calls on the sim |
 | `port/view.{h,cpp}`, `port/greybox.{h,cpp}` | what the camera shows of the sim (both builds draw from it); a chunk as plain boxes and quads for a port's first milestone |

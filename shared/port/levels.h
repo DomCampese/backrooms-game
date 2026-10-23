@@ -1,19 +1,21 @@
 #pragma once
-// How each level looks: light colour and output, fog, gloss, damp. The numbers
+// How each level looks: light colour and output, fog, gloss, damp. Both
+// builds read this table and lightAtCPU (the Web build's world shader and the
+// Unreal port's world material are given the same numbers). The numbers
 // the generator and the rules read (wall height, light pitch, storey pitch,
 // name, exits, which tubes work) are core's LEVEL_RULES; LevelCfg extends that
 // table, so LEVELS[lv].wallH and LEVEL_RULES[lv].wallH are one definition.
-#include "raylib.h"
-#include "core/level_rules.h"
-#include "core/layout.h"
+#include "../core/level_rules.h"
+#include "../core/layout.h"
+#include "../core/vec.h"
 
 struct LevelCfg : LevelRules {
     float lightMul;   // brightness of the ones that work
     float fogDen;     // exponential fog density
     float gloss;      // floor specular; the shader skips specular below 0.10
-    Vector3 lightCol; // colour of the fluorescents
-    Vector3 amb;      // ambient floor, so unlit corners are not pure black
-    Vector3 fogCol;   // what the fog fades to at range
+    Vec3 lightCol;    // colour of the fluorescents
+    Vec3 amb;         // ambient floor, so unlit corners are not pure black
+    Vec3 fogCol;      // what the fog fades to at range
     // World-space damp patches in the shader (uWet), and where on the 0..1
     // patch field they start (uWetFrom, carpetWetCPU): 0.60 wets about a
     // quarter of the floor, 0.78 about 1-3%.
@@ -57,3 +59,15 @@ struct StoreyLightCPU {
     int occN = 0, originI = 0, originK = 0;
 };
 void setStoreyLightCPU(const StoreyLightCPU &s);
+
+// Every world surface the Web build paints (web/src/surfaces.cpp), by slot.
+// Levels share slots (the Red Halls reuse Level 1's slab; the pool ceiling is
+// its floor tile), so a slot is generated once.
+enum SurfSlot { SURF_CARPET, SURF_BOARDS, SURF_PAPER, SURF_SLAB, SURF_SOFFIT, SURF_CONCWALL,
+                SURF_POOLFLOOR, SURF_POOLWALL, SURF_BRICK, SURF_BANQUET, SURF_PARTYCEIL,
+                SURF_PARTYWALL, SURF_COUNT };
+// texdump's file names, and the Unreal import's.
+extern const char *const SURF_NAMES[SURF_COUNT];
+// What each level puts on its floors, ceilings and walls.
+struct LevelSurfaces { SurfSlot floor, ceiling, walls; };
+extern const LevelSurfaces LEVEL_SURFACES[NLEVELS];

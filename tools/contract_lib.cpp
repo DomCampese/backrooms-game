@@ -5,6 +5,7 @@
 #include "../shared/core/world.h"
 #include "../shared/core/hash.h"
 #include "../shared/core/level_rules.h"
+#include "../shared/core/floorplan.h"
 #include "../shared/core/layout.h"
 #include "contract_lib.h"
 
@@ -637,15 +638,120 @@ void writeLayouts(Golden &g) {
     layoutChunk(g, w, 0, 1, 0, 1, 0);
 }
 
+// ---- floorplan: what chunkFloorplan says a chunk is made of.
+
+void putEdge(std::string &s, const char *label, const FloorEdge &e) {
+    char buf[256];
+    snprintf(buf, sizeof buf, " %s wall %d %.9g..%.9g buried %d void %d floor %.9g %.9g ceil %.9g %.9g has %d%d%d%d",
+             label, e.wall, e.base, e.top, e.buried, e.voidFaces, e.floorLo, e.floorHi, e.ceilLo, e.ceilHi,
+             e.hasFloorLo ? 1 : 0, e.hasFloorHi ? 1 : 0, e.hasCeilLo ? 1 : 0, e.hasCeilHi ? 1 : 0);
+    s += buf;
+}
+
+// An edge with nothing to say: open, between two plain cells. Its buried bits
+// say only what the walls either side of it are, which their own lines show.
+bool plainEdge(const FloorEdge &e, float wallH) {
+    return e.wall == WALL_NONE && e.floorLo == 0 && e.floorHi == 0 && e.ceilLo == wallH && e.ceilHi == wallH &&
+           !e.voidFaces && e.hasFloorLo && e.hasFloorHi && e.hasCeilLo && e.hasCeilHi;
+}
+
+// A cell with nothing to say: flat floor at 0 under an unbroken ceiling, no
+// pillar or pool, and both edges plain.
+bool plainCell(const FloorCell &c, float wallH) {
+    return c.floor == FloorKind::Flat && c.y == 0 && c.ceiling && c.ceilY == wallH && !c.pool && !c.pillar &&
+           plainEdge(c.north, wallH) && plainEdge(c.west, wallH);
+}
+
+void floorplanChunk(Golden &g, World &w, int level, unsigned visit, int storey, int cx, int cz) {
+    StoreyScope sc(w, storey);
+    const ChunkFloorplan P = chunkFloorplan(w, cx, cz);
+    g.put("\n");
+    chunkLabel(g, level, visit, storey, cx, cz);
+    g.put(" floorplan: %zu risers, %zu lips, %zu ceiling rects, %zu soffits, %zu flights, %zu arches\n",
+          P.risers.size(), P.lips.size(), P.ceiling.size(), P.soffits.size(), P.flights.size(), P.arches.size());
+    // Every cell goes into the hash; the plain ones are not printed.
+    uint64_t h = 1469598103934665603ull;
+    int plain = 0;
+    for (int i = 0; i < CCELLS; i++)
+        for (int k = 0; k < CCELLS; k++) {
+            const FloorCell &c = P.cells[i][k];
+            char buf[160];
+            snprintf(buf, sizeof buf, "cell %d,%d floor %d y %.9g ceiling %d %.9g pool %d pillar %d", i, k,
+                     (int)c.floor, c.y, c.ceiling ? 1 : 0, c.ceilY, c.pool ? 1 : 0, c.pillar ? 1 : 0);
+            // The hash takes every field; the printed line leaves out a plain edge.
+            std::string line = buf, shown = buf;
+            putEdge(line, "N", c.north);
+            putEdge(line, "W", c.west);
+            if (!plainEdge(c.north, w.wallH)) putEdge(shown, "N", c.north);
+            if (!plainEdge(c.west, w.wallH)) putEdge(shown, "W", c.west);
+            for (unsigned char ch : line) h = (h ^ ch) * 1099511628211ull;
+            if (plainCell(c, w.wallH)) plain++;
+            else g.put("%s\n", shown.c_str());
+        }
+    g.put("cells hash=%016llx plain=%d\n", (unsigned long long)h, plain);
+    for (const Riser &r : P.risers)
+        g.put("riser cell %d,%d %.9g %.9g -> %.9g %.9g y %.9g..%.9g facing %.9g %.9g\n", r.i, r.k, r.x0, r.z0, r.x1,
+              r.z1, r.lo, r.hi, r.nx, r.nz);
+    for (const Lip &l : P.lips)
+        g.put("lip cell %d,%d %.9g %.9g -> %.9g %.9g in %.9g %.9g\n", l.i, l.k, l.x0, l.z0, l.x1, l.z1, l.inx, l.inz);
+    for (const CeilingRect &r : P.ceiling)
+        g.put("ceiling %.9g %.9g .. %.9g %.9g y %.9g\n", r.x0, r.z0, r.x1, r.z1, r.y);
+    for (const Soffit &o : P.soffits)
+        g.put("soffit cell %d,%d %.9g %.9g -> %.9g %.9g y %.9g..%.9g bulkhead %d\n", o.i, o.k, o.ax, o.az, o.bx, o.bz,
+              o.lo, o.hi, o.bulkhead ? 1 : 0);
+    for (const Flight &f : P.flights) {
+        g.put("flight kind %d dir %d at %d,%d lo %d steps %zu", f.feat.kind, f.feat.dir, f.feat.x0, f.feat.z0, f.feat.lo,
+              f.steps.size());
+        if (f.landing)
+            g.put(" landing after %d u 0..%.9g v %.9g..%.9g y %.9g", f.landingAfter, f.landingU1, f.landingV0,
+                  f.landingV1, f.landingY);
+        g.put("\n");
+        for (const FlightStep &st : f.steps)
+            g.put(" step u %.9g..%.9g v %.9g..%.9g y %.9g..%.9g up %d\n", st.u0, st.u1, st.va, st.vb, st.y0, st.y1,
+                  st.risesPlusV ? 1 : 0);
+    }
+    for (const Arch &a : P.arches) g.put("arch axis %d start %d\n", a.axis, a.start);
+}
+
+// The same chunks as layout.txt.
+void writeFloorplans(Golden &g) {
+    g.put("# chunkFloorplan, seed %u, wallH and storeyH from LEVEL_RULES. Per chunk: every cell\n"
+          "# that is not plain flat floor (FloorKind, then the north and west edges: WallKind,\n"
+          "# wall base..top, buried ends, void faces, floor and ceiling each side and whether\n"
+          "# each side has them; an open edge between plain cells is left out), a hash over\n"
+          "# every cell line with both edges, printed or not, then the lists in the\n"
+          "# floorplan's order.\n", SEED);
+    for (int lv = 0; lv < NLEVELS; lv++)
+        for (unsigned v = 0; v < NVISITS; v++) {
+            World w;
+            setup(w, lv, v);
+            floorplanChunk(g, w, lv, v, 0, 0, 0);
+            floorplanChunk(g, w, lv, v, 0, FAR_CX, FAR_CZ);
+            if (lv != 0 || v != 1) continue;
+            for (int kind : { VK_STAIRWELL, VK_STAIR, VK_ATRIUM }) {
+                VertFeat f;
+                int fcx, fcz;
+                findFeature(w, kind, fcx, fcz, f);
+                floorplanChunk(g, w, lv, v, 0, fcx, fcz);
+                floorplanChunk(g, w, lv, v, 1, fcx, fcz);
+            }
+        }
+    World w;
+    setup(w, 0, 1);
+    w.manilaTest = true;
+    floorplanChunk(g, w, 0, 1, 0, 1, 0);
+}
+
 }  // namespace
 
 std::vector<Golden> produce() {
-    std::vector<Golden> gs(5);
+    std::vector<Golden> gs(6);
     gs[0].name = "chunks.txt";
     gs[1].name = "chunks_full.txt";
     gs[2].name = "queries.txt";
     gs[3].name = "mutations.txt";
     gs[4].name = "layout.txt";
+    gs[5].name = "floorplan.txt";
     writeChunks(gs[0], gs[1]);
 
     Golden &q = gs[2];
@@ -673,6 +779,7 @@ std::vector<Golden> produce() {
         mutations(gs[3], w);
     }
     writeLayouts(gs[4]);
+    writeFloorplans(gs[5]);
     return gs;
 }
 

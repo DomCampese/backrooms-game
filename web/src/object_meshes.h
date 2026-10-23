@@ -1,5 +1,5 @@
 #pragma once
-// The loose and held objects, each built at life size with its base on y = 0.
+// The loose and held objects (port/objects.h) as raylib meshes.
 #include "raylib.h"
 
 // One almond water can. UVs index makeAlmondWrapTex.

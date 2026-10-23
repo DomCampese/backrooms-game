@@ -519,7 +519,7 @@ void Game::updateOccupancy() {
     World &world = sim.world;
     if (sim.shadowsStale) { occValid = false; sim.shadowsStale = false; }
     int wantI = cellOf(sim.px) - OCC_N / 2, wantK = cellOf(sim.pz) - OCC_N / 2;
-    if (occValid && abs(wantI - occOriginI) < 6 && abs(wantK - occOriginK) < 6) return;
+    if (occValid && abs(wantI - occOriginI) < OCC_RECENTRE && abs(wantK - occOriginK) < OCC_RECENTRE) return;
     occOriginI = wantI; occOriginK = wantK;
     world.buildOccupancy(occOriginI, occOriginK, OCC_N, occBuf.data());
     UpdateTexture(texOcc, occBuf.data());

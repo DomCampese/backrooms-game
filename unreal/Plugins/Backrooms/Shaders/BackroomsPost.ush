@@ -1,0 +1,99 @@
+// The Web build's post pass (POST_FS in web/src/shaders.cpp), in HLSL for the
+// Unreal port's post-process material (M_BackroomsPost, built by
+// Content/Python/backrooms_looks.py). That material replaces Unreal's
+// tonemapper: the world materials already tone-map each fragment as the GLSL
+// does, so the scene colour arrives here as the display values raylib's render
+// target holds, and this writes what raylib draws to the window. Change one,
+// change the other.
+#pragma once
+
+// What the post pass reads besides the scene: MPC_Backrooms' Post vector
+// (time, fear, water, migraine).
+struct FBRPost
+{
+	float Time, Fear, Water, Migraine;
+	float2 InvSize;   // one texel of the scene, viewport UV
+};
+
+float BRPostHash(float2 P)
+{
+	return frac(sin(dot(P, float2(12.9898, 78.233))) * 43758.5453);
+}
+
+// The post pass in three steps, because the scene is sampled in between by
+// the material's Custom node (SceneTextureLookup is the material template's,
+// and is not declared yet where this file is included):
+//
+//   float Throb; float2 Uv = BRPostUV(P, ViewportUV, Throb);
+//   ...the scene at BRPostTap(P, Uv, Throb, i), i = 0..14, as raylib's
+//   clamped render target: BRPostToViewport turns a tap into Unreal's UV...
+//   return BRPostFinish(P, Uv, Throb, Taps);
+
+// A GLSL texture coordinate (v up the picture) as Unreal's viewport UV,
+// clamped to the edges as raylib's render target is.
+float2 BRPostToViewport(FBRPost P, float2 GlUV)
+{
+	return clamp(float2(GlUV.x, 1.0 - GlUV.y), 0.5 * P.InvSize, 1.0 - 0.5 * P.InvSize);
+}
+
+// Where the GLSL samples, after the water's warp and the migraine's pinch.
+float2 BRPostUV(FBRPost P, float2 ViewportUV, out float Throb)
+{
+	float2 Uv = float2(ViewportUV.x, 1.0 - ViewportUV.y);
+	if (P.Water > 0.0)
+	{
+		Uv += P.Water * 0.0018 * float2(sin(Uv.y * 24.0 + P.Time * 1.3), sin(Uv.x * 21.0 - P.Time));
+		Uv = clamp(Uv, float2(0.002, 0.002), float2(0.998, 0.998));
+	}
+	Throb = 0.0;
+	if (P.Migraine > 0.0)
+	{
+		float Ph = frac(P.Time * 1.05);
+		Throb = P.Migraine * (exp(-Ph * Ph * 90.0) + 0.6 * exp(-(Ph - 0.22) * (Ph - 0.22) * 120.0));
+		Uv = 0.5 + (Uv - 0.5) * (1.0 - 0.006 * Throb);
+	}
+	return Uv;
+}
+
+// Tap I of the fifteen the GLSL reads: 0 red, 1 green and 2 blue split by the
+// chromatic aberration, then the glow's twelve, three per direction.
+float2 BRPostTap(FBRPost P, float2 Uv, float Throb, int I)
+{
+	float2 Dir = Uv - 0.5;
+	float Ca = 0.00015 + P.Fear * 0.0025 + Throb * 0.0035;
+	if (I == 0) return Uv + Dir * Ca;
+	if (I == 1) return Uv;
+	if (I == 2) return Uv - Dir * Ca;
+	const float2 Offsets[4] = { float2(1, 0), float2(-1, 0), float2(0, 1), float2(0, -1) };
+	const float Reach[3] = { 2.0, 6.0, 15.0 };
+	int K = I - 3;
+	return Uv + Offsets[K / 3] * P.InvSize * Reach[K - (K / 3) * 3];
+}
+
+// Taps[i] is the scene at BRPostTap(i), clamped as an 8-bit target holds it.
+float3 BRPostFinish(FBRPost P, float2 Uv, float Throb, float3 Taps[15])
+{
+	const float Weight[3] = { 0.50, 0.32, 0.18 };
+	float2 Dir = Uv - 0.5;
+	float3 C = float3(Taps[0].r, Taps[1].g, Taps[2].b);
+	float3 Bl = float3(0.0, 0.0, 0.0);
+	[unroll]
+	for (int I = 0; I < 12; I++)
+	{
+		Bl += max(Taps[3 + I] - 0.78, 0.0) * Weight[I - (I / 3) * 3];
+	}
+	C += Bl * float3(1.10, 1.03, 0.88) * 0.34;
+	float3 S = C * C * (3.0 - 2.0 * C);
+	C = lerp(C, S, 0.16);
+	float Lum0 = dot(C, float3(0.299, 0.587, 0.114));
+	C = lerp(float3(Lum0, Lum0, Lum0), C, 1.08);
+	float G = BRPostHash(Uv * float2(1287.0, 721.0) + float2(frac(P.Time * 13.71) * 61.0, frac(P.Time * 7.31) * 83.0)) - 0.5;
+	C += G * (0.012 + 0.055 * P.Fear);
+	float D = length(Dir);
+	C *= 1.0 - smoothstep(0.34, 0.95, D) * (0.42 + 0.34 * P.Fear + 0.30 * Throb);
+	C *= 1.0 - 0.05 * Throb;
+	C *= 0.994 + 0.006 * sin(P.Time * 377.0);
+	C = lerp(C, C * float3(0.48, 0.86, 0.80) + float3(0.015, 0.07, 0.065), P.Water * 0.75);
+	// An 8-bit window clamps what the GLSL writes.
+	return saturate(C);
+}

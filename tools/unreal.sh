@@ -5,8 +5,8 @@
 #   tools/unreal.sh open      build, then open the project in the editor
 #   tools/unreal.sh play      build, then run the game in its own window
 #   tools/unreal.sh test      build, then run the Backrooms automation tests
-#   tools/unreal.sh surfaces  write the game's surfaces and looks.json for the editor (texdump)
-#   tools/unreal.sh import    import assets/models, assets/sounds and the surfaces again
+#   tools/unreal.sh surfaces  write the Web build's textures and world.json for the editor (texdump)
+#   tools/unreal.sh import    import assets/sounds and build the world's materials again
 #   tools/unreal.sh log       the "Backrooms:" lines from the last run's log
 #
 # `make unreal`, `make unreal-open`, `make unreal-play` and `make unreal-test`
@@ -21,7 +21,7 @@ UE_ROOT=${UE_ROOT:-"/Users/Shared/Epic Games/UE_5.8"}
 EDITOR="$UE_ROOT/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor"
 EDITOR_CMD="$UE_ROOT/Engine/Binaries/Mac/UnrealEditor-Cmd"
 LOG="$ROOT/unreal/Saved/Logs/BackroomsGame.log"
-# backrooms_looks.py reads the surfaces from here.
+# backrooms_world.py reads the textures from here.
 SURFACES="$ROOT/unreal/Saved/Surfaces"
 
 die() { echo "unreal.sh: $*" >&2; exit 1; }
@@ -54,8 +54,8 @@ build() {
 surfaces() {
     make -C "$ROOT" texdump
     mkdir -p "$SURFACES"
-    "$ROOT/texdump" --unreal "$SURFACES" >/dev/null
-    echo "unreal.sh: wrote the surfaces and looks.json to $SURFACES"
+    "$ROOT/texdump" --unreal "$SURFACES" "$ROOT/assets/models/revolver.glb" >/dev/null
+    echo "unreal.sh: wrote the textures and world.json to $SURFACES"
 }
 
 case "${1:-build}" in
@@ -70,14 +70,11 @@ open)
 play)
     build
     # The game cannot import; the editor does it when it opens the project.
-    if ! ls "$ROOT/unreal/Content/Backrooms/Revolver/"*.uasset >/dev/null 2>&1; then
-        echo "unreal.sh: the revolver is not imported yet; run 'make unreal-open' once and let the editor import it" >&2
-    fi
     if ! ls "$ROOT/unreal/Content/Backrooms/Sounds/water/"*.uasset >/dev/null 2>&1; then
         echo "unreal.sh: the recorded sounds are not imported yet; run 'make unreal-open' once and let the editor import them" >&2
     fi
-    if ! ls "$ROOT/unreal/Content/Backrooms/Looks/"*.uasset >/dev/null 2>&1; then
-        echo "unreal.sh: the level looks are not built yet; run 'make unreal-open' once and let the editor build them" >&2
+    if ! ls "$ROOT/unreal/Content/Backrooms/World/"*.uasset >/dev/null 2>&1; then
+        echo "unreal.sh: the world's materials are not built yet; run 'make unreal-open' once and let the editor build them" >&2
     fi
     MAP="/Engine/Maps/Entry?level=${LEVEL:-0}?seed=${SEED:-1337}"
     "$EDITOR" "$PROJECT" "$MAP" -game -windowed -ResX=1440 -ResY=850 -log || true
@@ -97,7 +94,7 @@ surfaces)
 import)
     surfaces
     "$EDITOR_CMD" "$PROJECT" -run=pythonscript \
-        -script="import backrooms_import, backrooms_looks; backrooms_import.import_revolver(); backrooms_import.import_sounds(); backrooms_looks.build_looks()" -unattended -log
+        -script="import backrooms_import, backrooms_world; backrooms_import.import_sounds(); backrooms_world.build()" -unattended -log
     grep "Backrooms:" "$LOG" || echo "(no Backrooms lines in $LOG)"
     ;;
 log)

@@ -1,200 +1,88 @@
 #include "BackroomsChunkBuild.h"
 #include "BackroomsCoords.h"
-#include "BackroomsFixtureShapes.h"
-#include "BackroomsLevelLook.h"
-#include "Components/InstancedStaticMeshComponent.h"
-#include "Engine/StaticMesh.h"
-#include "Materials/MaterialInstanceDynamic.h"
+#include "BackroomsRender.h"
 #include "ProceduralMeshComponent.h"
-#include "core/layout.h"
-#include "port/greybox.h"
+#include "core/world.h"
+#include "port/chunk_mesh.h"
 
 namespace
 {
-// The engine's plain material, which takes a colour parameter.
-const TCHAR* BaseMaterial = TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial");
-
-UMaterialInterface* SurfaceMaterial(const UBackroomsLevelLook* Look, EBackroomsSurface Surface, UObject* Outer)
+// raylib blends every draw. Unreal's masked pass cannot, so a face whose
+// alpha the world shader leaves below 1 goes to a translucent section: glass
+// and water by their vertex alpha (the shader's 0.30 to 0.62 band), and every
+// face of the slots that are all decals (scrawl, contact shadows) or glass
+// and water themselves.
+bool BlendedSlot(int32 Slot)
 {
-	const FBackroomsSurfaceLook* Entry = Look ? Look->Surfaces.Find(Surface) : nullptr;
-	if (Entry && Entry->Material)
+	return Slot == MESH_SCRAWL || Slot == MESH_AO || Slot == MESH_WATER || Slot == MESH_GLASS;
+}
+bool BlendedAlpha(uint8 A) { return A >= 77 && A < 159; }   // 0.30 .. 0.62 of 255
+
+// The slots MeshTracer traces the sim's rounds against.
+bool SolidSlot(int32 Slot)
+{
+	return Slot != MESH_SCRAWL && Slot != MESH_WATER && Slot != MESH_AO;
+}
+
+struct FSection
+{
+	TArray<FVector> Vertices, Normals;
+	TArray<FVector2D> UVs;
+	TArray<FColor> Colours;
+	TArray<int32> Triangles;
+	TMap<int32, int32> Remap;
+
+	void Add(const MB& Part, int32 V)
 	{
-		return Entry->Material;
+		if (const int32* Known = Remap.Find(V))
+		{
+			Triangles.Add(*Known);
+			return;
+		}
+		const int32 Index = Vertices.Num();
+		Remap.Add(V, Index);
+		Vertices.Add(BackroomsCoords::ToUnreal({ Part.v[V * 3], Part.v[V * 3 + 1], Part.v[V * 3 + 2] }));
+		Normals.Add(BackroomsCoords::ToUnrealDirection({ Part.n[V * 3], Part.n[V * 3 + 1], Part.n[V * 3 + 2] }));
+		UVs.Add(FVector2D(Part.uv[V * 2], Part.uv[V * 2 + 1]));
+		Colours.Add(FColor(Part.c[V * 4], Part.c[V * 4 + 1], Part.c[V * 4 + 2], Part.c[V * 4 + 3]));
+		Triangles.Add(Index);
 	}
-	UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, BaseMaterial);
-	if (!Base)
-	{
-		return nullptr;
-	}
-	UMaterialInstanceDynamic* Flat = UMaterialInstanceDynamic::Create(Base, Outer);
-	Flat->SetVectorParameterValue(TEXT("Color"), Entry ? Entry->Colour : UBackroomsLevelLook::DefaultColour(Surface));
-	return Flat;
+};
 }
 
-// The tangent along +u. Unreal derives the bitangent as Normal x Tangent and
-// flips it on request; a normal map's green follows +v (down the texture), so it
-// is flipped wherever that cross product points the other way. The handedness
-// swap in BackroomsCoords flips cross products, so this is decided in Unreal's
-// space.
-FProcMeshTangent Tangent(const FVector& Normal, const Vec3& UAxis, const Vec3& VAxis)
+void BackroomsChunkBuild::Build(World& W, int32 Cx, int32 Cz, const UBackroomsRender& Render, UProceduralMeshComponent& Mesh,
+	bool bCollision)
 {
-	const FVector U = BackroomsCoords::ToUnrealDirection(UAxis);
-	const FVector V = BackroomsCoords::ToUnrealDirection(VAxis);
-	return FProcMeshTangent(U, FVector::DotProduct(FVector::CrossProduct(Normal, U), V) < 0.0);
-}
-
-UInstancedStaticMeshComponent* NewInstances(UProceduralMeshComponent& Parent, UStaticMesh* Mesh,
-	TArray<TObjectPtr<UInstancedStaticMeshComponent>>& Instances)
-{
-	UInstancedStaticMeshComponent* Component =
-		NewObject<UInstancedStaticMeshComponent>(Parent.GetOwner(), NAME_None, RF_Transient);
-	Component->SetStaticMesh(Mesh);
-	Component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	Component->SetupAttachment(&Parent);
-	Component->RegisterComponent();
-	Instances.Add(Component);
-	return Component;
-}
-
-void AddProps(const ChunkLayout& Layout, const UBackroomsLevelLook& Look, UProceduralMeshComponent& Parent,
-	TArray<TObjectPtr<UInstancedStaticMeshComponent>>& Instances)
-{
-	TMap<EBackroomsProp, UInstancedStaticMeshComponent*> ByKind;
-	for (const PropPlacement& Prop : Layout.props)
-	{
-		const EBackroomsProp Kind = (EBackroomsProp)Prop.kind;
-		const FBackroomsPropLook* Entry = Look.Props.Find(Kind);
-		if (!Entry || !Entry->Mesh)
-		{
-			continue;
-		}
-		UInstancedStaticMeshComponent*& Component = ByKind.FindOrAdd(Kind);
-		if (!Component)
-		{
-			Component = NewInstances(Parent, Entry->Mesh, Instances);
-		}
-		const FTransform Frame(BackroomsCoords::ToUnrealRotator(Prop.yaw, 0.0f),
-			BackroomsCoords::ToUnreal({ Prop.x, Prop.floorY, Prop.z }));
-		Component->AddInstance(Entry->Offset * Frame);
-	}
-}
-
-// Every fixture: the look's mesh for its kind in the fixture's frame, or a
-// plain box. Fixtures have no collision, as in the Web build.
-void AddFixtures(const ChunkLayout& Layout, const UBackroomsLevelLook* Look, UProceduralMeshComponent& Parent,
-	TArray<TObjectPtr<UInstancedStaticMeshComponent>>& Instances)
-{
-	TMap<EBackroomsFixture, UInstancedStaticMeshComponent*> ByKind;
-	for (const Fixture& Item : Layout.fixtures)
-	{
-		const EBackroomsFixture Kind = (EBackroomsFixture)Item.kind;
-		const FBackroomsFixtureLook* Own = Look ? Look->Fixtures.Find(Kind) : nullptr;
-		const bool bMeshed = Own && Own->Mesh;
-		FTransform Placed;
-		if (bMeshed)
-		{
-			Placed = Own->Offset * BackroomsFixtureShapes::Frame(Item);
-		}
-		else if (!BackroomsFixtureShapes::Plain(Item, Placed))
-		{
-			continue;
-		}
-		UInstancedStaticMeshComponent*& Component = ByKind.FindOrAdd(Kind);
-		if (!Component)
-		{
-			Component = NewInstances(Parent, bMeshed ? Own->Mesh.Get() : BackroomsFixtureShapes::Mesh(), Instances);
-			UMaterialInterface* Material = Own && Own->Material ? Own->Material.Get()
-				: bMeshed ? nullptr : BackroomsFixtureShapes::Material(Kind, Parent.GetOwner());
-			if (Material)
-			{
-				Component->SetMaterial(0, Material);
-			}
-		}
-		Component->AddInstance(Placed);
-	}
-}
-
-void AddFittings(const ChunkLayout& Layout, const UBackroomsLevelLook& Look, UProceduralMeshComponent& Parent,
-	TArray<TObjectPtr<UInstancedStaticMeshComponent>>& Instances)
-{
-	UInstancedStaticMeshComponent* Lit = nullptr;
-	UInstancedStaticMeshComponent* Dead = nullptr;
-	for (const LightFitting& Fitting : Layout.fittings)
-	{
-		if (Fitting.gap != FittingGap::None)
-		{
-			continue;
-		}
-		UInstancedStaticMeshComponent*& Component = Fitting.dead ? Dead : Lit;
-		if (!Component)
-		{
-			Component = NewInstances(Parent, Look.FittingMesh, Instances);
-			if (Fitting.dead && Look.DeadFittingMaterial)
-			{
-				Component->SetMaterial(0, Look.DeadFittingMaterial);
-			}
-		}
-		// A Level 1 batten runs along x: a quarter turn.
-		const float Yaw = Fitting.turned ? UE_HALF_PI : 0.0f;
-		Component->AddInstance(FTransform(BackroomsCoords::ToUnrealRotator(Yaw, 0.0f), BackroomsCoords::ToUnreal(Fitting.pos)));
-	}
-}
-}
-
-void BackroomsChunkBuild::Build(World& W, int32 Cx, int32 Cz, const UBackroomsLevelLook* Look,
-	UProceduralMeshComponent& Mesh, bool bCollision, TArray<TObjectPtr<UInstancedStaticMeshComponent>>& Instances)
-{
-	const uint32 MeshedProps = Look ? Look->MeshedProps() : 0;
-	const bool bMeshedFittings = Look && Look->FittingMesh;
-	const GreyboxMesh Greybox = greyboxChunk(W, Cx, Cz, MeshedProps);
+	ChunkGeometry Geometry;
+	bakeChunkGeometry(W, Cx, Cz, Geometry);
 	int32 SectionIndex = 0;
-	for (int32 S = 0; S < (int32)GreySurface::Count; S++)
+	for (int32 Slot = 0; Slot < MESH_COUNT; Slot++)
 	{
-		const GreyboxMesh::Section& Section = Greybox.sections[S];
-		const bool bFitting = S == (int32)GreySurface::Light || S == (int32)GreySurface::DeadLight;
-		if (Section.index.empty() || (bFitting && bMeshedFittings))
+		const MB& Part = Geometry.parts[Slot];
+		FSection Sections[2];   // masked, blended
+		for (size_t T = 0; T + 2 < Part.idx.size(); T += 3)
 		{
-			continue;
+			const int32 A = Part.idx[T], B = Part.idx[T + 1], C = Part.idx[T + 2];
+			const bool bBlend = BlendedSlot(Slot) || BlendedAlpha(Part.c[A * 4 + 3]);
+			for (int32 V : { A, B, C })
+			{
+				Sections[bBlend ? 1 : 0].Add(Part, V);
+			}
 		}
-		const int32 Count = (int32)Section.pos.size();
-		TArray<FVector> Vertices, Normals;
-		TArray<FVector2D> UVs;
-		TArray<FProcMeshTangent> Tangents;
-		TArray<int32> Triangles;
-		Vertices.Reserve(Count);
-		Normals.Reserve(Count);
-		UVs.Reserve(Count);
-		Tangents.Reserve(Count);
-		Triangles.Reserve((int32)Section.index.size());
-		for (int32 V = 0; V < Count; V++)
+		for (int32 Blend = 0; Blend < 2; Blend++)
 		{
-			Vertices.Add(BackroomsCoords::ToUnreal(Section.pos[V]));
-			Normals.Add(BackroomsCoords::ToUnrealDirection(Section.normal[V]));
-			UVs.Add(FVector2D(Section.uv[V].x, Section.uv[V].y));
-			Tangents.Add(Tangent(Normals.Last(), Section.uAxis[V], Section.vAxis[V]));
+			const FSection& S = Sections[Blend];
+			if (S.Triangles.IsEmpty())
+			{
+				continue;
+			}
+			Mesh.CreateMeshSection(SectionIndex, S.Vertices, S.Triangles, S.Normals, S.UVs, S.Colours,
+				TArray<FProcMeshTangent>(), bCollision && SolidSlot(Slot));
+			Mesh.SetMaterial(SectionIndex, Render.Chunk(Slot, Blend != 0));
+			SectionIndex++;
 		}
-		for (uint32_t I : Section.index)
-		{
-			Triangles.Add((int32)I);
-		}
-		// Rounds pass through water, as in the Web build's MeshTracer.
-		const bool bSolid = bCollision && S != (int32)GreySurface::Water;
-		Mesh.CreateMeshSection_LinearColor(SectionIndex, Vertices, Triangles, Normals, UVs,
-			TArray<FLinearColor>(), Tangents, bSolid);
-		if (UMaterialInterface* Material = SurfaceMaterial(Look, (EBackroomsSurface)S, Mesh.GetOwner()))
-		{
-			Mesh.SetMaterial(SectionIndex, Material);
-		}
-		SectionIndex++;
 	}
-	const ChunkLayout Layout = chunkLayout(W, Cx, Cz);
-	AddFixtures(Layout, Look, Mesh, Instances);
-	if (MeshedProps)
-	{
-		AddProps(Layout, *Look, Mesh, Instances);
-	}
-	if (bMeshedFittings)
-	{
-		AddFittings(Layout, *Look, Mesh, Instances);
-	}
+	// The shader's uDrawRel: which storey this chunk is, against the player's.
+	Mesh.SetCustomPrimitiveDataFloat(0, 1.0f);
+	Mesh.SetCustomPrimitiveDataFloat(1, (float)W.qs);
 }

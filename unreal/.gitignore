@@ -12,10 +12,7 @@ Plugins/*/Intermediate/
 *.xcodeproj
 .vscode/
 
-# Imported from assets/models and assets/sounds, and built from the game's
-# surfaces, by Plugins/Backrooms/Content/Python on first open
-Content/Backrooms/Revolver/
+# Imported from assets/sounds, and built from the Web build's textures, by
+# Plugins/Backrooms/Content/Python on first open
 Content/Backrooms/Sounds/
-Content/Backrooms/Surfaces/
-Content/Backrooms/Looks/
-Content/Backrooms/Sprites/
+Content/Backrooms/World/

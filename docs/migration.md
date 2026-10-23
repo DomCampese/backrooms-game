@@ -163,7 +163,7 @@ first clang run. Call anything with a side effect as its own statement.
 | seam | state | check that holds it |
 |---|---|---|
 | 1 core | done | `tools/core-check.sh`, `./contract --check`, the mapdump set |
-| 2 layout | props, fixtures, light fittings, openings done; floorplan geometry still built in the mesher | mesh-bake comparison (method below), `./contract --check` |
+| 2 layout | props, fixtures, light fittings, openings done; the floorplan (floors, walls, risers, ceilings, soffits, flights, arches) done in October 2026 (`chunkFloorplan`) | mesh-bake comparison (method below), `./contract --check` |
 | 3 sim | done; shared/sim depends on core only | `tools/core-check.sh`, the regression harness, `./replay tests/traces/*.trace` |
 
 Each seam was proved against a build of main from before any of them
@@ -267,8 +267,7 @@ Still decided in the mesher, and why:
 
 | what | why it stays |
 |---|---|
-| walls, floors, ceilings and soffits, stairs, pools, the Poolrooms' arches, baked AO, skirting | the follow-up seam: geometry of the floorplan itself |
-| Level 1's dock safety edging | follows floor drops, which is floor geometry |
+| how walls, floors, ceilings, stairs, pools and arches are built (wall boxes, step blocks, nosing, the rotten patch's bowl, AO strips, skirting) | looks: `chunkFloorplan` decides where each goes and how high (below) |
 | the Red Rooms tint | a colour field round cursed exits in the 3 x 3 chunks, read from core's `cursedExit`; it is how the walls look, not something standing there |
 | the Manila Room's floorboards, paper, notes and chandelier | built from one `Rng` seeded by the layout's seed; the notes share the stream with the boards, so moving them means moving the boards |
 | each prop's shape and variation (stacked cartons, the dead vending machine, cup count) | derived from the layout's hashes; how a prop looks |
@@ -289,6 +288,29 @@ The mesh bake proof compiles the saved old `world_mesh.cpp` with
 `-DbakeChunk=bakeChunkOld -DChunkMeshCache=ChunkMeshCacheOld` beside the
 current one, opens a hidden raylib window (meshes upload to GL), bakes each
 chunk with both and `memcmp`s the arrays. It lived in scratch space.
+
+### Seam 2b: floorplan (October 2026)
+
+`chunkFloorplan(world, cx, cz)` (`shared/core/floorplan.{h,cpp}`) describes what
+a chunk of storey `qs` is made of, in world metres in that storey's frame, so
+`bakeChunkGeometry` and the greybox decide nothing about where a floor, wall or
+ceiling goes. `./mapdump --floorplan CX CZ` prints it.
+
+| part | holds |
+|---|---|
+| `cells` | floor kind (flat, rotten, the Manila Room's boards, stair, hole) and height, pool, pillar, ceiling and its height; the north and west edges: wall kind through the overlays, wall base and top, buried end caps, void faces, each side's floor and ceiling and whether it has them |
+| `risers`, `lips` | each step between floors, listed once with the cell that draws it and its facing; Level 1's dock edging along each drop |
+| `ceiling`, `soffits` | the ceiling as rectangles merged along x then down z; each face that closes a step up in the ceiling, and whether it is a bulkhead round an opening into the storey above |
+| `flights`, `arches` | each flight rising from this storey as its steps in the feature's frame, and an enclosed stairwell's half landing; the Poolrooms' vaults over the partition openings |
+
+Proofs, against main before the seam (98720d7):
+
+| proof | result |
+|---|---|
+| mesh bake | 2,500 bakes, old mesher against new, every slot's vertex, uv, normal, colour and index arrays byte-identical (57.3 M vertices a side): 100 chunks (cx, cz in -5..4) for each level at visits 0 and 1, with and without exits everywhere, Level 0 storeys -1, 1 and 2, the pinned Manila Room, and shifted doorways with every locked door unlocked. Moving a riser, a bulkhead or the landing 1 mm, narrowing a lip, dropping an arch, a void face or a buried end, or reading a rotten patch as flat fails it in 105 to 2,386 chunks |
+| greybox | 5,000 greyboxes, old builder against new, byte-identical (74.2 M vertices a side), the same chunks with and without meshed props; lowering every wall base 1 mm fails it in 2,412 |
+| `./contract --check` | new golden `floorplan.txt`, written on purpose; the others unchanged |
+| captures | below the noise between two captures of main (the PR has the numbers) |
 
 ### Seam 3: simulation and presentation
 
