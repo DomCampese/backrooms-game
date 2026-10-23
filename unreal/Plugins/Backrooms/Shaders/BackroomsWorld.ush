@@ -9,8 +9,9 @@
 // The material converts Unreal's position and normal before calling in.
 //
 // The numbers the GLSL has written in from core at load (PANEL_HALF, the tube
-// hash and stutter) arrive here as defines, which the material's Custom node
-// sets from looks.json (texdump --unreal writes them from core).
+// hash and stutter, the pillar footprint, the occupancy grid's bits) arrive
+// here as defines, which the material's Custom node sets from world.json
+// (texdump --unreal writes them from core).
 #pragma once
 
 // Pixel shaders only: it takes derivatives, and the material's Custom node
@@ -19,6 +20,9 @@
 
 #ifndef BR_PANEL_HALF
 #error "M_BackroomsWorld sets the BR_* defines from looks.json; rebuild it with backrooms_looks.build_looks()"
+#endif
+#ifndef BR_OCC_PILLAR
+#error "world.json predates the occupancy bits; rerun tools/unreal.sh surfaces and rebuild M_BackroomsWorld"
 #endif
 
 // GLSL's dFdy is up the window, HLSL's ddy down it. detailNormal's frame is
@@ -119,10 +123,10 @@ int BROccAt(FBRUniforms U, FBRFrag F, Texture2D Occ, int2 C)
 
 bool BRPillarBlocks(FBRUniforms U, FBRFrag F, Texture2D Occ, int2 C, float2 A, float2 InvDir, float Dist)
 {
-	float2 Lo = (float2(C) * 2.0 + float2(0.42, 0.42) - A) * InvDir;
-	float2 Hi = (float2(C) * 2.0 + float2(1.58, 1.58) - A) * InvDir;
+	float2 Lo = (float2(C) * 2.0 + float2(BR_PILLAR_LO, BR_PILLAR_LO) - A) * InvDir;
+	float2 Hi = (float2(C) * 2.0 + float2(BR_PILLAR_HI, BR_PILLAR_HI) - A) * InvDir;
 	float2 Entry = min(Lo, Hi), Leave = max(Lo, Hi);
-	return (BROccAt(U, F, Occ, C) & 4) != 0
+	return (BROccAt(U, F, Occ, C) & BR_OCC_PILLAR) != 0
 		&& max(max(Entry.x, Entry.y), 0.001) < min(min(Leave.x, Leave.y), Dist - 0.001);
 }
 
@@ -152,14 +156,14 @@ float BRLightVis(FBRUniforms U, FBRFrag F, Texture2D Occ, float2 A, float2 B)
 		{
 			if (TMax.x > Dist) return 1.0;
 			C.x += Stp.x;
-			if ((BROccAt(U, F, Occ, int2(Stp.x > 0 ? C.x : C.x + 1, C.y)) & 2) != 0) return 0.0;
+			if ((BROccAt(U, F, Occ, int2(Stp.x > 0 ? C.x : C.x + 1, C.y)) & BR_OCC_WALL_W) != 0) return 0.0;
 			TMax.x += TDelta.x;
 		}
 		else
 		{
 			if (TMax.y > Dist) return 1.0;
 			C.y += Stp.y;
-			if ((BROccAt(U, F, Occ, int2(C.x, Stp.y > 0 ? C.y : C.y + 1)) & 1) != 0) return 0.0;
+			if ((BROccAt(U, F, Occ, int2(C.x, Stp.y > 0 ? C.y : C.y + 1)) & BR_OCC_WALL_N) != 0) return 0.0;
 			TMax.y += TDelta.y;
 		}
 		if (BRPillarBlocks(U, F, Occ, C, A, InvDir, Dist)) return 0.0;
@@ -277,7 +281,7 @@ float3 BRRoomLight(FBRUniforms U, inout FBRFrag F, Texture2D Occ, float3 P, floa
 	float2 ShP = P.xz + normalize(F.FragN).xz * 0.16;
 	int Own = U.StoreyH > 0.0 ? BROccAt(U, F, Occ, int2(floor(ShP * 0.5))) : 0;
 	int OwnMask = 511, UpMask = 0;
-	if ((Own & 64) != 0)
+	if ((Own & BR_OCC_NEAR_OPENING) != 0)
 	{
 		int N2 = int(U.OccN);
 		int2 T = int2(Base * (U.LS * 0.5)) - int2(U.OccOrigin);
@@ -287,7 +291,7 @@ float3 BRRoomLight(FBRUniforms U, inout FBRFrag F, Texture2D Occ, float3 P, floa
 			int Hi = int(M.a + 0.5);
 			int Ci = int(dot(float4(0.0, 1.0, 2.0, 0.0), F.Chan) + 0.5);
 			OwnMask = int(dot(M, F.Chan) + 0.5) | (((Hi >> Ci) & 1) << 8);
-			if (F.Rel < 1 && (Own & 16) != 0)
+			if (F.Rel < 1 && (Own & BR_OCC_OPEN_ABOVE) != 0)
 			{
 				float4 Uc = BRChanFor(F.Rel + 1);
 				int Cu = int(dot(float4(0.0, 1.0, 2.0, 0.0), Uc) + 0.5);

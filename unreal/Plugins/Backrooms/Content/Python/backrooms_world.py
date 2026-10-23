@@ -293,7 +293,7 @@ def build_world_material(name, blend, mpc, defines, neutral):
     _unlit(mat, blend)
     inputs = ["CamRel", "Normal", "UV", "VertexRGB", "VertexA", "Tex0", "Tex1", "Occ", "ObjRefl", "GlossOverride",
               "Viewmodel", "Tint", "HasStorey", "ChunkStorey"] + MPC_VECTORS[:16]
-    custom = _custom(mat, WORLD_CODE, WORLD_INCLUDE, {k: _hlsl_float(v) for k, v in defines.items()}, inputs, -300, 0)
+    custom = _custom(mat, WORLD_CODE, WORLD_INCLUDE, defines, inputs, -300, 0)
 
     position = mel().create_material_expression(mat, unreal.MaterialExpressionWorldPosition, -900, -600)
     position.set_editor_property("world_position_shader_offset",
@@ -389,8 +389,11 @@ def build():
         return False
     mpc = build_collection()
     neutral = textures["neutral"]
-    mat = build_world_material("M_BackroomsWorld", unreal.BlendMode.BLEND_MASKED, mpc, world["defines"], neutral)
-    build_world_material("M_BackroomsWorldBlend", unreal.BlendMode.BLEND_TRANSLUCENT, mpc, world["defines"], neutral)
+    # Core's numbers as HLSL floats, and the occupancy grid's bits as ints.
+    defines = {k: _hlsl_float(v) for k, v in world["defines"].items()}
+    defines.update({k: str(int(v)) for k, v in world.get("bits", {}).items()})
+    mat = build_world_material("M_BackroomsWorld", unreal.BlendMode.BLEND_MASKED, mpc, defines, neutral)
+    build_world_material("M_BackroomsWorldBlend", unreal.BlendMode.BLEND_TRANSLUCENT, mpc, defines, neutral)
     build_shape_material("M_BackroomsShape", unreal.BlendMode.BLEND_OPAQUE, False)
     build_shape_material("M_BackroomsShapeBlend", unreal.BlendMode.BLEND_TRANSLUCENT, False)
     for name, blend in (("M_BackroomsBillboard", unreal.BlendMode.BLEND_TRANSLUCENT),

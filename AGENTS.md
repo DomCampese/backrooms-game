@@ -31,7 +31,10 @@ drawn"). What will bite:
   ddy lights every relief from below.
 - **The world shader's core numbers reach the HLSL as defines** from
   `world.json` (`texdump --unreal`), as `worldFragmentShader()` writes them
-  into the GLSL. A new `@TOKEN@` needs a row in both.
+  into the GLSL. A new `@TOKEN@` needs a row in both. The occupancy bits are
+  ints the HLSL masks with, so they sit under `bits`, not `defines` (which the
+  editor turns into floats), and `BackroomsWorld.ush` stops with an `#error`
+  if a `world.json` from before them is still in `Saved/Surfaces`.
 - **Per-frame light is `frameLight`, per-frame drawing `sceneDraws`**
   (shared/port/draw.h), which render.cpp draws from too (checked: 0 pixels
   differ over seven captures). A new thing render.cpp draws round the chunks
