@@ -167,6 +167,18 @@ constexpr float FULL_H = 1.0e4f;
 constexpr float RAIL_T = 0.075f;
 constexpr float RAIL_H = 0.65f;
 
+// The bits of a cell's byte in the occupancy grid (World::buildOccupancy).
+// worldFragmentShader() writes them into the GLSL, and lightAtCPU reads them.
+enum OccBit : uint8_t {
+    OCC_WALL_N = 1,          // an opaque wall on the north edge
+    OCC_WALL_W = 2,          // ... on the west edge
+    OCC_PILLAR = 4,
+    OCC_NO_FITTING = 8,      // no fitting at this cell's min corner: it would hang in an opening
+    OCC_OPEN_ABOVE = 16,     // no ceiling here, so the storey above's tubes light it
+    OCC_HOLE_CORNER = 32,    // a hole touches that corner, so its fitting lights the storey below
+    OCC_NEAR_OPENING = 64,   // one of the three above is set within reach of the fittings the shader sums here
+};
+
 // walls: wallN[i][k] = north edge of cell (i,k) at z=k*CELL; wallW = west edge at x=i*CELL
 struct ChunkData {
     uint8_t wallN[CCELLS][CCELLS];   // WallKind
@@ -291,14 +303,10 @@ struct World {
     float groundAt(float x, float z, float feetY);
     bool lineOfSight(float ax, float az, float bx, float bz);
     // The light-occlusion grid the shader marches, n x n cells from (originI,
-    // originK), four bytes a cell: your storey, the one below, the one above, spare.
-    // bit 0: opaque wall on the north edge; bit 1: on the west edge; bit 2: pillar;
-    // bit 3: no fitting at this cell's min corner (it would hang in an opening);
-    // bit 4: no ceiling here, so the storey above's tubes light it; bit 5: a hole
-    // touches that corner, so the fitting there lights the storey below; bit 6: one
-    // of bits 3-5 is set within reach of the fittings the shader sums here. Bit 6
-    // must never be clear where a missing fitting matters. `out` has 2n rows: n of
-    // cells, then n of fitting masks (buildOccupancy).
+    // originK), four bytes a cell: your storey, the one below, the one above, spare,
+    // each an OccBit set. OCC_NEAR_OPENING must never be clear where a missing
+    // fitting matters. `out` has 2n rows: n of cells, then n of fitting masks
+    // (buildOccupancy).
     void buildOccupancy(int originI, int originK, int n, unsigned char *out);
     // Can a body walk from cell (ci,ck) into the adjacent (ni,nk)? Furniture and
     // pillars fill their cell; only a doorway opens a walled edge.

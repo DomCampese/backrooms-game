@@ -1336,19 +1336,19 @@ void World::buildOccupancy(int originI, int originK, int n, unsigned char *out) 
         for (int x = 0; x < n; x++) {
             int ci = originI + x, ck = originK + z;
             unsigned char v = 0;
-            if (blocksLight(wallNVal(ci, ck))) v |= 1;
-            if (blocksLight(wallWVal(ci, ck))) v |= 2;
-            if (pillarAt(ci, ck)) v |= 4;
+            if (blocksLight(wallNVal(ci, ck))) v |= OCC_WALL_N;
+            if (blocksLight(wallWVal(ci, ck))) v |= OCC_WALL_W;
+            if (pillarAt(ci, ck)) v |= OCC_PILLAR;
             if (storeyH > 0.0f) {
                 // A fitting is centred on this cell's min corner and overhangs all four cells
                 // round it; if any is open to the storey above, the mesher leaves the fitting
                 // out and the shader must not light from it.
                 uint8_t own = vflagAt(ci, ck);
                 uint8_t corner = own | vflagAt(ci - 1, ck) | vflagAt(ci, ck - 1) | vflagAt(ci - 1, ck - 1);
-                if (own & VF_OPENUP) v |= 16;
-                if (corner & VF_OPENUP) v |= 8;
-                // bit 5: a hole touches this corner, so the fitting also lights the storey below
-                if (corner & VF_HOLE) v |= 32;
+                if (own & VF_OPENUP) v |= OCC_OPEN_ABOVE;
+                if (corner & VF_OPENUP) v |= OCC_NO_FITTING;
+                // a hole touches this corner, so the fitting also lights the storey below
+                if (corner & VF_HOLE) v |= OCC_HOLE_CORNER;
             }
             unsigned char *o = out + (z * n + x) * 4;
             o[0] = v; o[1] = o[2] = o[3] = 0;
@@ -1375,17 +1375,17 @@ void World::buildOccupancy(int originI, int originK, int n, unsigned char *out) 
                 if (!d) continue;
                 int li = ci - fdiv(ci, CCELLS) * CCELLS, lk = ck - fdiv(ck, CCELLS) * CCELLS;
                 unsigned char v = 0;
-                if (blocksLight(d->wallN[li][lk])) v |= 1;
-                if (blocksLight(d->wallW[li][lk])) v |= 2;
-                if (d->pillar[li][lk]) v |= 4;
+                if (blocksLight(d->wallN[li][lk])) v |= OCC_WALL_N;
+                if (blocksLight(d->wallW[li][lk])) v |= OCC_WALL_W;
+                if (d->pillar[li][lk]) v |= OCC_PILLAR;
                 uint8_t corner = d->vflag[li][lk] | flagOf(ci - 1, ck) | flagOf(ci, ck - 1) | flagOf(ci - 1, ck - 1);
-                if (d->vflag[li][lk] & VF_OPENUP) v |= 16;
-                if (corner & VF_OPENUP) v |= 8;
-                if (corner & VF_HOLE) v |= 32;
+                if (d->vflag[li][lk] & VF_OPENUP) v |= OCC_OPEN_ABOVE;
+                if (corner & VF_OPENUP) v |= OCC_NO_FITTING;
+                if (corner & VF_HOLE) v |= OCC_HOLE_CORNER;
                 out[(z * n + x) * 4 + ch] = v;
             }
     }
-    // Bit 6: one of the nine fittings the shader sums for a point in this cell
+    // OCC_NEAR_OPENING: one of the nine fittings the shader sums for a point in this cell
     // could be missing, or this cell could be under an opening. The shader reads the
     // fitting masks only where it is set. The nine lie within 1.5 grid pitches; one
     // more cell for rounding and one for the shadow lookup's 16 cm bias. Clear
@@ -1399,7 +1399,7 @@ void World::buildOccupancy(int originI, int originK, int n, unsigned char *out) 
                 unsigned char hit = 0;
                 for (int d = -R; d <= R && !hit; d++) {
                     int xx = x + d;
-                    if (xx >= 0 && xx < n && (out[(z * n + xx) * 4 + ch] & (8 | 16 | 32))) hit = 1;
+                    if (xx >= 0 && xx < n && (out[(z * n + xx) * 4 + ch] & (OCC_NO_FITTING | OCC_OPEN_ABOVE | OCC_HOLE_CORNER))) hit = 1;
                 }
                 row[z * n + x] = hit;
             }
@@ -1407,13 +1407,13 @@ void World::buildOccupancy(int originI, int originK, int n, unsigned char *out) 
             for (int x = 0; x < n; x++)
                 for (int d = -R; d <= R; d++) {
                     int zz = z + d;
-                    if (zz >= 0 && zz < n && row[zz * n + x]) { out[(z * n + x) * 4 + ch] |= 64; break; }
+                    if (zz >= 0 && zz < n && row[zz * n + x]) { out[(z * n + x) * 4 + ch] |= OCC_NEAR_OPENING; break; }
                 }
     }
     // The second n rows: for each light block, which of the nine summed fittings
     // exist, a byte per storey (bit (dx+1)*3 + (dz+1), the shader's loop order),
-    // with the three ninth bits in the spare byte. A fitting exists where bit 3 is
-    // clear at the corner under its centre. One fetch per fragment instead of nine
+    // with the three ninth bits in the spare byte. A fitting exists where
+    // OCC_NO_FITTING is clear at the corner under its centre. One fetch per fragment instead of nine
     // per storey. Stored at every cell for its block; the shader reads the block's
     // first cell. Assumes the grid pitch is a whole number of cells.
     const float ls = LEVEL_RULES[level].ls;
@@ -1432,7 +1432,7 @@ void World::buildOccupancy(int originI, int originK, int n, unsigned char *out) 
                         // the corner the shader looks up: floor(centre / CELL + 0.5)
                         int kx = (int)floorf(((bx + dx) * ls + ls * 0.5f) / CELL + 0.5f);
                         int kz = (int)floorf(((bz + dz) * ls + ls * 0.5f) / CELL + 0.5f);
-                        if (!(occByte(kx, kz, ch) & 8)) mask |= 1 << ((dx + 1) * 3 + (dz + 1));
+                        if (!(occByte(kx, kz, ch) & OCC_NO_FITTING)) mask |= 1 << ((dx + 1) * 3 + (dz + 1));
                     }
                 o[ch] = (unsigned char)(mask & 255);
                 o[3] |= (unsigned char)(((mask >> 8) & 1) << ch);

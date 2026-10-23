@@ -187,9 +187,18 @@ static int dumpForUnreal(const char *revolver) {
         { "TUBE_STUTTER_OPEN", TUBE_STUTTER_OPEN }, { "TUBE_STUTTER_DIP", TUBE_STUTTER_DIP },
         { "TUBE_BUZZ_BASE", TUBE_BUZZ_BASE }, { "TUBE_BUZZ_SPREAD", TUBE_BUZZ_SPREAD },
         { "TUBE_BUZZ_PHASE", TUBE_BUZZ_PHASE }, { "TUBE_BUZZ_DUTY", TUBE_BUZZ_DUTY },
+        { "PILLAR_LO", PILLAR_LO }, { "PILLAR_HI", PILLAR_HI },
     };
     for (size_t i = 0; i < sizeof numbers / sizeof numbers[0]; i++)
         fprintf(gJson, "%s\n    \"BR_%s\": %.9g", i ? "," : "", numbers[i].name, numbers[i].value);
+    // The occupancy grid's bits, which the HLSL masks with, so ints.
+    fprintf(gJson, "\n  },\n  \"bits\": {");
+    const struct { const char *name; int value; } bits[] = {
+        { "OCC_WALL_N", OCC_WALL_N }, { "OCC_WALL_W", OCC_WALL_W }, { "OCC_PILLAR", OCC_PILLAR },
+        { "OCC_OPEN_ABOVE", OCC_OPEN_ABOVE }, { "OCC_NEAR_OPENING", OCC_NEAR_OPENING },
+    };
+    for (size_t i = 0; i < sizeof bits / sizeof bits[0]; i++)
+        fprintf(gJson, "%s\n    \"BR_%s\": %d", i ? "," : "", bits[i].name, bits[i].value);
     fprintf(gJson, "\n  },\n  \"textures\": [");
     for (int k = 0; k < SURF_COUNT; k++) {
         Surface sf = timed([k] { return makeSurface((SurfSlot)k); });
