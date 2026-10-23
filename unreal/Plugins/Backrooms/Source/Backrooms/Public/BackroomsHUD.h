@@ -3,10 +3,11 @@
 #include "GameFramework/HUD.h"
 #include "BackroomsHUD.generated.h"
 
-// A plain text HUD from UBackroomsWorldSubsystem::GetHud, so a run is playable
-// before a UMG one exists: the meters and inventory bottom left, notes and
-// warnings centred, the pause and death cards. Replace it with a Blueprint HUD
-// class on a Blueprint subclass of the game mode.
+// The Web build's HUD: the title and death cards, the intro, the cards that
+// come and go, the meters, the inventory and the hints, laid out by
+// shared/port/hud.h as render.cpp lays them out, and measured and drawn with
+// the engine's medium font. Replace it with a Blueprint HUD class on a
+// Blueprint subclass of the game mode; GetHud gives a UMG HUD the same state.
 UCLASS(Blueprintable)
 class BACKROOMS_API ABackroomsHUD : public AHUD
 {
@@ -16,5 +17,6 @@ public:
 	virtual void DrawHUD() override;
 
 private:
-	void Line(const FString& Text, float X, float Y, const FLinearColor& Colour, bool bCentred, float Scale = 1.0f);
+	// The torch's reminder shows until it is first used (Game::everFlashed).
+	bool bEverFlashed = false;
 };
