@@ -101,6 +101,7 @@ struct Game {
     Material mats[MAT_COUNT]{};
     GameAudio audio;
     Camcorder camcorder;
+    CamcorderReel camReel;
     RenderTexture2D rt{};
 
     void init();

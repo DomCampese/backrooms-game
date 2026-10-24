@@ -259,8 +259,13 @@ off the Mac. In order:
    card, the intro's fade and level name, the meters, the inventory, the
    death card. Check the type's size against a Web build capture at the same
    window height (each line is scaled so its line height is raylib's size)
-   and that centred lines sit centred. The camcorder, its replay under the
-   death card and the touch hints are the Web build's alone.
+   and that centred lines sit centred. The touch hints are the Web build's alone.
+6. **The camcorder** (24 October 2026, not yet built on the Mac). V raises it
+   with a motor whine and a beep; the revolver leaves the frame, the OSD comes
+   up (REC, the counter, the date, the battery) and the inventory goes. The
+   wheel and RMB zoom (the W-T bar), LMB switches night shot, whose lamp lights
+   the room as the Web build's does. There is no tape look and no playback on
+   the death card yet: Unreal has no reel (Not done yet).
 
 A session on the Mac itself (`claude remote-control` in the repository) could
 build, run the tests and read the log directly; from the cloud each Unreal
@@ -272,7 +277,7 @@ What the seams leave for the port, or for the Web build before it.
 
 | item | where | why it matters |
 |---|---|---|
-| post-process | the water warp, the fear vignette, the Web build's own tone curve | Unreal's filmic curve stands in for the Web build's ACES fit, and the ambients were tuned against that fit's toe (AGENTS.md, "Lighting"); the exposure and ambient numbers are starting points until held against captures |
+| the camcorder's tape | the reel (frames grabbed at 15 Hz into one texture, `CamcorderReel::grab`) and `TAPE_FS` in HLSL | the viewfinder shows the plain scene under the OSD, and the death card has no playback: `Camcorder::record` is told there is no reel, so nothing is taped. `CamPicture` and the cell layout (`cellX`, `reelW`) are what a port's reel and post material need |
 | real meshes | props, fixtures, items and actors | the looks can take a mesh for every kind; none is authored yet, so props are their collision boxes, fixtures and items plain shapes, and actors billboards |
 | floorplan geometry as data | done (October 2026): `chunkFloorplan` (core/floorplan.h) describes floors, walls, risers, ceilings, soffits, flights and arches, and the mesher and the greybox build from it | Unreal's chunk actors draw it through the greybox; real meshes for walls and floors (skirting, door trim, stair nosing) would be placed from it, as fixtures are from `chunkLayout` |
 | sound in Unreal | written (`UBackroomsSound`), not yet heard on the Mac | M6 |

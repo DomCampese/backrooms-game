@@ -205,8 +205,9 @@ void Game::init() {
     simBegin(sim, start, now);
     rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
     SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);   // post CA/bloom sample past the edges: clamp, don't wrap
-    camcorder.load();
+    camReel.load();
     camcorder.fitReel(GetScreenWidth(), GetScreenHeight());
+    camReel.fit(camcorder);
     if (const char *camEnv = getenv("BACKROOMS_CAM")) camKnob = atoi(camEnv);
     chaseKnob = getenv("BACKROOMS_CHASE") != nullptr;
 
@@ -342,6 +343,7 @@ bool Game::tick() {
         SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);   // post CA/bloom sample past the edges: clamp, don't wrap
         sim.fov = baseFov();   // a phone turned on its side is framed from the first frame
         camcorder.fitReel(GetScreenWidth(), GetScreenHeight());
+        camReel.fit(camcorder);
         if (trace) trace.fov(sim.fov);
     }
     if (IsKeyPressed(KEY_F11)) ToggleBorderlessWindowed();
@@ -357,7 +359,8 @@ bool Game::tick() {
         if (trace) trace.digest(sim);
         if (!sim.inMenu || sim.deathT <= 0) camcorder.stopReplay();
         if (!sim.inMenu) camcorder.startTape();
-        camcorder.stepReplay(dt, audio);
+        camcorder.stepReplay(dt);
+        camReel.playNoises(camcorder, audio);
         finishStep(true);
         renderScene(now);
         renderUI(now);
@@ -389,18 +392,24 @@ bool Game::tick() {
     if (captureClick) DisableCursor();
     InputFrame in = readInput(captureClick);
     if (camKnob && frame == 2) { camcorder.up = true; camcorder.night = camKnob > 1; }
-    camcorder.control(in, sim, dt);   // before the trace: what is recorded is what the sim was given
+    camcorder.control(in, sim, dt, inKeyPressed(KEY_V));   // before the trace: what is recorded is what the sim was given
+    webLightCam(camcorder.up);
     if (trace) trace.step(in, dt, now, sim.clockSeed);
     sim.step(in, dt, now);
     if (trace) trace.digest(sim);
     camcorder.logSounds(sim.audio);
-    if (sim.inMenu && sim.deathT > 0) camcorder.beginReplay();   // taken: the tape plays on the card
+    if (sim.inMenu && sim.deathT > 0 && camcorder.beginReplay())   // taken: the tape plays on the card
+        webLightCam(false);
+    camReel.playNoises(camcorder, audio);
     finishStep(false);
     streamChunks();
     updateOccupancy();
 
     renderScene(now);
-    if (!sim.inMenu) camcorder.record(rt, sim, dt, (float)(now - sim.runStart));
+    if (!sim.inMenu) {
+        int slot = camcorder.record(sim, dt, (float)(now - sim.runStart), camReel.ready(), GetRandomValue);
+        if (slot >= 0) camReel.grab(camcorder, slot, rt);
+    }
     renderUI(now);
 
     if (shotPath && frame == shotFrame) {

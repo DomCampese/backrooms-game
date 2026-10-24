@@ -16,6 +16,7 @@
 #include "Misc/Parse.h"
 #include "Stats/Stats.h"
 #include "core/level_rules.h"
+#include "port/camcorder.h"
 #include "port/draw.h"
 #include "port/view.h"
 #include "sim/start.h"
@@ -62,6 +63,9 @@ void UBackroomsWorldSubsystem::NewSim()
 {
 	FreeSim();
 	Game = new Sim();
+	Cam = new Camcorder();
+	// No reel is drawn yet; the cells only size the tape's list of frames.
+	Cam->fitReel(1440, 850);
 	FUnrealTracer* Shots = new FUnrealTracer();
 	Shots->Scene = GetWorld();
 	Shots->Game = Game;
@@ -144,7 +148,7 @@ FTransform UBackroomsWorldSubsystem::StartFreeCamera(int32 Level, uint32 Seed, u
 	return FTransform(BackroomsCoords::ToUnrealRotator(OpeningYaw, 0.0f), BackroomsCoords::ToUnreal(Eye));
 }
 
-void UBackroomsWorldSubsystem::TickRun(const InputFrame& In, bool bPauseToggled, float Dt)
+void UBackroomsWorldSubsystem::TickRun(const InputFrame& In, bool bPauseToggled, bool bCamToggle, float Dt)
 {
 	if (!Game || !bRun)
 	{
@@ -160,6 +164,9 @@ void UBackroomsWorldSubsystem::TickRun(const InputFrame& In, bool bPauseToggled,
 		Game->menuDrift(Dt, T);
 		Game->menuBegin(In, T);
 		if (Trace) Trace->digest(*Game);
+		if (!Game->inMenu || Game->deathT <= 0) Cam->stopReplay();
+		if (!Game->inMenu) Cam->startTape();
+		Cam->stepReplay(Dt);
 		FinishFrame();
 		return;
 	}
@@ -175,9 +182,20 @@ void UBackroomsWorldSubsystem::TickRun(const InputFrame& In, bool bPauseToggled,
 		FinishFrame(true);
 		return;
 	}
-	if (Trace) Trace->step(In, Dt, T, Game->clockSeed);
-	Game->step(In, Dt, T);
+	// The camera takes its buttons out before the trace: what is recorded is
+	// what the sim was given.
+	InputFrame Frame = In;
+	Cam->control(Frame, *Game, Dt, bCamToggle);
+	if (Trace) Trace->step(Frame, Dt, T, Game->clockSeed);
+	Game->step(Frame, Dt, T);
 	if (Trace) Trace->digest(*Game);
+	Cam->logSounds(Game->audio);
+	if (Game->inMenu && Game->deathT > 0) Cam->beginReplay();
+	if (!Game->inMenu)
+	{
+		Cam->record(*Game, Dt, (float)(T - Game->runStart), false,
+			[](int Lo, int Hi) { return FMath::RandRange(Lo, Hi); });
+	}
 	FinishFrame();
 }
 
@@ -187,6 +205,7 @@ void UBackroomsWorldSubsystem::FinishFrame(bool bPaused)
 {
 	if (Sound)
 	{
+		Sound->Camera(Cam->noises);
 		Sound->Play(Game->audio);
 		if (bPaused)
 		{
@@ -195,6 +214,7 @@ void UBackroomsWorldSubsystem::FinishFrame(bool bPaused)
 		Sound->Feed();
 	}
 	Game->audio.clear();
+	Cam->noises.clear();
 	Game->dropAimLatch = false;
 	Game->recordsChanged = false;
 }
@@ -207,7 +227,7 @@ FVector UBackroomsWorldSubsystem::StoreyOrigin() const
 FTransform UBackroomsWorldSubsystem::ViewTransform(float& OutFovY) const
 {
 	const SimView View = simView(*Game);
-	OutFovY = View.fovY;
+	OutFovY = Cam ? Cam->fovY(View.fovY) : View.fovY;
 	const FMatrix Axes = FRotationMatrix::MakeFromXZ(BackroomsCoords::ToUnrealDirection(View.forward),
 		BackroomsCoords::ToUnrealDirection(View.up));
 	return FTransform(Axes.Rotator(), BackroomsCoords::ToUnreal(View.eye) + StoreyOrigin());
@@ -236,6 +256,8 @@ void UBackroomsWorldSubsystem::FreeSim()
 	Trace = nullptr;
 	delete Game;
 	Game = nullptr;
+	delete Cam;
+	Cam = nullptr;
 	delete Tracer;
 	Tracer = nullptr;
 	bRun = false;
@@ -479,8 +501,7 @@ void UBackroomsWorldSubsystem::ShowFrame(const Vec3& Eye)
 		Render->ShowPost(GetWorld());
 		return;
 	}
-	// The Web build has no camcorder here: its infrared lamp is off.
-	const FrameLight Light = frameLight(S, T, 0.0f);
+	const FrameLight Light = frameLight(S, T, Cam->irLamp());
 	const float Water = S.level == 2 && Maze.poolAt(cellOf(S.px), cellOf(S.pz))
 		? FMath::Clamp((WATER_Y - S.eyeY) * 8.0f, 0.0f, 1.0f) : 0.0f;
 	Render->Frame(GetWorld(), Light, Eye, S.fear, Water, S.migraine);
@@ -504,7 +525,9 @@ void UBackroomsWorldSubsystem::ShowFrame(const Vec3& Eye)
 	sceneDraws(S, Light, T, Draws);
 	const size_t FirstHeld = Draws.size();
 	const SimView View = simView(S);
-	heldDraws(S, View, T, Draws);
-	Hand->Show(S, *Render, StoreyOrigin(), Draws);
+	// Looking through the camcorder, whatever is in the other hand is out of frame.
+	const bool bInHand = !Cam->viewing();
+	if (bInHand) heldDraws(S, View, T, Draws);
+	Hand->Show(S, bInHand, *Render, StoreyOrigin(), Draws);
 	Scene->Show(Draws, FirstHeld, View, *Render, StoreyOrigin());
 }
