@@ -32,6 +32,10 @@ drawn"). What will bite:
 - **The world shader's core numbers reach the HLSL as defines** from
   `world.json` (`texdump --unreal`), as `worldFragmentShader()` writes them
   into the GLSL. A new `@TOKEN@` needs a row in both.
+- **Per-frame light is `frameLight`, per-frame drawing `sceneDraws`**
+  (shared/port/draw.h), which render.cpp draws from too (checked: 0 pixels
+  differ over seven captures). A new thing render.cpp draws round the chunks
+  goes there, or Unreal does not draw it.
 - **The HUD is `hudDraws`** (shared/port/hud.h): what render.cpp's `renderUI`
   draws over the world, as a list of text, rectangles, gradients and a dot in
   window pixels, which render.cpp and `ABackroomsHUD` both draw. Text is
@@ -42,10 +46,6 @@ drawn"). What will bite:
   over 200,000 random sim states (5.9 M draws, none differ). Redirect raylib
   with object-like macros (`#define DrawText logText`): a function-like one
   breaks on the braced colours, whose commas count as arguments.
-- **Per-frame light is `frameLight`, per-frame drawing `sceneDraws`**
-  (shared/port/draw.h), which render.cpp draws from too (checked: 0 pixels
-  differ over seven captures). A new thing render.cpp draws round the chunks
-  goes there, or Unreal does not draw it.
 - **The revolver is shared/port/revolver.h, not an imported skeletal mesh.**
   The import never showed the reload. port/model reads the GLB and samples,
   blends and skins it as raylib 5.5 does (bone matrices that scale after
