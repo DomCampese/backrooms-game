@@ -9,6 +9,7 @@
 // engine imports and plays itself. Their PLAYs are left in `recorded`, and
 // `loops` holds the levels the looped ones are eased to.
 #include "ambience.h"
+#include "camcorder.h"
 #include "sounds.h"
 #include <cstdint>
 #include <vector>
@@ -27,6 +28,9 @@ struct SoundMixer {
     void load();
     // One tick's events, in the order the sim emitted them.
     void apply(const std::vector<AudioEvent> &events);
+    // The camcorder's sounds, in the order it asked for them; clears the list.
+    // An echo of a recording is not played: the mixer has no recordings.
+    void camera(std::vector<CamNoise> &noises);
     // A paused tick, after apply(): the bed goes on without the growl, hiss and
     // whispers, and the loops hold their levels.
     void holdPaused(const AmbienceMix &mix, const LoopCue &cue);
@@ -46,6 +50,11 @@ private:
     Voice voices[SFX_COUNT][SFX_MAX_VARIANTS];
     Pcm voicePcm;
     Voice tapeVoice;
+    Pcm camPcm[CAM_CLIPS];
+    Voice camVoices[CAM_CLIPS];
+    // An echo plays on a voice of its own (raylib: an alias of the clip), so
+    // it leaves the clip's pitch, volume and pan as the rules set them.
+    Voice echoes[SFX_COUNT][SFX_MAX_VARIANTS];
     Ambience bed;
     // The Web build fills the bed's stream only on a tick that emits
     // AMBIENCE (not on Level 2 or the title screen), and a starved stream is

@@ -22,6 +22,7 @@ struct HudDraw {
         GradientV,    // filled, col at the top fading to col2 at the bottom
         GradientH,    // filled, col at the left fading to col2 at the right
         Circle,       // filled, centred on (x, y), radius r
+        Triangle,     // filled, pointing right: (x, y), (x, y + h), (x + r, y + h / 2)
     };
     Kind kind;
     int x = 0, y = 0, w = 0, h = 0;

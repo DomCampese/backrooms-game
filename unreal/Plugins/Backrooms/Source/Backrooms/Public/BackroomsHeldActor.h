@@ -25,8 +25,9 @@ public:
 	ABackroomsHeldActor();
 
 	// Origin places the sim's storey frame in the world. Adds the muzzle flash
-	// and smoke to Draws when the revolver is shown.
-	void Show(const Sim& Game, const UBackroomsRender& Render, const FVector& Origin, std::vector<SceneDraw>& Draws);
+	// and smoke to Draws when the revolver is shown. Nothing is in hand while
+	// the camcorder is at the eye (bInHand false).
+	void Show(const Sim& Game, bool bInHand, const UBackroomsRender& Render, const FVector& Origin, std::vector<SceneDraw>& Draws);
 
 private:
 	bool Load();

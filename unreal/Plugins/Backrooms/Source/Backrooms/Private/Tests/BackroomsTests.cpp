@@ -206,6 +206,25 @@ bool FBackroomsSoundTest::RunTest(const FString& Parameters)
 	Mixer->apply({});
 	Mixer->render(Out.GetData(), Frames);
 	TestEqual(TEXT("the bed is silent when not fed"), Loudness(0) + Loudness(1), (int64)0);
+
+	// The camcorder's own voices, and a sound echoed off its tape on a voice
+	// that leaves the clip's own untouched.
+	std::vector<CamNoise> Noises = { { CamSound::Hiss, {}, 1.0f, 1.0f } };
+	Mixer->camera(Noises);
+	TestTrue(TEXT("the camera's list is cleared"), Noises.empty());
+	Mixer->render(Out.GetData(), Frames);
+	TestTrue(TEXT("the tape hiss sounds"), Loudness(0) > 0 && Loudness(0) == Loudness(1));
+	Noises = { { CamSound::HissStop, {}, 1.0f, 1.0f } };
+	Mixer->camera(Noises);
+	Mixer->render(Out.GetData(), Frames);
+	TestEqual(TEXT("the hiss stops"), Loudness(0) + Loudness(1), (int64)0);
+	AudioEvent Echoed = Event(AudioEvent::PLAY, Sfx::Click);
+	Echoed.atPitch(1.5f);
+	Noises = { { CamSound::Echo, Echoed, 0.32f, 0.7f } };
+	Mixer->camera(Noises);
+	Mixer->render(Out.GetData(), Frames);
+	TestTrue(TEXT("an echo sounds"), Loudness(0) > 0);
+	TestFalse(TEXT("an echo leaves the clip's own voice alone"), Mixer->playing(Sfx::Click, 0));
 	return true;
 }
 

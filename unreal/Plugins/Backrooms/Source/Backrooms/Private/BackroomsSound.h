@@ -6,6 +6,7 @@
 
 struct AmbienceMix;
 struct AudioEvent;
+struct CamNoise;
 struct LoopCue;
 struct SoundMixer;
 class UAudioComponent;
@@ -29,6 +30,8 @@ public:
 	void Stop();
 	// One frame's events, in the order the sim emitted them.
 	void Play(const std::vector<AudioEvent>& Events);
+	// The camcorder's sounds, before Play; clears them.
+	void Camera(std::vector<CamNoise>& Noises);
 	// A paused frame, after Play: the bed goes on without the growl, hiss and
 	// whispers, and the loops hold.
 	void HoldPaused(const AmbienceMix& Mix, const LoopCue& Cue);

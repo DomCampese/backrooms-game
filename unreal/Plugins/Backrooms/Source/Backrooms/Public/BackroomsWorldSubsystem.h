@@ -5,6 +5,7 @@
 #include "BackroomsWorldSubsystem.generated.h"
 
 struct Sim;
+struct Camcorder;
 struct Vec3;
 struct InputFrame;
 struct TraceWriter;
@@ -47,12 +48,14 @@ public:
 
 	bool IsRunning() const { return bRun; }
 	// One frame of a run: the title screen, a pause toggle, or a step, as
-	// Game::tick does them. Dt is the frame time; the clock is read here.
-	void TickRun(const InputFrame& In, bool bPauseToggled, float Dt);
+	// Game::tick does them. bCamToggle raises or lowers the camcorder. Dt is
+	// the frame time; the clock is read here.
+	void TickRun(const InputFrame& In, bool bPauseToggled, bool bCamToggle, float Dt);
 	// The camera for the sim's current view, in Unreal space, and its vertical
 	// field of view in degrees.
 	FTransform ViewTransform(float& OutFovY) const;
 	const Sim* GetSim() const { return Game; }
+	const Camcorder* GetCamcorder() const { return Cam; }
 	// The clock the sim is stepped with, for what is drawn from it (the HUD).
 	double SimClock() const { return Now(); }
 
@@ -85,6 +88,9 @@ private:
 
 	// Not UObjects: owned here, freed by Deinitialize.
 	Sim* Game = nullptr;
+	// The camcorder's rules and OSD (shared/port/camcorder.h). There is no reel
+	// yet: nothing is taped, so the death card has no playback.
+	Camcorder* Cam = nullptr;
 	SolidTracer* Tracer = nullptr;
 	SolidTracer* Recorder = nullptr;   // wraps Tracer while a trace is written
 	TraceWriter* Trace = nullptr;

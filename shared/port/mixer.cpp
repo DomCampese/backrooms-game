@@ -18,6 +18,11 @@ void SoundMixer::load() {
     voicePcm = tapeVoicePcm();
     tapeVoice.pcm = &voicePcm;
     tapeVoice.volume = TAPE_VOICE_VOLUME;
+    for (int c = 0; c < CAM_CLIPS; c++) {
+        camPcm[c] = camcorderClip((CamSound)c);
+        camVoices[c].pcm = &camPcm[c];
+    }
+    camVoices[(int)CamSound::Hiss].volume = Camcorder::HISS_VOLUME;
 }
 
 void SoundMixer::apply(const std::vector<AudioEvent> &events) {
@@ -56,6 +61,37 @@ void SoundMixer::apply(const std::vector<AudioEvent> &events) {
     }
 }
 
+// As CamcorderReel::playNoises and GameAudio::echo play them.
+void SoundMixer::camera(std::vector<CamNoise> &noises) {
+    auto start = [](Voice &v) { v.pos = 0; v.playing = true; };
+    for (const CamNoise &n : noises) {
+        switch (n.sound) {
+        case CamSound::Zoom:
+        case CamSound::Hiss: {
+            Voice &v = camVoices[(int)n.sound];
+            if (!v.playing) start(v);
+            break;
+        }
+        case CamSound::HissStop: camVoices[(int)CamSound::Hiss].playing = false; break;
+        case CamSound::Echo: {
+            const AudioEvent &e = n.echo;
+            const Pcm &pcm = clips[(int)e.sfx][e.variant];
+            if (pcm.empty()) break;
+            ClipSpec spec = clipSpec(e.sfx);
+            Voice &v = echoes[(int)e.sfx][e.variant];
+            v.pcm = &pcm;
+            v.pitch = (e.set & AudioEvent::SET_PITCH ? e.pitch : spec.pitch) * n.pitch;
+            v.volume = (e.set & AudioEvent::SET_VOLUME ? e.volume : spec.volume) * n.volume;
+            v.pan = e.set & AudioEvent::SET_PAN ? e.pan : 0.0f;
+            start(v);
+            break;
+        }
+        default: start(camVoices[(int)n.sound]); break;
+        }
+    }
+    noises.clear();
+}
+
 void SoundMixer::holdPaused(const AmbienceMix &mix, const LoopCue &cue) {
     bed.mix = mix;
     bed.mix.growl = bed.mix.hiss = bed.mix.whisper = 0;
@@ -92,6 +128,9 @@ void SoundMixer::render(int16_t *stereo, int frames) {
     for (auto &variants : voices)
         for (Voice &v : variants) if (v.pcm) mixVoice(v, acc.data(), frames);
     mixVoice(tapeVoice, acc.data(), frames);
+    for (Voice &v : camVoices) mixVoice(v, acc.data(), frames);
+    for (auto &variants : echoes)
+        for (Voice &v : variants) if (v.pcm) mixVoice(v, acc.data(), frames);
     for (size_t i = 0; i < acc.size(); i++)
         stereo[i] = (int16_t)lrintf(clampf(acc[i], -1.0f, 1.0f) * 32767.0f);
 }

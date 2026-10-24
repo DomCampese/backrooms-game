@@ -67,8 +67,12 @@ drawn"). What will bite:
 
 # Camcorder and recovered tape (October 2026)
 
-web/src/camcorder.{h,cpp}, the `TAPE_FS` shader and the world shader's `uIR`.
-It is the Web build's alone; the Unreal build does not have it. What will bite:
+shared/port/camcorder.{h,cpp} (`Camcorder`: the controls, zoom, night shot,
+interference, the tape's frames and sounds, the playback's clock, the clips and
+the OSD as `HudDraw`s), web/src/camcorder.{h,cpp} (`CamcorderReel`: the reel,
+`TAPE_FS`, the sound handles) and the world shader's `uIR`. The Unreal build
+has the camera without a reel: V, zoom, night shot's lamp, the OSD and the
+sounds, but nothing is taped and its death card has no playback. What will bite:
 
 - **The sim never sees the camera.** `Camcorder::control` runs between
   `readInput` and `trace.step` and takes fire, aim, reload and the wheel out
@@ -96,6 +100,20 @@ It is the Web build's alone; the Unreal build does not have it. What will bite:
   rules play without `SET_PITCH`.
 - **`Sim::DEATH_CARD` is 12 s, was 7**, to fit the playback (about 6 s) and
   then the card. `DEATH_CARD_HOLD` is unchanged, so a key still skips it.
+- **The camera asks for its sounds; it does not play them.** `Camcorder::noises`
+  is the list, drained by `CamcorderReel::playNoises` (raylib) or
+  `SoundMixer::camera` (Unreal). `Zoom` and `Hiss` mean "unless it is already
+  playing", which only the platform knows. An `Echo` of a recording plays in
+  the Web build and not in the mixer, which has no recordings.
+- **Call `fitReel` before the first tick, reel or no reel.** It sizes the list
+  of frames, and `record` reads the oldest frame to trim the logged sounds: with
+  no frames that is a division by zero slots. Unreal fits a 1440x850 reel it
+  never draws.
+- **The move to shared/port was checked call for call.** main's camcorder.cpp
+  (renamed by `-DCamcorder=CamcorderOld`) and the new pair ran side by side over
+  1.31 M random ticks (2,000 runs, deaths, playbacks, resizes, a failed reel),
+  every raylib call, sound, echo and light logged: none differ, and each of ten
+  small changes planted in the new code was caught.
 - **Interference is real.** At frame 40 of a seed-1337 Level 0 capture the
   tape is torn because Clark has spawned stalking about 12 m away, out of sight.
   That is the feature, not a bug in the shader.
@@ -900,7 +918,8 @@ build's, in `web/src/`.
 | `sfx.cpp` | loads the clips (`port/sounds.h`) and the embedded recordings into raylib |
 | `audio.cpp` | feeds the ambience bed (`port/ambience.h`) to a raylib stream; recorded loops live in `GameAudio::feedLoops` |
 | `sim/entity.h` | `Entity` (Clark on Level 0, the Smiler on 1 and 3, the Partygoer on 4) and `Dog` state |
-| `camcorder.{h,cpp}` | the camcorder: viewfinder, night shot, zoom, interference, the tape reel and its playback on the death card, its OSD and sounds |
+| `port/camcorder.{h,cpp}` | the camcorder: viewfinder, night shot, zoom, interference, the tape's frames and its playback on the death card, its clips and OSD |
+| `camcorder.{h,cpp}` | the camcorder's reel (one render texture), the tape look (`TAPE_FS`) and its sound handles |
 | `util.{h,cpp}` | platform helpers (`cl8`, `PARTY`); includes core's math and hashes. `SAMPLE_RATE` is port/sounds.h's |
 
 `Sim::step` calls the update functions in a fixed order: flashlight, look,

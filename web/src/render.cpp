@@ -9,6 +9,7 @@
 #include "rlgl.h"
 #include <cmath>
 #include <algorithm>
+#include <ctime>
 
 static_assert(sizeof(PARTY) / sizeof(PARTY[0]) == PARTY_COLOURS, "the sim draws balloon colours from PARTY_COLOURS");
 
@@ -300,6 +301,31 @@ void Game::drawScene(const SceneDraw &d, const Camera3D &cam) {
     }
 }
 
+// A list of 2D draws in window pixels (port/hud.h), with raylib.
+static void drawHud(const std::vector<HudDraw> &draws) {
+    for (const HudDraw &d : draws) {
+        Color c = { d.col.r, d.col.g, d.col.b, d.col.a }, c2 = { d.col2.r, d.col2.g, d.col2.b, d.col2.a };
+        switch (d.kind) {
+        case HudDraw::Text: DrawText(d.text.c_str(), d.x, d.y, d.h, c); break;
+        case HudDraw::Rect: DrawRectangle(d.x, d.y, d.w, d.h, c); break;
+        case HudDraw::RectLines: DrawRectangleLines(d.x, d.y, d.w, d.h, c); break;
+        case HudDraw::GradientV: DrawRectangleGradientV(d.x, d.y, d.w, d.h, c, c2); break;
+        case HudDraw::GradientH: DrawRectangleGradientH(d.x, d.y, d.w, d.h, c, c2); break;
+        case HudDraw::Circle: DrawCircle(d.x, d.y, d.r, c); break;
+        case HudDraw::Triangle:
+            DrawTriangle({ (float)d.x, (float)d.y }, { (float)d.x, (float)(d.y + d.h) },
+                         { (float)d.x + d.r, (float)d.y + d.h * 0.5f }, c);
+            break;
+        }
+    }
+}
+
+// The camcorder's date and time: the wall clock's, not the run's.
+static const std::tm *wallClock() {
+    time_t t = time(nullptr);
+    return localtime(&t);
+}
+
 void Game::renderUI(double now) {
     if (captureTime >= 0) now = captureTime;
     // ---- post + UI
@@ -316,7 +342,10 @@ void Game::renderUI(double now) {
     // Through the camcorder the tape's look replaces the eye's, and the
     // inventory and meters give way to its OSD.
     const bool filming = camcorder.viewing() && !sim.inMenu;
-    if (filming) camcorder.drawViewfinder(rt, timeF, (float)elapsed);
+    if (filming) {
+        camReel.present(camcorder.viewfinderPicture(), rt, timeF);
+        drawHud(camcorder.viewfinderOsd(sw, sh, timeF, (float)elapsed, wallClock(), MeasureText));
+    }
     else {
         BeginShaderMode(postShader);
         DrawTextureRec(rt.texture, { 0, 0, (float)rt.texture.width, -(float)rt.texture.height }, { 0, 0 }, WHITE);
@@ -327,7 +356,10 @@ void Game::renderUI(double now) {
     if (cleanShot && !sim.inMenu) { EndDrawing(); return; }
 
     // The tape plays under the death card's words, so it goes down first.
-    if (sim.inMenu && sim.deathT > 0 && camcorder.replaying()) camcorder.drawReplay(timeF);
+    if (sim.inMenu && sim.deathT > 0 && camcorder.replaying()) {
+        camReel.present(camcorder.replayPicture(), rt, timeF);
+        drawHud(camcorder.replayOsd(sw, sh, timeF, wallClock(), MeasureText));
+    }
     HudInput in;
     in.width = sw;
     in.height = sh;
@@ -339,16 +371,6 @@ void Game::renderUI(double now) {
     in.captureHint = !inCursorHidden() && !shotPath;
     in.fps = GetFPS();
     in.debug = debugHud;
-    for (const HudDraw &d : hudDraws(sim, in, everFlashed, MeasureText)) {
-        Color c = { d.col.r, d.col.g, d.col.b, d.col.a }, c2 = { d.col2.r, d.col2.g, d.col2.b, d.col2.a };
-        switch (d.kind) {
-        case HudDraw::Text: DrawText(d.text.c_str(), d.x, d.y, d.h, c); break;
-        case HudDraw::Rect: DrawRectangle(d.x, d.y, d.w, d.h, c); break;
-        case HudDraw::RectLines: DrawRectangleLines(d.x, d.y, d.w, d.h, c); break;
-        case HudDraw::GradientV: DrawRectangleGradientV(d.x, d.y, d.w, d.h, c, c2); break;
-        case HudDraw::GradientH: DrawRectangleGradientH(d.x, d.y, d.w, d.h, c, c2); break;
-        case HudDraw::Circle: DrawCircle(d.x, d.y, d.r, c); break;
-        }
-    }
+    drawHud(hudDraws(sim, in, everFlashed, MeasureText));
     EndDrawing();
 }

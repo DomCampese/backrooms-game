@@ -11,7 +11,7 @@ enum class EBackroomsControl : uint8
 	Forward, Back, Left, Right, Sprint, Crouch, Squeeze, Jump,
 	PickRevolver, PickFlare, PickDeck, Fire, Aim, Reload, Throw, Flashlight, Use, Drink, Chalk,
 	Pause, DebugHud, DevBlackout, DevBanish, DevRefill, DevStoreyUp, DevStoreyDown, DevNextLevel,
-	Begin, Look, Wheel,
+	Begin, Look, Wheel, Camcorder,
 	Count UMETA(Hidden)
 };
 
