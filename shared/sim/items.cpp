@@ -18,15 +18,9 @@ static const char *TAPE_LINES[] = {
 static constexpr int TAPE_LINE_COUNT = sizeof(TAPE_LINES) / sizeof(TAPE_LINES[0]);
 
 float Sim::bottleShelfY(int a, int b) {
-    switch (world.propAt(a, b)) {
-    case PROP_CABINET:     return 1.32f;
-    case PROP_TABLE:       return 0.72f;
-    case PROP_NIGHTSTAND:  return 0.60f;
-    case PROP_PARTY_TABLE: return 0.74f;
-    case PROP_DESK:        return 0.74f;
-    case PROP_MANILA_TABLE: return 0.787f;  // the octagonal table's top (addManilaRoom)
-    default:               return -1.0f;
-    }
+    uint8_t kind = world.propAt(a, b);
+    if (kind == PROP_MANILA_TABLE) return MANILA_TABLE_REST;
+    return kind < PROP_KINDS && PROP_SHAPES[kind].shelf ? PROP_SHAPES[kind].top : -1.0f;
 }
 
 bool Sim::bottleAt(int a, int b) {
