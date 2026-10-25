@@ -629,8 +629,14 @@ byte-identical. How it fits together, and what will bite:
   (`voidFace`) never show the baseboard at all. Every other level keeps its
   deliberate repeat, byte for byte.
 - **Streaming.** Adjacent storeys are generated and meshed only round chunks
-  that link to them (and ±2 through stacked links); `unloadFar` drops layers
-  more than `STOREY_REACH` storeys away. The regression's `capture()` runs `streamChunks`
+  that link to them (and on through tall courts, one chunk a storey); `unloadFar` drops layers
+  more than `STOREY_REACH` storeys away. The order is `streamChunks`
+  (shared/port/stream.h), which `Game::streamChunks` and Unreal's
+  `StreamAround` both walk; Unreal used to build full rings on the storeys
+  either side, slab nobody sees, and no chunk of a court's far storeys.
+  Moving the walk out of game.cpp was checked by compiling main's body
+  unchanged beside the new one over a logging cache: 100,000 cases (storeys
+  -3..3, both budgets, part-built caches), 4 M `ensure` calls, none differ. The regression's `capture()` runs `streamChunks`
   24 times, not 7: with 7 the storey above had not been meshed yet and every
   opening in a capture was black.
 - **The landing lamp.** Enclosed stairwells have no ceiling grid over them, so

@@ -194,6 +194,7 @@ The platform side of the seam:
 | file | holds |
 |---|---|
 | `shared/port/chunk_mesh.{h,cpp}` | `bakeChunkGeometry` (the mesher, engine-neutral), `ChunkMesh` slots |
+| `shared/port/stream.{h,cpp}` | `streamChunks`: which chunks a view streams, nearest first, on its storey and through the openings to others; `Game::streamChunks` and Unreal's `StreamAround` walk it |
 | `shared/port/mesh_builder.{h,cpp}`, `atlas.{h,cpp}`, `palette.h` | `MB`, `addPropBox`, `addSolidBox`, `PLAIN_UV`; `FIXTURES`, `vendUV`, tile sizes; `cl8`, `PARTY_RGBA` |
 | `web/src/world_mesh.{h,cpp}`, `mesh_upload.h` | `bakeChunk` (uploads the mesher's parts), `ChunkMeshCache` |
 | `web/src/object_meshes.{h,cpp}` | can, deck, reels, lamp, flare, crate and lid |
