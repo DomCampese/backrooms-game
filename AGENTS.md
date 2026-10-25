@@ -289,7 +289,12 @@ contracts. What will bite:
 - **proof-shots' menu.png is wall-clock noise.** The title camera's pitch is
   `sin(GetTime() * 0.22)`, so the frame depends on how long 60 frames took: the
   baseline binary differed from itself by 26% of pixels under load. The world
-  frames are pinned and must match to the pixel.
+  frames are pinned and must match to the pixel, except that lv0.png (and once
+  beam.png) can come out differently from one batch to the next of the same
+  binary: 5-6% of lv0's pixels, the back wall's light, while six single
+  `tools/shot.sh` runs of main and of a branch at the same knobs all matched to
+  the pixel (October 2026, cause not found). Before blaming a change for an
+  lv0 or beam difference, re-shoot that frame a few times from both binaries.
 
 # Chunk layout (September 2026)
 
