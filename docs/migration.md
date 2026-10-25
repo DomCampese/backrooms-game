@@ -196,6 +196,7 @@ The platform side of the seam:
 | `shared/port/chunk_mesh.{h,cpp}` | `bakeChunkGeometry` (the mesher, engine-neutral), `ChunkMesh` slots |
 | `shared/port/mesh_builder.{h,cpp}`, `atlas.{h,cpp}`, `palette.h` | `MB`, `addPropBox`, `addSolidBox`, `PLAIN_UV`; `FIXTURES`, `vendUV`, tile sizes; `cl8`, `PARTY_RGBA` |
 | `web/src/world_mesh.{h,cpp}`, `mesh_upload.h` | `bakeChunk` (uploads the mesher's parts), `ChunkMeshCache` |
+| `shared/port/visible.{h,cpp}` | `visibleChunks`: which streamed chunks a view sees, nearest first, other storeys only through the openings in view; render.cpp draws the list and Unreal hides the rest |
 | `web/src/object_meshes.{h,cpp}` | can, deck, reels, lamp, flare, crate and lid |
 | `web/src/vec_rl.h` | `toRl` / `fromRl` |
 | `web/src/levels.{h,cpp}` | `LevelCfg : LevelRules` (the look), `lightAtCPU` and the other CPU lighting mirrors |

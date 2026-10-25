@@ -106,7 +106,7 @@ palette of `PARTY_COLOURS` entries; the port owns the colours.
 | walls, floors, ceilings, stairs, pools | M2: a dynamic or procedural mesh per chunk built from the mesher's arrays; later a modular kit placed from core data |
 | props, fixtures (`ChunkLayout`) | instanced static meshes per kind, one component per chunk |
 | light fittings (`ChunkLayout`) | emissive panel meshes everywhere, plus a pool of real lights assigned to the fittings nearest the player each frame (the shader already sums only the 3x3 fittings round a point). Dead, dim and faulty states come from the layout; flicker and blackouts come from the sim's clock |
-| storeys (`storeyH`, `changeStorey` rebasing) | core and the sim stay storey-local. Place storey `s` at `z = s * storeyH` in Unreal space and convert at the boundary; do not port the rebase into Unreal actors |
+| storeys (`storeyH`, `changeStorey` rebasing) | core and the sim stay storey-local. Place storey `s` at `z = s * storeyH` in Unreal space and convert at the boundary; do not port the rebase into Unreal actors. In a run, `HideUnseenChunks` hides every chunk actor `visibleChunks` (shared/port/visible.h) leaves out, as the Web build leaves it undrawn: on the Mac, look up a stairwell and an atrium and turn round for a chunk that stays hidden when it should show |
 | player movement and collision | the sim stays authoritative (it uses core's `collideCircle`/`groundAt`), and the pawn follows it, until parity is proven; Unreal collision is for the camera and effects |
 | hunter, dogs (billboard sheets) | skeletal meshes driven by sim state; the sim's gait phase counts footfalls and can drive animation and footstep notifies together |
 | `InputFrame` | filled from Enhanced Input actions |
