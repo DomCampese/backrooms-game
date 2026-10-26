@@ -1346,7 +1346,7 @@ cannot otherwise reach.
 
 ## Measuring the layout, which screenshots will lie to you about
 
-`tools/mapdump.cpp` links `shared/core` alone and calls `generate()` directly —
+`tools/mapdump.cpp` links `shared/core` and `shared/sim` and calls `generate()` directly —
 no window, no GL, no raylib, about a second for a 258 m square:
 
 ```bash
@@ -1408,9 +1408,11 @@ the partition was built to fix, and is not: the ring is 87 of a chunk's 256
 cells, so 34% of the floor *is* corridor, and a corridor has no walls. Compare
 the two numbers before reading anything into either.
 
-`hideSpotAt` and `coinAt` live on `Sim` (shared/sim/items.cpp) and mapdump
-mirrors those two rules. Change either there and change it in mapdump too, or
-the harness quietly reports the old world.
+`hideSpotAt` and `coinAt` live on `Sim` (shared/sim/items.cpp), and mapdump
+calls them on a `Sim` it holds for its world. It used to keep copies, and its
+coin salt had fallen behind the sim's `pickupSalt`, which mixes in the level,
+visit and storey: every coin count and `o` mapdump printed away from Level 0,
+visit 0, storey 0 described another world (October 2026).
 
 To compare frame cost against another build rather than eyeballing `fps=`
 (which is a smoothed integer, and the sandbox swings about 15% run to run):

@@ -214,7 +214,7 @@ Still coupled, and why:
   ...)`). What it used to decide from hashes (fixtures, fittings, props, doors)
   is now core's `ChunkLayout`: see seam 2 below for what is left.
 - Game rules that hash cells (hide spots, coins, crates) live in the sim
-  (shared/sim/items.cpp), and `tools/mapdump.cpp` mirrors `hideSpotAt` and
+  (shared/sim/items.cpp), and `tools/mapdump.cpp` calls the sim's `hideSpotAt` and
   `coinAt`.
 - A prop's height is written in three places: `addProp` (mesher),
   `gatherCellAABBs` (core) and `Sim::bottleShelfY`.

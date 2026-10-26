@@ -1,6 +1,6 @@
 // A measuring instrument for the generator. No window, no GL, no Xvfb: it links
-// shared/core alone and calls generate() directly, so every number below comes
-// from exactly the code the game ships.
+// shared/core and shared/sim and calls generate() directly, so every number
+// below comes from exactly the code the game ships.
 //
 // This exists because screenshots were actively misleading about the layout.
 // From captures alone the halls looked like they ran for hundreds of metres;
@@ -17,6 +17,7 @@
 #include "../shared/core/level_rules.h"
 #include "../shared/core/floorplan.h"
 #include "../shared/core/layout.h"
+#include "../shared/sim/sim.h"
 
 #include <algorithm>
 #include <cmath>
@@ -28,24 +29,10 @@
 
 namespace {
 
-// Game::hideSpotAt and Game::coinAt live on Game, which would drag the whole
-// renderer in here. They are pure functions of world state, so they are
-// mirrored — if either rule changes in game.cpp, change it here too or this
-// harness will quietly report the old world.
-bool hideSpotAt(World &w, int a, int b) {
-    switch (w.propAt(a, b)) {
-    case PROP_BOXES: case PROP_CABINET: case PROP_COUCH: case PROP_ARMOIRE:
-    case PROP_NIGHTSTAND: case PROP_BED: case PROP_PARTY_TABLE: case PROP_DESK:
-    case PROP_SHELVING:
-        return true;
-    default:
-        return false;
-    }
-}
-bool coinAt(World &w, int a, int b) {
-    if (w.pillarAt(a, b) || w.propAt(a, b) || w.poolAt(a, b)) return false;
-    return ih(a, b, (uint32_t)w.seed ^ 0xC01Du) % 449 == 0;
-}
+// The sim's own rules for what a cell holds (hide spots, coins), on the world
+// it owns. mapdump used to carry copies, and its coin salt had fallen behind
+// the sim's (pickupSalt mixes in the level, visit and storey).
+Sim sim;
 
 struct Args {
     int level = 0, cells = 129, samples = 4000, storey = 0;
@@ -68,7 +55,7 @@ char cellGlyph(World &w, int a, int b) {
         case PROP_PLANT:       return '*';
         case PROP_LAMP:        return 'i';
         case PROP_COOLER:      return 'c';
-        default:               return hideSpotAt(w, a, b) ? 'H' : 'p';
+        default:               return sim.hideSpotAt(a, b) ? 'H' : 'p';
         }
     }
     if (w.valveAt(a, b)) return 'Y';
@@ -247,7 +234,8 @@ int main(int argc, char **argv) {
         else { fputs(usage, stderr); return 2; }
     }
 
-    World w;
+    World &w = sim.world;
+    sim.level = a.level;
     w.seed = a.seed;
     w.level = a.level;
     w.visit = a.visit;
@@ -298,7 +286,7 @@ int main(int argc, char **argv) {
                        (wv == WALL_WINDOW) ? '=' : (wv == WALL_EXIT) ? 'E' : ' ';
                 char g = cellGlyph(w, x, b);
                 if (g == ' ' && w.keyAt(x, b))   g = 'k';
-                if (g == ' ' && coinAt(w, x, b)) g = 'o';
+                if (g == ' ' && sim.coinAt(x, b)) g = 'o';
                 if (g == ' ' && w.poolAt(x, b))  g = 'w';
                 float fy = w.floorY(x, b);
                 char h = (fabsf(fy) < 0.05f) ? ' ' : (fy > 0 ? '^' : '_');
@@ -349,8 +337,8 @@ int main(int argc, char **argv) {
         }
         if (w.pillarAt(x, b)) pillars++;
         if (w.propAt(x, b)) props++;
-        if (hideSpotAt(w, x, b)) hides++;
-        if (coinAt(w, x, b)) coins++;
+        if (sim.hideSpotAt(x, b)) hides++;
+        if (sim.coinAt(x, b)) coins++;
         if (w.softAt(x, b)) soft++;
         if (w.valveAt(x, b)) valves++;
         if (w.poolAt(x, b)) pools++;
