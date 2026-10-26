@@ -636,6 +636,12 @@ byte-identical. How it fits together, and what will bite:
 - **The landing lamp.** Enclosed stairwells have no ceiling grid over them, so
   the nearest one within 22 m gets the shader's spare point light (`uLamp`,
   colour `uLampCol`); the Manila Room's chandelier wins when it is nearer.
+  Which landings are near, and where each lamp and tube is, is
+  `World::landingLights`, which `frameLight` and `sceneDraws` both read. It
+  looks only at chunks already generated, and `sceneDraws` generates chunks
+  round the view, so two calls in a row can see different landings: a harness
+  comparing two versions has to warm the world up with one call first, or it
+  reports 4% of states differing between a build and itself.
 
 Tools: `BACKROOMS_STOREY=n` starts on storey n; with F3 up, PageUp/PageDown
 move a storey where you stand. `./mapdump --visit 1 --list-stairs` prints every

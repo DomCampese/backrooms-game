@@ -226,8 +226,8 @@ Still coupled, and why:
   `TUBE_STUTTER_SPREAD` for `lightState`), and the stutter's (`TUBE_STUTTER_*`,
   `TUBE_BUZZ_*`, which `tubeStutter` uses). The light plane is core's `LIGHT_DROP` everywhere on the C++ side,
   the mesher, `uLY` and every `lightAtCPU` call included.
-- The render loop reads `ChunkData` directly for the stairwell landing lights
-  (`nfeat`, `feats`).
+- The stairwell landing lights are core's `World::landingLights`; nothing
+  outside core reads `ChunkData`'s features for them.
 
 Proofs, against a build of main before the seam (374a84e; two captures of
 that binary give the noise floor):

@@ -138,6 +138,15 @@ enum VertKind : uint8_t {
 };
 // One vertical feature. Local frame: u across the rise, v along it, metres
 // from the footprint's corner; `dir` turns that frame onto the grid.
+// An enclosed stairwell's landing light: the point the shader's spare light
+// shines from (World::landingLamp), and the batten's tube, its centre and
+// whether it runs along x. The tube goes out in a blackout, so a renderer
+// draws it, not the chunk mesh.
+struct LandingLight {
+    Vec3 lamp, tube;
+    bool alongX;
+};
+
 struct VertFeat {
     uint8_t kind = VK_NONE;
     uint8_t dir = 0;          // 0 rises toward +z, 1 toward -z, 2 toward +x, 3 toward -x
@@ -271,6 +280,11 @@ struct World {
     Vec3 landingLamp(const VertFeat &f, int cx, int cz) const {
         return featureWorld(f, cx, cz, CELL, storeyH * 0.5f + 2.25f, 4 * CELL - WT - 0.07f);
     }
+    // The landing lights of the enclosed stairwells in the generated chunks of
+    // the 3 x 3 round chunk (pcx, pcz), in the frame of the storey you are on
+    // (World::storey), chunk by chunk then feature by feature. Nothing is
+    // generated to find them.
+    std::vector<LandingLight> landingLights(int pcx, int pcz);
     // Write storey qs's half of a feature into a chunk being generated: its
     // margin, cell flags, walls, rails and doors.
     void stampFeature(ChunkData &d, const VertFeat &f, int cx, int cz);
