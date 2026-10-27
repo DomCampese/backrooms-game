@@ -226,8 +226,8 @@ static void addStep(MB &fl, MB &pr, ToWorld to, float u0, float u1, float va, fl
 }
 
 // Build one piece of furniture: boxes in the props mesh, a contact shadow in
-// the AO mesh, and for the fallen tile a hole in the ceiling mesh. Heights must
-// match gatherCellAABBs and Game::bottleShelfY.
+// the AO mesh, and for the fallen tile a hole in the ceiling mesh. What
+// collision stops at and a carton stands on is PROP_SHAPES' top (core/world.h).
 static void addProp(const PropPlacement &site, int level, MB &pr, MB &ce, MB &ao, MB &fx) {
     const float pcx = site.x, pcz = site.z, rot = site.yaw, ey = site.floorY;
     const uint32_t h = site.hash;
@@ -264,6 +264,7 @@ static void addProp(const PropPlacement &site, int level, MB &pr, MB &ce, MB &ao
             pr.tri({cx,y1,cz},p3,p2,{0,1,0},uv,uv,uv,tint);
         }
     };
+    const float top = PROP_SHAPES[site.kind].top;
     auto blob = [&](float hx, float hz) {
         addContactShadow(ao, pcx, pcz, ey, rot, hx, hz);
     };
@@ -289,14 +290,14 @@ static void addProp(const PropPlacement &site, int level, MB &pr, MB &ce, MB &ao
     }
     case PROP_CABINET:     // filing cabinet
         blob(0.34f, 0.42f);
-        addPropBox(pr, pcx, pcz, rot, 0.26f, 0.34f, ey, ey + 1.32f,
+        addPropBox(pr, pcx, pcz, rot, 0.26f, 0.34f, ey, ey + top,
                    FU0, FV0, FU1, FV1, MU0, MV0, MU1, MV1);
         for (int i=0;i<3;++i)
             part(0,0.343f,0.075f,0.008f,ey+0.23f+i*0.40f,ey+0.25f+i*0.40f,Surface::Metal,{187,191,186,254});
         break;
     case PROP_TABLE: {   // folding table
         blob(0.58f, 0.40f);
-        float ty = 0.72f;
+        float ty = top;
         addPropBox(pr, pcx, pcz, rot, 0.62f, 0.40f, ey + ty - 0.04f, ey + ty,
                    MU0, MV0, MU1, MV1, MU0, MV0, MU1, MV1);
         for (int lx = -1; lx <= 1; lx += 2) for (int lz = -1; lz <= 1; lz += 2) {
@@ -332,7 +333,7 @@ static void addProp(const PropPlacement &site, int level, MB &pr, MB &ce, MB &ao
     case PROP_COUCH: {   // couch
         blob(0.74f, 0.48f);
         Rgba uph = { 172, 152, 96, 255 };
-        part(0, 0.10f, 0.78f, 0.42f, ey + 0.16f, ey + 0.44f, Surface::Fabric, uph);   // seat
+        part(0, 0.10f, 0.78f, 0.42f, ey + 0.16f, ey + top, Surface::Fabric, uph);     // seat
         part(0, -0.36f, 0.78f, 0.14f, ey + 0.16f, ey + 0.92f, Surface::Fabric, uph);  // backrest
         part(-0.64f, 0.06f, 0.14f, 0.46f, ey, ey + 0.62f, Surface::Fabric, uph);      // arms
         part( 0.64f, 0.06f, 0.14f, 0.46f, ey, ey + 0.62f, Surface::Fabric, uph);
@@ -347,7 +348,7 @@ static void addProp(const PropPlacement &site, int level, MB &pr, MB &ce, MB &ao
     case PROP_ARMOIRE:     // armoire
         blob(0.54f, 0.46f);
         part(0, 0, 0.44f, 0.36f, ey, ey + 1.78f, Surface::Wood, Rgba{ 118, 82, 58, 255 });
-        part(0, 0, 0.48f, 0.40f, ey + 1.78f, ey + 1.90f, Surface::Wood, Rgba{ 92, 63, 44, 255 });  // cornice
+        part(0, 0, 0.48f, 0.40f, ey + 1.78f, ey + top, Surface::Wood, Rgba{ 92, 63, 44, 255 });   // cornice
         part(0, 0.37f, 0.015f, 0.015f, ey + 0.85f, ey + 1.0f, Surface::Metal, Rgba{ 190, 170, 110, 255 }); // handles
         for (int i=-1;i<=1;i+=2)
             part(i*0.218f,0.362f,0.193f,0.003f,ey+0.15f,ey+1.67f,Surface::Wood,{155,113,79,255});
@@ -361,19 +362,19 @@ static void addProp(const PropPlacement &site, int level, MB &pr, MB &ce, MB &ao
     case PROP_NIGHTSTAND:     // nightstand
         blob(0.36f, 0.36f);
         part(0, 0, 0.26f, 0.26f, ey, ey + 0.55f, Surface::Wood, Rgba{ 126, 90, 62, 255 });
-        part(0, 0, 0.30f, 0.30f, ey + 0.55f, ey + 0.60f, Surface::Wood, Rgba{ 104, 74, 50, 255 });
+        part(0, 0, 0.30f, 0.30f, ey + 0.55f, ey + top, Surface::Wood, Rgba{ 104, 74, 50, 255 });
         break;
     case PROP_BED: {   // bed: frame, mattress, headboard
         blob(0.60f, 1.02f);
         Rgba wd = { 110, 78, 54, 255 };
         part(0, 0, 0.52f, 0.92f, ey + 0.12f, ey + 0.26f, Surface::Wood, wd);          // frame
-        part(0, 0.04f, 0.48f, 0.86f, ey + 0.26f, ey + 0.46f, Surface::Fabric, Rgba{ 216, 208, 188, 255 }); // mattress
+        part(0, 0.04f, 0.48f, 0.86f, ey + 0.26f, ey + top, Surface::Fabric, Rgba{ 216, 208, 188, 255 });  // mattress
         part(0, -0.97f, 0.52f, 0.05f, ey, ey + 0.95f, Surface::Wood, wd);             // headboard
         break;
     }
     case PROP_PARTY_TABLE: {  // party table: cloth, cake, cups
         blob(0.52f, 0.52f);
-        float ty = 0.74f;
+        float ty = top;
         const uint32_t th = site.hash2;
         Rgba cloth = PARTY_RGBA[th % 5];
         part(0, 0, 0.55f, 0.55f, ey + ty - 0.05f, ey + ty, Surface::Fabric, cloth);
@@ -512,12 +513,12 @@ static void addProp(const PropPlacement &site, int level, MB &pr, MB &ce, MB &ao
     case PROP_DESK: {  // office desk and chair
         blob(0.72f, 0.52f);
         Rgba wd = { 104, 80, 56, 255 };
-        part(0, -0.12f, 0.62f, 0.34f, ey + 0.70f, ey + 0.74f, Surface::Wood, wd);      // desktop
+        part(0, -0.12f, 0.62f, 0.34f, ey + 0.70f, ey + top, Surface::Wood, wd);       // desktop
         part(-0.46f, -0.12f, 0.14f, 0.30f, ey, ey + 0.70f, Surface::Wood, wd);         // pedestals
         part( 0.46f, -0.12f, 0.14f, 0.30f, ey, ey + 0.70f, Surface::Wood, wd);
         part(0.08f, -0.22f, 0.19f, 0.035f, ey + 0.76f, ey + 1.08f, Surface::Metal, Rgba{ 30, 30, 34, 255 }); // monitor
-        part(0.08f, -0.14f, 0.06f, 0.06f, ey + 0.74f, ey + 0.77f, Surface::Metal, Rgba{ 38, 38, 42, 255 });  // its foot
-        part(-0.30f, -0.14f, 0.11f, 0.08f, ey + 0.74f, ey + 0.765f, Surface::Metal, Rgba{ 200, 196, 186, 255 }); // papers
+        part(0.08f, -0.14f, 0.06f, 0.06f, ey + top, ey + 0.77f, Surface::Metal, Rgba{ 38, 38, 42, 255 });  // its foot
+        part(-0.30f, -0.14f, 0.11f, 0.08f, ey + top, ey + 0.765f, Surface::Metal, Rgba{ 200, 196, 186, 255 }); // papers
         part(0.02f + r1 * 0.1f, 0.44f, 0.20f, 0.20f, ey + 0.40f, ey + 0.46f, Surface::Fabric, Rgba{ 52, 50, 54, 255 }); // chair seat
         part(0.02f + r1 * 0.1f, 0.62f, 0.20f, 0.04f, ey + 0.46f, ey + 0.96f, Surface::Fabric, Rgba{ 52, 50, 54, 255 }); // backrest
         part(0.02f + r1 * 0.1f, 0.44f, 0.035f, 0.035f, ey, ey + 0.40f, Surface::Metal, Rgba{ 72, 72, 76, 255 });        // post
@@ -530,7 +531,7 @@ static void addProp(const PropPlacement &site, int level, MB &pr, MB &ce, MB &ao
             part(0, 0, 0.60f, 0.24f, ey + 0.08f + s2 * 0.55f, ey + 0.12f + s2 * 0.55f, Surface::Metal, mt);
         // corner posts, not panels, so the rack is see-through from the side
         for (int ux = -1; ux <= 1; ux += 2) for (int uz = -1; uz <= 1; uz += 2)
-            part(ux * 0.575f, uz * 0.215f, 0.03f, 0.03f, ey, ey + 1.80f, Surface::Metal, mt);
+            part(ux * 0.575f, uz * 0.215f, 0.03f, 0.03f, ey, ey + top, Surface::Metal, mt);
         part(-0.25f, 0.0f, 0.16f, 0.16f, ey + 0.12f, ey + 0.44f, Surface::Cardboard, Rgba{ 168, 138, 100, 255 });  // stock
         part( 0.30f, 0.02f, 0.14f, 0.14f, ey + 0.67f, ey + 0.94f, Surface::Cardboard, Rgba{ 150, 122, 88, 255 });
         if (r2 > 0.4f)
@@ -539,7 +540,7 @@ static void addProp(const PropPlacement &site, int level, MB &pr, MB &ce, MB &ao
     }
     case PROP_COOLER: {  // water cooler
         blob(0.30f, 0.30f);
-        part(0, 0, 0.19f, 0.19f, ey, ey + 0.94f, Surface::Metal, Rgba{ 204, 206, 210, 255 });   // body
+        part(0, 0, 0.19f, 0.19f, ey, ey + top, Surface::Metal, Rgba{ 204, 206, 210, 255 });    // body
         roundPart(0,0,0.10f,0.125f,ey+0.94f,ey+1.24f,{150,186,214,254});
         roundPart(0,0,0.125f,0.10f,ey+1.24f,ey+1.28f,{150,186,214,254});
         for (int i=0;i<3;++i) roundPart(0,0,0.128f,0.128f,ey+1.01f+i*0.07f,ey+1.025f+i*0.07f,{179,206,223,254});
@@ -550,7 +551,7 @@ static void addProp(const PropPlacement &site, int level, MB &pr, MB &ce, MB &ao
         blob(0.26f, 0.26f);
         part(0, 0, 0.17f, 0.17f, ey, ey + 0.09f, Surface::Metal, Rgba{ 120, 70, 48, 255 });    // saucer
         roundPart(0,0,0.105f,0.145f,ey+0.02f,ey+0.30f,{146,88,58,254});
-        roundPart(0,0,0.153f,0.153f,ey+0.285f,ey+0.32f,{172,104,70,254});
+        roundPart(0,0,0.153f,0.153f,ey+0.285f,ey+top,{172,104,70,254});
         part(0, 0, 0.032f, 0.032f, ey + 0.32f, ey + 0.88f, Surface::Metal, Rgba{ 76, 66, 44, 255 });   // stem
         for (int i=0;i<10;++i) {
             float angle=rot+i*2.39996f,yy=ey+0.58f+(i%4)*0.13f;
@@ -827,7 +828,7 @@ static void addManilaRoom(MB &pr, MB &fx, MB &ao, float rx, float rz, float cy, 
     const FixtureRect &N = FIXTURES[FIX_NOTE];
     for (int i = 0; i < 4; i++) {
         float a = r.f01() * TAU, d = 0.12f + r.f01() * 0.30f, rot = r.f01() * TAU;
-        float nx = rx + cosf(a) * d, nz = rz + sinf(a) * d, y = 0.787f + 0.0012f * i;
+        float nx = rx + cosf(a) * d, nz = rz + sinf(a) * d, y = MANILA_TABLE_REST + 0.0012f * i;
         float c = cosf(rot), s2 = sinf(rot), hw = N.halfW, hh = N.halfH;
         auto P = [&](float u, float v) { return Vec3{ nx + u * c - v * s2, y, nz + u * s2 + v * c }; };
         fx.quad(P(-hw,-hh), P(-hw,hh), P(hw,hh), P(hw,-hh), { 0, 1, 0 },

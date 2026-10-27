@@ -1220,32 +1220,25 @@ int World::gatherCellAABBs(int ci, int ck, AABB *out, int cap, int cnt, bool inc
             float ey = floorY(ci, ck);
             uint32_t h = ih(ci, ck, sseed() ^ PROP_HASH_SALT);
             float r1 = (h & 0xFF) / 255.0f, r2 = ((h >> 8) & 0xFF) / 255.0f;
-            // Tops must match the heights addProp builds and Game::bottleShelfY; change
-            // all three together. PROP_FALLEN_TILE has no box: rubble is walked over.
             switch (pv) {
             case PROP_BOXES: {   // top of the tallest stacked one
                 float t = 0.55f + r1 * 0.2f;
                 if (r2 > 0.35f) t += 0.5f;
                 out[cnt++] = { x0 + 0.35f, z0 + 0.35f, x0 + 1.65f, z0 + 1.65f, ey + t }; break;
             }
-            case PROP_CABINET:     out[cnt++] = { x0 + 0.60f, z0 + 0.60f, x0 + 1.40f, z0 + 1.40f, ey + 1.32f }; break;
-            case PROP_TABLE:       out[cnt++] = { x0 + 0.32f, z0 + 0.32f, x0 + 1.68f, z0 + 1.68f, ey + 0.72f }; break;
-            case PROP_COUCH:       out[cnt++] = { x0 + 0.20f, z0 + 0.38f, x0 + 1.80f, z0 + 1.62f, ey + 0.44f }; break;
-            case PROP_ARMOIRE:     out[cnt++] = { x0 + 0.55f, z0 + 0.62f, x0 + 1.45f, z0 + 1.38f, ey + 1.90f }; break;
-            case PROP_LAMP:        out[cnt++] = { x0 + 0.82f, z0 + 0.82f, x0 + 1.18f, z0 + 1.18f, ey + 1.62f }; break;
-            case PROP_NIGHTSTAND:  out[cnt++] = { x0 + 0.66f, z0 + 0.66f, x0 + 1.34f, z0 + 1.34f, ey + 0.60f }; break;
-            case PROP_BED:         out[cnt++] = { x0 + 0.30f, z0 + 0.15f, x0 + 1.70f, z0 + 1.85f, ey + 0.46f }; break;
             case PROP_VENDING: {   // wherever vendFootprint stood it
                 float vx, vz, bx0, bz0, bx1, bz1;
                 vendFootprint(propRotAt(ci, ck), x0 + 1.0f, z0 + 1.0f, vx, vz, bx0, bz0, bx1, bz1);
                 out[cnt++] = { bx0, bz0, bx1, bz1, ey + VEND_Y1 };
                 break;
             }
-            case PROP_PARTY_TABLE: out[cnt++] = { x0 + 0.40f, z0 + 0.40f, x0 + 1.60f, z0 + 1.60f, ey + 0.74f }; break;
-            case PROP_DESK:        out[cnt++] = { x0 + 0.30f, z0 + 0.50f, x0 + 1.70f, z0 + 1.50f, ey + 0.74f }; break;
-            case PROP_SHELVING:    out[cnt++] = { x0 + 0.36f, z0 + 0.70f, x0 + 1.64f, z0 + 1.30f, ey + 1.80f }; break;
-            case PROP_COOLER:      out[cnt++] = { x0 + 0.78f, z0 + 0.78f, x0 + 1.22f, z0 + 1.22f, ey + 0.94f }; break;
-            case PROP_PLANT:       out[cnt++] = { x0 + 0.80f, z0 + 0.80f, x0 + 1.20f, z0 + 1.20f, ey + 0.32f }; break;
+            default: {
+                if (pv < PROP_KINDS && PROP_SHAPES[pv].solid) {
+                    const PropShape &ps = PROP_SHAPES[pv];
+                    out[cnt++] = { x0 + ps.x0, z0 + ps.z0, x0 + ps.x1, z0 + ps.z1, ey + ps.top };
+                }
+                break;
+            }
             }
         }
     }

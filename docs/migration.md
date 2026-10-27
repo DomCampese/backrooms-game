@@ -217,7 +217,9 @@ Still coupled, and why:
 - Game rules that hash cells (hide spots, coins, crates) live in the sim
   (shared/sim/items.cpp), and `tools/mapdump.cpp` mirrors `hideSpotAt` and
   `coinAt`.
-- A prop's height is written in three places: `addProp` (mesher),
+- A carton's stack is still worked out twice, from the cell's hash, by
+  `addProp` (mesher) and `gatherCellAABBs`. Every other prop's box, top and
+  shelf are `PROP_SHAPES` (core/world.h), read by `addProp`,
   `gatherCellAABBs` (core) and `Sim::bottleShelfY`.
 - No lighting constant is copied into the GLSL by hand any more; its lighting
   arithmetic is still its own. The panel half-size is

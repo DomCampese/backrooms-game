@@ -2284,10 +2284,14 @@ pass, and both obey the same three rules, learned the hard way:
   boxes. Skip that and you walk through the door frame, which reads worse than
   the gap did. `WALL_EXIT` still has no collision at all, so its jambs are
   phantom; that is pre-existing, not a pattern to copy.
-- **A prop's height lives in three places and they must agree**: `addProp`
-  builds it (chunk_mesh.cpp), `gatherCellAABBs` gives it a collision box, and
-  `Sim::bottleShelfY` says how high a carton stands on it. Change one, change
-  all three, or you get furniture you fall through or cartons floating.
+- **A prop's size is `PROP_SHAPES` (core/world.h)**: its collision box
+  (`gatherCellAABBs`), the top `addProp` builds it to (chunk_mesh.cpp) and,
+  where `shelf` is set, the height `Sim::bottleShelfY` stands a carton at.
+  These were three copies until October 2026. The move was checked with
+  2,500 chunk bakes (byte-identical) and every cell's boxes and shelf over
+  every level, visit, exit setting and three storeys (674,527 boxes, the same
+  hash). Cartons, the vending machine and the Manila Room's table
+  (`MANILA_TABLE_REST`) keep their own rules: a carton's top follows its hash.
 - **The rotten floor patches are a shortcut, not an accident, and three things
   say so.** `World::softDip` is the single source of the bowl's shape: the floor
   mesher builds the cell out of it and `groundAt` walks the player down the same
