@@ -194,6 +194,7 @@ The platform side of the seam:
 | file | holds |
 |---|---|
 | `shared/port/chunk_mesh.{h,cpp}` | `bakeChunkGeometry` (the mesher, engine-neutral), `ChunkMesh` slots |
+| `shared/port/stream.{h,cpp}` | `streamChunks`: which chunks a view streams, nearest first, on its storey and through the openings to others; `Game::streamChunks` and Unreal's `StreamAround` walk it |
 | `shared/port/mesh_builder.{h,cpp}`, `atlas.{h,cpp}`, `palette.h` | `MB`, `addPropBox`, `addSolidBox`, `PLAIN_UV`; `FIXTURES`, `vendUV`, tile sizes; `cl8`, `PARTY_RGBA` |
 | `shared/port/hud.{h,cpp}` | `hudDraws`: the HUD render.cpp draws over the world, as draws in window pixels, measured by the caller's font |
 | `shared/port/camcorder.{h,cpp}` | `Camcorder`: the camera's controls, the tape's frames and sounds, the playback's clock, its clips and OSD; the platform keeps the reel and draws `CamPicture` through its tape look |

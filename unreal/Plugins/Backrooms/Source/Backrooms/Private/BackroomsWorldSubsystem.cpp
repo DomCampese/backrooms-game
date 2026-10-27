@@ -18,6 +18,7 @@
 #include "core/level_rules.h"
 #include "port/camcorder.h"
 #include "port/draw.h"
+#include "port/stream.h"
 #include "port/view.h"
 #include "sim/start.h"
 #include "sim/trace.h"
@@ -312,7 +313,7 @@ void UBackroomsWorldSubsystem::Tick(float DeltaTime)
 	if (bRun)
 	{
 		// The sim owns which storey is current (it rebases as you climb).
-		StreamAround(BackroomsCoords::ToUnreal({ Game->px, 0.0f, Game->pz }), Game->world.storey, DeltaTime);
+		StreamAround(BackroomsCoords::ToUnreal({ Game->px, 0.0f, Game->pz }), DeltaTime);
 		ShowFrame(simView(*Game).eye);
 	}
 	else
@@ -324,13 +325,13 @@ void UBackroomsWorldSubsystem::Tick(float DeltaTime)
 		{
 			Game->world.setStorey(Storey);
 		}
-		StreamAround(Camera, Storey, DeltaTime);
+		StreamAround(Camera, DeltaTime);
 		ShowFrame(BackroomsCoords::FromUnreal(Camera - StoreyOrigin()));
 	}
 }
 
 // Focus is in Unreal space; only its x and y (core's x and z) are read.
-void UBackroomsWorldSubsystem::StreamAround(const FVector& Focus, int32 Storey, float DeltaTime)
+void UBackroomsWorldSubsystem::StreamAround(const FVector& Focus, float DeltaTime)
 {
 	World& Maze = Game->world;
 	// What core has dropped or rebuilt goes first, before any actor is kept.
@@ -340,42 +341,29 @@ void UBackroomsWorldSubsystem::StreamAround(const FVector& Focus, int32 Storey, 
 	}
 	Maze.staleChunks.clear();
 
-	// Wanted chunks, nearest first: this storey ring by ring, then the others.
+	// Wanted chunks, nearest first, in the Web build's order (port/stream.h):
+	// this storey ring by ring, then the other storeys only where an opening
+	// shows them. Every wanted chunk is listed, so the rest can be dropped; a
+	// frame builds the first few that are missing.
 	const Vec3 At = BackroomsCoords::FromUnreal(Focus);
 	const int32 Pcx = fdiv(cellOf(At.x), CCELLS), Pcz = fdiv(cellOf(At.z), CCELLS);
 	const UBackroomsSettings* Settings = GetDefault<UBackroomsSettings>();
 	TArray<FIntVector> Wanted;
-	const int32 Rel[3] = { 0, -1, 1 };
-	for (int32 R : Rel)
-	{
-		if (R != 0 && Maze.storeyH <= 0.0f)
-		{
-			continue;
-		}
-		const int32 Reach = R == 0 ? Settings->ReachOwnStorey : Settings->ReachOtherStoreys;
-		for (int32 Ring = 0; Ring <= Reach; Ring++)
-		{
-			for (int32 Dz = -Ring; Dz <= Ring; Dz++)
-			{
-				for (int32 Dx = -Ring; Dx <= Ring; Dx++)
-				{
-					if (FMath::Max(FMath::Abs(Dx), FMath::Abs(Dz)) == Ring)
-					{
-						Wanted.Add(FIntVector(Pcx + Dx, Pcz + Dz, Storey + R));
-					}
-				}
-			}
-		}
-	}
 	int32 Budget = Settings->BuildsPerFrame;
-	for (const FIntVector& Key : Wanted)
-	{
+	streamChunks(Maze, Pcx, Pcz, Settings->ReachOwnStorey, [&](const StreamChunk& C) {
+		const FIntVector Key(C.cx, C.cz, C.storey);
+		Wanted.Add(Key);
 		if (Budget > 0 && !Chunks.Contains(Key))
 		{
 			BuildChunk(Key);
 			Budget--;
+			if (C.inShadowGrid)
+			{
+				Game->shadowsStale = true;
+			}
 		}
-	}
+		return true;
+	});
 	TArray<FIntVector> Unwanted;
 	for (const TPair<FIntVector, TObjectPtr<ABackroomsChunkActor>>& Entry : Chunks)
 	{

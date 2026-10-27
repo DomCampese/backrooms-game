@@ -77,7 +77,9 @@ private:
 	// Web build's.
 	double Now() const;
 	FVector StoreyOrigin() const;
-	void StreamAround(const FVector& Focus, int32 Storey, float DeltaTime);
+	// Builds and drops chunk actors round Focus on the current storey, in
+	// port/stream.h's order.
+	void StreamAround(const FVector& Focus, float DeltaTime);
 	void BuildChunk(const FIntVector& Key);
 	void DropChunk(const FIntVector& Key);
 	void DropAll();

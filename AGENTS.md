@@ -320,7 +320,12 @@ contracts. What will bite:
 - **proof-shots' menu.png is wall-clock noise.** The title camera's pitch is
   `sin(GetTime() * 0.22)`, so the frame depends on how long 60 frames took: the
   baseline binary differed from itself by 26% of pixels under load. The world
-  frames are pinned and must match to the pixel.
+  frames are pinned and must match to the pixel, except that lv0.png (and once
+  beam.png) can come out differently from one batch to the next of the same
+  binary: 5-6% of lv0's pixels, the back wall's light, while six single
+  `tools/shot.sh` runs of main and of a branch at the same knobs all matched to
+  the pixel (October 2026, cause not found). Before blaming a change for an
+  lv0 or beam difference, re-shoot that frame a few times from both binaries.
 
 # Chunk layout (September 2026)
 
@@ -663,8 +668,14 @@ byte-identical. How it fits together, and what will bite:
   (`voidFace`) never show the baseboard at all. Every other level keeps its
   deliberate repeat, byte for byte.
 - **Streaming.** Adjacent storeys are generated and meshed only round chunks
-  that link to them (and ±2 through stacked links); `unloadFar` drops layers
-  more than `STOREY_REACH` storeys away. The regression's `capture()` runs `streamChunks`
+  that link to them (and on through tall courts, one chunk a storey); `unloadFar` drops layers
+  more than `STOREY_REACH` storeys away. The order is `streamChunks`
+  (shared/port/stream.h), which `Game::streamChunks` and Unreal's
+  `StreamAround` both walk; Unreal used to build full rings on the storeys
+  either side, slab nobody sees, and no chunk of a court's far storeys.
+  Moving the walk out of game.cpp was checked by compiling main's body
+  unchanged beside the new one over a logging cache: 100,000 cases (storeys
+  -3..3, both budgets, part-built caches), 4 M `ensure` calls, none differ. The regression's `capture()` runs `streamChunks`
   24 times, not 7: with 7 the storey above had not been meshed yet and every
   opening in a capture was black.
 - **The landing lamp.** Enclosed stairwells have no ceiling grid over them, so
