@@ -59,7 +59,7 @@ void ABackroomsHUD::DrawHUD()
 	const Camcorder& Cam = *Backrooms->GetCamcorder();
 	const std::tm Clock = WallClock();
 	// Through the camcorder its OSD replaces the inventory and meters, as the
-	// tape look will replace the eye's when the port has a reel.
+	// tape look replaces the eye's (UBackroomsRender::ShowPost).
 	const bool bFilming = Cam.viewing() && !Game->inMenu;
 	if (bFilming)
 	{

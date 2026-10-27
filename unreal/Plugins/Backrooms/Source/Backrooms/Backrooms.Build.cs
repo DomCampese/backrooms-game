@@ -17,7 +17,8 @@ public class Backrooms : ModuleRules
 		PrivateIncludePaths.Add(Path.Combine(Repo, "tools"));
 
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "DeveloperSettings", "InputCore", "EnhancedInput", "ProceduralMeshComponent" });
-		PrivateDependencyModuleNames.Add("AssetRegistry");
+		// RenderCore and RHI: the camcorder's reel copies each frame into its slot.
+		PrivateDependencyModuleNames.AddRange(new string[] { "AssetRegistry", "RenderCore", "RHI" });
 
 		// A shared PCH is force-included into every file, core's included, and
 		// core must see nothing but itself and the standard library.

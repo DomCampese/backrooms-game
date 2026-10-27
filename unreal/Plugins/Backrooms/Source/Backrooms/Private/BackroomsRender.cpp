@@ -9,6 +9,7 @@
 #include "Misc/Paths.h"
 #include "core/layout.h"
 #include "core/world.h"
+#include "port/camcorder.h"
 #include "port/chunk_mesh.h"
 #include "port/levels.h"
 
@@ -85,6 +86,7 @@ bool UBackroomsRender::Load()
 	ShapeOpaque = LoadAt<UMaterialInterface>(TEXT("M_BackroomsShape"));
 	ShapeBlend = LoadAt<UMaterialInterface>(TEXT("M_BackroomsShapeBlend"));
 	PostMaterial = LoadAt<UMaterialInterface>(TEXT("M_BackroomsPost"));
+	UMaterialInterface* TapeBase = LoadAt<UMaterialInterface>(TEXT("M_BackroomsTape"));
 	UMaterialInterface* BillboardBase = LoadAt<UMaterialInterface>(TEXT("M_BackroomsBillboard"));
 	UMaterialInterface* BillboardAddBase = LoadAt<UMaterialInterface>(TEXT("M_BackroomsBillboardAdd"));
 
@@ -107,7 +109,7 @@ bool UBackroomsRender::Load()
 		}
 	}
 	FString Missing;
-	if (!Collection || !WorldMasked || !WorldBlend || !ShapeOpaque || !ShapeBlend || !PostMaterial || !BillboardBase || !BillboardAddBase)
+	if (!Collection || !WorldMasked || !WorldBlend || !ShapeOpaque || !ShapeBlend || !PostMaterial || !TapeBase || !BillboardBase || !BillboardAddBase)
 	{
 		Missing = TEXT("its materials");
 	}
@@ -131,6 +133,7 @@ bool UBackroomsRender::Load()
 	OccBytes.SetNumZeroed(OCC_CELLS * OCC_CELLS * 4 * 2);
 
 	UTexture2D* Neutral = Texture(TEXT("neutral"));
+	TapeMaterial = UMaterialInstanceDynamic::Create(TapeBase, this);
 	ChunkMaterials.SetNum(MatCount * 2);
 	for (int32 M = 0; M < MatCount; M++)
 	{
@@ -338,7 +341,35 @@ FrameLight UBackroomsRender::Still()
 	return L;
 }
 
-void UBackroomsRender::ShowPost(UWorld* Where)
+void UBackroomsRender::PinPost(FPostProcessSettings& S)
+{
+	S.bOverride_AutoExposureMethod = true;
+	S.AutoExposureMethod = AEM_Manual;
+	S.bOverride_AutoExposureBias = true;
+	S.AutoExposureBias = 0.0f;
+	S.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
+	S.AutoExposureApplyPhysicalCameraExposure = 0;
+	S.bOverride_BloomIntensity = true;
+	S.BloomIntensity = 0.0f;
+	S.bOverride_VignetteIntensity = true;
+	S.VignetteIntensity = 0.0f;
+	S.bOverride_SceneFringeIntensity = true;
+	S.SceneFringeIntensity = 0.0f;
+	S.bOverride_FilmGrainIntensity = true;
+	S.FilmGrainIntensity = 0.0f;
+	S.bOverride_MotionBlurAmount = true;
+	S.MotionBlurAmount = 0.0f;
+	S.bOverride_AmbientOcclusionIntensity = true;
+	S.AmbientOcclusionIntensity = 0.0f;
+	S.bOverride_LensFlareIntensity = true;
+	S.LensFlareIntensity = 0.0f;
+	S.bOverride_DynamicGlobalIlluminationMethod = true;
+	S.DynamicGlobalIlluminationMethod = EDynamicGlobalIlluminationMethod::None;
+	S.bOverride_ReflectionMethod = true;
+	S.ReflectionMethod = EReflectionMethod::None;
+}
+
+void UBackroomsRender::ShowPost(UWorld* Where, const CamPicture* Tape, UTexture* Reel)
 {
 	if (bLoaded && !Post)
 	{
@@ -349,35 +380,37 @@ void UBackroomsRender::ShowPost(UWorld* Where)
 		{
 			Post->bUnbound = true;
 			Post->Priority = 1000.0f;
-			FPostProcessSettings& S = Post->Settings;
 			// The post material replaces the tonemapper; the world materials
 			// tone-map as the Web build's shader does. Exposure is pinned at 1,
 			// and nothing of Unreal's own grading, bloom or lighting runs.
-			S.WeightedBlendables.Array.Add(FWeightedBlendable(1.0f, PostMaterial));
-			S.bOverride_AutoExposureMethod = true;
-			S.AutoExposureMethod = AEM_Manual;
-			S.bOverride_AutoExposureBias = true;
-			S.AutoExposureBias = 0.0f;
-			S.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
-			S.AutoExposureApplyPhysicalCameraExposure = 0;
-			S.bOverride_BloomIntensity = true;
-			S.BloomIntensity = 0.0f;
-			S.bOverride_VignetteIntensity = true;
-			S.VignetteIntensity = 0.0f;
-			S.bOverride_SceneFringeIntensity = true;
-			S.SceneFringeIntensity = 0.0f;
-			S.bOverride_FilmGrainIntensity = true;
-			S.FilmGrainIntensity = 0.0f;
-			S.bOverride_MotionBlurAmount = true;
-			S.MotionBlurAmount = 0.0f;
-			S.bOverride_AmbientOcclusionIntensity = true;
-			S.AmbientOcclusionIntensity = 0.0f;
-			S.bOverride_LensFlareIntensity = true;
-			S.LensFlareIntensity = 0.0f;
-			S.bOverride_DynamicGlobalIlluminationMethod = true;
-			S.DynamicGlobalIlluminationMethod = EDynamicGlobalIlluminationMethod::None;
-			S.bOverride_ReflectionMethod = true;
-			S.ReflectionMethod = EReflectionMethod::None;
+			Post->Settings.WeightedBlendables.Array.Add(FWeightedBlendable(1.0f, PostMaterial));
+			PinPost(Post->Settings);
 		}
+	}
+	if (!Post)
+	{
+		return;
+	}
+	// Both replace the tonemapper, so one is in the volume at a time.
+	UMaterialInterface* Want = PostMaterial;
+	if (Tape && TapeMaterial)
+	{
+		Want = TapeMaterial;
+		if (UMaterialParameterCollectionInstance* P = Where->GetParameterCollectionInstance(Collection))
+		{
+			P->SetVectorParameterValue(TEXT("TapeA"), FLinearColor(Tape->a.u0, Tape->a.v0, Tape->a.u1, Tape->a.v1));
+			P->SetVectorParameterValue(TEXT("TapeB"), FLinearColor(Tape->b.u0, Tape->b.v0, Tape->b.u1, Tape->b.v1));
+			P->SetVectorParameterValue(TEXT("Tape"), FLinearColor(Tape->mix, Tape->night, Tape->track, Tape->still));
+			P->SetVectorParameterValue(TEXT("TapeFrom"), FLinearColor(Tape->snow, Tape->fromReel ? 1.0f : 0.0f, 0.0f, 0.0f));
+		}
+		if (Reel)
+		{
+			TapeMaterial->SetTextureParameterValue(TEXT("Reel"), Reel);
+		}
+	}
+	FWeightedBlendable& Blendable = Post->Settings.WeightedBlendables.Array[0];
+	if (Blendable.Object != Want)
+	{
+		Blendable.Object = Want;
 	}
 }

@@ -1,0 +1,137 @@
+// The Web build's tape look (TAPE_FS in web/src/shaders.cpp), in HLSL for the
+// Unreal port's camcorder material (M_BackroomsTape, built by
+// Content/Python/backrooms_world.py). It takes the post material's place while
+// the viewfinder is up or the tape plays back on the death card, and draws the
+// scene, or two neighbouring frames off the reel, as tape. Change one, change
+// the other: tools/tape-check.sh renders both and compares them.
+#pragma once
+
+// What the tape look reads besides its pictures: MPC_Backrooms' Tape vectors
+// (UBackroomsRender::Frame), the time and the framebuffer's size.
+struct FBRTape
+{
+	float Time;
+	float2 Res;           // the framebuffer, px
+	float4 CellA, CellB;  // frames as uv: min.xy, max.zw, v up the picture
+	float Mix;            // how far from frame a to frame b
+	float Night;          // night shot: infrared, gained up, green
+	float Track;          // interference: 0 clean .. 1 torn
+	float Still;          // a paused frame, which the heads cannot hold still
+	float Snow;           // no picture: only noise
+};
+
+float BRTapeHash(float2 P)
+{
+	return frac(sin(dot(P, float2(12.9898, 78.233))) * 43758.5453);
+}
+
+// The line a fragment is on, and where its picture is read once the line's
+// timing has wandered.
+struct FBRTapeLine
+{
+	float2 Q;     // 0..1, bottom-left, as the frames are stored
+	float Down;   // 0 at the top of the picture, before a still frame's shake
+	float Line;   // of the field's 240
+	float Tear;   // the tracking band, where it is torn
+};
+
+// The tape look in three steps, because the pictures are sampled in between
+// by the material's Custom node (the scene through SceneTextureLookup, the
+// reel through its texture parameter):
+//
+//   FBRTapeLine L = BRTapeLine(P, FragCoord);
+//   ...frame I of seven at BRTapeTap(L.Q, I): CellA's and CellB's texel at
+//   BRTapeCellUV(Cell, tap), mixed by P.Mix...
+//   return BRTapeFinish(P, FragCoord, L, Frames);
+//
+// FragCoord is GLSL's gl_FragCoord: pixels, bottom-left, at pixel centres.
+
+FBRTapeLine BRTapeLine(FBRTape P, float2 FragCoord)
+{
+	FBRTapeLine L;
+	float2 Q = FragCoord / P.Res;
+	float T = P.Time;
+	L.Down = 1.0 - Q.y;
+	L.Line = floor(L.Down * 240.0);
+	Q.y += P.Still * (BRTapeHash(float2(floor(T * 18.0), 3.1)) - 0.5) * 0.008;
+	// Line timing wanders a little always, and a lot under interference.
+	float Jit = (BRTapeHash(float2(L.Line, floor(T * 30.0))) - 0.5) * (0.0012 + 0.010 * P.Track * P.Track);
+	// A tracking band rolling down the picture.
+	float Band = frac(L.Down * 0.7 - T * (0.12 + 0.30 * P.Track));
+	L.Tear = smoothstep(0.0, 0.05, Band) * (1.0 - smoothstep(0.05, 0.14, Band)) * smoothstep(0.15, 0.6, P.Track);
+	Jit += L.Tear * (0.02 + 0.06 * BRTapeHash(float2(L.Line, floor(T * 24.0))));
+	// Head switching: the bottom few lines of every field are skewed.
+	float Hs = 1.0 - smoothstep(0.0, 0.022, Q.y);
+	Jit += Hs * (0.012 + 0.03 * BRTapeHash(float2(L.Line, floor(T * 60.0))));
+	Q.x += Jit;
+	L.Q = Q;
+	return L;
+}
+
+// Where frame I of the seven the GLSL reads is read: 0 the fragment's own,
+// 1 and 2 the luma's neighbours either side, 3 to 6 the chroma smeared to
+// the right.
+float2 BRTapeTap(float2 Q, int I)
+{
+	const float Dx = 1.0 / 320.0;
+	if (I == 0) return Q;
+	if (I == 1) return Q - float2(Dx, 0.0);
+	if (I == 2) return Q + float2(Dx, 0.0);
+	return Q + float2(Dx * (1.5 + 2.2 * float(I - 3)), 0.0);
+}
+
+// A tap's place in a frame's cell, as uv with v up the picture.
+float2 BRTapeCellUV(float4 Cell, float2 Q)
+{
+	Q = clamp(Q, float2(0.002, 0.002), float2(0.998, 0.998));
+	return lerp(Cell.xy, Cell.zw, Q);
+}
+
+// Frames[I] is the picture at BRTapeTap(I): CellA's and CellB's mixed by Mix.
+float3 BRTapeFinish(FBRTape P, float2 FragCoord, FBRTapeLine L, float3 Frames[7])
+{
+	const float3 Luma = float3(0.299, 0.587, 0.114);
+	// GLSL's TO_YIQ and TO_RGB as written there: its constructor takes
+	// columns and HLSL's rows, so a vector on the left multiplies the same
+	// way. DXC hands that to SPIR-V as GLSL's M * v, which rounds as the Web
+	// build does; mul(M, v) with the rows written out came 1/255 off on a
+	// pixel in 300,000.
+	const float3x3 ToYiq = { 0.299, 0.596, 0.211, 0.587, -0.274, -0.523, 0.114, -0.322, 0.312 };
+	const float3x3 ToRgb = { 1.0, 1.0, 1.0, 0.956, -0.272, -1.106, 0.621, -0.647, 1.703 };
+	float T = P.Time;
+	// Luma sharp, chroma smeared to the right: tape keeps colour at a fraction
+	// of the bandwidth it keeps brightness.
+	float Y = dot(0.22 * Frames[1] + 0.56 * Frames[0] + 0.22 * Frames[2], Luma);
+	float2 Iq = float2(0.0, 0.0);
+	[unroll]
+	for (int I = 0; I < 4; I++)
+	{
+		Iq += mul(Frames[3 + I], ToYiq).yz;
+	}
+	Iq *= 0.25 * 0.88;
+	float3 C = mul(float3(Y, Iq), ToRgb);
+	// A tape's blacks are never black, and its whites are never quite white.
+	C = 0.035 + C * 0.94;
+	if (P.Night > 0.0)
+	{
+		// Infrared sees a surface's brightness more than its colour, so dark
+		// red brick comes up nearly as well as pale wallpaper.
+		float Lm = lerp(dot(C, Luma), max(C.r, max(C.g, C.b)), 0.7);
+		Lm = 1.0 - exp(-Lm * 3.0);   // the gain the camera rides in the dark
+		C = lerp(C, float3(0.30, 1.0, 0.40) * Lm + float3(0.015, 0.045, 0.02), P.Night);
+	}
+	float N = BRTapeHash(floor(FragCoord / 2.0) + frac(T * float2(13.17, 7.31)) * 311.0);
+	C += (N - 0.5) * (0.045 + 0.035 * P.Night + 0.16 * P.Track + 0.10 * L.Tear);
+	// Dropouts: a scrap of a line where the oxide is gone, flaring white.
+	float Field = floor(T * 24.0);
+	float Drop = step(0.9982 - 0.010 * P.Track, BRTapeHash(float2(L.Line, Field + 7.0)));
+	float Span = 1.0 - smoothstep(0.0, 0.03 + 0.09 * BRTapeHash(float2(L.Line, Field + 9.0)),
+		abs(L.Q.x - BRTapeHash(float2(L.Line, Field + 3.0))));
+	C = lerp(C, float3(0.88, 0.88, 0.88), Drop * Span * 0.75);
+	float Snow = 0.15 + 0.75 * N;
+	C = lerp(C, float3(Snow, Snow, Snow), P.Snow);
+	C *= 0.93 + 0.07 * sin(L.Down * P.Res.y * 3.14159 * 0.5);   // scanlines, one every other pixel row
+	float2 D = L.Q - 0.5;
+	C *= 1.0 - smoothstep(0.30, 0.85, length(D * float2(1.0, 0.8))) * (0.45 + 0.30 * P.Night);
+	return saturate(C);
+}

@@ -264,8 +264,18 @@ off the Mac. In order:
    with a motor whine and a beep; the revolver leaves the frame, the OSD comes
    up (REC, the counter, the date, the battery) and the inventory goes. The
    wheel and RMB zoom (the W-T bar), LMB switches night shot, whose lamp lights
-   the room as the Web build's does. There is no tape look and no playback on
-   the death card yet: Unreal has no reel (Not done yet).
+   the room as the Web build's does.
+7. **The tape** (27 October 2026, not yet built on the Mac). Through the
+   viewfinder the picture is tape: soft colour smeared right, scanlines, a
+   rolling tear when Clark is near (night shot green). Die after a minute of
+   play and the card plays the last seconds back: snow, the run, slowing,
+   a shaking still. A shader error in `M_BackroomsTape` (LogShaderCompilers)
+   is the likeliest first failure, then the reel: a playback that is black
+   means the capture or the copy into the reel (`UBackroomsReel::Grab`) drew
+   nothing; one upside down, that the reel's rows do not run down as
+   `cellY` does. `tools/tape-check.sh` proved the shader and the material's
+   code against `TAPE_FS` pixel for pixel, with DXC and spirv-cross; the
+   reel's capture and copy have not run anywhere.
 
 A session on the Mac itself (`claude remote-control` in the repository) could
 build, run the tests and read the log directly; from the cloud each Unreal
@@ -277,7 +287,7 @@ What the seams leave for the port, or for the Web build before it.
 
 | item | where | why it matters |
 |---|---|---|
-| the camcorder's tape | the reel (frames grabbed at 15 Hz into one texture, `CamcorderReel::grab`) and `TAPE_FS` in HLSL | the viewfinder shows the plain scene under the OSD, and the death card has no playback: `Camcorder::record` is told there is no reel, so nothing is taped. `CamPicture` and the cell layout (`cellX`, `reelW`) are what a port's reel and post material need |
+| the camcorder's tape | written (27 October 2026): `UBackroomsReel` and `M_BackroomsTape` (`BackroomsTape.ush`) | not yet run on the Mac. Two known differences: a reel frame keeps the scene's colour where raylib's grab multiplies it by the target's alpha (behind glass and water, a little darker in the Web build), and where nothing is drawn it is black, where raylib's holds the level's clear colour (only the Poolrooms' is not black) |
 | real meshes | props, fixtures, items and actors | the looks can take a mesh for every kind; none is authored yet, so props are their collision boxes, fixtures and items plain shapes, and actors billboards |
 | floorplan geometry as data | done (October 2026): `chunkFloorplan` (core/floorplan.h) describes floors, walls, risers, ceilings, soffits, flights and arches, and the mesher and the greybox build from it | Unreal's chunk actors draw it through the greybox; real meshes for walls and floors (skirting, door trim, stair nosing) would be placed from it, as fixtures are from `chunkLayout` |
 | sound in Unreal | written (`UBackroomsSound`), not yet heard on the Mac | M6 |
