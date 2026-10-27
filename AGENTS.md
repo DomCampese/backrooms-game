@@ -31,7 +31,10 @@ drawn"). What will bite:
   ddy lights every relief from below.
 - **The world shader's core numbers reach the HLSL as defines** from
   `world.json` (`texdump --unreal`), as `worldFragmentShader()` writes them
-  into the GLSL. A new `@TOKEN@` needs a row in both.
+  into the GLSL. A new `@TOKEN@` needs a row in both. The occupancy bits are
+  ints the HLSL masks with, so they sit under `bits`, not `defines` (which the
+  editor turns into floats), and `BackroomsWorld.ush` stops with an `#error`
+  if a `world.json` from before them is still in `Saved/Surfaces`.
 - **Per-frame light is `frameLight`, per-frame drawing `sceneDraws`**
   (shared/port/draw.h), which render.cpp draws from too (checked: 0 pixels
   differ over seven captures). A new thing render.cpp draws round the chunks
@@ -588,10 +591,13 @@ byte-identical. How it fits together, and what will bite:
   below is. Landing calls `Sim::landFrom`: about 0.4 of the health meter for
   one storey, most of it for two.
 - **Occupancy is RGBA, and twice as tall as it is wide.** Rows 0..n-1 are
-  cells: byte 0 your storey, 1 the one below, 2 the one above. Bit 3 = no
-  fitting at this cell's min corner (it would hang in an opening), bit 4 = no
-  ceiling here, bit 5 = a hole touches the corner, bit 6 = an opening is within
-  reach of the nine fittings the shader sums here. Rows n..2n-1 are *fitting
+  cells: byte 0 your storey, 1 the one below, 2 the one above. The bits are
+  `OccBit` (core/world.h), which `worldFragmentShader()` writes into the GLSL
+  and `lightAtCPU` reads: bit 3 (`OCC_NO_FITTING`) = no fitting at this cell's
+  min corner (it would hang in an opening), bit 4 (`OCC_OPEN_ABOVE`) = no
+  ceiling here, bit 5 (`OCC_HOLE_CORNER`) = a hole touches the corner, bit 6
+  (`OCC_NEAR_OPENING`) = an opening is within reach of the nine fittings the
+  shader sums here. Rows n..2n-1 are *fitting
   masks*: per light block, a 9-bit "which of the nine exist" for each storey
   (a byte each, the ninth bits in alpha). The shader picks its byte by `gRel`
   (`floor((y + 0.3) / H)`), lights OPENUP cells with a second pass over the

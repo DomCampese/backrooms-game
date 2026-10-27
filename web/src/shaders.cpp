@@ -145,10 +145,10 @@ int occAt(ivec2 c){ return occAtC(c, gChan); }
 // Test that footprint even in the ray's first and last cells. Skipping those
 // cells left a bright square around every pillar, followed by oversized shadows.
 bool pillarBlocks(ivec2 c, vec2 a, vec2 invDir, float dist){
-    vec2 lo = (vec2(c)*2.0 + vec2(0.42) - a) * invDir;
-    vec2 hi = (vec2(c)*2.0 + vec2(1.58) - a) * invDir;
+    vec2 lo = (vec2(c)*2.0 + vec2(@PILLAR_LO@) - a) * invDir;
+    vec2 hi = (vec2(c)*2.0 + vec2(@PILLAR_HI@) - a) * invDir;
     vec2 entry = min(lo, hi), leave = max(lo, hi);
-    return (occAt(c) & 4) != 0 &&
+    return (occAt(c) & @OCC_PILLAR@) != 0 &&
            max(max(entry.x, entry.y), 0.001) < min(min(leave.x, leave.y), dist - 0.001);
 }
 // Does light from `a` reach `b`? Walls are a floorplan extruded to full height,
@@ -185,12 +185,12 @@ float lightVis(vec2 a, vec2 b){
             if (tMax.x > dist) return 1.0;
             c.x += stp.x;
             // crossing between cells shares one west edge: the right-hand cell owns it
-            if ((occAt(ivec2(stp.x > 0 ? c.x : c.x + 1, c.y)) & 2) != 0) return 0.0;
+            if ((occAt(ivec2(stp.x > 0 ? c.x : c.x + 1, c.y)) & @OCC_WALL_W@) != 0) return 0.0;
             tMax.x += tDelta.x;
         } else {
             if (tMax.y > dist) return 1.0;
             c.y += stp.y;
-            if ((occAt(ivec2(c.x, stp.y > 0 ? c.y : c.y + 1)) & 1) != 0) return 0.0;
+            if ((occAt(ivec2(c.x, stp.y > 0 ? c.y : c.y + 1)) & @OCC_WALL_N@) != 0) return 0.0;
             tMax.y += tDelta.y;
         }
         if (pillarBlocks(c, a, invDir, dist)) return 0.0;
@@ -378,7 +378,7 @@ vec3 roomLight(vec3 P, vec3 N){
     // fragment — is the plain nine-panel sum, for one extra fetch.
     int own = uStoreyH > 0.0 ? occAt(ivec2(floor(shP * 0.5))) : 0;
     int ownMask = 511, upMask = 0;
-    if ((own & 64) != 0){
+    if ((own & @OCC_NEAR_OPENING@) != 0){
         int n = int(uOccN);
         ivec2 t = ivec2(base * (uLS * 0.5)) - ivec2(uOccOrigin);   // the block's first cell
         if (t.x >= 0 && t.y >= 0 && t.x < n && t.y < n){
@@ -386,7 +386,7 @@ vec3 roomLight(vec3 P, vec3 N){
             int hi = int(m.a + 0.5);
             int ci = int(dot(vec4(0.0, 1.0, 2.0, 0.0), gChan) + 0.5);   // R, G or B
             ownMask = int(dot(m, gChan) + 0.5) | (((hi >> ci) & 1) << 8);
-            if (gRel < 1 && (own & 16) != 0){
+            if (gRel < 1 && (own & @OCC_OPEN_ABOVE@) != 0){
                 vec4 uc = chanFor(gRel + 1);
                 int cu = int(dot(vec4(0.0, 1.0, 2.0, 0.0), uc) + 0.5);
                 int upper = int(dot(m, uc) + 0.5) | (((hi >> cu) & 1) << 8);
@@ -942,13 +942,24 @@ std::string worldFragmentShader() {
         { "@TUBE_BUZZ_SPREAD@", TUBE_BUZZ_SPREAD },
         { "@TUBE_BUZZ_PHASE@", TUBE_BUZZ_PHASE },
         { "@TUBE_BUZZ_DUTY@", TUBE_BUZZ_DUTY },
+        { "@PILLAR_LO@", PILLAR_LO },
+        { "@PILLAR_HI@", PILLAR_HI },
     };
-    for (const auto &n : numbers) {
-        // A number can be written in more than once: the stutter's hashes
-        // scale by the tube hash's TUBE_HASH_SCALE.
-        const std::string token = n.token, value = glslFloat(n.value);
+    // The occupancy grid's bits (World::buildOccupancy), as GLSL ints.
+    const struct { const char *token; int value; } bits[] = {
+        { "@OCC_WALL_N@", OCC_WALL_N },
+        { "@OCC_WALL_W@", OCC_WALL_W },
+        { "@OCC_PILLAR@", OCC_PILLAR },
+        { "@OCC_OPEN_ABOVE@", OCC_OPEN_ABOVE },
+        { "@OCC_NEAR_OPENING@", OCC_NEAR_OPENING },
+    };
+    // A number can be written in more than once: the stutter's hashes scale by
+    // the tube hash's TUBE_HASH_SCALE.
+    auto put = [&](const std::string &token, const std::string &value) {
         for (size_t at = src.find(token); at != std::string::npos; at = src.find(token, at + value.size()))
             src.replace(at, token.size(), value);
-    }
+    };
+    for (const auto &n : numbers) put(n.token, glslFloat(n.value));
+    for (const auto &b : bits) put(b.token, std::to_string(b.value));
     return src;
 }
