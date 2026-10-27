@@ -98,8 +98,8 @@ repository, not just this folder. On the Mac:
    starts a run on Level 0 at seed 1337 and the sim drives the camera: WASD,
    the mouse, the Web build's keys (F to switch the torch on, R to reload, F3
    for the debug keys). Everything is drawn as the Web build draws it (below).
-   A text HUD (`ABackroomsHUD`) shows the meters, inventory, notes and the
-   death card. If the world is black, the log says why ("the world is not
+   The HUD (`ABackroomsHUD`) is the Web build's, laid out by
+   shared/port/hud.h and drawn in the engine's medium font. If the world is black, the log says why ("the world is not
    drawn: ...").
 
 For an Xcode project (debugging, or browsing the code), run
@@ -125,6 +125,7 @@ material is unlit, and its colour is the Web build's.
 | crates, cans, the deck, coins, balloons, flares, the hunter, the pack, rounds, impacts, mist | `sceneDraws` (shared/port/draw.h), lit by `lightAtCPU` | the same list (`ABackroomsSceneActor`), raylib's shapes tessellated by `shapeTriangles` |
 | the revolver | raylib 5.5's glTF animation and CPU skinning | shared/port/revolver.h, bit-identical to raylib 5.5 over the whole reload |
 | post pass | `POST_FS` | `Shaders/BackroomsPost.ush` in `M_BackroomsPost`, in place of Unreal's tonemapper |
+| the HUD: title and death cards, intro, cards, meters, inventory, hints | `hudDraws` (shared/port/hud.h), measured with raylib's font | the same list (`ABackroomsHUD`), measured and drawn with the engine's medium font; gradients in 48 bands |
 
 `make unreal-open` runs `tools/unreal.sh surfaces` before it opens the
 editor: `texdump --unreal` writes every texture the Web build binds to

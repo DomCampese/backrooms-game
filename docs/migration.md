@@ -195,6 +195,7 @@ The platform side of the seam:
 |---|---|
 | `shared/port/chunk_mesh.{h,cpp}` | `bakeChunkGeometry` (the mesher, engine-neutral), `ChunkMesh` slots |
 | `shared/port/mesh_builder.{h,cpp}`, `atlas.{h,cpp}`, `palette.h` | `MB`, `addPropBox`, `addSolidBox`, `PLAIN_UV`; `FIXTURES`, `vendUV`, tile sizes; `cl8`, `PARTY_RGBA` |
+| `shared/port/hud.{h,cpp}` | `hudDraws`: the HUD render.cpp draws over the world, as draws in window pixels, measured by the caller's font |
 | `web/src/world_mesh.{h,cpp}`, `mesh_upload.h` | `bakeChunk` (uploads the mesher's parts), `ChunkMeshCache` |
 | `web/src/object_meshes.{h,cpp}` | can, deck, reels, lamp, flare, crate and lid |
 | `web/src/vec_rl.h` | `toRl` / `fromRl` |

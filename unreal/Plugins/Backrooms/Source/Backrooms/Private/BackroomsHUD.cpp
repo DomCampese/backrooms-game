@@ -1,82 +1,94 @@
 #include "BackroomsHUD.h"
-#include "BackroomsTypes.h"
 #include "BackroomsWorldSubsystem.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
 #include "Engine/World.h"
+#include "port/hud.h"
 
 namespace
 {
-const TCHAR* WeaponNames[3] = { TEXT("REVOLVER"), TEXT("FLARE"), TEXT("TAPE DECK") };
+FLinearColor Colour(const Rgba& C)
+{
+	return FLinearColor(FColor(C.r, C.g, C.b, C.a));
 }
 
-void ABackroomsHUD::Line(const FString& Text, float X, float Y, const FLinearColor& Colour, bool bCentred, float Scale)
-{
-	UFont* Font = GEngine ? GEngine->GetMediumFont() : nullptr;
-	float W = 0.0f, H = 0.0f;
-	GetTextSize(Text, W, H, Font, Scale);
-	const float Left = bCentred ? X - W * 0.5f : X;
-	// A dark offset copy first, so the text reads over bright tile.
-	DrawText(Text, FLinearColor(0, 0, 0, 0.8f), Left + 2.0f, Y + 2.0f, Font, Scale);
-	DrawText(Text, Colour, Left, Y, Font, Scale);
+// The canvas has no gradient fill, so a gradient is drawn in bands this many
+// to its length.
+constexpr int32 GradientBands = 48;
 }
 
 void ABackroomsHUD::DrawHUD()
 {
 	Super::DrawHUD();
-	const UBackroomsWorldSubsystem* Backrooms = GetWorld()->GetSubsystem<UBackroomsWorldSubsystem>();
-	if (!Canvas || !Backrooms)
+	const UBackroomsWorldSubsystem* Backrooms = GetWorld() ? GetWorld()->GetSubsystem<UBackroomsWorldSubsystem>() : nullptr;
+	const Sim* Game = Backrooms ? Backrooms->GetSim() : nullptr;
+	if (!Canvas || !Game || !Backrooms->IsRunning())
 	{
 		return;
 	}
-	const FBackroomsHudState Hud = Backrooms->GetHud();
-	if (!Hud.bRunning)
-	{
-		return;
-	}
-	const float W = Canvas->ClipX, H = Canvas->ClipY;
-	// Scaled from the Web build's 850-pixel-high window.
-	const float K = H / 850.0f;
-	const FLinearColor Pale(0.92f, 0.9f, 0.8f), Dim(0.7f, 0.68f, 0.6f), Warn(0.95f, 0.45f, 0.35f);
+	UFont* Font = GEngine ? GEngine->GetMediumFont() : nullptr;
+	// A raylib size is the height of a line of text; the font is scaled to it.
+	float Unused = 0.0f, LineH = 0.0f;
+	GetTextSize(TEXT("Xg"), Unused, LineH, Font, 1.0f);
+	auto ScaleFor = [LineH](int32 Px) { return LineH > 0.0f ? Px / LineH : 1.0f; };
+	const HudMeasure Measure = [this, Font, &ScaleFor](const char* Text, int Px) {
+		float W = 0.0f, H = 0.0f;
+		GetTextSize(FString(UTF8_TO_TCHAR(Text)), W, H, Font, ScaleFor(Px));
+		return (int)W;
+	};
 
-	if (Hud.bDeathCard)
-	{
-		Line(Hud.DeathTitle.ToString(), W * 0.5f, H * 0.4f, Warn, true, 2.4f * K);
-		Line(Hud.DeathBy.ToString(), W * 0.5f, H * 0.4f + 60.0f * K, Pale, true, 1.2f * K);
-		Line(TEXT("ENTER or SPACE to begin again"), W * 0.5f, H * 0.4f + 110.0f * K, Dim, true, K);
-		return;
-	}
-	if (Hud.bTitleScreen)
-	{
-		Line(TEXT("THE BACKROOMS"), W * 0.5f, H * 0.4f, Pale, true, 2.8f * K);
-		Line(TEXT("ENTER or SPACE to begin"), W * 0.5f, H * 0.4f + 70.0f * K, Dim, true, K);
-		return;
-	}
+	HudInput In;
+	In.width = (int)Canvas->ClipX;
+	In.height = (int)Canvas->ClipY;
+	In.now = Backrooms->SimClock();
+	In.filming = false;      // the camcorder is the Web build's alone
+	In.replaying = false;
+	In.cardAlpha = 1.0f;
+	In.touch = false;
+	In.captureHint = false;
+	const float Dt = GetWorld()->GetDeltaSeconds();
+	In.fps = Dt > 0.0f ? (int)(1.0f / Dt + 0.5f) : 0;
+	In.debug = false;
 
-	Line(FString::Printf(TEXT("%s  ·  storey %d"), *Hud.LevelName.ToString(), Hud.Storey), 24.0f * K, 20.0f * K, Dim, false, K);
-	float Y = H - 150.0f * K;
-	const float X = 24.0f * K, Step = 24.0f * K;
-	Line(FString::Printf(TEXT("HEALTH %d%%   SANITY %d%%   BATTERY %d%%%s"), FMath::RoundToInt(Hud.Health * 100.0f),
-		FMath::RoundToInt(Hud.Sanity * 100.0f), FMath::RoundToInt(Hud.Battery * 100.0f),
-		Hud.bFlashlightOn ? TEXT("  (torch on)") : TEXT("")), X, Y, Hud.Health < 0.5f ? Warn : Pale, false, K);
-	Y += Step;
-	Line(FString::Printf(TEXT("%s   AMMO %d   FLARES %d"), WeaponNames[FMath::Clamp(Hud.Weapon, 0, 2)], Hud.Ammo, Hud.Flares),
-		X, Y, Pale, false, K);
-	Y += Step;
-	Line(FString::Printf(TEXT("DOUBLOONS %d   ALMOND WATER %d   TAPES %d   KEYS %d"), Hud.Coins, Hud.AlmondWater, Hud.Tapes,
-		Hud.Keys), X, Y, Dim, false, K);
-
-	if (!Hud.Note.IsEmpty())
+	for (const HudDraw& D : hudDraws(*Game, In, bEverFlashed, Measure))
 	{
-		Line(Hud.Note.ToString(), W * 0.5f, H * 0.72f, Pale, true, 1.1f * K);
-	}
-	if (!Hud.SanityWarning.IsEmpty())
-	{
-		Line(Hud.SanityWarning.ToString(), W * 0.5f, H * 0.2f, Warn, true, 1.2f * K);
-	}
-	if (Hud.bPaused)
-	{
-		Line(TEXT("PAUSED  ·  P to resume"), W * 0.5f, H * 0.45f, Pale, true, 1.8f * K);
+		const FLinearColor C = Colour(D.col), C2 = Colour(D.col2);
+		switch (D.kind)
+		{
+		case HudDraw::Text:
+			DrawText(FString(UTF8_TO_TCHAR(D.text.c_str())), C, D.x, D.y, Font, ScaleFor(D.h));
+			break;
+		case HudDraw::Rect:
+			DrawRect(C, D.x, D.y, D.w, D.h);
+			break;
+		case HudDraw::RectLines:
+			DrawRect(C, D.x, D.y, D.w, 1);
+			DrawRect(C, D.x, D.y + D.h - 1, D.w, 1);
+			DrawRect(C, D.x, D.y + 1, 1, D.h - 2);
+			DrawRect(C, D.x + D.w - 1, D.y + 1, 1, D.h - 2);
+			break;
+		case HudDraw::GradientV:
+		case HudDraw::GradientH:
+		{
+			const bool bDown = D.kind == HudDraw::GradientV;
+			const float Length = bDown ? D.h : D.w, Band = Length / GradientBands;
+			for (int32 B = 0; B < GradientBands; B++)
+			{
+				const FLinearColor Mix = FMath::Lerp(C, C2, (B + 0.5f) / GradientBands);
+				if (bDown) DrawRect(Mix, D.x, D.y + B * Band, D.w, Band);
+				else DrawRect(Mix, D.x + B * Band, D.y, Band, D.h);
+			}
+			break;
+		}
+		case HudDraw::Circle:
+			// A disc a few pixels across, as rows.
+			for (int32 Dy = -(int32)D.r; Dy <= (int32)D.r; Dy++)
+			{
+				const float Half = FMath::Sqrt(FMath::Max(D.r * D.r - Dy * Dy, 0.0f));
+				DrawRect(C, D.x - Half, D.y + Dy, 2.0f * Half, 1);
+			}
+			break;
+		}
 	}
 }
