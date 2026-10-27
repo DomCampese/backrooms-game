@@ -656,11 +656,16 @@ byte-identical. How it fits together, and what will bite:
   fitting was then doing its arithmetic before being thrown out.
 - **Other storeys are drawn only through an opening you can see.** Outside a
   footprint the slab is closed (ceiling below, floor above, fascia round the
-  edge), so `renderScene` projects each candidate chunk's box from the eye onto
-  the plane of the upper floor and draws it only if that overlaps a footprint.
-  The frustum alone let 22 chunks of other storeys in behind 9 of this one.
-  Stacked flights chain to ±2 storeys through both openings. A new kind of
-  opening that is *not* inside a feature footprint breaks this.
+  edge), so `visibleChunks` (shared/port/visible.h) projects each candidate
+  chunk's box from the eye onto the plane of the upper floor and keeps it only
+  if that overlaps a footprint. render.cpp draws its list and Unreal hides
+  every other chunk actor in a run. The frustum alone let 22 chunks of other
+  storeys in behind 9 of this one. Stacked flights chain through every opening
+  in turn, up to `STOREY_REACH` storeys. A new kind of opening that is *not*
+  inside a feature footprint breaks this. The move out of render.cpp was
+  checked by compiling main's block unchanged beside the new function over
+  200,000 random views (2.1 M chunks, 650k on other storeys): the same chunks
+  in the same order, offsets and distances to the bit.
 - **Wallpaper on tall walls.** The L0 tile has its baseboard baked into the
   bottom, so a wall that climbs past 3 m (a shaft, the fascia round an opening,
   the void side of a rail) repeats it at 3 m. `WallBuilder::tallPaper` (storeyed levels

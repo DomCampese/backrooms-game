@@ -87,6 +87,10 @@ private:
 	// shader's uniforms for an eye at Eye (metres, the current storey's
 	// frame), then in a run the scene and the revolver.
 	void ShowFrame(const Vec3& Eye);
+	// Hides the chunk actors the sim's view cannot see: those outside the
+	// frustum, and other storeys' outside the openings in view
+	// (port/visible.h), as the Web build leaves them undrawn.
+	void HideUnseenChunks();
 
 	// Not UObjects: owned here, freed by Deinitialize.
 	Sim* Game = nullptr;

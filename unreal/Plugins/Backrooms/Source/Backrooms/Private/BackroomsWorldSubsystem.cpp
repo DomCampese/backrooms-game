@@ -7,6 +7,7 @@
 #include "BackroomsSettings.h"
 #include "BackroomsSound.h"
 #include "Camera/PlayerCameraManager.h"
+#include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
 #include "Math/RotationMatrix.h"
 #include "GameFramework/PlayerController.h"
@@ -20,6 +21,7 @@
 #include "port/draw.h"
 #include "port/stream.h"
 #include "port/view.h"
+#include "port/visible.h"
 #include "sim/start.h"
 #include "sim/trace.h"
 #include <algorithm>
@@ -385,6 +387,37 @@ void UBackroomsWorldSubsystem::StreamAround(const FVector& Focus, float DeltaTim
 	}
 }
 
+void UBackroomsWorldSubsystem::HideUnseenChunks()
+{
+	const Sim& S = *Game;
+	FVector2D Size(0.0, 0.0);
+	if (UGameViewportClient* Viewport = GetWorld()->GetGameViewport())
+	{
+		Viewport->GetViewportSize(Size);
+	}
+	TSet<FIntVector> Seen;
+	if (Size.X >= 1.0 && Size.Y >= 1.0)
+	{
+		const SimView View = simView(S);
+		const ChunkViewer Viewer{ { S.px, S.eyeY, S.pz }, S.fwd, View.eye, View.up, View.fovY, (int)Size.X, (int)Size.Y };
+		for (const VisibleChunk& C : visibleChunks(Game->world, Viewer, [this](int Storey, int Cx, int Cz) {
+				return Chunks.Contains(FIntVector(Cx, Cz, Storey));
+			}))
+		{
+			Seen.Add(FIntVector(C.cx, C.cz, C.storey));
+		}
+	}
+	for (const TPair<FIntVector, TObjectPtr<ABackroomsChunkActor>>& Entry : Chunks)
+	{
+		// Without a viewport to frame (a headless test), show everything.
+		const bool bShow = Seen.Num() == 0 || Seen.Contains(Entry.Key);
+		if (Entry.Value && Entry.Value->IsHidden() == bShow)
+		{
+			Entry.Value->SetActorHiddenInGame(!bShow);
+		}
+	}
+}
+
 void UBackroomsWorldSubsystem::BuildChunk(const FIntVector& Key)
 {
 	World& Maze = Game->world;
@@ -494,6 +527,7 @@ void UBackroomsWorldSubsystem::ShowFrame(const Vec3& Eye)
 		? FMath::Clamp((WATER_Y - S.eyeY) * 8.0f, 0.0f, 1.0f) : 0.0f;
 	Render->Frame(GetWorld(), Light, Eye, S.fear, Water, S.migraine);
 	Render->ShowPost(GetWorld());
+	HideUnseenChunks();
 
 	FActorSpawnParameters Params;
 	Params.ObjectFlags |= RF_Transient;
