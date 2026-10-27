@@ -63,10 +63,10 @@ bool ABackroomsHeldActor::Load()
 	return true;
 }
 
-void ABackroomsHeldActor::Show(const Sim& Game, const UBackroomsRender& Render, const FVector& Origin,
+void ABackroomsHeldActor::Show(const Sim& Game, bool bInHand, const UBackroomsRender& Render, const FVector& Origin,
 	std::vector<SceneDraw>& Draws)
 {
-	if (heldItem(Game) != Held::Revolver || !Load())
+	if (!bInHand || heldItem(Game) != Held::Revolver || !Load())
 	{
 		Gun->SetVisibility(false);
 		return;

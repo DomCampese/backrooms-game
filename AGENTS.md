@@ -70,8 +70,12 @@ drawn"). What will bite:
 
 # Camcorder and recovered tape (October 2026)
 
-web/src/camcorder.{h,cpp}, the `TAPE_FS` shader and the world shader's `uIR`.
-It is the Web build's alone; the Unreal build does not have it. What will bite:
+shared/port/camcorder.{h,cpp} (`Camcorder`: the controls, zoom, night shot,
+interference, the tape's frames and sounds, the playback's clock, the clips and
+the OSD as `HudDraw`s), web/src/camcorder.{h,cpp} (`CamcorderReel`: the reel,
+`TAPE_FS`, the sound handles) and the world shader's `uIR`. The Unreal build
+has the camera without a reel: V, zoom, night shot's lamp, the OSD and the
+sounds, but nothing is taped and its death card has no playback. What will bite:
 
 - **The sim never sees the camera.** `Camcorder::control` runs between
   `readInput` and `trace.step` and takes fire, aim, reload and the wheel out
@@ -99,6 +103,20 @@ It is the Web build's alone; the Unreal build does not have it. What will bite:
   rules play without `SET_PITCH`.
 - **`Sim::DEATH_CARD` is 12 s, was 7**, to fit the playback (about 6 s) and
   then the card. `DEATH_CARD_HOLD` is unchanged, so a key still skips it.
+- **The camera asks for its sounds; it does not play them.** `Camcorder::noises`
+  is the list, drained by `CamcorderReel::playNoises` (raylib) or
+  `SoundMixer::camera` (Unreal). `Zoom` and `Hiss` mean "unless it is already
+  playing", which only the platform knows. An `Echo` of a recording plays in
+  the Web build and not in the mixer, which has no recordings.
+- **Call `fitReel` before the first tick, reel or no reel.** It sizes the list
+  of frames, and `record` reads the oldest frame to trim the logged sounds: with
+  no frames that is a division by zero slots. Unreal fits a 1440x850 reel it
+  never draws.
+- **The move to shared/port was checked call for call.** main's camcorder.cpp
+  (renamed by `-DCamcorder=CamcorderOld`) and the new pair ran side by side over
+  1.31 M random ticks (2,000 runs, deaths, playbacks, resizes, a failed reel),
+  every raylib call, sound, echo and light logged: none differ, and each of ten
+  small changes planted in the new code was caught.
 - **Interference is real.** At frame 40 of a seed-1337 Level 0 capture the
   tape is torn because Clark has spawned stalking about 12 m away, out of sight.
   That is the feature, not a bug in the shader.
@@ -302,7 +320,12 @@ contracts. What will bite:
 - **proof-shots' menu.png is wall-clock noise.** The title camera's pitch is
   `sin(GetTime() * 0.22)`, so the frame depends on how long 60 frames took: the
   baseline binary differed from itself by 26% of pixels under load. The world
-  frames are pinned and must match to the pixel.
+  frames are pinned and must match to the pixel, except that lv0.png (and once
+  beam.png) can come out differently from one batch to the next of the same
+  binary: 5-6% of lv0's pixels, the back wall's light, while six single
+  `tools/shot.sh` runs of main and of a branch at the same knobs all matched to
+  the pixel (October 2026, cause not found). Before blaming a change for an
+  lv0 or beam difference, re-shoot that frame a few times from both binaries.
 
 # Chunk layout (September 2026)
 
@@ -633,11 +656,16 @@ byte-identical. How it fits together, and what will bite:
   fitting was then doing its arithmetic before being thrown out.
 - **Other storeys are drawn only through an opening you can see.** Outside a
   footprint the slab is closed (ceiling below, floor above, fascia round the
-  edge), so `renderScene` projects each candidate chunk's box from the eye onto
-  the plane of the upper floor and draws it only if that overlaps a footprint.
-  The frustum alone let 22 chunks of other storeys in behind 9 of this one.
-  Stacked flights chain to ±2 storeys through both openings. A new kind of
-  opening that is *not* inside a feature footprint breaks this.
+  edge), so `visibleChunks` (shared/port/visible.h) projects each candidate
+  chunk's box from the eye onto the plane of the upper floor and keeps it only
+  if that overlaps a footprint. render.cpp draws its list and Unreal hides
+  every other chunk actor in a run. The frustum alone let 22 chunks of other
+  storeys in behind 9 of this one. Stacked flights chain through every opening
+  in turn, up to `STOREY_REACH` storeys. A new kind of opening that is *not*
+  inside a feature footprint breaks this. The move out of render.cpp was
+  checked by compiling main's block unchanged beside the new function over
+  200,000 random views (2.1 M chunks, 650k on other storeys): the same chunks
+  in the same order, offsets and distances to the bit.
 - **Wallpaper on tall walls.** The L0 tile has its baseboard baked into the
   bottom, so a wall that climbs past 3 m (a shaft, the fascia round an opening,
   the void side of a rail) repeats it at 3 m. `WallBuilder::tallPaper` (storeyed levels
@@ -645,13 +673,25 @@ byte-identical. How it fits together, and what will bite:
   (`voidFace`) never show the baseboard at all. Every other level keeps its
   deliberate repeat, byte for byte.
 - **Streaming.** Adjacent storeys are generated and meshed only round chunks
-  that link to them (and ±2 through stacked links); `unloadFar` drops layers
-  more than `STOREY_REACH` storeys away. The regression's `capture()` runs `streamChunks`
+  that link to them (and on through tall courts, one chunk a storey); `unloadFar` drops layers
+  more than `STOREY_REACH` storeys away. The order is `streamChunks`
+  (shared/port/stream.h), which `Game::streamChunks` and Unreal's
+  `StreamAround` both walk; Unreal used to build full rings on the storeys
+  either side, slab nobody sees, and no chunk of a court's far storeys.
+  Moving the walk out of game.cpp was checked by compiling main's body
+  unchanged beside the new one over a logging cache: 100,000 cases (storeys
+  -3..3, both budgets, part-built caches), 4 M `ensure` calls, none differ. The regression's `capture()` runs `streamChunks`
   24 times, not 7: with 7 the storey above had not been meshed yet and every
   opening in a capture was black.
 - **The landing lamp.** Enclosed stairwells have no ceiling grid over them, so
   the nearest one within 22 m gets the shader's spare point light (`uLamp`,
   colour `uLampCol`); the Manila Room's chandelier wins when it is nearer.
+  Which landings are near, and where each lamp and tube is, is
+  `World::landingLights`, which `frameLight` and `sceneDraws` both read. It
+  looks only at chunks already generated, and `sceneDraws` generates chunks
+  round the view, so two calls in a row can see different landings: a harness
+  comparing two versions has to warm the world up with one call first, or it
+  reports 4% of states differing between a build and itself.
 
 Tools: `BACKROOMS_STOREY=n` starts on storey n; with F3 up, PageUp/PageDown
 move a storey where you stand. `./mapdump --visit 1 --list-stairs` prints every
@@ -906,7 +946,8 @@ build's, in `web/src/`.
 | `sfx.cpp` | loads the clips (`port/sounds.h`) and the embedded recordings into raylib |
 | `audio.cpp` | feeds the ambience bed (`port/ambience.h`) to a raylib stream; recorded loops live in `GameAudio::feedLoops` |
 | `sim/entity.h` | `Entity` (Clark on Level 0, the Smiler on 1 and 3, the Partygoer on 4) and `Dog` state |
-| `camcorder.{h,cpp}` | the camcorder: viewfinder, night shot, zoom, interference, the tape reel and its playback on the death card, its OSD and sounds |
+| `port/camcorder.{h,cpp}` | the camcorder: viewfinder, night shot, zoom, interference, the tape's frames and its playback on the death card, its clips and OSD |
+| `camcorder.{h,cpp}` | the camcorder's reel (one render texture), the tape look (`TAPE_FS`) and its sound handles |
 | `util.{h,cpp}` | platform helpers (`cl8`, `PARTY`); includes core's math and hashes. `SAMPLE_RATE` is port/sounds.h's |
 
 `Sim::step` calls the update functions in a fixed order: flashlight, look,
@@ -1357,7 +1398,7 @@ cannot otherwise reach.
 
 ## Measuring the layout, which screenshots will lie to you about
 
-`tools/mapdump.cpp` links `shared/core` alone and calls `generate()` directly —
+`tools/mapdump.cpp` links `shared/core` and `shared/sim` and calls `generate()` directly —
 no window, no GL, no raylib, about a second for a 258 m square:
 
 ```bash
@@ -1419,9 +1460,11 @@ the partition was built to fix, and is not: the ring is 87 of a chunk's 256
 cells, so 34% of the floor *is* corridor, and a corridor has no walls. Compare
 the two numbers before reading anything into either.
 
-`hideSpotAt` and `coinAt` live on `Sim` (shared/sim/items.cpp) and mapdump
-mirrors those two rules. Change either there and change it in mapdump too, or
-the harness quietly reports the old world.
+`hideSpotAt` and `coinAt` live on `Sim` (shared/sim/items.cpp), and mapdump
+calls them on a `Sim` it holds for its world. It used to keep copies, and its
+coin salt had fallen behind the sim's `pickupSalt`, which mixes in the level,
+visit and storey: every coin count and `o` mapdump printed away from Level 0,
+visit 0, storey 0 described another world (October 2026).
 
 To compare frame cost against another build rather than eyeballing `fps=`
 (which is a smoothed integer, and the sandbox swings about 15% run to run):
@@ -2284,10 +2327,14 @@ pass, and both obey the same three rules, learned the hard way:
   boxes. Skip that and you walk through the door frame, which reads worse than
   the gap did. `WALL_EXIT` still has no collision at all, so its jambs are
   phantom; that is pre-existing, not a pattern to copy.
-- **A prop's height lives in three places and they must agree**: `addProp`
-  builds it (chunk_mesh.cpp), `gatherCellAABBs` gives it a collision box, and
-  `Sim::bottleShelfY` says how high a carton stands on it. Change one, change
-  all three, or you get furniture you fall through or cartons floating.
+- **A prop's size is `PROP_SHAPES` (core/world.h)**: its collision box
+  (`gatherCellAABBs`), the top `addProp` builds it to (chunk_mesh.cpp) and,
+  where `shelf` is set, the height `Sim::bottleShelfY` stands a carton at.
+  These were three copies until October 2026. The move was checked with
+  2,500 chunk bakes (byte-identical) and every cell's boxes and shelf over
+  every level, visit, exit setting and three storeys (674,527 boxes, the same
+  hash). Cartons, the vending machine and the Manila Room's table
+  (`MANILA_TABLE_REST`) keep their own rules: a carton's top follows its hash.
 - **The rotten floor patches are a shortcut, not an accident, and three things
   say so.** `World::softDip` is the single source of the bowl's shape: the floor
   mesher builds the cell out of it and `groundAt` walks the player down the same

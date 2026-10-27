@@ -7,6 +7,7 @@
 #include "BackroomsSettings.h"
 #include "BackroomsSound.h"
 #include "Camera/PlayerCameraManager.h"
+#include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
 #include "Math/RotationMatrix.h"
 #include "GameFramework/PlayerController.h"
@@ -16,8 +17,11 @@
 #include "Misc/Parse.h"
 #include "Stats/Stats.h"
 #include "core/level_rules.h"
+#include "port/camcorder.h"
 #include "port/draw.h"
+#include "port/stream.h"
 #include "port/view.h"
+#include "port/visible.h"
 #include "sim/start.h"
 #include "sim/trace.h"
 #include <algorithm>
@@ -62,6 +66,9 @@ void UBackroomsWorldSubsystem::NewSim()
 {
 	FreeSim();
 	Game = new Sim();
+	Cam = new Camcorder();
+	// No reel is drawn yet; the cells only size the tape's list of frames.
+	Cam->fitReel(1440, 850);
 	FUnrealTracer* Shots = new FUnrealTracer();
 	Shots->Scene = GetWorld();
 	Shots->Game = Game;
@@ -144,7 +151,7 @@ FTransform UBackroomsWorldSubsystem::StartFreeCamera(int32 Level, uint32 Seed, u
 	return FTransform(BackroomsCoords::ToUnrealRotator(OpeningYaw, 0.0f), BackroomsCoords::ToUnreal(Eye));
 }
 
-void UBackroomsWorldSubsystem::TickRun(const InputFrame& In, bool bPauseToggled, float Dt)
+void UBackroomsWorldSubsystem::TickRun(const InputFrame& In, bool bPauseToggled, bool bCamToggle, float Dt)
 {
 	if (!Game || !bRun)
 	{
@@ -160,6 +167,9 @@ void UBackroomsWorldSubsystem::TickRun(const InputFrame& In, bool bPauseToggled,
 		Game->menuDrift(Dt, T);
 		Game->menuBegin(In, T);
 		if (Trace) Trace->digest(*Game);
+		if (!Game->inMenu || Game->deathT <= 0) Cam->stopReplay();
+		if (!Game->inMenu) Cam->startTape();
+		Cam->stepReplay(Dt);
 		FinishFrame();
 		return;
 	}
@@ -175,9 +185,20 @@ void UBackroomsWorldSubsystem::TickRun(const InputFrame& In, bool bPauseToggled,
 		FinishFrame(true);
 		return;
 	}
-	if (Trace) Trace->step(In, Dt, T, Game->clockSeed);
-	Game->step(In, Dt, T);
+	// The camera takes its buttons out before the trace: what is recorded is
+	// what the sim was given.
+	InputFrame Frame = In;
+	Cam->control(Frame, *Game, Dt, bCamToggle);
+	if (Trace) Trace->step(Frame, Dt, T, Game->clockSeed);
+	Game->step(Frame, Dt, T);
 	if (Trace) Trace->digest(*Game);
+	Cam->logSounds(Game->audio);
+	if (Game->inMenu && Game->deathT > 0) Cam->beginReplay();
+	if (!Game->inMenu)
+	{
+		Cam->record(*Game, Dt, (float)(T - Game->runStart), false,
+			[](int Lo, int Hi) { return FMath::RandRange(Lo, Hi); });
+	}
 	FinishFrame();
 }
 
@@ -187,6 +208,7 @@ void UBackroomsWorldSubsystem::FinishFrame(bool bPaused)
 {
 	if (Sound)
 	{
+		Sound->Camera(Cam->noises);
 		Sound->Play(Game->audio);
 		if (bPaused)
 		{
@@ -195,6 +217,7 @@ void UBackroomsWorldSubsystem::FinishFrame(bool bPaused)
 		Sound->Feed();
 	}
 	Game->audio.clear();
+	Cam->noises.clear();
 	Game->dropAimLatch = false;
 	Game->recordsChanged = false;
 }
@@ -207,7 +230,7 @@ FVector UBackroomsWorldSubsystem::StoreyOrigin() const
 FTransform UBackroomsWorldSubsystem::ViewTransform(float& OutFovY) const
 {
 	const SimView View = simView(*Game);
-	OutFovY = View.fovY;
+	OutFovY = Cam ? Cam->fovY(View.fovY) : View.fovY;
 	const FMatrix Axes = FRotationMatrix::MakeFromXZ(BackroomsCoords::ToUnrealDirection(View.forward),
 		BackroomsCoords::ToUnrealDirection(View.up));
 	return FTransform(Axes.Rotator(), BackroomsCoords::ToUnreal(View.eye) + StoreyOrigin());
@@ -236,6 +259,8 @@ void UBackroomsWorldSubsystem::FreeSim()
 	Trace = nullptr;
 	delete Game;
 	Game = nullptr;
+	delete Cam;
+	Cam = nullptr;
 	delete Tracer;
 	Tracer = nullptr;
 	bRun = false;
@@ -290,7 +315,7 @@ void UBackroomsWorldSubsystem::Tick(float DeltaTime)
 	if (bRun)
 	{
 		// The sim owns which storey is current (it rebases as you climb).
-		StreamAround(BackroomsCoords::ToUnreal({ Game->px, 0.0f, Game->pz }), Game->world.storey, DeltaTime);
+		StreamAround(BackroomsCoords::ToUnreal({ Game->px, 0.0f, Game->pz }), DeltaTime);
 		ShowFrame(simView(*Game).eye);
 	}
 	else
@@ -302,13 +327,13 @@ void UBackroomsWorldSubsystem::Tick(float DeltaTime)
 		{
 			Game->world.setStorey(Storey);
 		}
-		StreamAround(Camera, Storey, DeltaTime);
+		StreamAround(Camera, DeltaTime);
 		ShowFrame(BackroomsCoords::FromUnreal(Camera - StoreyOrigin()));
 	}
 }
 
 // Focus is in Unreal space; only its x and y (core's x and z) are read.
-void UBackroomsWorldSubsystem::StreamAround(const FVector& Focus, int32 Storey, float DeltaTime)
+void UBackroomsWorldSubsystem::StreamAround(const FVector& Focus, float DeltaTime)
 {
 	World& Maze = Game->world;
 	// What core has dropped or rebuilt goes first, before any actor is kept.
@@ -318,42 +343,29 @@ void UBackroomsWorldSubsystem::StreamAround(const FVector& Focus, int32 Storey, 
 	}
 	Maze.staleChunks.clear();
 
-	// Wanted chunks, nearest first: this storey ring by ring, then the others.
+	// Wanted chunks, nearest first, in the Web build's order (port/stream.h):
+	// this storey ring by ring, then the other storeys only where an opening
+	// shows them. Every wanted chunk is listed, so the rest can be dropped; a
+	// frame builds the first few that are missing.
 	const Vec3 At = BackroomsCoords::FromUnreal(Focus);
 	const int32 Pcx = fdiv(cellOf(At.x), CCELLS), Pcz = fdiv(cellOf(At.z), CCELLS);
 	const UBackroomsSettings* Settings = GetDefault<UBackroomsSettings>();
 	TArray<FIntVector> Wanted;
-	const int32 Rel[3] = { 0, -1, 1 };
-	for (int32 R : Rel)
-	{
-		if (R != 0 && Maze.storeyH <= 0.0f)
-		{
-			continue;
-		}
-		const int32 Reach = R == 0 ? Settings->ReachOwnStorey : Settings->ReachOtherStoreys;
-		for (int32 Ring = 0; Ring <= Reach; Ring++)
-		{
-			for (int32 Dz = -Ring; Dz <= Ring; Dz++)
-			{
-				for (int32 Dx = -Ring; Dx <= Ring; Dx++)
-				{
-					if (FMath::Max(FMath::Abs(Dx), FMath::Abs(Dz)) == Ring)
-					{
-						Wanted.Add(FIntVector(Pcx + Dx, Pcz + Dz, Storey + R));
-					}
-				}
-			}
-		}
-	}
 	int32 Budget = Settings->BuildsPerFrame;
-	for (const FIntVector& Key : Wanted)
-	{
+	streamChunks(Maze, Pcx, Pcz, Settings->ReachOwnStorey, [&](const StreamChunk& C) {
+		const FIntVector Key(C.cx, C.cz, C.storey);
+		Wanted.Add(Key);
 		if (Budget > 0 && !Chunks.Contains(Key))
 		{
 			BuildChunk(Key);
 			Budget--;
+			if (C.inShadowGrid)
+			{
+				Game->shadowsStale = true;
+			}
 		}
-	}
+		return true;
+	});
 	TArray<FIntVector> Unwanted;
 	for (const TPair<FIntVector, TObjectPtr<ABackroomsChunkActor>>& Entry : Chunks)
 	{
@@ -372,6 +384,37 @@ void UBackroomsWorldSubsystem::StreamAround(const FVector& Focus, int32 Storey, 
 	{
 		SinceUnload = 0.0f;
 		Maze.unloadFar(Pcx, Pcz, UnloadRadius);
+	}
+}
+
+void UBackroomsWorldSubsystem::HideUnseenChunks()
+{
+	const Sim& S = *Game;
+	FVector2D Size(0.0, 0.0);
+	if (UGameViewportClient* Viewport = GetWorld()->GetGameViewport())
+	{
+		Viewport->GetViewportSize(Size);
+	}
+	TSet<FIntVector> Seen;
+	if (Size.X >= 1.0 && Size.Y >= 1.0)
+	{
+		const SimView View = simView(S);
+		const ChunkViewer Viewer{ { S.px, S.eyeY, S.pz }, S.fwd, View.eye, View.up, View.fovY, (int)Size.X, (int)Size.Y };
+		for (const VisibleChunk& C : visibleChunks(Game->world, Viewer, [this](int Storey, int Cx, int Cz) {
+				return Chunks.Contains(FIntVector(Cx, Cz, Storey));
+			}))
+		{
+			Seen.Add(FIntVector(C.cx, C.cz, C.storey));
+		}
+	}
+	for (const TPair<FIntVector, TObjectPtr<ABackroomsChunkActor>>& Entry : Chunks)
+	{
+		// Without a viewport to frame (a headless test), show everything.
+		const bool bShow = Seen.Num() == 0 || Seen.Contains(Entry.Key);
+		if (Entry.Value && Entry.Value->IsHidden() == bShow)
+		{
+			Entry.Value->SetActorHiddenInGame(!bShow);
+		}
 	}
 }
 
@@ -479,12 +522,12 @@ void UBackroomsWorldSubsystem::ShowFrame(const Vec3& Eye)
 		Render->ShowPost(GetWorld());
 		return;
 	}
-	// The Web build has no camcorder here: its infrared lamp is off.
-	const FrameLight Light = frameLight(S, T, 0.0f);
+	const FrameLight Light = frameLight(S, T, Cam->irLamp());
 	const float Water = S.level == 2 && Maze.poolAt(cellOf(S.px), cellOf(S.pz))
 		? FMath::Clamp((WATER_Y - S.eyeY) * 8.0f, 0.0f, 1.0f) : 0.0f;
 	Render->Frame(GetWorld(), Light, Eye, S.fear, Water, S.migraine);
 	Render->ShowPost(GetWorld());
+	HideUnseenChunks();
 
 	FActorSpawnParameters Params;
 	Params.ObjectFlags |= RF_Transient;
@@ -504,7 +547,9 @@ void UBackroomsWorldSubsystem::ShowFrame(const Vec3& Eye)
 	sceneDraws(S, Light, T, Draws);
 	const size_t FirstHeld = Draws.size();
 	const SimView View = simView(S);
-	heldDraws(S, View, T, Draws);
-	Hand->Show(S, *Render, StoreyOrigin(), Draws);
+	// Looking through the camcorder, whatever is in the other hand is out of frame.
+	const bool bInHand = !Cam->viewing();
+	if (bInHand) heldDraws(S, View, T, Draws);
+	Hand->Show(S, bInHand, *Render, StoreyOrigin(), Draws);
 	Scene->Show(Draws, FirstHeld, View, *Render, StoreyOrigin());
 }

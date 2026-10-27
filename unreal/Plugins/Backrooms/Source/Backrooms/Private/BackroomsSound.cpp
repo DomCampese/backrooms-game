@@ -74,6 +74,14 @@ void UBackroomsSound::BeginDestroy()
 	Super::BeginDestroy();
 }
 
+void UBackroomsSound::Camera(std::vector<CamNoise>& Noises)
+{
+	if (Mixer)
+	{
+		Mixer->camera(Noises);
+	}
+}
+
 void UBackroomsSound::Play(const std::vector<AudioEvent>& Events)
 {
 	if (!Mixer)

@@ -2,6 +2,7 @@
 #include "textures.h"
 #include "shaders.h"
 #include "input.h"
+#include "port/stream.h"
 #include "rlgl.h"
 #include "raymath.h"
 #include <cmath>
@@ -205,8 +206,9 @@ void Game::init() {
     simBegin(sim, start, now);
     rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
     SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);   // post CA/bloom sample past the edges: clamp, don't wrap
-    camcorder.load();
+    camReel.load();
     camcorder.fitReel(GetScreenWidth(), GetScreenHeight());
+    camReel.fit(camcorder);
     if (const char *camEnv = getenv("BACKROOMS_CAM")) camKnob = atoi(camEnv);
     chaseKnob = getenv("BACKROOMS_CHASE") != nullptr;
 
@@ -342,6 +344,7 @@ bool Game::tick() {
         SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);   // post CA/bloom sample past the edges: clamp, don't wrap
         sim.fov = baseFov();   // a phone turned on its side is framed from the first frame
         camcorder.fitReel(GetScreenWidth(), GetScreenHeight());
+        camReel.fit(camcorder);
         if (trace) trace.fov(sim.fov);
     }
     if (IsKeyPressed(KEY_F11)) ToggleBorderlessWindowed();
@@ -357,7 +360,8 @@ bool Game::tick() {
         if (trace) trace.digest(sim);
         if (!sim.inMenu || sim.deathT <= 0) camcorder.stopReplay();
         if (!sim.inMenu) camcorder.startTape();
-        camcorder.stepReplay(dt, audio);
+        camcorder.stepReplay(dt);
+        camReel.playNoises(camcorder, audio);
         finishStep(true);
         renderScene(now);
         renderUI(now);
@@ -389,18 +393,24 @@ bool Game::tick() {
     if (captureClick) DisableCursor();
     InputFrame in = readInput(captureClick);
     if (camKnob && frame == 2) { camcorder.up = true; camcorder.night = camKnob > 1; }
-    camcorder.control(in, sim, dt);   // before the trace: what is recorded is what the sim was given
+    camcorder.control(in, sim, dt, inKeyPressed(KEY_V));   // before the trace: what is recorded is what the sim was given
+    webLightCam(camcorder.up);
     if (trace) trace.step(in, dt, now, sim.clockSeed);
     sim.step(in, dt, now);
     if (trace) trace.digest(sim);
     camcorder.logSounds(sim.audio);
-    if (sim.inMenu && sim.deathT > 0) camcorder.beginReplay();   // taken: the tape plays on the card
+    if (sim.inMenu && sim.deathT > 0 && camcorder.beginReplay())   // taken: the tape plays on the card
+        webLightCam(false);
+    camReel.playNoises(camcorder, audio);
     finishStep(false);
     streamChunks();
     updateOccupancy();
 
     renderScene(now);
-    if (!sim.inMenu) camcorder.record(rt, sim, dt, (float)(now - sim.runStart));
+    if (!sim.inMenu) {
+        int slot = camcorder.record(sim, dt, (float)(now - sim.runStart), camReel.ready(), GetRandomValue);
+        if (slot >= 0) camReel.grab(camcorder, slot, rt);
+    }
     renderUI(now);
 
     if (shotPath && frame == shotFrame) {
@@ -472,43 +482,13 @@ void Game::streamChunks() {
     World &world = sim.world;
     int pcx = fdiv(cellOf(sim.px), CCELLS), pcz = fdiv(cellOf(sim.pz), CCELLS);
     int budget = (frame < 3) ? 64 : 4;
-    for (int r = 0; r <= 2 && budget > 0; r++)
-        for (int dx = -r; dx <= r && budget > 0; dx++)
-            for (int dz = -r; dz <= r && budget > 0; dz++) {
-                if (std::max(abs(dx), abs(dz)) != r) continue;
-                if (chunkMeshes.ensure(world, pcx + dx, pcz + dz)) budget--;
-            }
-    // The storeys above and below, where you can see them: through the
-    // openings in the chunks round you. A feature's own chunk is where the
-    // opening is, and its neighbours are what you see past the edges of it.
-    if (world.storeyH > 0.0f && budget > 0) {
-        for (int rel = -1; rel <= 1 && budget > 0; rel += 2)
-            for (int dx = -1; dx <= 1 && budget > 0; dx++)
-                for (int dz = -1; dz <= 1 && budget > 0; dz++) {
-                    if (!world.linksStorey(pcx + dx, pcz + dz, rel)) continue;
-                    StoreyScope sc(world, world.storey + rel);
-                    for (int ex = -1; ex <= 1 && budget > 0; ex++)
-                        for (int ez = -1; ez <= 1 && budget > 0; ez++) {
-                            if (abs(dx + ex) > 2 || abs(dz + ez) > 2) continue;
-                            // The shadow grid carries this storey too (bytes 1
-                            // and 2), read from whatever is loaded when it is
-                            // built — so a chunk arriving here means rebuilding
-                            // it, or the light that should fall down this
-                            // opening waits until you have walked 12 m.
-                            if (chunkMeshes.ensure(world, pcx + dx + ex, pcz + dz + ez)) { budget--; occValid = false; }
-                            // Follow visible chains through tall courts, one chunk
-                            // per layer; normal rooms stop the chain immediately.
-                            for(int depth=2;depth<=STOREY_REACH && budget>0;++depth) {
-                                StoreyScope prev(world,world.storey+(depth-1)*rel);
-                                VertFeat link;
-                                if(!world.pairFeature(pcx+dx+ex,pcz+dz+ez,
-                                    world.storey+(rel>0 ? depth-1 : -depth),link)) break;
-                                StoreyScope next(world,world.storey+depth*rel);
-                                if(chunkMeshes.ensure(world,pcx+dx+ex,pcz+dz+ez)) --budget;
-                            }
-                        }
-                }
-    }
+    ::streamChunks(world, pcx, pcz, 2, [&](const StreamChunk &c) {
+        if (chunkMeshes.ensure(world, c.cx, c.cz)) {
+            budget--;
+            if (c.inShadowGrid) occValid = false;
+        }
+        return budget > 0;
+    });
     if (frame % 90 == 0) world.unloadFar(pcx, pcz, 5);
 }
 

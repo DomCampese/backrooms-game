@@ -3,12 +3,14 @@
 #include "port/held.h"
 #include "port/hud.h"
 #include "port/scene.h"
+#include "port/visible.h"
 #include "textures.h"
 #include "port/sprites.h"
 #include "raymath.h"
 #include "rlgl.h"
 #include <cmath>
 #include <algorithm>
+#include <ctime>
 
 static_assert(sizeof(PARTY) / sizeof(PARTY[0]) == PARTY_COLOURS, "the sim draws balloon colours from PARTY_COLOURS");
 
@@ -26,7 +28,6 @@ void Game::renderScene(double now) {
     syncLevelLook();
     if (captureTime >= 0) now = captureTime;
     // ---- render 3D scene into rt
-    int pcx = fdiv(cellOf(sim.px), CCELLS), pcz = fdiv(cellOf(sim.pz), CCELLS);
     Camera3D cam = {};
     const SimView view = simView(sim);
     cam.position = toRl(view.eye);
@@ -61,112 +62,19 @@ void Game::renderScene(double now) {
     // Long pool galleries fade into atmospheric colour beyond the streamed ring.
     ClearBackground(sim.level==2 ? Color{48,70,66,255} : BLACK);
     BeginMode3D(cam);
-    struct VisibleChunk { const ChunkMeshes *data; float distance2; float yOff; };
-    VisibleChunk visible[25 + 2 * STOREY_REACH * 25];
-    int visibleCount = 0;
-    Vector3 cameraRight = Vector3Normalize(Vector3CrossProduct(toRl(sim.fwd), cam.up));
-    Vector3 cameraUp = Vector3Normalize(Vector3CrossProduct(cameraRight, toRl(sim.fwd)));
-    float tanV = tanf(cam.fovy * DEG2RAD * 0.5f);
-    float tanH = tanV * rt.texture.width / rt.texture.height;
-    // Bounds include the deepest atrium, ceiling and slight wall overlap — and,
-    // on a storeyed level, flights and shaft walls that climb to the next floor.
-    float yLo = -2.5f, yHi = fmaxf(LEVELS[sim.level].wallH, sim.world.storeyH) + 1.2f;
-    float halfY = (yHi - yLo) * 0.5f;
-    float radius = sqrtf(CHUNK*CHUNK*0.5f + halfY*halfY) + 0.5f;
-    // A sphere against the view frustum, conservatively.
-    auto sphereVisible = [&](Vector3 c, float r) {
-        Vector3 delta{c.x - sim.px, c.y - sim.eyeY, c.z - sim.pz};
-        float depth = Vector3DotProduct(delta, toRl(sim.fwd));
-        return !(depth < -r ||
-                 fabsf(Vector3DotProduct(delta, cameraRight)) > depth*tanH + r*sqrtf(1+tanH*tanH) ||
-                 fabsf(Vector3DotProduct(delta, cameraUp)) > depth*tanV + r*sqrtf(1+tanV*tanV));
-    };
-    auto consider = [&](int storey, int cx, int cz, float yOff) {
-        const ChunkMeshes *baked = chunkMeshes.find(sim.world, storey, cx, cz);
-        if (!baked) return;
-        for (int q = 0; q < visibleCount; q++) if (visible[q].data == baked) return;
-        Vector3 c{cx*CHUNK+CHUNK*0.5f, yLo + halfY + yOff, cz*CHUNK+CHUNK*0.5f};
-        if (!sphereVisible(c, radius)) return;
-        if (visibleCount < (int)(sizeof(visible) / sizeof(visible[0])))
-            visible[visibleCount++] = {baked, Vector3LengthSqr(Vector3{c.x-sim.px, c.y-sim.eyeY, c.z-sim.pz}), yOff};
-    };
-    for (int dx=-2; dx<=2; ++dx) for (int dz=-2; dz<=2; ++dz) consider(sim.world.storey, pcx+dx, pcz+dz, 0.0f);
-    std::sort(visible, visible+visibleCount, [](const VisibleChunk &a, const VisibleChunk &b) {
-        return a.distance2 < b.distance2;
+    // This storey's chunks in view, then the other storeys' that an opening
+    // shows, each nearest first (port/visible.h). After this storey's, so the
+    // floors and ceilings you are between have already filled the depth buffer
+    // and most of the other floor is rejected before it is lit.
+    const ChunkViewer viewer{ { sim.px, sim.eyeY, sim.pz }, sim.fwd, view.eye, view.up, cam.fovy,
+                              rt.texture.width, rt.texture.height };
+    const std::vector<VisibleChunk> inView = visibleChunks(sim.world, viewer, [&](int storey, int cx, int cz) {
+        return chunkMeshes.find(sim.world, storey, cx, cz) != nullptr;
     });
-    // The storeys above and below, through the openings near you: the chunks
-    // round each opening, drawn a pitch up or down in their own frame. After
-    // this storey's, so the floors and ceilings you are between have already
-    // filled the depth buffer and most of the other floor is rejected before
-    // it is lit.
-    //
-    // And only what an opening actually shows. Outside a feature's footprint
-    // the slab between two storeys is closed — ceiling below, floor above,
-    // fascias round the edge — so every line of sight into the other storey
-    // crosses the plane of the upper floor inside that footprint. A chunk is
-    // drawn only if its box, projected from the eye onto that plane, overlaps
-    // the footprint: a portal test, one rectangle per opening. Drawing every
-    // chunk round every link in the frustum put 22 chunks of other storeys
-    // behind the 9 of this one and cost a tenth of the frame.
-    struct Portal { float x0, z0, x1, z1, y; bool up; };
-    Vector3 eye = cam.position;
-    // The opening between storeys lo and lo + 1 (relative to yours) in a chunk.
-    auto portalOf = [&](int cx, int cz, int lo, Portal &p) {
-        VertFeat f;
-        if (!sim.world.pairFeature(cx, cz, sim.world.storey + lo, f)) return false;
-        float ax = (float)((cx * CCELLS + f.x0) * CELL), az = (float)((cz * CCELLS + f.z0) * CELL);
-        float ex = (f.dir < 2 ? f.wu : f.lv) * CELL, ez = (f.dir < 2 ? f.lv : f.wu) * CELL;
-        p = { ax - 0.1f, az - 0.1f, ax + ex + 0.1f, az + ez + 0.1f, (lo + 1) * sim.world.storeyH, lo >= 0 };
-        // The prism between the two floors has to be in view at all.
-        Vector3 c{ax + ex * 0.5f, (lo + 0.5f) * sim.world.storeyH, az + ez * 0.5f};
-        return sphereVisible(c, sqrtf(ex*ex + ez*ez + sim.world.storeyH*sim.world.storeyH) * 0.5f + 0.5f);
-    };
-    // Can anything in this chunk's box (at storey offset yOff) be seen through p?
-    auto through = [&](const Portal &p, int cx, int cz, float yOff) {
-        // An eye at or past the plane — halfway down a flight, below the hole
-        // it came through — is inside the opening: everything past it shows.
-        if ((p.y > eye.y) != p.up || fabsf(p.y - eye.y) < 0.05f) return true;
-        float y0 = yOff + yLo, y1 = yOff + yHi;
-        if (p.up) y0 = fmaxf(y0, p.y); else y1 = fminf(y1, p.y);   // only the far side counts
-        if (y0 > y1) return false;
-        float mnx = 1e30f, mxx = -1e30f, mnz = 1e30f, mxz = -1e30f;
-        for (int i = 0; i < 8; i++) {
-            float x = cx * CHUNK + ((i & 1) ? CHUNK : 0.0f), z = cz * CHUNK + ((i & 2) ? CHUNK : 0.0f);
-            float y = (i & 4) ? y1 : y0;
-            float t = (p.y - eye.y) / (y - eye.y);     // in (0, 1]: y is on the far side
-            float X = eye.x + (x - eye.x) * t, Z = eye.z + (z - eye.z) * t;
-            mnx = fminf(mnx, X); mxx = fmaxf(mxx, X); mnz = fminf(mnz, Z); mxz = fmaxf(mxz, Z);
-        }
-        return !(mxx < p.x0 || mnx > p.x1 || mxz < p.z0 || mnz > p.z1);
-    };
-    int ownCount = visibleCount;
-    if (sim.world.storeyH > 0.0f)
-        for (int rel = -1; rel <= 1; rel += 2)
-            for (int dx=-1; dx<=1; ++dx) for (int dz=-1; dz<=1; ++dz) {
-                Portal p1;
-                if (!portalOf(pcx+dx, pcz+dz, rel > 0 ? 0 : -1, p1)) continue;
-                for (int ex=-1; ex<=1; ++ex) for (int ez=-1; ez<=1; ++ez) {
-                    int cx = pcx+dx+ex, cz = pcz+dz+ez;
-                    if (!through(p1, cx, cz, rel * sim.world.storeyH)) continue;
-                    consider(sim.world.storey + rel, cx, cz, rel * sim.world.storeyH);
-                    // Stairs stack: the flight you are looking up often lands
-                    // beside the next one, and through that one's opening is
-                    // the storey after. Its own chunk is all you can see of it,
-                    // and only through both openings.
-                    Portal chain[STOREY_REACH];chain[0]=p1;
-                    for(int depth=2;depth<=STOREY_REACH;++depth) {
-                        if(!portalOf(cx,cz,rel>0 ? depth-1 : -depth,chain[depth-1])) break;
-                        bool seen=true;
-                        for(int j=0;j<depth;++j)
-                            if(!through(chain[j],cx,cz,depth*rel*sim.world.storeyH)) { seen=false;break; }
-                        if(!seen) break;
-                        consider(sim.world.storey+depth*rel,cx,cz,depth*rel*sim.world.storeyH);
-                    }
-                }
-            }
-    std::sort(visible+ownCount, visible+visibleCount, [](const VisibleChunk &a, const VisibleChunk &b) {
-        return a.distance2 < b.distance2;
-    });
+    struct Drawn { const ChunkMeshes *data; float yOff; };
+    std::vector<Drawn> visible;
+    for (const VisibleChunk &c : inView) visible.push_back({ chunkMeshes.find(sim.world, c.storey, c.cx, c.cz), c.yOff });
+    const int visibleCount = (int)visible.size();
     // The storey a chunk belongs to, for the shader's lighting (uDrawRel).
     auto setDrawRel = [&](float yOff) {
         float rel = sim.world.storeyH > 0.0f ? roundf(yOff / sim.world.storeyH) : 0.0f;
@@ -300,6 +208,31 @@ void Game::drawScene(const SceneDraw &d, const Camera3D &cam) {
     }
 }
 
+// A list of 2D draws in window pixels (port/hud.h), with raylib.
+static void drawHud(const std::vector<HudDraw> &draws) {
+    for (const HudDraw &d : draws) {
+        Color c = { d.col.r, d.col.g, d.col.b, d.col.a }, c2 = { d.col2.r, d.col2.g, d.col2.b, d.col2.a };
+        switch (d.kind) {
+        case HudDraw::Text: DrawText(d.text.c_str(), d.x, d.y, d.h, c); break;
+        case HudDraw::Rect: DrawRectangle(d.x, d.y, d.w, d.h, c); break;
+        case HudDraw::RectLines: DrawRectangleLines(d.x, d.y, d.w, d.h, c); break;
+        case HudDraw::GradientV: DrawRectangleGradientV(d.x, d.y, d.w, d.h, c, c2); break;
+        case HudDraw::GradientH: DrawRectangleGradientH(d.x, d.y, d.w, d.h, c, c2); break;
+        case HudDraw::Circle: DrawCircle(d.x, d.y, d.r, c); break;
+        case HudDraw::Triangle:
+            DrawTriangle({ (float)d.x, (float)d.y }, { (float)d.x, (float)(d.y + d.h) },
+                         { (float)d.x + d.r, (float)d.y + d.h * 0.5f }, c);
+            break;
+        }
+    }
+}
+
+// The camcorder's date and time: the wall clock's, not the run's.
+static const std::tm *wallClock() {
+    time_t t = time(nullptr);
+    return localtime(&t);
+}
+
 void Game::renderUI(double now) {
     if (captureTime >= 0) now = captureTime;
     // ---- post + UI
@@ -316,7 +249,10 @@ void Game::renderUI(double now) {
     // Through the camcorder the tape's look replaces the eye's, and the
     // inventory and meters give way to its OSD.
     const bool filming = camcorder.viewing() && !sim.inMenu;
-    if (filming) camcorder.drawViewfinder(rt, timeF, (float)elapsed);
+    if (filming) {
+        camReel.present(camcorder.viewfinderPicture(), rt, timeF);
+        drawHud(camcorder.viewfinderOsd(sw, sh, timeF, (float)elapsed, wallClock(), MeasureText));
+    }
     else {
         BeginShaderMode(postShader);
         DrawTextureRec(rt.texture, { 0, 0, (float)rt.texture.width, -(float)rt.texture.height }, { 0, 0 }, WHITE);
@@ -327,7 +263,10 @@ void Game::renderUI(double now) {
     if (cleanShot && !sim.inMenu) { EndDrawing(); return; }
 
     // The tape plays under the death card's words, so it goes down first.
-    if (sim.inMenu && sim.deathT > 0 && camcorder.replaying()) camcorder.drawReplay(timeF);
+    if (sim.inMenu && sim.deathT > 0 && camcorder.replaying()) {
+        camReel.present(camcorder.replayPicture(), rt, timeF);
+        drawHud(camcorder.replayOsd(sw, sh, timeF, wallClock(), MeasureText));
+    }
     HudInput in;
     in.width = sw;
     in.height = sh;
@@ -339,16 +278,6 @@ void Game::renderUI(double now) {
     in.captureHint = !inCursorHidden() && !shotPath;
     in.fps = GetFPS();
     in.debug = debugHud;
-    for (const HudDraw &d : hudDraws(sim, in, everFlashed, MeasureText)) {
-        Color c = { d.col.r, d.col.g, d.col.b, d.col.a }, c2 = { d.col2.r, d.col2.g, d.col2.b, d.col2.a };
-        switch (d.kind) {
-        case HudDraw::Text: DrawText(d.text.c_str(), d.x, d.y, d.h, c); break;
-        case HudDraw::Rect: DrawRectangle(d.x, d.y, d.w, d.h, c); break;
-        case HudDraw::RectLines: DrawRectangleLines(d.x, d.y, d.w, d.h, c); break;
-        case HudDraw::GradientV: DrawRectangleGradientV(d.x, d.y, d.w, d.h, c, c2); break;
-        case HudDraw::GradientH: DrawRectangleGradientH(d.x, d.y, d.w, d.h, c, c2); break;
-        case HudDraw::Circle: DrawCircle(d.x, d.y, d.r, c); break;
-        }
-    }
+    drawHud(hudDraws(sim, in, everFlashed, MeasureText));
     EndDrawing();
 }

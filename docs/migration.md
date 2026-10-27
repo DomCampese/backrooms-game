@@ -194,9 +194,12 @@ The platform side of the seam:
 | file | holds |
 |---|---|
 | `shared/port/chunk_mesh.{h,cpp}` | `bakeChunkGeometry` (the mesher, engine-neutral), `ChunkMesh` slots |
+| `shared/port/stream.{h,cpp}` | `streamChunks`: which chunks a view streams, nearest first, on its storey and through the openings to others; `Game::streamChunks` and Unreal's `StreamAround` walk it |
 | `shared/port/mesh_builder.{h,cpp}`, `atlas.{h,cpp}`, `palette.h` | `MB`, `addPropBox`, `addSolidBox`, `PLAIN_UV`; `FIXTURES`, `vendUV`, tile sizes; `cl8`, `PARTY_RGBA` |
 | `shared/port/hud.{h,cpp}` | `hudDraws`: the HUD render.cpp draws over the world, as draws in window pixels, measured by the caller's font |
+| `shared/port/camcorder.{h,cpp}` | `Camcorder`: the camera's controls, the tape's frames and sounds, the playback's clock, its clips and OSD; the platform keeps the reel and draws `CamPicture` through its tape look |
 | `web/src/world_mesh.{h,cpp}`, `mesh_upload.h` | `bakeChunk` (uploads the mesher's parts), `ChunkMeshCache` |
+| `shared/port/visible.{h,cpp}` | `visibleChunks`: which streamed chunks a view sees, nearest first, other storeys only through the openings in view; render.cpp draws the list and Unreal hides the rest |
 | `web/src/object_meshes.{h,cpp}` | can, deck, reels, lamp, flare, crate and lid |
 | `web/src/vec_rl.h` | `toRl` / `fromRl` |
 | `web/src/levels.{h,cpp}` | `LevelCfg : LevelRules` (the look), `lightAtCPU` and the other CPU lighting mirrors |
@@ -215,9 +218,11 @@ Still coupled, and why:
   ...)`). What it used to decide from hashes (fixtures, fittings, props, doors)
   is now core's `ChunkLayout`: see seam 2 below for what is left.
 - Game rules that hash cells (hide spots, coins, crates) live in the sim
-  (shared/sim/items.cpp), and `tools/mapdump.cpp` mirrors `hideSpotAt` and
+  (shared/sim/items.cpp), and `tools/mapdump.cpp` calls the sim's `hideSpotAt` and
   `coinAt`.
-- A prop's height is written in three places: `addProp` (mesher),
+- A carton's stack is still worked out twice, from the cell's hash, by
+  `addProp` (mesher) and `gatherCellAABBs`. Every other prop's box, top and
+  shelf are `PROP_SHAPES` (core/world.h), read by `addProp`,
   `gatherCellAABBs` (core) and `Sim::bottleShelfY`.
 - No lighting constant is copied into the GLSL by hand any more; its lighting
   arithmetic is still its own. The panel half-size is
@@ -230,8 +235,8 @@ Still coupled, and why:
   (`PILLAR_LO`, `PILLAR_HI`) and the occupancy grid's bits (`OccBit`, world.h,
   which `buildOccupancy` sets and `lightAtCPU` reads). The light plane is core's `LIGHT_DROP` everywhere on the C++ side,
   the mesher, `uLY` and every `lightAtCPU` call included.
-- The render loop reads `ChunkData` directly for the stairwell landing lights
-  (`nfeat`, `feats`).
+- The stairwell landing lights are core's `World::landingLights`; nothing
+  outside core reads `ChunkData`'s features for them.
 
 Proofs, against a build of main before the seam (374a84e; two captures of
 that binary give the noise floor):

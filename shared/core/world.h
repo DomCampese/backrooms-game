@@ -76,6 +76,42 @@ enum PropKind : uint8_t {
     PROP_MANILA_TABLE,
 };
 
+constexpr int PROP_KINDS = PROP_MANILA_TABLE + 1;
+
+// A prop's collision box, as offsets from its cell's min corner, and its top
+// above the floor it stands on. The mesher builds each piece to this top and
+// the sim stands a carton on it where `shelf` is set, so the three cannot
+// disagree. Cartons (their top varies with the hash), the vending machine
+// (vendFootprint) and the rubble of a fallen tile (walked over) are not boxed
+// from here.
+struct PropShape {
+    bool solid;
+    float x0, z0, x1, z1, top;
+    bool shelf;
+};
+constexpr PropShape PROP_SHAPES[PROP_KINDS] = {
+    {},                                                    // PROP_NONE
+    {},                                                    // PROP_BOXES
+    { true, 0.60f, 0.60f, 1.40f, 1.40f, 1.32f, true },    // PROP_CABINET
+    { true, 0.32f, 0.32f, 1.68f, 1.68f, 0.72f, true },    // PROP_TABLE
+    {},                                                    // PROP_FALLEN_TILE
+    { true, 0.20f, 0.38f, 1.80f, 1.62f, 0.44f, false },   // PROP_COUCH: the seat
+    { true, 0.55f, 0.62f, 1.45f, 1.38f, 1.90f, false },   // PROP_ARMOIRE
+    { true, 0.82f, 0.82f, 1.18f, 1.18f, 1.62f, false },   // PROP_LAMP
+    { true, 0.66f, 0.66f, 1.34f, 1.34f, 0.60f, true },    // PROP_NIGHTSTAND
+    { true, 0.30f, 0.15f, 1.70f, 1.85f, 0.46f, false },   // PROP_BED: the mattress
+    {},                                                    // PROP_VENDING
+    { true, 0.40f, 0.40f, 1.60f, 1.60f, 0.74f, true },    // PROP_PARTY_TABLE
+    { true, 0.30f, 0.50f, 1.70f, 1.50f, 0.74f, true },    // PROP_DESK
+    { true, 0.36f, 0.70f, 1.64f, 1.30f, 1.80f, false },   // PROP_SHELVING
+    { true, 0.78f, 0.78f, 1.22f, 1.22f, 0.94f, false },   // PROP_COOLER: the body, under the bottle
+    { true, 0.80f, 0.80f, 1.20f, 1.20f, 0.32f, false },   // PROP_PLANT: the pot's rim
+    {},                                                    // PROP_MANILA_TABLE: the room's furniture is not boxed
+};
+// Where things lie on the Manila Room's table: its notes and its can, 2 mm
+// over the top (0.785) so they do not fight it for depth.
+constexpr float MANILA_TABLE_REST = 0.787f;
+
 // propRot bit 2: the prop stands pushed back against the solid wall behind it.
 // Only vending machines. World::generate sets it after every pass that changes
 // an edge, so the mesher and collision (vendFootprint) agree.
@@ -138,6 +174,15 @@ enum VertKind : uint8_t {
 };
 // One vertical feature. Local frame: u across the rise, v along it, metres
 // from the footprint's corner; `dir` turns that frame onto the grid.
+// An enclosed stairwell's landing light: the point the shader's spare light
+// shines from (World::landingLamp), and the batten's tube, its centre and
+// whether it runs along x. The tube goes out in a blackout, so a renderer
+// draws it, not the chunk mesh.
+struct LandingLight {
+    Vec3 lamp, tube;
+    bool alongX;
+};
+
 struct VertFeat {
     uint8_t kind = VK_NONE;
     uint8_t dir = 0;          // 0 rises toward +z, 1 toward -z, 2 toward +x, 3 toward -x
@@ -283,6 +328,11 @@ struct World {
     Vec3 landingLamp(const VertFeat &f, int cx, int cz) const {
         return featureWorld(f, cx, cz, CELL, storeyH * 0.5f + 2.25f, 4 * CELL - WT - 0.07f);
     }
+    // The landing lights of the enclosed stairwells in the generated chunks of
+    // the 3 x 3 round chunk (pcx, pcz), in the frame of the storey you are on
+    // (World::storey), chunk by chunk then feature by feature. Nothing is
+    // generated to find them.
+    std::vector<LandingLight> landingLights(int pcx, int pcz);
     // Write storey qs's half of a feature into a chunk being generated: its
     // margin, cell flags, walls, rails and doors.
     void stampFeature(ChunkData &d, const VertFeat &f, int cx, int cz);

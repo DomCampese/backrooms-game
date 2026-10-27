@@ -185,21 +185,10 @@ FrameLight frameLight(Sim &sim, float now, float ir) {
     const int pcx = fdiv(cellOf(sim.px), CCELLS), pcz = fdiv(cellOf(sim.pz), CCELLS);
     Vec3 wellLamp = { 0, 0, 0 };
     float wellD2 = 1e30f;
-    if (sim.world.storeyH > 0.0f) {
-        for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
-            int cx = pcx + dx, cz = pcz + dz;
-            auto it = sim.world.chunks.find(World::key(cx, cz));
-            if (it == sim.world.chunks.end()) continue;
-            const ChunkData &cd = it->second;
-            for (int q = 0; q < cd.nfeat; q++) {
-                const VertFeat &f = cd.feats[q];
-                if (f.kind != VK_STAIRWELL) continue;
-                Vec3 lp = sim.world.landingLamp(f, cx, cz);
-                lp.y += (f.lo - sim.world.storey) * sim.world.storeyH;
-                float d2 = (lp.x - sim.px) * (lp.x - sim.px) + (lp.y - sim.eyeY) * (lp.y - sim.eyeY) + (lp.z - sim.pz) * (lp.z - sim.pz);
-                if (d2 < wellD2) { wellD2 = d2; wellLamp = lp; }
-            }
-        }
+    for (const LandingLight &well : sim.world.landingLights(pcx, pcz)) {
+        const Vec3 &lp = well.lamp;
+        float d2 = (lp.x - sim.px) * (lp.x - sim.px) + (lp.y - sim.eyeY) * (lp.y - sim.eyeY) + (lp.z - sim.pz) * (lp.z - sim.pz);
+        if (d2 < wellD2) { wellD2 = d2; wellLamp = lp; }
     }
     // The Manila Room, when one is near: its tubes out, its chandelier on. An
     // inverted rectangle masks nothing. The chandelier ignores the blackouts
@@ -234,23 +223,9 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
     const Vec3 flarePos = light.flarePos;
     // Stairwell landing lights: the tube on each batten near you, as bright as
     // the tubes are tonight, drawn here because a chunk mesh cannot go out.
-    if (sim.world.storeyH > 0.0f) {
-        for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
-            auto it = sim.world.chunks.find(World::key(pcx + dx, pcz + dz));
-            if (it == sim.world.chunks.end()) continue;
-            for (int q = 0; q < it->second.nfeat; q++) {
-                const VertFeat &f = it->second.feats[q];
-                if (f.kind != VK_STAIRWELL) continue;
-                float yo = (f.lo - sim.world.storey) * sim.world.storeyH;
-                Vec3 c = sim.world.featureWorld(f, pcx + dx, pcz + dz, CELL, sim.world.storeyH * 0.5f + 2.25f - 0.065f + yo,
-                                                4 * CELL - WT - 0.145f);
-                Vec3 e = sim.world.featureWorld(f, pcx + dx, pcz + dz, CELL + 1.0f, 0, 0);
-                Vec3 o = sim.world.featureWorld(f, pcx + dx, pcz + dz, CELL, 0, 0);
-                bool alongX = fabsf(e.x - o.x) > 0.5f;
-                unsigned char g8 = cl8(60 + 195 * sim.blackoutCur * flick);
-                put(out, cube(c, alongX ? 0.96f : 0.035f, 0.035f, alongX ? 0.035f : 0.96f, { g8, g8, cl8(g8 * 0.92f), 255 }));
-            }
-        }
+    for (const LandingLight &well : sim.world.landingLights(pcx, pcz)) {
+        unsigned char g8 = cl8(60 + 195 * sim.blackoutCur * flick);
+        put(out, cube(well.tube, well.alongX ? 0.96f : 0.035f, 0.035f, well.alongX ? 0.035f : 0.96f, { g8, g8, cl8(g8 * 0.92f), 255 }));
     }
     // Small things draw unlit, so the room light at each one is estimated on
     // the CPU (plus the flare or muzzle glow): no balloons shining through a

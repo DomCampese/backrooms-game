@@ -126,6 +126,7 @@ material is unlit, and its colour is the Web build's.
 | the revolver | raylib 5.5's glTF animation and CPU skinning | shared/port/revolver.h, bit-identical to raylib 5.5 over the whole reload |
 | post pass | `POST_FS` | `Shaders/BackroomsPost.ush` in `M_BackroomsPost`, in place of Unreal's tonemapper |
 | the HUD: title and death cards, intro, cards, meters, inventory, hints | `hudDraws` (shared/port/hud.h), measured with raylib's font | the same list (`ABackroomsHUD`), measured and drawn with the engine's medium font; gradients in 48 bands |
+| the camcorder (V) | `Camcorder` (shared/port/camcorder.h): zoom, night shot's lamp, its OSD and sounds; the reel and `TAPE_FS` draw the tape | the same rules, OSD and sounds (`SoundMixer::camera`); no reel yet, so no tape look and no playback |
 
 `make unreal-open` runs `tools/unreal.sh surfaces` before it opens the
 editor: `texdump --unreal` writes every texture the Web build binds to
