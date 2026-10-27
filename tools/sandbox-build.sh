@@ -37,8 +37,8 @@ shopt -u nullglob
 # reads the tail.
 build_mapdump() {
     rm -f mapdump
-    c++ "${CORE_FLAGS[@]}" tools/mapdump.cpp "${CORE[@]}" -o mapdump
-    echo "built ./mapdump (core only)"
+    c++ "${CORE_FLAGS[@]}" tools/mapdump.cpp "${CORE[@]}" shared/sim/*.cpp -o mapdump
+    echo "built ./mapdump (core and sim only)"
 }
 # contract: core's golden answers (docs/migration.md, "Contract tests").
 build_contract() {

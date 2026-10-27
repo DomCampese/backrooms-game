@@ -218,7 +218,7 @@ Still coupled, and why:
   ...)`). What it used to decide from hashes (fixtures, fittings, props, doors)
   is now core's `ChunkLayout`: see seam 2 below for what is left.
 - Game rules that hash cells (hide spots, coins, crates) live in the sim
-  (shared/sim/items.cpp), and `tools/mapdump.cpp` mirrors `hideSpotAt` and
+  (shared/sim/items.cpp), and `tools/mapdump.cpp` calls the sim's `hideSpotAt` and
   `coinAt`.
 - A carton's stack is still worked out twice, from the cell's hash, by
   `addProp` (mesher) and `gatherCellAABBs`. Every other prop's box, top and
@@ -235,8 +235,8 @@ Still coupled, and why:
   (`PILLAR_LO`, `PILLAR_HI`) and the occupancy grid's bits (`OccBit`, world.h,
   which `buildOccupancy` sets and `lightAtCPU` reads). The light plane is core's `LIGHT_DROP` everywhere on the C++ side,
   the mesher, `uLY` and every `lightAtCPU` call included.
-- The render loop reads `ChunkData` directly for the stairwell landing lights
-  (`nfeat`, `feats`).
+- The stairwell landing lights are core's `World::landingLights`; nothing
+  outside core reads `ChunkData`'s features for them.
 
 Proofs, against a build of main before the seam (374a84e; two captures of
 that binary give the noise floor):

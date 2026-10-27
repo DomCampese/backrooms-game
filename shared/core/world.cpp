@@ -135,6 +135,30 @@ void World::featureLocal(const VertFeat &f, int cx, int cz, float x, float z, fl
     default: v = V - lx; u = lz;     break;
     }
 }
+std::vector<LandingLight> World::landingLights(int pcx, int pcz) {
+    std::vector<LandingLight> out;
+    if (storeyH <= 0.0f) return out;
+    for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+        int cx = pcx + dx, cz = pcz + dz;
+        auto it = chunks.find(key(cx, cz));
+        if (it == chunks.end()) continue;
+        const ChunkData &cd = it->second;
+        for (int q = 0; q < cd.nfeat; q++) {
+            const VertFeat &f = cd.feats[q];
+            if (f.kind != VK_STAIRWELL) continue;
+            LandingLight l;
+            l.lamp = landingLamp(f, cx, cz);
+            l.lamp.y += (f.lo - storey) * storeyH;
+            float yo = (f.lo - storey) * storeyH;
+            l.tube = featureWorld(f, cx, cz, CELL, storeyH * 0.5f + 2.25f - 0.065f + yo, 4 * CELL - WT - 0.145f);
+            Vec3 e = featureWorld(f, cx, cz, CELL + 1.0f, 0, 0), o = featureWorld(f, cx, cz, CELL, 0, 0);
+            l.alongX = fabsf(e.x - o.x) > 0.5f;
+            out.push_back(l);
+        }
+    }
+    return out;
+}
+
 Vec3 World::featureWorld(const VertFeat &f, int cx, int cz, float u, float y, float v) const {
     float fx = (cx * CCELLS + f.x0) * CELL, fz = (cz * CCELLS + f.z0) * CELL;
     float U = f.wu * CELL, V = f.lv * CELL;
