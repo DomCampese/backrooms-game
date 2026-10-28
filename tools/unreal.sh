@@ -6,7 +6,8 @@
 #   tools/unreal.sh play      build, then run the game in its own window
 #   tools/unreal.sh test      build, then run the Backrooms automation tests
 #   tools/unreal.sh surfaces  write the Web build's textures and world.json for the editor (texdump)
-#   tools/unreal.sh import    import assets/sounds and build the world's materials again
+#   tools/unreal.sh import    build, then import assets/sounds and build the world's materials,
+#                             headless (no editor window); `make unreal-materials`
 #   tools/unreal.sh log       the "Backrooms:" lines from the last run's log
 #
 # `make unreal`, `make unreal-open`, `make unreal-play` and `make unreal-test`
@@ -58,6 +59,16 @@ surfaces() {
     echo "unreal.sh: wrote the textures and world.json to $SURFACES"
 }
 
+# The editor's Python, headless: the sounds and the world's textures and
+# materials, as opening the editor builds them, with no window.
+materials() {
+    surfaces
+    "$EDITOR_CMD" "$PROJECT" -run=pythonscript \
+        -script="import backrooms_import, backrooms_world; backrooms_import.import_sounds(); backrooms_world.build()" \
+        -unattended -nosplash -log || true
+    grep "Backrooms:" "$LOG" || echo "(no Backrooms lines in $LOG)"
+}
+
 case "${1:-build}" in
 build)
     build
@@ -74,10 +85,13 @@ play)
         echo "unreal.sh: the recorded sounds are not imported yet; run 'make unreal-open' once and let the editor import them" >&2
     fi
     # Each by name: materials an older editor built are all there but a new one.
+    # The game cannot build them, so build them here, without the editor's window.
     for asset in MPC_Backrooms M_BackroomsWorld M_BackroomsWorldBlend M_BackroomsShape M_BackroomsShapeBlend \
                  M_BackroomsBillboard M_BackroomsBillboardAdd M_BackroomsPost M_BackroomsTape; do
         if [ ! -f "$ROOT/unreal/Content/Backrooms/World/$asset.uasset" ]; then
-            echo "unreal.sh: $asset is not built yet; run 'make unreal-open' once and let the editor build the world's materials" >&2
+            echo "unreal.sh: $asset is not built yet; building the world's materials first" >&2
+            materials
+            break
         fi
     done
     MAP="/Engine/Maps/Entry?level=${LEVEL:-0}?seed=${SEED:-1337}"
@@ -96,10 +110,8 @@ surfaces)
     surfaces
     ;;
 import)
-    surfaces
-    "$EDITOR_CMD" "$PROJECT" -run=pythonscript \
-        -script="import backrooms_import, backrooms_world; backrooms_import.import_sounds(); backrooms_world.build()" -unattended -log
-    grep "Backrooms:" "$LOG" || echo "(no Backrooms lines in $LOG)"
+    build
+    materials
     ;;
 log)
     grep "Backrooms:" "$LOG" || echo "(no Backrooms lines in $LOG)"

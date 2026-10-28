@@ -277,6 +277,11 @@ off the Mac. In order:
    code against `TAPE_FS` pixel for pixel, with DXC and spirv-cross; the
    reel's capture and copy have not run anywhere.
 
+8. **Performance** (28 October 2026, not yet measured on the Mac). `stat
+   unit` and `stat gpu` while playing; then Project Settings > Game >
+   Backrooms > Performance: `LightQuality` Medium or Low, `ScreenPercentage`
+   below 100, `MaxFPS` (60 by default). High must look as it did.
+
 A session on the Mac itself (`claude remote-control` in the repository) could
 build, run the tests and read the log directly; from the cloud each Unreal
 change has waited on a build and a pasted log.

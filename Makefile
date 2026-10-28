@@ -102,4 +102,7 @@ unreal-test:
 	tools/unreal.sh test
 unreal-surfaces:
 	tools/unreal.sh surfaces
-.PHONY: unreal unreal-open unreal-play unreal-test unreal-surfaces
+# The sounds and the world's materials, without opening the editor.
+unreal-materials:
+	tools/unreal.sh import
+.PHONY: unreal unreal-open unreal-play unreal-test unreal-surfaces unreal-materials

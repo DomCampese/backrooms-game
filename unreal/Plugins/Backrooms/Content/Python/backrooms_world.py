@@ -46,7 +46,7 @@ DIGEST_TAG = "BackroomsWorld"
 MPC_VECTORS = [
     "Frame", "ViewPos", "FlashDir", "FlarePos", "EntPos", "Ent", "Amb", "FogCol", "LightCol", "LampCol",
     "Air", "Tubes", "Surface", "Grid", "RoomMask", "Lamp", "Post", "Clear",
-    "TapeA", "TapeB", "Tape", "TapeFrom",
+    "TapeA", "TapeB", "Tape", "TapeFrom", "Quality",
 ]
 
 # The world material's Custom node: the material's inputs into the HLSL's
@@ -66,6 +66,7 @@ U.Vary = Surface.y; U.Faulty = Surface.z; U.Wet = Surface.w;
 U.WetFrom = Grid.x; U.OccN = Grid.y; U.OccOrigin = Grid.zw;
 U.RoomMask = RoomMask; U.Lamp = Lamp; U.ObjRefl = ObjRefl;
 U.DrawRel = HasStorey * (ChunkStorey - Ent.w);
+U.Quality = Quality.x;
 // What render.cpp sets round a viewmodel: no shadow grid, an ambient floor.
 if (Viewmodel > 0.5)
 {
@@ -341,7 +342,7 @@ def build_world_material(name, blend, mpc, defines, neutral):
     mat = _fresh_material(name)
     _unlit(mat, blend)
     inputs = ["CamRel", "Normal", "UV", "VertexRGB", "VertexA", "Tex0", "Tex1", "Occ", "ObjRefl", "GlossOverride",
-              "Viewmodel", "Tint", "HasStorey", "ChunkStorey"] + MPC_VECTORS[:16]
+              "Viewmodel", "Tint", "HasStorey", "ChunkStorey"] + MPC_VECTORS[:16] + ["Quality"]
     custom = _custom(mat, WORLD_CODE, WORLD_INCLUDE, defines, inputs, -300, 0)
 
     position = mel().create_material_expression(mat, unreal.MaterialExpressionWorldPosition, -900, -600)
@@ -359,7 +360,7 @@ def build_world_material(name, blend, mpc, defines, neutral):
                ("HasStorey", 0.0, 0), ("ChunkStorey", 0.0, 1)]
     for i, (pname, value, index) in enumerate(scalars):
         _link(_scalar(mat, pname, value, -900, 100 + 80 * i, index), "", custom, pname)
-    for i, vname in enumerate(MPC_VECTORS[:16]):
+    for i, vname in enumerate(MPC_VECTORS[:16] + ["Quality"]):
         _link(_collection(mat, mpc, vname, -1200, -600 + 80 * i), "", custom, vname)
 
     rgb = _mask(mat, custom, "rgb", 0, -100)

@@ -72,6 +72,16 @@ drawn"). What will bite:
   material instead: the revolver's smoke came out an opaque dark square. The
   editor's digest now covers backrooms_world.py itself, so a change to how a
   material is built rebuilds them on the next `make unreal-open`.
+- **`LightQuality` is the only place Unreal's lighting may differ from the
+  Web build's** (Project Settings > Game > Backrooms > Performance, the
+  `Quality` vector, `U.Quality` in BackroomsWorld.ush). High is the GLSL's
+  arithmetic: compiled with Quality pinned at 0, DXC's DXIL for the world
+  material is the same 13,656 lines as before the setting. Medium traces one
+  hard shadow tap and fades shadows by 8 m (10-15 m at High), Low traces
+  none; both keep all nine panels, because each fades out inside that
+  window. Low's shader is 36% fewer instructions. The scene actor builds a
+  section again only when its triangles change and otherwise moves its
+  vertices (`UpdateMeshSection`).
 - **Textures are imported as bytes**: no sRGB decode, no compression
   (`TC_VectorDisplacementmap`), because raylib uploads them that way and the
   shader's arithmetic, and the detail maps' slopes and alpha codes, assume it.

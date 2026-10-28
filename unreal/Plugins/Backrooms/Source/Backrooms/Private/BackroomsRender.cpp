@@ -1,4 +1,5 @@
 #include "BackroomsRender.h"
+#include "BackroomsSettings.h"
 #include "Engine/PostProcessVolume.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
@@ -341,6 +342,8 @@ void UBackroomsRender::Frame(UWorld* Where, const FrameLight& L, const Vec3& Vie
 	P->SetVectorParameterValue(TEXT("Lamp"), FLinearColor(L.lamp[0], L.lamp[1], L.lamp[2], L.lamp[3]));
 	P->SetVectorParameterValue(TEXT("Post"), FLinearColor(L.time, Fear, Water, Migraine));
 	P->SetVectorParameterValue(TEXT("Clear"), ClearColour(Level));
+	P->SetVectorParameterValue(TEXT("Quality"),
+		FLinearColor((float)(int32)GetDefault<UBackroomsSettings>()->LightQuality, 0.0f, 0.0f, 0.0f));
 }
 
 FrameLight UBackroomsRender::Still()
