@@ -5,6 +5,17 @@
 #include "BackroomsSettings.generated.h"
 
 class ABackroomsChunkActor;
+
+// How much of the world shader's shadow tracing runs (BackroomsWorld.ush,
+// U.Quality). High is the Web build's lighting; the others trace fewer
+// shadows, which is most of the frame, and look a little flatter.
+UENUM()
+enum class EBackroomsLightQuality : uint8
+{
+	High,     // the Web build's: soft shadows from every tube within 10-15 m
+	Medium,   // hard shadows, fading out by 8 m
+	Low,      // no shadows from the tubes
+};
 class UInputAction;
 class UInputMappingContext;
 
@@ -64,6 +75,19 @@ public:
 	// frame longer than this leaves a gap in the sound.
 	UPROPERTY(Config, EditAnywhere, Category = "Sound", meta = (ClampMin = 0.03, ClampMax = 0.5))
 	float SoundLatency = 0.1f;
+
+	// Performance. LightQuality is read every frame; the frame cap and the
+	// resolution are applied when a world starts, and the console's t.MaxFPS
+	// and r.ScreenPercentage still override them.
+	UPROPERTY(Config, EditAnywhere, Category = "Performance")
+	EBackroomsLightQuality LightQuality = EBackroomsLightQuality::High;
+	// Frames a second at most; 0 for no cap.
+	UPROPERTY(Config, EditAnywhere, Category = "Performance", meta = (ClampMin = 0, ClampMax = 240))
+	int32 MaxFPS = 60;
+	// The world's resolution as a percentage of the window's; the HUD stays
+	// sharp. The world shader costs per pixel, so this is the biggest lever.
+	UPROPERTY(Config, EditAnywhere, Category = "Performance", meta = (ClampMin = 25, ClampMax = 100))
+	int32 ScreenPercentage = 100;
 
 	virtual FName GetCategoryName() const override { return TEXT("Game"); }
 };

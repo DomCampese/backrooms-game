@@ -48,6 +48,9 @@ struct FBRUniforms
 	float2 OccOrigin;
 	float OccN;
 	float StoreyH, Storey, DrawRel;
+	// Not the GLSL's: 0 is the Web build's lighting, 1 and 2 trace fewer
+	// shadows (UBackroomsSettings::LightQuality).
+	float Quality;
 };
 
 // The GLSL's per-fragment globals (gRel, gChan, gLightLum, gGloss) and fragN.
@@ -248,7 +251,11 @@ float3 BRPanelSum(FBRUniforms U, FBRFrag F, Texture2D Occ, float3 P, float3 N, f
 		if (Atten < 1e-5) continue;
 		if (St * Atten < 0.004) continue;
 		float L1 = abs(Lc.x - ShP.x) + abs(Lc.z - ShP.y);
-		float Sw = 1.0 - smoothstep(10.0, 15.0, L1);
+		// The shadow march is most of the frame. Medium fades it out by 8 m
+		// (10-15 m at high) and traces one tap, low traces none; the panels
+		// stay nine, since each fades out inside that window.
+		float2 ShadowFade = U.Quality < 0.5 ? float2(10.0, 15.0) : float2(5.0, 8.0);
+		float Sw = U.Quality > 1.5 ? 0.0 : 1.0 - smoothstep(ShadowFade.x, ShadowFade.y, L1);
 		float Vis;
 		if (Upper || Sw < 0.002)
 		{
@@ -257,7 +264,7 @@ float3 BRPanelSum(FBRUniforms U, FBRFrag F, Texture2D Occ, float3 P, float3 N, f
 		else
 		{
 			float Sr2 = min(36.0, 0.5625 * U.LS * U.LS), Sr1 = min(16.0, 0.25 * U.LS * U.LS);
-			float Spread = D2 < Sr2 ? 0.45 * (1.0 - smoothstep(Sr1, Sr2, D2)) : 0.0;
+			float Spread = D2 < Sr2 && U.Quality < 0.5 ? 0.45 * (1.0 - smoothstep(Sr1, Sr2, D2)) : 0.0;
 			Vis = BRPanelVis(U, F, Occ, Lc.xz, ShP, Spread);
 		}
 		Vis = lerp(1.0, Vis, Sw);
@@ -321,7 +328,7 @@ float3 BRRoomLight(FBRUniforms U, inout FBRFrag F, Texture2D Occ, float3 P, floa
 				float3 Ld = Sp - P;
 				float D2 = dot(Ld, Ld);
 				float Lobe = BRSheen(N, V, Ld * rsqrt(max(D2, 1e-6)), Shin) * F.Gloss * St * 2.6 / (1.0 + 0.22 * D2);
-				if (Lobe > 0.002) Light += U.LightCol * (Lobe * BRLightVis(U, F, Occ, Sp.xz, ShP));
+				if (Lobe > 0.002) Light += U.LightCol * (Lobe * (U.Quality > 1.5 ? 1.0 : BRLightVis(U, F, Occ, Sp.xz, ShP)));
 			}
 		}
 	}

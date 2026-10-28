@@ -12,6 +12,7 @@
 #include "Engine/World.h"
 #include "Math/RotationMatrix.h"
 #include "GameFramework/PlayerController.h"
+#include "HAL/IConsoleManager.h"
 #include "HAL/PlatformTime.h"
 #include "Misc/CommandLine.h"
 #include "Misc/DateTime.h"
@@ -280,6 +281,17 @@ void UBackroomsWorldSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	// Opening the .uproject does not recompile changed source, so an old plugin
 	// binary runs without saying so. This line dates the one that is running.
 	UE_LOG(LogTemp, Display, TEXT("Backrooms: plugin compiled %s %s"), ANSI_TO_TCHAR(__DATE__), ANSI_TO_TCHAR(__TIME__));
+	// Project Settings > Game > Backrooms > Performance. Set by code, so a
+	// value typed into the console still wins.
+	const UBackroomsSettings* Settings = GetDefault<UBackroomsSettings>();
+	auto Put = [](const TCHAR* Name, int32 Value) {
+		if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(Name))
+		{
+			Var->Set(Value, ECVF_SetByCode);
+		}
+	};
+	Put(TEXT("t.MaxFPS"), Settings->MaxFPS);
+	Put(TEXT("r.ScreenPercentage"), Settings->ScreenPercentage);
 }
 
 void UBackroomsWorldSubsystem::Deinitialize()

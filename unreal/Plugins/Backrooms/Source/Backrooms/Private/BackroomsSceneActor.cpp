@@ -97,11 +97,32 @@ void ABackroomsSceneActor::Show(const std::vector<SceneDraw>& Draws, size_t Firs
 		BatchFor(Material).Add(Triangles, Identity, Origin);
 	}
 
-	Mesh->ClearAllMeshSections();
+	// Most frames draw the same things in new places (the revolver, the
+	// hunter's walk, a flare's flicker), so most sections keep their buffers
+	// and only their vertices move. Building every section again each frame
+	// cost the game thread a whole mesh upload per frame.
 	for (int32 Section = 0; Section < Order.Num(); Section++)
 	{
 		const FBatch& B = Batches[Order[Section]];
+		FBackroomsSceneSection* Was = Built.IsValidIndex(Section) ? &Built[Section] : nullptr;
+		if (Was && Was->Material == Order[Section] && Was->Vertices == B.Vertices.Num() && Was->Triangles == B.Triangles)
+		{
+			Mesh->UpdateMeshSection(Section, B.Vertices, B.Normals, B.UVs, B.Colours, TArray<FProcMeshTangent>());
+			continue;
+		}
 		Mesh->CreateMeshSection(Section, B.Vertices, B.Triangles, B.Normals, B.UVs, B.Colours, TArray<FProcMeshTangent>(), false);
 		Mesh->SetMaterial(Section, Order[Section]);
+		if (!Was)
+		{
+			Was = &Built.AddDefaulted_GetRef();
+		}
+		Was->Material = Order[Section];
+		Was->Vertices = B.Vertices.Num();
+		Was->Triangles = B.Triangles;
 	}
+	for (int32 Section = Order.Num(); Section < Built.Num(); Section++)
+	{
+		Mesh->ClearMeshSection(Section);
+	}
+	Built.SetNum(Order.Num());
 }

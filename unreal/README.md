@@ -20,6 +20,7 @@ The short version, on the Mac, from the repository's root:
 ```bash
 make unreal-open    # build, open the editor (first time: imports the revolver)
 make unreal-play    # build, run the game in a window
+make unreal-materials  # build the sounds and the world's materials, no editor window
 make unreal-test    # build, run the Backrooms automation tests
 tools/unreal.sh log # the "Backrooms:" lines from the last run
 ```
@@ -91,9 +92,13 @@ repository, not just this folder. On the Mac:
    first time, the editor imports `assets/sounds` to `Content/Backrooms/Sounds`
    and the Web build's textures to `Content/Backrooms/World` and builds the
    world's materials there (both gitignored; below); the Output Log says
-   "imported 12 sounds" and "built the world's materials". `make unreal-play`
-   cannot import, since the game has no editor, and warns if this has not
-   happened yet.
+   "imported 12 sounds" and "built the world's materials". `make
+   unreal-materials` does the same without opening the editor (the editor's
+   Python commandlet), and `make unreal-play` runs it when a material is
+   missing; after pulling a change to the materials, run it once.
+   Project Settings > Game > Backrooms > Performance has the frame cap (60),
+   the world's resolution (`ScreenPercentage`) and `LightQuality`: High is
+   the Web build's lighting, Medium traces hard shadows to 8 m, Low none.
 5. Press Play. The default map is the engine's empty Entry map; the game mode
    starts a run on Level 0 at seed 1337 and the sim drives the camera: WASD,
    the mouse, the Web build's keys (F to switch the torch on, R to reload, F3

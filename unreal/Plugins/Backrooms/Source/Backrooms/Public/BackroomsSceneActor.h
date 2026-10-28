@@ -6,14 +6,25 @@
 #include "BackroomsSceneActor.generated.h"
 
 class UBackroomsRender;
+class UMaterialInterface;
 class UProceduralMeshComponent;
+
+// What a section of the scene's mesh was last built with: a frame with the
+// same material, vertex count and triangles only moves its vertices.
+struct FBackroomsSceneSection
+{
+	const UMaterialInterface* Material = nullptr;
+	int32 Vertices = 0;
+	TArray<int32> Triangles;
+};
 
 // Draws, each frame, what the Web build draws round the chunks
 // (shared/port/draw.h): the loose objects through the world shader, and
 // raylib's unlit shapes and billboards (the hunter, the pack, flares, coins,
 // balloons, chalk, rounds in flight, impacts, the mist, the muzzle flash) lit
-// as render.cpp lights them. One procedural mesh, a section per material,
-// rebuilt every frame in the world's coordinates.
+// as render.cpp lights them. One procedural mesh, a section per material, in
+// the world's coordinates, built again only when a section's triangles change
+// and otherwise updated in place.
 UCLASS(Transient)
 class BACKROOMS_API ABackroomsSceneActor : public AActor
 {
@@ -31,4 +42,5 @@ public:
 private:
 	UPROPERTY(VisibleAnywhere, Category = "Backrooms")
 	TObjectPtr<UProceduralMeshComponent> Mesh;
+	TArray<FBackroomsSceneSection> Built;
 };
