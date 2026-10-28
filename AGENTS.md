@@ -169,7 +169,9 @@ docs/unreal-handoff.md "Next" has what is open. What will bite:
 - **A `TObjectPtr` converts implicitly only to its own type (5.8).** Returning
   a `TObjectPtr<UMaterialInstanceDynamic>` as a `UMaterialInterface*` fails
   with "no viable conversion" in every file that includes the header; the
-  conversion to a base is explicit. Use `.Get()`.
+  conversion to a base is explicit. Use `.Get()`, in the .cpp: in a header
+  that only forward-declares the class, `.Get()` fails too ("not defined, but
+  forward declared"), since the compiler cannot see it derives from the base.
 - **`AssetRegistryModule.h` no longer brings in `FAssetData` (5.8).** Include
   `AssetRegistry/AssetData.h` and `AssetRegistry/IAssetRegistry.h` too, or a
   `TArray<FAssetData>` fails as an incomplete type.

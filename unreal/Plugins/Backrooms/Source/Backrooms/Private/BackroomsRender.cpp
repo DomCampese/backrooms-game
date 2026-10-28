@@ -240,6 +240,10 @@ UMaterialInterface* UBackroomsRender::Lamp(bool bViewmodel, float Tint) const
 	return M;
 }
 
+// Here, not in the header: the conversion to the base needs the class
+// complete, and the header only declares it.
+UMaterialInterface* UBackroomsRender::HeldFlare() const { return Flare.Get(); }
+
 UMaterialInterface* UBackroomsRender::Revolver(int32 Index) const
 {
 	return RevolverMaterials.IsValidIndex(Index) ? RevolverMaterials[Index].Get() : nullptr;
