@@ -163,8 +163,11 @@ What will bite:
   landed a project the editor had last opened before it had every material
   but `M_BackroomsTape`; `Load` refused them all and the world was black
   under a working HUD. The tape is optional now (a warning, and the
-  viewfinder shows the plain scene), and `unreal.sh play` names each missing
-  material. After pulling a material change, `make unreal-open` once.
+  viewfinder shows the plain scene), and `make unreal-play` builds the
+  materials itself, headless, when one is missing or the surfaces, the
+  editor's Python or the recordings changed since the last good build
+  (`unreal/Saved/materials.digest`). The editor opening the project builds
+  them too but writes no digest, so the next play builds them once more.
 - **Interference is real.** At frame 40 of a seed-1337 Level 0 capture the
   tape is torn because Clark has spawned stalking about 12 m away, out of sight.
   That is the feature, not a bug in the shader.

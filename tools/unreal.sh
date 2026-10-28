@@ -3,7 +3,7 @@
 #
 #   tools/unreal.sh build     compile the editor modules (after every pull)
 #   tools/unreal.sh open      build, then open the project in the editor
-#   tools/unreal.sh play      build, then run the game in its own window
+#   tools/unreal.sh play      build, bring the sounds and materials up to date, then run the game
 #   tools/unreal.sh test      build, then run the Backrooms automation tests
 #   tools/unreal.sh surfaces  write the Web build's textures and world.json for the editor (texdump)
 #   tools/unreal.sh import    build, then import assets/sounds and build the world's materials,
@@ -69,6 +69,50 @@ materials() {
     grep "Backrooms:" "$LOG" || echo "(no Backrooms lines in $LOG)"
 }
 
+# What the materials are built from: the surfaces texdump writes, the editor's
+# Python, and the list of recordings. The digest of the last good build is
+# kept beside the surfaces, so a play rebuilds only when one of these moved.
+STAMP="$ROOT/unreal/Saved/materials.digest"
+inputs_digest() {
+    local sum=sha256sum
+    command -v sha256sum >/dev/null || sum="shasum -a 256"
+    (cd "$ROOT" && {
+        find unreal/Saved/Surfaces -type f | LC_ALL=C sort | while read -r f; do echo "$f"; cat "$f"; done
+        cat unreal/Plugins/Backrooms/Content/Python/*.py
+        find assets/sounds -name '*.ogg' | LC_ALL=C sort
+    }) | $sum | cut -d' ' -f1
+}
+
+# The game cannot import or build materials, so a play does it first, with the
+# editor's Python and no window, when the project lacks one or its inputs changed.
+materials_if_stale() {
+    surfaces
+    local want reason=""
+    want=$(inputs_digest)
+    for asset in World/MPC_Backrooms World/M_BackroomsWorld World/M_BackroomsWorldBlend World/M_BackroomsShape \
+                 World/M_BackroomsShapeBlend World/M_BackroomsBillboard World/M_BackroomsBillboardAdd \
+                 World/M_BackroomsPost World/M_BackroomsTape Sounds/water/swim_1; do
+        if [ ! -f "$ROOT/unreal/Content/Backrooms/$asset.uasset" ]; then
+            reason="$asset is not built yet"
+            break
+        fi
+    done
+    if [ -z "$reason" ] && [ "$(cat "$STAMP" 2>/dev/null)" != "$want" ]; then
+        reason="the textures or the material code changed"
+    fi
+    if [ -z "$reason" ]; then
+        echo "unreal.sh: the sounds and materials are up to date"
+        return
+    fi
+    echo "unreal.sh: $reason; building the sounds and materials (no editor window, a minute or two)"
+    materials
+    if grep -q "built the world's materials" "$LOG"; then
+        echo "$want" >"$STAMP"
+    else
+        echo "unreal.sh: the materials did not build; the lines above say why" >&2
+    fi
+}
+
 case "${1:-build}" in
 build)
     build
@@ -80,20 +124,7 @@ open)
     ;;
 play)
     build
-    # The game cannot import; the editor does it when it opens the project.
-    if ! ls "$ROOT/unreal/Content/Backrooms/Sounds/water/"*.uasset >/dev/null 2>&1; then
-        echo "unreal.sh: the recorded sounds are not imported yet; run 'make unreal-open' once and let the editor import them" >&2
-    fi
-    # Each by name: materials an older editor built are all there but a new one.
-    # The game cannot build them, so build them here, without the editor's window.
-    for asset in MPC_Backrooms M_BackroomsWorld M_BackroomsWorldBlend M_BackroomsShape M_BackroomsShapeBlend \
-                 M_BackroomsBillboard M_BackroomsBillboardAdd M_BackroomsPost M_BackroomsTape; do
-        if [ ! -f "$ROOT/unreal/Content/Backrooms/World/$asset.uasset" ]; then
-            echo "unreal.sh: $asset is not built yet; building the world's materials first" >&2
-            materials
-            break
-        fi
-    done
+    materials_if_stale
     MAP="/Engine/Maps/Entry?level=${LEVEL:-0}?seed=${SEED:-1337}"
     "$EDITOR" "$PROJECT" "$MAP" -game -windowed -ResX=1440 -ResY=850 -log || true
     echo "--- Backrooms lines from $LOG:"
@@ -112,6 +143,7 @@ surfaces)
 import)
     build
     materials
+    grep -q "built the world's materials" "$LOG" && inputs_digest >"$STAMP"
     ;;
 log)
     grep "Backrooms:" "$LOG" || echo "(no Backrooms lines in $LOG)"
