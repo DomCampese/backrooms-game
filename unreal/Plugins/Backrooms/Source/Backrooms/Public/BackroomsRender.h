@@ -46,7 +46,7 @@ public:
 	UMaterialInterface* Object(ObjMat Mat, bool bViewmodel) const;
 	UMaterialInterface* Lamp(bool bViewmodel, float Tint) const;
 	// The flare in hand: the props atlas at the flare's gloss.
-	UMaterialInterface* HeldFlare() const { return Flare.Get(); }
+	UMaterialInterface* HeldFlare() const;
 	// The revolver's glTF material Index, or null.
 	UMaterialInterface* Revolver(int32 Index) const;
 	// raylib's unlit shapes, opaque or blended, and billboards cut from Tex.
