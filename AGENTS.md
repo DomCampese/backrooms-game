@@ -142,6 +142,13 @@ What will bite:
   into the reel by the RHI (one format, so the bytes move as they are). Its
   `PostProcessSettings` get `PinPost`'s overrides, or its exposure would
   adapt on its own.
+- **A new material must not be one `Load` insists on.** `make unreal-play`
+  runs the game (`-game`), which cannot build materials, so after the tape
+  landed a project the editor had last opened before it had every material
+  but `M_BackroomsTape`; `Load` refused them all and the world was black
+  under a working HUD. The tape is optional now (a warning, and the
+  viewfinder shows the plain scene), and `unreal.sh play` names each missing
+  material. After pulling a material change, `make unreal-open` once.
 - **Interference is real.** At frame 40 of a seed-1337 Level 0 capture the
   tape is torn because Clark has spawned stalking about 12 m away, out of sight.
   That is the feature, not a bug in the shader.

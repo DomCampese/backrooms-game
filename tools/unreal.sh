@@ -73,9 +73,13 @@ play)
     if ! ls "$ROOT/unreal/Content/Backrooms/Sounds/water/"*.uasset >/dev/null 2>&1; then
         echo "unreal.sh: the recorded sounds are not imported yet; run 'make unreal-open' once and let the editor import them" >&2
     fi
-    if ! ls "$ROOT/unreal/Content/Backrooms/World/"*.uasset >/dev/null 2>&1; then
-        echo "unreal.sh: the world's materials are not built yet; run 'make unreal-open' once and let the editor build them" >&2
-    fi
+    # Each by name: materials an older editor built are all there but a new one.
+    for asset in MPC_Backrooms M_BackroomsWorld M_BackroomsWorldBlend M_BackroomsShape M_BackroomsShapeBlend \
+                 M_BackroomsBillboard M_BackroomsBillboardAdd M_BackroomsPost M_BackroomsTape; do
+        if [ ! -f "$ROOT/unreal/Content/Backrooms/World/$asset.uasset" ]; then
+            echo "unreal.sh: $asset is not built yet; run 'make unreal-open' once and let the editor build the world's materials" >&2
+        fi
+    done
     MAP="/Engine/Maps/Entry?level=${LEVEL:-0}?seed=${SEED:-1337}"
     "$EDITOR" "$PROJECT" "$MAP" -game -windowed -ResX=1440 -ResY=850 -log || true
     echo "--- Backrooms lines from $LOG:"
