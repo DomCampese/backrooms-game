@@ -180,9 +180,10 @@ def digest():
         h.update(name.encode())
         with open(os.path.join(folder, name), "rb") as f:
             h.update(f.read())
-    # The glue code too: a change to it must rebuild the materials. The .ush
-    # files are compiled by the engine and need no rebuild here.
-    h.update(WORLD_CODE.encode() + POST_CODE.encode() + TAPE_CODE.encode())
+    # This file too: a change to how a material is built must rebuild them.
+    # The .ush files are compiled by the engine and need no rebuild here.
+    with open(__file__, "rb") as f:
+        h.update(f.read())
     return h.hexdigest()
 
 
@@ -371,10 +372,12 @@ def build_world_material(name, blend, mpc, defines, neutral):
     return mat
 
 
-def build_shape_material(name, blend, textured):
+def build_shape_material(name, blend, textured, default_sheet=None):
     """raylib's default shader: the vertex colour, times a texture's (Sheet)
     for billboards. Additive is raylib's BLEND_ADDITIVE, colour times alpha
-    added."""
+    added. Sheet is set per instance, but the parameter needs a texture of its
+    own: without one the material does not compile, and the engine draws its
+    default material instead, an opaque square where the muzzle smoke was."""
     mat = _fresh_material(name)
     _unlit(mat, blend)
     vertex = mel().create_material_expression(mat, unreal.MaterialExpressionVertexColor, -800, 0)
@@ -383,6 +386,7 @@ def build_shape_material(name, blend, textured):
         sheet = mel().create_material_expression(mat, unreal.MaterialExpressionTextureSampleParameter2D, -800, 300)
         sheet.set_editor_property("parameter_name", "Sheet")
         sheet.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_COLOR)
+        sheet.set_editor_property("texture", default_sheet)
         rgb = mel().create_material_expression(mat, unreal.MaterialExpressionMultiply, -500, 0)
         _link(vertex, "", rgb, "A")
         _link(sheet, "RGB", rgb, "B")
@@ -475,7 +479,7 @@ def build():
     for name, blend in (("M_BackroomsBillboard", unreal.BlendMode.BLEND_TRANSLUCENT),
                         ("M_BackroomsBillboardAdd", unreal.BlendMode.BLEND_ADDITIVE)):
         # Sheet is set per instance at run time (UBackroomsRender::Billboard).
-        build_shape_material(name, blend, True)
+        build_shape_material(name, blend, True, textures["particle"])
     build_post_material(mpc)
     build_tape_material(mpc, neutral)
     eal().set_metadata_tag(mat, DIGEST_TAG, digest())

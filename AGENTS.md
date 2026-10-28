@@ -66,6 +66,12 @@ drawn"). What will bite:
   An engine default that lights, grades or adapts (Lumen, bloom, auto
   exposure, TSR's history) changes every pixel: Config/DefaultEngine.ini and
   `UBackroomsRender::ShowPost` turn them off.
+- **A texture parameter needs a texture of its own in the base material,**
+  even when every instance sets it. The billboards' Sheet had none, so the
+  billboard materials did not compile and the engine drew its default
+  material instead: the revolver's smoke came out an opaque dark square. The
+  editor's digest now covers backrooms_world.py itself, so a change to how a
+  material is built rebuilds them on the next `make unreal-open`.
 - **Textures are imported as bytes**: no sRGB decode, no compression
   (`TC_VectorDisplacementmap`), because raylib uploads them that way and the
   shader's arithmetic, and the detail maps' slopes and alpha codes, assume it.
