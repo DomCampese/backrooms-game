@@ -395,7 +395,7 @@ void UBackroomsRender::ShowPost(UWorld* Where, const CamPicture* Tape, UTexture*
 	UMaterialInterface* Want = PostMaterial;
 	if (Tape && TapeMaterial)
 	{
-		Want = TapeMaterial;
+		Want = TapeMaterial.Get();
 		if (UMaterialParameterCollectionInstance* P = Where->GetParameterCollectionInstance(Collection))
 		{
 			P->SetVectorParameterValue(TEXT("TapeA"), FLinearColor(Tape->a.u0, Tape->a.v0, Tape->a.u1, Tape->a.v1));

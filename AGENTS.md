@@ -166,6 +166,10 @@ docs/unreal-handoff.md "Next" has what is open. What will bite:
   case**, and two with the same name fail UHT before anything compiles:
   `ABackroomsHUD` and a struct `FBackroomsHud` stopped the first build on the
   Mac ("shares engine name"). The struct is `FBackroomsHudState`.
+- **A `TObjectPtr` converts implicitly only to its own type (5.8).** Returning
+  a `TObjectPtr<UMaterialInstanceDynamic>` as a `UMaterialInterface*` fails
+  with "no viable conversion" in every file that includes the header; the
+  conversion to a base is explicit. Use `.Get()`.
 - **`AssetRegistryModule.h` no longer brings in `FAssetData` (5.8).** Include
   `AssetRegistry/AssetData.h` and `AssetRegistry/IAssetRegistry.h` too, or a
   `TArray<FAssetData>` fails as an incomplete type.

@@ -94,4 +94,4 @@ void UBackroomsReel::Grab(const Camcorder& Cam, int32 Slot, const FTransform& Vi
 	});
 }
 
-UTexture* UBackroomsReel::Texture() const { return Reel; }
+UTexture* UBackroomsReel::Texture() const { return Reel.Get(); }
