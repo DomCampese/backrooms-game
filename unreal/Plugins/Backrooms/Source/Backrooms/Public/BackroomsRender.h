@@ -4,18 +4,22 @@
 #include "port/draw.h"
 #include "BackroomsRender.generated.h"
 
+struct CamPicture;
+struct FPostProcessSettings;
 struct World;
 class APostProcessVolume;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UMaterialParameterCollection;
+class UTexture;
 class UTexture2D;
 
 // What the Unreal port draws the Web build's world with, and the per-frame
 // state the Web build hands its shaders. Every surface is unlit: its colour is
 // the Web build's world shader (Shaders/BackroomsWorld.ush), or raylib's
 // unlit shapes and billboards lit on the CPU (shared/port/draw.h), and the
-// post pass (Shaders/BackroomsPost.ush) replaces Unreal's tonemapper. The
+// post pass (Shaders/BackroomsPost.ush) replaces Unreal's tonemapper, or the
+// camcorder's tape look (Shaders/BackroomsTape.ush) does. The
 // editor builds the materials and imports the textures
 // (Content/Python/backrooms_world.py); until it has, Load says so and the
 // world is not drawn.
@@ -61,8 +65,14 @@ public:
 	// current storey's frame; Fear, Water and Migraine are the post pass's.
 	void Frame(UWorld* Where, const FrameLight& Light, const Vec3& ViewPos, float Fear, float Water, float Migraine);
 	// The post volume that puts the Web build's post pass in place of
-	// Unreal's tonemapper, spawned into a game world once.
-	void ShowPost(UWorld* Where);
+	// Unreal's tonemapper, spawned into a game world once. With a Tape the
+	// tape look takes the post pass's place, as render.cpp's renderUI draws
+	// one or the other: the live scene in the viewfinder, or frames off Reel
+	// on the death card.
+	void ShowPost(UWorld* Where, const CamPicture* Tape = nullptr, UTexture* Reel = nullptr);
+	// What every view of the world pins: exposure at 1, and none of Unreal's
+	// own grading, bloom or lighting. The post volume and the reel's capture.
+	static void PinPost(FPostProcessSettings& S);
 	// The light of a still moment with no one in it: every tube at its
 	// output, no torch, no flare, no hunter. For the editor's preview.
 	static FrameLight Still();
@@ -87,6 +97,9 @@ private:
 	TObjectPtr<UMaterialInterface> ShapeBlend;
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInterface> PostMaterial;
+	// M_BackroomsTape, with the reel it plays back from.
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> TapeMaterial;
 	UPROPERTY(Transient)
 	TMap<FString, TObjectPtr<UTexture2D>> Textures;
 

@@ -13,6 +13,7 @@ struct SolidTracer;
 class ABackroomsChunkActor;
 class ABackroomsSceneActor;
 class ABackroomsHeldActor;
+class UBackroomsReel;
 class UBackroomsRender;
 class UBackroomsSound;
 
@@ -91,11 +92,13 @@ private:
 	// frustum, and other storeys' outside the openings in view
 	// (port/visible.h), as the Web build leaves them undrawn.
 	void HideUnseenChunks();
+	// Fits the camcorder and its reel to the viewport when its size changes.
+	void FitReel();
 
 	// Not UObjects: owned here, freed by Deinitialize.
 	Sim* Game = nullptr;
-	// The camcorder's rules and OSD (shared/port/camcorder.h). There is no reel
-	// yet: nothing is taped, so the death card has no playback.
+	// The camcorder's rules and OSD (shared/port/camcorder.h); its frames are
+	// on Reel.
 	Camcorder* Cam = nullptr;
 	SolidTracer* Tracer = nullptr;
 	SolidTracer* Recorder = nullptr;   // wraps Tracer while a trace is written
@@ -115,5 +118,12 @@ private:
 	// A run's sound; none in a free camera.
 	UPROPERTY()
 	TObjectPtr<UBackroomsSound> Sound;
+	// The camcorder's reel, fitted to the viewport (ReelFor) as the Web build
+	// fits it to the window; and the slot Camcorder::record asked for this
+	// frame, grabbed once ShowFrame has placed the frame's scene.
+	UPROPERTY()
+	TObjectPtr<UBackroomsReel> Reel;
+	FIntPoint ReelFor = FIntPoint::ZeroValue;
+	int32 PendingSlot = -1;
 	float SinceUnload = 0.0f;
 };

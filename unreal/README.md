@@ -31,7 +31,7 @@ tools/unreal.sh log # the "Backrooms:" lines from the last run
 | `BackroomsGame.uproject` | the project; its only module is a stub, the game lives in the plugin |
 | `Plugins/Backrooms/` | the `Backrooms` Runtime module, and `BackroomsShaders`, which only maps `Shaders/` to `/BackroomsShaders` (PostConfigInit) |
 | `.../Private/Shared/*.cpp` | one file per source in `shared/core`, `shared/sim`, `shared/port` and `tools/contract_lib.cpp`, each a single `#include`: the module compiles the repository's files, not copies |
-| `Plugins/Backrooms/Shaders` | `BackroomsWorld.ush` and `BackroomsPost.ush`: the Web build's world and post shaders (web/src/shaders.cpp) in HLSL, line for line |
+| `Plugins/Backrooms/Shaders` | `BackroomsWorld.ush`, `BackroomsPost.ush` and `BackroomsTape.ush`: the Web build's world, post and tape shaders (web/src/shaders.cpp) in HLSL, line for line |
 | `.../Public/BackroomsCoords.h` | the one conversion between core (metres, y up) and Unreal (centimetres, z up) |
 | `.../BackroomsWorldSubsystem` | owns the `Sim` (and core's `World` in it); steps a run, streams chunk actors round the player, sets each frame's light, `GetHud` for a HUD |
 | `.../BackroomsRender` | the world's materials, textures and parameter collection, the shadow grid (`World::buildOccupancy`), the post volume |
@@ -126,7 +126,8 @@ material is unlit, and its colour is the Web build's.
 | the revolver | raylib 5.5's glTF animation and CPU skinning | shared/port/revolver.h, bit-identical to raylib 5.5 over the whole reload |
 | post pass | `POST_FS` | `Shaders/BackroomsPost.ush` in `M_BackroomsPost`, in place of Unreal's tonemapper |
 | the HUD: title and death cards, intro, cards, meters, inventory, hints | `hudDraws` (shared/port/hud.h), measured with raylib's font | the same list (`ABackroomsHUD`), measured and drawn with the engine's medium font; gradients in 48 bands |
-| the camcorder (V) | `Camcorder` (shared/port/camcorder.h): zoom, night shot's lamp, its OSD and sounds; the reel and `TAPE_FS` draw the tape | the same rules, OSD and sounds (`SoundMixer::camera`); no reel yet, so no tape look and no playback |
+| the camcorder (V) | `Camcorder` (shared/port/camcorder.h): zoom, night shot's lamp, its OSD and sounds | the same rules, OSD and sounds (`SoundMixer::camera`) |
+| the tape look, in the viewfinder and played back on the death card | `TAPE_FS` over the scene's render target, or over two frames on the reel (`CamcorderReel`: one render texture, a frame grabbed into a cell at 15 Hz) | `Shaders/BackroomsTape.ush` in `M_BackroomsTape`, which takes `M_BackroomsPost`'s place in the post volume while it shows (`UBackroomsRender::ShowPost`); the reel is `UBackroomsReel`, a scene capture at the cell's size copied into its slot. `tools/tape-check.sh` renders the GLSL, the .ush and the material's code on one GPU: no pixel differs |
 
 `make unreal-open` runs `tools/unreal.sh surfaces` before it opens the
 editor: `texdump --unreal` writes every texture the Web build binds to

@@ -15,7 +15,10 @@ and builds:
   M_BackroomsBillboardAdd: raylib's unlit shapes and billboards, their colour
   the vertex colour (times the texture);
 - M_BackroomsPost: the Web build's post pass (BackroomsPost.ush) in place of
-  Unreal's tonemapper.
+  Unreal's tonemapper;
+- M_BackroomsTape: the camcorder's tape look (BackroomsTape.ush), which
+  UBackroomsRender::ShowPost puts in the post material's place while the
+  viewfinder is up or the tape plays back.
 
 init_unreal.py runs it when the files in Saved/Surfaces differ from the ones
 the materials were built from. To build again by hand, in the editor's Python
@@ -34,6 +37,7 @@ TEXTURE_DIR = WORLD_DIR + "/Textures"
 MPC_NAME = "MPC_Backrooms"
 WORLD_INCLUDE = "/BackroomsShaders/BackroomsWorld.ush"
 POST_INCLUDE = "/BackroomsShaders/BackroomsPost.ush"
+TAPE_INCLUDE = "/BackroomsShaders/BackroomsTape.ush"
 # Recorded on M_BackroomsWorld: the digest of the files it was built from.
 DIGEST_TAG = "BackroomsWorld"
 
@@ -42,6 +46,7 @@ DIGEST_TAG = "BackroomsWorld"
 MPC_VECTORS = [
     "Frame", "ViewPos", "FlashDir", "FlarePos", "EntPos", "Ent", "Amb", "FogCol", "LightCol", "LampCol",
     "Air", "Tubes", "Surface", "Grid", "RoomMask", "Lamp", "Post", "Clear",
+    "TapeA", "TapeB", "Tape", "TapeFrom",
 ]
 
 # The world material's Custom node: the material's inputs into the HLSL's
@@ -99,6 +104,49 @@ return float4(BRPostFinish(P, Uv, Throb, Taps), 1.0);
 """
 
 
+# The tape material's Custom node: TAPE_FS's uniforms from the collection,
+# gl_FragCoord from the pixel position (from the viewport UV it came out a
+# rounding off, which moved the noise on 0.4% of pixels), and its texture:
+# the scene as raylib's
+# render target holds it (as POST_CODE reads it, point sampled), or the reel.
+# The cells' v runs up the picture and Unreal's UV down it.
+TAPE_CODE = """
+FBRTape P;
+P.Time = Post.x;
+P.Res = View.ViewSizeAndInvSize.xy;
+P.CellA = TapeA; P.CellB = TapeB;
+P.Mix = Tape.x; P.Night = Tape.y; P.Track = Tape.z; P.Still = Tape.w;
+P.Snow = TapeFrom.x;
+float2 FragCoord = float2(PixelPosition.x, P.Res.y - PixelPosition.y);
+FBRTapeLine L = BRTapeLine(P, FragCoord);
+float3 Frames[7];
+[unroll]
+for (int I = 0; I < 7; I++)
+{
+    float2 Q = BRTapeTap(L.Q, I);
+    float2 Uv[2] = { BRTapeCellUV(P.CellA, Q), BRTapeCellUV(P.CellB, Q) };
+    float3 Got[2];
+    [unroll]
+    for (int K = 0; K < 2; K++)
+    {
+        float2 V = float2(Uv[K].x, 1.0 - Uv[K].y);
+        if (TapeFrom.y > 0.5)
+        {
+            Got[K] = Texture2DSampleLevel(Reel, ReelSampler, V, 0.0).rgb;
+        }
+        else
+        {
+            float Depth = SceneTextureLookup(ViewportUVToSceneTextureUV(V, 1), 1, false).r;
+            float3 S = SceneTextureLookup(ViewportUVToSceneTextureUV(V, 14), 14, false).rgb / max(Exposure, 1e-6);
+            Got[K] = saturate(Depth > 1e7 ? Clear.rgb : S);
+        }
+    }
+    Frames[I] = lerp(Got[0], Got[1], P.Mix);
+}
+return float4(BRTapeFinish(P, FragCoord, L, Frames), 1.0);
+"""
+
+
 def mel():
     return unreal.MaterialEditingLibrary
 
@@ -134,7 +182,7 @@ def digest():
             h.update(f.read())
     # The glue code too: a change to it must rebuild the materials. The .ush
     # files are compiled by the engine and need no rebuild here.
-    h.update(WORLD_CODE.encode() + POST_CODE.encode())
+    h.update(WORLD_CODE.encode() + POST_CODE.encode() + TAPE_CODE.encode())
     return h.hexdigest()
 
 
@@ -380,6 +428,34 @@ def build_post_material(mpc):
     return mat
 
 
+def build_tape_material(mpc, neutral):
+    """The tape look, which takes M_BackroomsPost's place in the post volume.
+    Reel is the camcorder's reel, set at run time (UBackroomsRender::ShowPost);
+    the scene and depth are read as POST_CODE reads them."""
+    mat = _fresh_material("M_BackroomsTape")
+    mat.set_editor_property("material_domain", unreal.MaterialDomain.MD_POST_PROCESS)
+    mat.set_editor_property("blendable_location", unreal.BlendableLocation.BL_REPLACING_TONEMAPPER)
+    custom = _custom(mat, TAPE_CODE, TAPE_INCLUDE, {},
+                     ["PixelPosition", "Exposure", "Post", "Clear", "TapeA", "TapeB", "Tape", "TapeFrom", "Reel", "Scene",
+                      "Depth"], -300, 0)
+    screen = mel().create_material_expression(mat, unreal.MaterialExpressionScreenPosition, -900, -300)
+    _link(screen, "PixelPosition", custom, "PixelPosition")
+    _link(mel().create_material_expression(mat, unreal.MaterialExpressionEyeAdaptation, -900, -200), "", custom,
+          "Exposure")
+    for i, name in enumerate(("Post", "Clear", "TapeA", "TapeB", "Tape", "TapeFrom")):
+        _link(_collection(mat, mpc, name, -900, -100 + 80 * i), "", custom, name)
+    _link(_texture_object(mat, "Reel", neutral, -900, 400), "", custom, "Reel")
+    for i, (pin, which) in enumerate((("Scene", unreal.SceneTextureId.PPI_POST_PROCESS_INPUT0),
+                                      ("Depth", unreal.SceneTextureId.PPI_SCENE_DEPTH))):
+        scene = mel().create_material_expression(mat, unreal.MaterialExpressionSceneTexture, -900, 500 + 100 * i)
+        scene.set_editor_property("scene_texture_id", which)
+        _link(scene, "Color", custom, pin)
+    rgb = _mask(mat, custom, "rgb", 0, 0)
+    mel().connect_material_property(rgb, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    mel().recompile_material(mat)
+    return mat
+
+
 def build():
     world = read_world()
     if not world:
@@ -401,6 +477,7 @@ def build():
         # Sheet is set per instance at run time (UBackroomsRender::Billboard).
         build_shape_material(name, blend, True)
     build_post_material(mpc)
+    build_tape_material(mpc, neutral)
     eal().set_metadata_tag(mat, DIGEST_TAG, digest())
     eal().save_directory(WORLD_DIR, only_if_is_dirty=False, recursive=True)
     unreal.log("Backrooms: built the world's materials and %d textures in %s" % (len(textures), WORLD_DIR))
@@ -412,7 +489,8 @@ def stale():
     if not os.path.exists(os.path.join(surfaces_dir(), "world.json")):
         return None   # nothing to build from; read_world says so when asked
     for name in ("M_BackroomsWorld", "M_BackroomsWorldBlend", "M_BackroomsShape", "M_BackroomsShapeBlend",
-                 "M_BackroomsBillboard", "M_BackroomsBillboardAdd", "M_BackroomsPost", MPC_NAME):
+                 "M_BackroomsBillboard", "M_BackroomsBillboardAdd", "M_BackroomsPost", "M_BackroomsTape",
+                 MPC_NAME):
         if not eal().does_asset_exist(WORLD_DIR + "/" + name):
             return name + " is missing"
     if eal().get_metadata_tag(eal().load_asset(WORLD_DIR + "/M_BackroomsWorld"), DIGEST_TAG) != digest():

@@ -2,6 +2,7 @@
 #include "BackroomsChunkActor.h"
 #include "BackroomsCoords.h"
 #include "BackroomsHeldActor.h"
+#include "BackroomsReel.h"
 #include "BackroomsRender.h"
 #include "BackroomsSceneActor.h"
 #include "BackroomsSettings.h"
@@ -67,8 +68,11 @@ void UBackroomsWorldSubsystem::NewSim()
 	FreeSim();
 	Game = new Sim();
 	Cam = new Camcorder();
-	// No reel is drawn yet; the cells only size the tape's list of frames.
+	// Before the first tick, reel or no reel: this sizes the tape's list of
+	// frames. ShowFrame fits it again to the viewport, with the reel.
 	Cam->fitReel(1440, 850);
+	ReelFor = FIntPoint::ZeroValue;
+	PendingSlot = -1;
 	FUnrealTracer* Shots = new FUnrealTracer();
 	Shots->Scene = GetWorld();
 	Shots->Game = Game;
@@ -196,8 +200,12 @@ void UBackroomsWorldSubsystem::TickRun(const InputFrame& In, bool bPauseToggled,
 	if (Game->inMenu && Game->deathT > 0) Cam->beginReplay();
 	if (!Game->inMenu)
 	{
-		Cam->record(*Game, Dt, (float)(T - Game->runStart), false,
+		const int32 Slot = Cam->record(*Game, Dt, (float)(T - Game->runStart), Reel && Reel->IsReady(),
 			[](int Lo, int Hi) { return FMath::RandRange(Lo, Hi); });
+		if (Slot >= 0)
+		{
+			PendingSlot = Slot;
+		}
 	}
 	FinishFrame();
 }
@@ -526,7 +534,21 @@ void UBackroomsWorldSubsystem::ShowFrame(const Vec3& Eye)
 	const float Water = S.level == 2 && Maze.poolAt(cellOf(S.px), cellOf(S.pz))
 		? FMath::Clamp((WATER_Y - S.eyeY) * 8.0f, 0.0f, 1.0f) : 0.0f;
 	Render->Frame(GetWorld(), Light, Eye, S.fear, Water, S.migraine);
-	Render->ShowPost(GetWorld());
+	FitReel();
+	// Through the camcorder the tape's look replaces the eye's, and on the
+	// death card the tape plays (render.cpp's renderUI).
+	const bool bFilming = Cam->viewing() && !S.inMenu;
+	const bool bReplaying = S.inMenu && S.deathT > 0 && Cam->replaying();
+	CamPicture Picture{};
+	if (bFilming)
+	{
+		Picture = Cam->viewfinderPicture();
+	}
+	else if (bReplaying)
+	{
+		Picture = Cam->replayPicture();
+	}
+	Render->ShowPost(GetWorld(), bFilming || bReplaying ? &Picture : nullptr, Reel ? Reel->Texture() : nullptr);
 	HideUnseenChunks();
 
 	FActorSpawnParameters Params;
@@ -552,4 +574,38 @@ void UBackroomsWorldSubsystem::ShowFrame(const Vec3& Eye)
 	if (bInHand) heldDraws(S, View, T, Draws);
 	Hand->Show(S, bInHand, *Render, StoreyOrigin(), Draws);
 	Scene->Show(Draws, FirstHeld, View, *Render, StoreyOrigin());
+
+	// The frame onto tape, as the Web build grabs its render target after
+	// drawing the scene and before the post pass.
+	if (PendingSlot >= 0 && Reel)
+	{
+		float FovY = 0.0f;
+		const FTransform Camera = ViewTransform(FovY);
+		Reel->Grab(*Cam, PendingSlot, Camera, FovY);
+	}
+	PendingSlot = -1;
+}
+
+void UBackroomsWorldSubsystem::FitReel()
+{
+	FVector2D Size(0.0, 0.0);
+	if (UGameViewportClient* Viewport = GetWorld()->GetGameViewport())
+	{
+		Viewport->GetViewportSize(Size);
+	}
+	const FIntPoint Want((int32)Size.X, (int32)Size.Y);
+	if (Want.X < 1 || Want.Y < 1 || Want == ReelFor)
+	{
+		return;
+	}
+	// Frame cells take the window's shape, so a new size starts a fresh tape
+	// (Game::tick on a resize).
+	ReelFor = Want;
+	PendingSlot = -1;
+	Cam->fitReel(Want.X, Want.Y);
+	if (!Reel)
+	{
+		Reel = NewObject<UBackroomsReel>(this);
+	}
+	Reel->Fit(GetWorld(), *Cam);
 }

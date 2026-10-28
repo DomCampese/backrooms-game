@@ -22,10 +22,12 @@ The Unreal port no longer lights anything with Unreal: every material is
 unlit and its colour is the Web build's (unreal/README.md, "How the world is
 drawn"). What will bite:
 
-- **Two shader copies.** `WORLD_FS`/`POST_FS` (web/src/shaders.cpp) and
+- **Two shader copies.** `WORLD_FS`/`POST_FS`/`TAPE_FS` (web/src/shaders.cpp) and
   unreal/Plugins/Backrooms/Shaders/*.ush are one shader in two languages.
-  Change one, change the other. The port was checked by compiling it with DXC
-  (DXIL and SPIR-V) and by comparing every numeric literal with the GLSL's.
+  Change one, change the other. The world and post ports were checked by
+  compiling them with DXC (DXIL and SPIR-V) and by comparing every numeric
+  literal with the GLSL's; the tape's is checked by `tools/tape-check.sh`
+  (below), which a port of the others could copy.
 - **GLSL's dFdy runs up the window, HLSL's ddy down it.** `detailNormal`'s
   frame takes its sign from both, so the port uses `-ddy` (`BR_DFDY`); plain
   ddy lights every relief from below.
@@ -73,9 +75,10 @@ drawn"). What will bite:
 shared/port/camcorder.{h,cpp} (`Camcorder`: the controls, zoom, night shot,
 interference, the tape's frames and sounds, the playback's clock, the clips and
 the OSD as `HudDraw`s), web/src/camcorder.{h,cpp} (`CamcorderReel`: the reel,
-`TAPE_FS`, the sound handles) and the world shader's `uIR`. The Unreal build
-has the camera without a reel: V, zoom, night shot's lamp, the OSD and the
-sounds, but nothing is taped and its death card has no playback. What will bite:
+`TAPE_FS`, the sound handles) and the world shader's `uIR`. In Unreal the reel
+is `UBackroomsReel` and the tape look `M_BackroomsTape`
+(Shaders/BackroomsTape.ush, written 27 October 2026, not yet run on the Mac).
+What will bite:
 
 - **The sim never sees the camera.** `Camcorder::control` runs between
   `readInput` and `trace.step` and takes fire, aim, reload and the wheel out
@@ -110,13 +113,35 @@ sounds, but nothing is taped and its death card has no playback. What will bite:
   the Web build and not in the mixer, which has no recordings.
 - **Call `fitReel` before the first tick, reel or no reel.** It sizes the list
   of frames, and `record` reads the oldest frame to trim the logged sounds: with
-  no frames that is a division by zero slots. Unreal fits a 1440x850 reel it
-  never draws.
+  no frames that is a division by zero slots. Unreal fits 1440x850 in `NewSim`,
+  then the viewport's size with the reel on the first frame (`FitReel`), and
+  again whenever that size changes, as the Web build does on a resize.
 - **The move to shared/port was checked call for call.** main's camcorder.cpp
   (renamed by `-DCamcorder=CamcorderOld`) and the new pair ran side by side over
   1.31 M random ticks (2,000 runs, deaths, playbacks, resizes, a failed reel),
   every raylib call, sound, echo and light logged: none differ, and each of ten
   small changes planted in the new code was caught.
+- **`tools/tape-check.sh` draws `TAPE_FS`, BackroomsTape.ush and
+  M_BackroomsTape's Custom node (`TAPE_CODE`, pasted into stand-ins for the
+  material template) on one GPU and compares the pixels**: DXC to SPIR-V,
+  spirv-cross back to GLSL, Mesa for all three. 50 states, 15.3 M pixels,
+  none differ, and each of eleven small changes planted in the .ush and the
+  material's code was caught. It needs DXC (the GitHub release tarball) and
+  `apt install spirv-cross`. Two things it found:
+  - **Write GLSL's matrices as GLSL writes them and put the vector on the
+    left** (`mul(v, M)`): the rows written out with `mul(M, v)` rounded 1/255
+    differently on a pixel in 300,000.
+  - **gl_FragCoord is the pixel position, not the viewport UV times the
+    size.** Rebuilt from the UV it came out a rounding off, which moved the
+    noise and the line hashes on 0.4% of pixels. The material takes the
+    ScreenPosition node's PixelPosition and flips it.
+- **The post and the tape both replace the tonemapper**, so one is in the
+  post volume at a time: `ShowPost` swaps the blendable's object. The reel's
+  frames are a `SCS_SceneColorHDRNoAlpha` capture, which no post-process
+  material touches, at the cell's size into an 8-bit linear target copied
+  into the reel by the RHI (one format, so the bytes move as they are). Its
+  `PostProcessSettings` get `PinPost`'s overrides, or its exposure would
+  adapt on its own.
 - **Interference is real.** At frame 40 of a seed-1337 Level 0 capture the
   tape is torn because Clark has spawned stalking about 12 m away, out of sight.
   That is the feature, not a bug in the shader.
@@ -141,6 +166,10 @@ docs/unreal-handoff.md "Next" has what is open. What will bite:
   case**, and two with the same name fail UHT before anything compiles:
   `ABackroomsHUD` and a struct `FBackroomsHud` stopped the first build on the
   Mac ("shares engine name"). The struct is `FBackroomsHudState`.
+- **A `TObjectPtr` converts implicitly only to its own type (5.8).** Returning
+  a `TObjectPtr<UMaterialInstanceDynamic>` as a `UMaterialInterface*` fails
+  with "no viable conversion" in every file that includes the header; the
+  conversion to a base is explicit. Use `.Get()`.
 - **`AssetRegistryModule.h` no longer brings in `FAssetData` (5.8).** Include
   `AssetRegistry/AssetData.h` and `AssetRegistry/IAssetRegistry.h` too, or a
   `TArray<FAssetData>` fails as an incomplete type.
