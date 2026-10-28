@@ -94,8 +94,9 @@ repository, not just this folder. On the Mac:
    world's materials there (both gitignored; below); the Output Log says
    "imported 12 sounds" and "built the world's materials". `make
    unreal-materials` does the same without opening the editor (the editor's
-   Python commandlet), and `make unreal-play` runs it when a material is
-   missing; after pulling a change to the materials, run it once.
+   Python commandlet), and `make unreal-play` runs it first whenever a
+   material is missing or what they are built from changed (the digest in
+   `unreal/Saved/materials.digest`), so a pull needs only `make unreal-play`.
    Project Settings > Game > Backrooms > Performance has the frame cap (60),
    the world's resolution (`ScreenPercentage`) and `LightQuality`: High is
    the Web build's lighting, Medium traces hard shadows to 8 m, Low none.
