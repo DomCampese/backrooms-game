@@ -17,6 +17,7 @@
 #include "Misc/CommandLine.h"
 #include "Misc/DateTime.h"
 #include "Misc/Parse.h"
+#include "Misc/Paths.h"
 #include "Stats/Stats.h"
 #include "core/level_rules.h"
 #include "port/camcorder.h"
@@ -24,6 +25,7 @@
 #include "port/stream.h"
 #include "port/view.h"
 #include "port/visible.h"
+#include "sim/records.h"
 #include "sim/start.h"
 #include "sim/trace.h"
 #include <algorithm>
@@ -87,7 +89,21 @@ void UBackroomsWorldSubsystem::NewSim()
 
 double UBackroomsWorldSubsystem::Now() const { return FPlatformTime::Seconds() - ClockZero; }
 
-void UBackroomsWorldSubsystem::StartRun(uint32 Seed, int32 Level)
+FString UBackroomsWorldSubsystem::RecordsPath()
+{
+	return FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("backrooms_best")));
+}
+
+void UBackroomsWorldSubsystem::SaveRecords()
+{
+	Game->recordsChanged = false;
+	if (!saveRecords(TCHAR_TO_UTF8(*RecordsPath()), Game->best))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Backrooms: cannot write the records to %s"), *RecordsPath());
+	}
+}
+
+void UBackroomsWorldSubsystem::StartRun(uint32 Seed, int32 Level, bool bTitleScreen)
 {
 	NewSim();
 	bRun = true;
@@ -99,9 +115,9 @@ void UBackroomsWorldSubsystem::StartRun(uint32 Seed, int32 Level)
 	SimStart Start;
 	Start.seed = Seed;
 	Start.level = Level > 0 ? FMath::Min(Level, NLEVELS - 1) : -1;
-	Start.menu = false;
-	// The records file is the Web build's; this one keeps none yet.
-	Start.keepRecords = false;
+	Start.menu = bTitleScreen;
+	Start.keepRecords = true;
+	Start.best = loadRecords(TCHAR_TO_UTF8(*RecordsPath()));
 	Start.fov = windowFovY(1440, 850, 0.0f);
 
 	FString RecordPath;
@@ -228,7 +244,10 @@ void UBackroomsWorldSubsystem::FinishFrame(bool bPaused)
 	Game->audio.clear();
 	Cam->noises.clear();
 	Game->dropAimLatch = false;
-	Game->recordsChanged = false;
+	if (Game->recordsChanged)
+	{
+		SaveRecords();
+	}
 }
 
 FVector UBackroomsWorldSubsystem::StoreyOrigin() const
@@ -247,6 +266,15 @@ FTransform UBackroomsWorldSubsystem::ViewTransform(float& OutFovY) const
 
 void UBackroomsWorldSubsystem::FreeSim()
 {
+	// What Game::shutdown banks: a run that ends with the game keeps its tallies.
+	if (Game && bRun)
+	{
+		Game->bankRecords();
+		if (Game->recordsChanged)
+		{
+			SaveRecords();
+		}
+	}
 	DropAll();
 	if (Scene)
 	{

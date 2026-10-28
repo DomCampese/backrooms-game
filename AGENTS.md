@@ -221,7 +221,12 @@ docs/unreal-handoff.md "Next" has what is open. What will bite:
   the key. Hold every key across a frame (record-trace.sh's `key`).
 - **The game starts a run through `SimStart`** (shared/sim/start.h): `Game::init`
   fills it from the BACKROOMS_* knobs and calls `simBegin`, `enterLevel`,
-  `simPlace`. A replay and a port call the same three.
+  `simPlace`. A replay and a port call the same three. Unreal opens on the
+  title screen unless the map's options name `?level=`, `?seed=` or
+  `?notitle` (so `LEVEL=1 make unreal-play` goes straight in), and keeps the
+  player's records in the Web build's format (shared/sim/records.h, moved from
+  game.cpp unchanged: 80,001 files, valid, truncated and corrupted, read and
+  written the same by both) at `unreal/Saved/backrooms_best`.
 - **A capture's spawn spot is chosen before any level is entered**: `simBegin`
   runs `findOpenSpot` in Level 0's maze at visit 0 on one storey, and the
   capture then stands at that spot in whatever level it enters.
@@ -991,7 +996,7 @@ build's, in `web/src/`.
 | `core/layout.{h,cpp}` | `ChunkLayout`: a chunk's props, fixtures, light fittings and openings, decided from the seed |
 | `core/floorplan.{h,cpp}` | `ChunkFloorplan`: a chunk's floors, walls, risers, ceilings, soffits, flights and arches, as the mesher builds them |
 | `core/hash.{h,cpp}`, `core/vec.h`, `core/portable_math.{h,cpp}` | hashes, RNG, value noise; `Vec2`/`Vec3`, `TAU`, `clampf`; sin, cos, exp, atan2, hypot that round the same everywhere |
-| `sim/start.{h,cpp}`, `sim/trace.{h,cpp}` | how a run starts (`SimStart`); recording and replaying the calls on the sim |
+| `sim/start.{h,cpp}`, `sim/trace.{h,cpp}`, `sim/records.{h,cpp}` | how a run starts (`SimStart`); recording and replaying the calls on the sim; the records file both builds read and write |
 | `port/view.{h,cpp}`, `port/greybox.{h,cpp}` | what the camera shows of the sim (both builds draw from it); a chunk as plain boxes and quads for a port's first milestone |
 | `port/hud.{h,cpp}` | the HUD over the world (`hudDraws`): cards, meters, inventory and hints as draws in window pixels, which both builds draw |
 | `port/held.{h,cpp}`, `port/scene.{h,cpp}`, `port/sprites.{h,cpp}`, `port/sheets.h` | what is in hand, what stands loose in the world, and the actors' billboard poses and sheet layout, which both builds draw from |

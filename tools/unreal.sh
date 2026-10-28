@@ -125,7 +125,8 @@ open)
 play)
     build
     materials_if_stale
-    MAP="/Engine/Maps/Entry?level=${LEVEL:-0}?seed=${SEED:-1337}"
+    # With neither, the game opens on its title screen, as the Web build does.
+    MAP="/Engine/Maps/Entry${LEVEL:+?level=$LEVEL}${SEED:+?seed=$SEED}"
     "$EDITOR" "$PROJECT" "$MAP" -game -windowed -ResX=1440 -ResY=850 -log || true
     echo "--- Backrooms lines from $LOG:"
     grep "Backrooms:" "$LOG" || echo "(none)"

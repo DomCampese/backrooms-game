@@ -1,4 +1,5 @@
 #include "BackroomsHUD.h"
+#include "BackroomsPlayerController.h"
 #include "BackroomsWorldSubsystem.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
@@ -86,7 +87,8 @@ void ABackroomsHUD::DrawHUD()
 	In.captureHint = false;
 	const float Dt = GetWorld()->GetDeltaSeconds();
 	In.fps = Dt > 0.0f ? (int)(1.0f / Dt + 0.5f) : 0;
-	In.debug = false;
+	const ABackroomsPlayerController* Player = Cast<ABackroomsPlayerController>(GetOwningPlayerController());
+	In.debug = Player && Player->IsDebugHudOn();
 
 	DrawList(hudDraws(*Game, In, bEverFlashed, Measure), Font, LineH);
 }

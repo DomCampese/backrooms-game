@@ -26,6 +26,8 @@ public:
 
 	// Where the free camera starts.
 	void SetFreeCameraStart(const FTransform& Start);
+	// F3's overlay is up (the HUD draws its lines, the debug keys are live).
+	bool IsDebugHudOn() const { return bDebugHud; }
 
 private:
 	void MakeControls();
