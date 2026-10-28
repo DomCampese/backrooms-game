@@ -109,7 +109,7 @@ bool UBackroomsRender::Load()
 		}
 	}
 	FString Missing;
-	if (!Collection || !WorldMasked || !WorldBlend || !ShapeOpaque || !ShapeBlend || !PostMaterial || !TapeBase || !BillboardBase || !BillboardAddBase)
+	if (!Collection || !WorldMasked || !WorldBlend || !ShapeOpaque || !ShapeBlend || !PostMaterial || !BillboardBase || !BillboardAddBase)
 	{
 		Missing = TEXT("its materials");
 	}
@@ -133,7 +133,19 @@ bool UBackroomsRender::Load()
 	OccBytes.SetNumZeroed(OCC_CELLS * OCC_CELLS * 4 * 2);
 
 	UTexture2D* Neutral = Texture(TEXT("neutral"));
-	TapeMaterial = UMaterialInstanceDynamic::Create(TapeBase, this);
+	// The camcorder's tape draws with it; without it the viewfinder shows the
+	// post pass, and the world still draws. A project the editor opened before
+	// the tape existed has every other material and not this one, and the game
+	// (-game) cannot build it: insisting on it left the whole world black.
+	if (TapeBase)
+	{
+		TapeMaterial = UMaterialInstanceDynamic::Create(TapeBase, this);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Backrooms: %s has no M_BackroomsTape yet, so the camcorder shows the plain scene. Run make unreal-open and let the editor build it"),
+			WorldDir);
+	}
 	ChunkMaterials.SetNum(MatCount * 2);
 	for (int32 M = 0; M < MatCount; M++)
 	{
