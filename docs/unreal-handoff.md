@@ -294,18 +294,24 @@ change has waited on a build and a pasted log.
 
 ## Parity
 
-What the Web build does that the Mac build does not yet, as of 28 October
-2026. Closed that day, not yet seen on the Mac: the title screen (a run with
-no `?level=` or `?seed=` opens on it), the records file (shared/sim/records.h,
-in the project's `Saved/backrooms_best`), F3's debug lines, and the tape's
-echoes of recorded sounds (a splash or the party music heard again in the
-playback). Everything else, the world, its lighting, the sim, the HUD, the
-revolver, sound, the camcorder and its tape, is the same code or a port
-proved against it, and is waiting only on being seen on the Mac.
+What the Web build does that the Mac build does not yet. As of 28 October
+2026 every gap a player would meet is closed in code, though not all of it has
+been seen on the Mac:
+
+- the title screen: a run with no `?level=`, `?seed=` or `?notitle` opens on it;
+- the records file (shared/sim/records.h), at `unreal/Saved/backrooms_best`;
+- F3's debug lines;
+- the tape's echoes of recorded sounds (a splash or the party music heard
+  again in the playback);
+- the reel's frames: both builds tape the scene's colour, translucent
+  surfaces included, over the level's clear colour.
+
+Everything else (the world, its lighting, the sim, the HUD, the revolver,
+sound, the camcorder and its tape) is the same code or a port proved against
+it. What remains:
 
 | gap | Web build | Mac build |
 |---|---|---|
-| tape reel | a frame is the scene times its alpha, over the level's clear colour | the scene's colour, over black (Poolrooms only differs) |
 | touch controls | the browser shell's on-screen controls | none needed on the Mac |
 
 New features go into both builds in the same change (AGENTS.md, "Two builds,
@@ -317,7 +323,7 @@ What the seams leave for the port, or for the Web build before it.
 
 | item | where | why it matters |
 |---|---|---|
-| the camcorder's tape | written (27 October 2026): `UBackroomsReel` and `M_BackroomsTape` (`BackroomsTape.ush`) | not yet run on the Mac. Two known differences: a reel frame keeps the scene's colour where raylib's grab multiplies it by the target's alpha (behind glass and water, a little darker in the Web build), and where nothing is drawn it is black, where raylib's holds the level's clear colour (only the Poolrooms' is not black) |
+| the camcorder's tape | written (27 October 2026): `UBackroomsReel` and `M_BackroomsTape` (`BackroomsTape.ush`); the reel's frames match the Web build's since 28 October (unblended colour, the clear colour behind) | not yet run on the Mac |
 | real meshes | props, fixtures, items and actors | the looks can take a mesh for every kind; none is authored yet, so props are their collision boxes, fixtures and items plain shapes, and actors billboards |
 | floorplan geometry as data | done (October 2026): `chunkFloorplan` (core/floorplan.h) describes floors, walls, risers, ceilings, soffits, flights and arches, and the mesher and the greybox build from it | Unreal's chunk actors draw it through the greybox; real meshes for walls and floors (skirting, door trim, stair nosing) would be placed from it, as fixtures are from `chunkLayout` |
 | sound in Unreal | written (`UBackroomsSound`), not yet heard on the Mac | M6 |

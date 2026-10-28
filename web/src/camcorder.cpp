@@ -41,11 +41,16 @@ void CamcorderReel::grab(const Camcorder &cam, int slot, const RenderTexture2D &
     float x = (float)cam.cellX(slot), y = (float)cam.cellY(slot);
     int w = cam.cellWidth(), h = cam.cellHeight();
     BeginTextureMode(reel);
-    // Opaque first: the scene target carries alpha (glass, water), and the
-    // post pass draws it over black.
-    DrawRectangle((int)x, (int)y, w, h, BLACK);
+    // Copied, not blended: the scene target's alpha is below 1 wherever
+    // something translucent was drawn (decals, the contact shadows, water,
+    // glass), and the screen shows its colour regardless. Blended over black
+    // the tape came out darker there than the eye saw it. GL_ONE, GL_ZERO,
+    // GL_FUNC_ADD: rlgl's names for them are #defines the sandbox's headers lose.
+    rlSetBlendFactors(1, 0, 0x8006);
+    BeginBlendMode(BLEND_CUSTOM);
     DrawTexturePro(rt.texture, { 0, 0, (float)rt.texture.width, -(float)rt.texture.height },
                    { x, y, (float)w, (float)h }, { 0, 0 }, 0, WHITE);
+    EndBlendMode();
     EndTextureMode();
 }
 

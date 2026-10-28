@@ -115,9 +115,14 @@ What will bite:
 - **The reel is one render texture, at most 2048 on a side**, which is all
   WebGL 2 guarantees. A frame is 288 px on its long side and the reel holds
   64 of them, 4.3 s at 15 Hz; at 1440x850 that is 7 x 10 cells and 14 MB.
-  Each frame is cleared to black before the scene is drawn into it:
-  the scene target carries alpha (glass, water) and would blend over the
-  frame the slot held before.
+  A frame is copied into its slot unblended (`BLEND_CUSTOM`, ONE and ZERO):
+  the scene target's alpha is below 1 wherever something translucent was
+  drawn (decals, the contact-shadow strips, water, glass), and the screen
+  shows its colour regardless. It used to be cleared to black and blended,
+  which put colour times alpha on tape, darker there than the eye saw.
+  Unreal's frames are the scene's colour too, and where nothing is drawn
+  both hold the level's clear colour: raylib's clear, and in Unreal a 4 km
+  box of `M_BackroomsClear` round the eye (`ShowBackdrop`).
 - **`TAPE_FS` takes its coordinates from `gl_FragCoord`, not the quad.** One
   shader draws the scene target and a frame on the reel, and samples either
   through `uCellA`/`uCellB` as uv rectangles with v up the picture. raylib's

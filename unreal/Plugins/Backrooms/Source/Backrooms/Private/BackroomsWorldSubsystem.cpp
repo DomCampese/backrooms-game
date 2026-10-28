@@ -360,6 +360,7 @@ void UBackroomsWorldSubsystem::Tick(float DeltaTime)
 		return;
 	}
 	Render->ApplyLevel(Game->world.level);
+	Render->ShowBackdrop(GetWorld(), Camera);
 	if (bRun)
 	{
 		// The sim owns which storey is current (it rebases as you climb).

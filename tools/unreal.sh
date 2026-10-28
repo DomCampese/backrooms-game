@@ -91,7 +91,7 @@ materials_if_stale() {
     want=$(inputs_digest)
     for asset in World/MPC_Backrooms World/M_BackroomsWorld World/M_BackroomsWorldBlend World/M_BackroomsShape \
                  World/M_BackroomsShapeBlend World/M_BackroomsBillboard World/M_BackroomsBillboardAdd \
-                 World/M_BackroomsPost World/M_BackroomsTape Sounds/water/swim_1; do
+                 World/M_BackroomsPost World/M_BackroomsTape World/M_BackroomsClear Sounds/water/swim_1; do
         if [ ! -f "$ROOT/unreal/Content/Backrooms/$asset.uasset" ]; then
             reason="$asset is not built yet"
             break
