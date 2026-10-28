@@ -297,13 +297,14 @@ change has waited on a build and a pasted log.
 What the Web build does that the Mac build does not yet, as of 28 October
 2026. Closed that day, not yet seen on the Mac: the title screen (a run with
 no `?level=` or `?seed=` opens on it), the records file (shared/sim/records.h,
-in the project's `Saved/backrooms_best`) and F3's debug lines. Everything else, the world, its lighting, the sim, the HUD, the
+in the project's `Saved/backrooms_best`), F3's debug lines, and the tape's
+echoes of recorded sounds (a splash or the party music heard again in the
+playback). Everything else, the world, its lighting, the sim, the HUD, the
 revolver, sound, the camcorder and its tape, is the same code or a port
 proved against it, and is waiting only on being seen on the Mac.
 
 | gap | Web build | Mac build |
 |---|---|---|
-| echoed recordings | the tape plays back a run's recorded sounds (water, the party music) too | `SoundMixer::camera` echoes the synthesized clips only |
 | tape reel | a frame is the scene times its alpha, over the level's clear colour | the scene's colour, over black (Poolrooms only differs) |
 | touch controls | the browser shell's on-screen controls | none needed on the Mac |
 

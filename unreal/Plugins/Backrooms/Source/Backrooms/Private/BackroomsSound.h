@@ -46,9 +46,9 @@ private:
 	// null, said once in the log.
 	USoundWave* Recording(const char* Path);
 	// The component for a recording, made by Start: one per recording, so a
-	// play restarts it as raylib's PlaySound does. Null without a device or
-	// the imported wave.
-	UAudioComponent* Player(const char* Path);
+	// play restarts it as raylib's PlaySound does, and one more for its echo
+	// off the camcorder's tape. Null without a device or the imported wave.
+	UAudioComponent* Player(const char* Path, bool bEcho = false);
 	void FeedLoop(const char* Path, float Volume, float Pitch);
 
 	SoundMixer* Mixer = nullptr;

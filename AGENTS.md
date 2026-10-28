@@ -131,8 +131,12 @@ What will bite:
 - **The camera asks for its sounds; it does not play them.** `Camcorder::noises`
   is the list, drained by `CamcorderReel::playNoises` (raylib) or
   `SoundMixer::camera` (Unreal). `Zoom` and `Hiss` mean "unless it is already
-  playing", which only the platform knows. An `Echo` of a recording plays in
-  the Web build and not in the mixer, which has no recordings.
+  playing", which only the platform knows. An `Echo` of a recording (the
+  water, the party music) is not the mixer's to play: it comes back in
+  `SoundMixer::recorded` marked `echo`, and `UBackroomsSound` plays it on a
+  component of its own (`Player(path, true)`), as `GameAudio::echo` plays an
+  alias, so a live play of the same recording is not cut off. Unreal plays
+  recordings centred, so an echo's pan is dropped there.
 - **Call `fitReel` before the first tick, reel or no reel.** It sizes the list
   of frames, and `record` reads the oldest frame to trim the logged sounds: with
   no frames that is a division by zero slots. Unreal fits 1440x850 in `NewSim`,

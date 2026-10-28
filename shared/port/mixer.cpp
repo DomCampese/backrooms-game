@@ -76,12 +76,17 @@ void SoundMixer::camera(std::vector<CamNoise> &noises) {
         case CamSound::Echo: {
             const AudioEvent &e = n.echo;
             const Pcm &pcm = clips[(int)e.sfx][e.variant];
-            if (pcm.empty()) break;
             ClipSpec spec = clipSpec(e.sfx);
+            float pitch = (e.set & AudioEvent::SET_PITCH ? e.pitch : spec.pitch) * n.pitch;
+            float volume = (e.set & AudioEvent::SET_VOLUME ? e.volume : spec.volume) * n.volume;
+            if (pcm.empty()) {   // a recording: the engine plays it
+                recorded.push_back({ e.sfx, e.variant, pitch, volume, true });
+                break;
+            }
             Voice &v = echoes[(int)e.sfx][e.variant];
             v.pcm = &pcm;
-            v.pitch = (e.set & AudioEvent::SET_PITCH ? e.pitch : spec.pitch) * n.pitch;
-            v.volume = (e.set & AudioEvent::SET_VOLUME ? e.volume : spec.volume) * n.volume;
+            v.pitch = pitch;
+            v.volume = volume;
             v.pan = e.set & AudioEvent::SET_PAN ? e.pan : 0.0f;
             start(v);
             break;
