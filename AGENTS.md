@@ -16,6 +16,12 @@ The move from `src/` was checked by compiling all 44 sources before and after:
 identical assembly. The Web build also runs natively on desktop; the name is
 its role, not its only platform.
 
+Both builds ship (the Web build in browsers, the Mac build from Unreal), so
+**a new feature lands in both in the same change**: its rules in shared/, each
+build's code only drawing and playing it, a shader change in the GLSL and the
+HLSL together. What the Mac build still lacks is docs/unreal-handoff.md,
+"Parity".
+
 # Unreal draws the Web build's world (October 2026)
 
 The Unreal port no longer lights anything with Unreal: every material is

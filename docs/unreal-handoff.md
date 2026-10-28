@@ -286,6 +286,25 @@ A session on the Mac itself (`claude remote-control` in the repository) could
 build, run the tests and read the log directly; from the cloud each Unreal
 change has waited on a build and a pasted log.
 
+## Parity
+
+What the Web build does that the Mac build does not yet, as of 28 October
+2026. Everything else, the world, its lighting, the sim, the HUD, the
+revolver, sound, the camcorder and its tape, is the same code or a port
+proved against it, and is waiting only on being seen on the Mac.
+
+| gap | Web build | Mac build |
+|---|---|---|
+| title screen | `Sim::inMenu` at start: the drifting title camera, the title card, a key or tap begins | starts straight into a run (`Start.menu = false` in `StartRun`); the menu code path runs only after a death |
+| records | best runs, kills, metres, tapes, kept in a file (`Game::saveRecords`) and shown on the cards | none kept (`Start.keepRecords = false`) |
+| debug HUD | F3 draws the debug lines (`HudInput::debug`) | F3 turns the debug keys on, but the HUD is drawn with `debug = false` |
+| echoed recordings | the tape plays back a run's recorded sounds (water, the party music) too | `SoundMixer::camera` echoes the synthesized clips only |
+| tape reel | a frame is the scene times its alpha, over the level's clear colour | the scene's colour, over black (Poolrooms only differs) |
+| touch controls | the browser shell's on-screen controls | none needed on the Mac |
+
+New features go into both builds in the same change (AGENTS.md, "Two builds,
+one repository").
+
 ## Not done yet
 
 What the seams leave for the port, or for the Web build before it.
