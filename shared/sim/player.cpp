@@ -166,7 +166,7 @@ void Sim::updateMovement(const InputFrame &in, float dt, double now) {
                 play(Sfx::SplashIn, v).atPitch(0.9f + grng.f01() * 0.15f).atVolume(clampf(-vy * 0.12f, 0.4f, 0.8f));
             } else {
                 int v = grng.ri(0, 3);    // landing thud
-                play(Sfx::Step, v).atPitch(0.62f + grng.f01() * 0.1f).atVolume(clampf(-vy * 0.14f, 0.3f, 0.85f));
+                play(stepSfx(), v).atPitch(0.62f + grng.f01() * 0.1f).atVolume(clampf(-vy * 0.14f, 0.3f, 0.85f));
             }
             landDip = clampf(-vy * 0.028f, 0.0f, 0.22f);
             vy = 0;
@@ -245,7 +245,7 @@ void Sim::updateGait(float spd, float speed, bool inWater, float dt) {
     eyeY -= swimClimb;
     if (floorf(bobPhase) > floorf(lastPhase)) {
         int v = grng.ri(0, 3);   // wading, a stroke pitched up is a leg pushing through water
-        play(inWater ? Sfx::SwimStroke : Sfx::Step, v)
+        play(inWater ? Sfx::SwimStroke : stepSfx(), v)
             .atPitch((inWater ? 1.15f : 0.9f) + grng.f01() * 0.22f)
             .atVolume((0.35f + 0.3f * bobAmt) * (inWater ? 1.2f : 1.0f));
     }
@@ -346,4 +346,15 @@ void Sim::landFrom(float drop, double now) {
     float dmg = clampf((drop - 2.2f) * 0.19f, 0.0f, 1.6f);
     fear = fmaxf(fear, 0.7f);
     hurtPlayer(now, dmg, "THE FALL", px, pz);
+}
+
+Sfx Sim::stepSfx() const {
+    Footing f = inManila ? Footing::Wood : LEVEL_RULES[level].footing;
+    switch (f) {
+    case Footing::Concrete: return Sfx::StepConcrete;
+    case Footing::Tile:     return Sfx::StepTile;
+    case Footing::Wood:     return Sfx::StepWood;
+    case Footing::Carpet:   break;
+    }
+    return Sfx::Step;
 }

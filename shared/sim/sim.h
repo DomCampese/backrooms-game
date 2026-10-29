@@ -291,6 +291,9 @@ struct Sim {
     void updateFlashlight(const InputFrame &in, float dt);
     void updateLook(const InputFrame &in);
     void updateMovement(const InputFrame &in, float dt, double now);
+    // The player's footfall for the floor underfoot: the level's footing
+    // (LevelRules::footing), or the boards inside the Manila Room.
+    Sfx stepSfx() const;
     void updateDevKeys(const DevKeys &dev, double now);
     void updateWeapons(const InputFrame &in, float dt, double now);
     void updateBullets(float dt);

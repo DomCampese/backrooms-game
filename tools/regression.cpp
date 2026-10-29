@@ -568,6 +568,34 @@ int main() {
         Wave w={}; w.frameCount=(unsigned)pcm.size(); w.sampleRate=SAMPLE_RATE; w.sampleSize=16; w.channels=1;
         w.data=pcm.data(); ExportWave(w,"drinking.wav");
     }
+    {
+        // Footsteps follow the floor: each level's footing, and the Manila
+        // Room's boards wherever it stands. The hard floors start and end
+        // silent (no click at either end of a clip), stay under clipping,
+        // and sit above the carpet in pitch, tile highest.
+        const int lv0=sim.level; const bool man0=sim.inManila;
+        const Sfx want[NLEVELS]={ Sfx::Step, Sfx::StepConcrete, Sfx::StepTile, Sfx::StepConcrete, Sfx::Step };
+        for (int lv=0;lv<NLEVELS;++lv) { sim.level=lv; sim.inManila=false; CHECK(sim.stepSfx()==want[lv]); }
+        sim.level=0; sim.inManila=true; CHECK(sim.stepSfx()==Sfx::StepWood);
+        sim.level=lv0; sim.inManila=man0;
+        auto crossings=[](const Pcm &p) {
+            int n=std::min((int)p.size(),SAMPLE_RATE*6/100), zc=0;
+            for (int i=1;i<n;++i) if ((p[i-1]<0)!=(p[i]<0)) zc++;
+            return zc;
+        };
+        int carpet=crossings(clipPcm(Sfx::Step,0)), last=carpet;
+        for (Sfx k : { Sfx::StepWood, Sfx::StepConcrete, Sfx::StepTile }) {
+            for (int v=0;v<4;++v) {
+                Pcm pcm=clipPcm(k,v);
+                int peak=0;
+                for (short x : pcm) peak=std::max(peak,std::abs((int)x));
+                CHECK(pcm.front()==0 && pcm.back()==0 && peak>8000 && peak<30000);
+            }
+            int zc=crossings(clipPcm(k,0));
+            CHECK(zc>last);
+            last=zc;
+        }
+    }
 
     // ---- the catch ends the run, and only out of a committed lunge. The bare
     // proximity test this replaced fired the instant you came inside 1.25 m,
