@@ -92,7 +92,7 @@ void UBackroomsSound::Play(const std::vector<AudioEvent>& Events)
 	for (const RecordedPlay& Rec : Mixer->recorded)
 	{
 		const std::string Path = clipRecording(Rec.sfx, Rec.variant);
-		if (UAudioComponent* Comp = Player(Path.c_str()))
+		if (UAudioComponent* Comp = Player(Path.c_str(), Rec.echo))
 		{
 			Comp->SetPitchMultiplier(Rec.pitch);
 			Comp->SetVolumeMultiplier(Rec.volume * CENTRE_GAIN);
@@ -153,9 +153,9 @@ USoundWave* UBackroomsSound::Recording(const char* Path)
 	return Wave;
 }
 
-UAudioComponent* UBackroomsSound::Player(const char* Path)
+UAudioComponent* UBackroomsSound::Player(const char* Path, bool bEcho)
 {
-	const FString Key = UTF8_TO_TCHAR(Path);
+	const FString Key = FString(UTF8_TO_TCHAR(Path)) + (bEcho ? TEXT("#echo") : TEXT(""));
 	if (TObjectPtr<UAudioComponent>* Found = Players.Find(Key))
 	{
 		return *Found;

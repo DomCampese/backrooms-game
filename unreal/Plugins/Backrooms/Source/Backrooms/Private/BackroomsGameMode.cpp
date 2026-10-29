@@ -32,7 +32,12 @@ void ABackroomsGameMode::InitGame(const FString& MapName, const FString& Options
 	}
 	else
 	{
-		Backrooms->StartRun((uint32)Seed, Level);
+		// The title screen, as the Web build opens on, unless the options ask
+		// for a level or a seed (a test, or tools/unreal.sh play LEVEL=..)
+		// or ?notitle.
+		const bool bTitle = !UGameplayStatics::HasOption(Options, TEXT("level"))
+			&& !UGameplayStatics::HasOption(Options, TEXT("seed")) && !UGameplayStatics::HasOption(Options, TEXT("notitle"));
+		Backrooms->StartRun((uint32)Seed, Level, bTitle);
 		float FovY = 70.0f;
 		Spawn = Backrooms->ViewTransform(FovY);
 	}

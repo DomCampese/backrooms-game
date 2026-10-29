@@ -115,9 +115,14 @@ What will bite:
 - **The reel is one render texture, at most 2048 on a side**, which is all
   WebGL 2 guarantees. A frame is 288 px on its long side and the reel holds
   64 of them, 4.3 s at 15 Hz; at 1440x850 that is 7 x 10 cells and 14 MB.
-  Each frame is cleared to black before the scene is drawn into it:
-  the scene target carries alpha (glass, water) and would blend over the
-  frame the slot held before.
+  A frame is copied into its slot unblended (`BLEND_CUSTOM`, ONE and ZERO):
+  the scene target's alpha is below 1 wherever something translucent was
+  drawn (decals, the contact-shadow strips, water, glass), and the screen
+  shows its colour regardless. It used to be cleared to black and blended,
+  which put colour times alpha on tape, darker there than the eye saw.
+  Unreal's frames are the scene's colour too, and where nothing is drawn
+  both hold the level's clear colour: raylib's clear, and in Unreal a 4 km
+  box of `M_BackroomsClear` round the eye (`ShowBackdrop`).
 - **`TAPE_FS` takes its coordinates from `gl_FragCoord`, not the quad.** One
   shader draws the scene target and a frame on the reel, and samples either
   through `uCellA`/`uCellB` as uv rectangles with v up the picture. raylib's
@@ -131,8 +136,12 @@ What will bite:
 - **The camera asks for its sounds; it does not play them.** `Camcorder::noises`
   is the list, drained by `CamcorderReel::playNoises` (raylib) or
   `SoundMixer::camera` (Unreal). `Zoom` and `Hiss` mean "unless it is already
-  playing", which only the platform knows. An `Echo` of a recording plays in
-  the Web build and not in the mixer, which has no recordings.
+  playing", which only the platform knows. An `Echo` of a recording (the
+  water, the party music) is not the mixer's to play: it comes back in
+  `SoundMixer::recorded` marked `echo`, and `UBackroomsSound` plays it on a
+  component of its own (`Player(path, true)`), as `GameAudio::echo` plays an
+  alias, so a live play of the same recording is not cut off. Unreal plays
+  recordings centred, so an echo's pan is dropped there.
 - **Call `fitReel` before the first tick, reel or no reel.** It sizes the list
   of frames, and `record` reads the oldest frame to trim the logged sounds: with
   no frames that is a division by zero slots. Unreal fits 1440x850 in `NewSim`,
@@ -221,7 +230,12 @@ docs/unreal-handoff.md "Next" has what is open. What will bite:
   the key. Hold every key across a frame (record-trace.sh's `key`).
 - **The game starts a run through `SimStart`** (shared/sim/start.h): `Game::init`
   fills it from the BACKROOMS_* knobs and calls `simBegin`, `enterLevel`,
-  `simPlace`. A replay and a port call the same three.
+  `simPlace`. A replay and a port call the same three. Unreal opens on the
+  title screen unless the map's options name `?level=`, `?seed=` or
+  `?notitle` (so `LEVEL=1 make unreal-play` goes straight in), and keeps the
+  player's records in the Web build's format (shared/sim/records.h, moved from
+  game.cpp unchanged: 80,001 files, valid, truncated and corrupted, read and
+  written the same by both) at `unreal/Saved/backrooms_best`.
 - **A capture's spawn spot is chosen before any level is entered**: `simBegin`
   runs `findOpenSpot` in Level 0's maze at visit 0 on one storey, and the
   capture then stands at that spot in whatever level it enters.
@@ -991,7 +1005,7 @@ build's, in `web/src/`.
 | `core/layout.{h,cpp}` | `ChunkLayout`: a chunk's props, fixtures, light fittings and openings, decided from the seed |
 | `core/floorplan.{h,cpp}` | `ChunkFloorplan`: a chunk's floors, walls, risers, ceilings, soffits, flights and arches, as the mesher builds them |
 | `core/hash.{h,cpp}`, `core/vec.h`, `core/portable_math.{h,cpp}` | hashes, RNG, value noise; `Vec2`/`Vec3`, `TAU`, `clampf`; sin, cos, exp, atan2, hypot that round the same everywhere |
-| `sim/start.{h,cpp}`, `sim/trace.{h,cpp}` | how a run starts (`SimStart`); recording and replaying the calls on the sim |
+| `sim/start.{h,cpp}`, `sim/trace.{h,cpp}`, `sim/records.{h,cpp}` | how a run starts (`SimStart`); recording and replaying the calls on the sim; the records file both builds read and write |
 | `port/view.{h,cpp}`, `port/greybox.{h,cpp}` | what the camera shows of the sim (both builds draw from it); a chunk as plain boxes and quads for a port's first milestone |
 | `port/hud.{h,cpp}` | the HUD over the world (`hudDraws`): cards, meters, inventory and hints as draws in window pixels, which both builds draw |
 | `port/held.{h,cpp}`, `port/scene.{h,cpp}`, `port/sprites.{h,cpp}`, `port/sheets.h` | what is in hand, what stands loose in the world, and the actors' billboard poses and sheet layout, which both builds draw from |

@@ -3,6 +3,7 @@
 #include "shaders.h"
 #include "input.h"
 #include "port/stream.h"
+#include "sim/records.h"
 #include "rlgl.h"
 #include "raymath.h"
 #include <cmath>
@@ -187,15 +188,7 @@ void Game::init() {
     start.fov = baseFov();
 
     snprintf(bestPath, sizeof(bestPath), "%s/.backrooms_best", getenv("HOME") ? getenv("HOME") : ".");
-    if (FILE *bf = fopen(bestPath, "r")) {
-        Records &b = start.best;
-        // Fields were appended over time; a file missing the later ones reads them as 0.
-        if (fscanf(bf, "%d %d %d", &b.escapes, &b.kills, &b.metres) != 3) b.escapes = b.kills = b.metres = 0;
-        if (fscanf(bf, "%d", &b.wins) != 1) b.wins = 0;
-        if (fscanf(bf, "%d", &b.tapes) != 1) b.tapes = 0;
-        if (fscanf(bf, "%d %d", &b.deepest, &b.longestRun) != 2) b.deepest = b.longestRun = 0;
-        fclose(bf);
-    }
+    start.best = loadRecords(bestPath);
 
     if (const char *recEnv = getenv("BACKROOMS_RECORD")) {
         if (trace.open(recEnv)) sim.tracer = &recordingTracer;
@@ -253,12 +246,7 @@ void Game::shutdown() {
 
 void Game::saveRecords() {
     sim.recordsChanged = false;
-    const Records &b = sim.best;
-    if (FILE *bf = fopen(bestPath, "w")) {
-        fprintf(bf, "%d %d %d %d %d\n%d %d\n", b.escapes, b.kills, b.metres, b.wins, b.tapes,
-                b.deepest, b.longestRun);
-        fclose(bf);
-    }
+    ::saveRecords(bestPath, sim.best);
 #ifdef PLATFORM_WEB
     // A tab's filesystem dies with the page: flush to the IndexedDB that
     // web/shell.html mounted over $HOME. shutdown() never runs on the web, so

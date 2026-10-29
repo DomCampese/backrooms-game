@@ -18,7 +18,9 @@ and builds:
   Unreal's tonemapper;
 - M_BackroomsTape: the camcorder's tape look (BackroomsTape.ush), which
   UBackroomsRender::ShowPost puts in the post material's place while the
-  viewfinder is up or the tape plays back.
+  viewfinder is up or the tape plays back;
+- M_BackroomsClear: the level's clear colour (MPC_Backrooms' Clear), on the
+  backdrop behind everything, as raylib clears its render target to it.
 
 init_unreal.py runs it when the files in Saved/Surfaces differ from the ones
 the materials were built from. To build again by hand, in the editor's Python
@@ -461,6 +463,18 @@ def build_tape_material(mpc, neutral):
     return mat
 
 
+def build_clear_material(mpc):
+    """Unlit, the collection's Clear: raylib's ClearBackground, on a box round
+    the eye (UBackroomsRender::ShowBackdrop), so the eye and the camcorder's
+    reel both see the level's colour where nothing is drawn."""
+    mat = _fresh_material("M_BackroomsClear")
+    _unlit(mat, unreal.BlendMode.BLEND_OPAQUE)
+    rgb = _mask(mat, _collection(mat, mpc, "Clear", -500, 0), "rgb", -200, 0)
+    mel().connect_material_property(rgb, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    mel().recompile_material(mat)
+    return mat
+
+
 def build():
     world = read_world()
     if not world:
@@ -483,6 +497,7 @@ def build():
         build_shape_material(name, blend, True, textures["particle"])
     build_post_material(mpc)
     build_tape_material(mpc, neutral)
+    build_clear_material(mpc)
     eal().set_metadata_tag(mat, DIGEST_TAG, digest())
     eal().save_directory(WORLD_DIR, only_if_is_dirty=False, recursive=True)
     unreal.log("Backrooms: built the world's materials and %d textures in %s" % (len(textures), WORLD_DIR))
@@ -494,7 +509,7 @@ def stale():
     if not os.path.exists(os.path.join(surfaces_dir(), "world.json")):
         return None   # nothing to build from; read_world says so when asked
     for name in ("M_BackroomsWorld", "M_BackroomsWorldBlend", "M_BackroomsShape", "M_BackroomsShapeBlend",
-                 "M_BackroomsBillboard", "M_BackroomsBillboardAdd", "M_BackroomsPost", "M_BackroomsTape",
+                 "M_BackroomsBillboard", "M_BackroomsBillboardAdd", "M_BackroomsPost", "M_BackroomsTape", "M_BackroomsClear",
                  MPC_NAME):
         if not eal().does_asset_exist(WORLD_DIR + "/" + name):
             return name + " is missing"

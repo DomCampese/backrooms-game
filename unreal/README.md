@@ -112,8 +112,10 @@ For an Xcode project (debugging, or browsing the code), run
 `"/Users/Shared/Epic Games/UE_5.8/Engine/Build/BatchFiles/Mac/GenerateProjectFiles.sh" -project="$PWD/unreal/BackroomsGame.uproject" -game`
 and open the `.xcworkspace` it writes into `unreal/`.
 
-From the console: `open /Engine/Maps/Entry?level=1?seed=42` starts a run on
-Level 1; `open /Engine/Maps/Entry?mode=free?level=2` flies a free camera over
+From the console: `open /Engine/Maps/Entry` opens the title screen, as the
+Web build does; `open /Engine/Maps/Entry?level=1?seed=42` starts a run on
+Level 1 straight away (any of `?level=`, `?seed=` or `?notitle` skips the
+title); `open /Engine/Maps/Entry?mode=free?level=2` flies a free camera over
 the Poolrooms (WASD, Space up, Ctrl down, Shift faster).
 
 ## How the world is drawn

@@ -18,6 +18,9 @@ struct RecordedPlay {
     Sfx sfx;
     int variant;
     float pitch, volume;   // the clip's, after this PLAY; volume before CENTRE_GAIN
+    // Heard again off the camcorder's tape: played on a voice of its own, as
+    // GameAudio::echo plays an alias, so the recording's own play goes on.
+    bool echo = false;
 };
 
 struct SoundMixer {
@@ -29,7 +32,7 @@ struct SoundMixer {
     // One tick's events, in the order the sim emitted them.
     void apply(const std::vector<AudioEvent> &events);
     // The camcorder's sounds, in the order it asked for them; clears the list.
-    // An echo of a recording is not played: the mixer has no recordings.
+    // An echo of a recording is left in `recorded`, marked `echo`.
     void camera(std::vector<CamNoise> &noises);
     // A paused tick, after apply(): the bed goes on without the growl, hiss and
     // whispers, and the loops hold their levels.

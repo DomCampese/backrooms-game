@@ -91,7 +91,7 @@ materials_if_stale() {
     want=$(inputs_digest)
     for asset in World/MPC_Backrooms World/M_BackroomsWorld World/M_BackroomsWorldBlend World/M_BackroomsShape \
                  World/M_BackroomsShapeBlend World/M_BackroomsBillboard World/M_BackroomsBillboardAdd \
-                 World/M_BackroomsPost World/M_BackroomsTape Sounds/water/swim_1; do
+                 World/M_BackroomsPost World/M_BackroomsTape World/M_BackroomsClear Sounds/water/swim_1; do
         if [ ! -f "$ROOT/unreal/Content/Backrooms/$asset.uasset" ]; then
             reason="$asset is not built yet"
             break
@@ -125,7 +125,8 @@ open)
 play)
     build
     materials_if_stale
-    MAP="/Engine/Maps/Entry?level=${LEVEL:-0}?seed=${SEED:-1337}"
+    # With neither, the game opens on its title screen, as the Web build does.
+    MAP="/Engine/Maps/Entry${LEVEL:+?level=$LEVEL}${SEED:+?seed=$SEED}"
     "$EDITOR" "$PROJECT" "$MAP" -game -windowed -ResX=1440 -ResY=850 -log || true
     echo "--- Backrooms lines from $LOG:"
     grep "Backrooms:" "$LOG" || echo "(none)"

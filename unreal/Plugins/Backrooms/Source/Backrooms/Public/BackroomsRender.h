@@ -8,6 +8,7 @@ struct CamPicture;
 struct FPostProcessSettings;
 struct World;
 class APostProcessVolume;
+class AStaticMeshActor;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UMaterialParameterCollection;
@@ -73,6 +74,12 @@ public:
 	// What every view of the world pins: exposure at 1, and none of Unreal's
 	// own grading, bloom or lighting. The post volume and the reel's capture.
 	static void PinPost(FPostProcessSettings& S);
+	// A box of the level's clear colour round Eye (Unreal space), behind
+	// everything: raylib clears its render target to that colour, which the
+	// camcorder's reel records where nothing is drawn (the Poolrooms' haze;
+	// black elsewhere). Without M_BackroomsClear there is none, and those
+	// pixels are black.
+	void ShowBackdrop(UWorld* Where, const FVector& Eye);
 	// The light of a still moment with no one in it: every tube at its
 	// output, no torch, no flare, no hunter. For the editor's preview.
 	static FrameLight Still();
@@ -128,4 +135,8 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<APostProcessVolume> Post;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> ClearMaterial;
+	UPROPERTY(Transient)
+	TObjectPtr<AStaticMeshActor> Backdrop;
 };

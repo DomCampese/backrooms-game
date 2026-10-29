@@ -1,6 +1,9 @@
 #include "BackroomsRender.h"
 #include "BackroomsSettings.h"
+#include "Components/StaticMeshComponent.h"
 #include "Engine/PostProcessVolume.h"
+#include "Engine/StaticMesh.h"
+#include "Engine/StaticMeshActor.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -88,6 +91,8 @@ bool UBackroomsRender::Load()
 	ShapeBlend = LoadAt<UMaterialInterface>(TEXT("M_BackroomsShapeBlend"));
 	PostMaterial = LoadAt<UMaterialInterface>(TEXT("M_BackroomsPost"));
 	UMaterialInterface* TapeBase = LoadAt<UMaterialInterface>(TEXT("M_BackroomsTape"));
+	// Optional, as the tape is: a project built before it draws black there.
+	ClearMaterial = LoadAt<UMaterialInterface>(TEXT("M_BackroomsClear"));
 	UMaterialInterface* BillboardBase = LoadAt<UMaterialInterface>(TEXT("M_BackroomsBillboard"));
 	UMaterialInterface* BillboardAddBase = LoadAt<UMaterialInterface>(TEXT("M_BackroomsBillboardAdd"));
 
@@ -358,6 +363,40 @@ FrameLight UBackroomsRender::Still()
 		L.roomMask[I] = NoMask[I];
 	}
 	return L;
+}
+
+void UBackroomsRender::ShowBackdrop(UWorld* Where, const FVector& Eye)
+{
+	if (!bLoaded || !ClearMaterial)
+	{
+		return;
+	}
+	if (!Backdrop)
+	{
+		UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
+		if (!Cube)
+		{
+			return;
+		}
+		FActorSpawnParameters Params;
+		Params.ObjectFlags |= RF_Transient;
+		Backdrop = Where->SpawnActor<AStaticMeshActor>(Eye, FRotator::ZeroRotator, Params);
+		if (!Backdrop)
+		{
+			return;
+		}
+		Backdrop->SetMobility(EComponentMobility::Movable);
+		UStaticMeshComponent* Box = Backdrop->GetStaticMeshComponent();
+		Box->SetStaticMesh(Cube);
+		Box->SetMaterial(0, ClearMaterial);
+		Box->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Box->SetCastShadow(false);
+		// The engine's cube is a metre on a side: this one is 4 km, well past
+		// every streamed chunk and every level's fog, seen from inside (the
+		// material is two-sided).
+		Backdrop->SetActorScale3D(FVector(4000.0));
+	}
+	Backdrop->SetActorLocation(Eye);
 }
 
 void UBackroomsRender::PinPost(FPostProcessSettings& S)

@@ -225,6 +225,15 @@ bool FBackroomsSoundTest::RunTest(const FString& Parameters)
 	Mixer->render(Out.GetData(), Frames);
 	TestTrue(TEXT("an echo sounds"), Loudness(0) > 0);
 	TestFalse(TEXT("an echo leaves the clip's own voice alone"), Mixer->playing(Sfx::Click, 0));
+	// A recording echoed off the tape is handed back to be played on a
+	// component of its own, at the tape's pitch and volume.
+	Mixer->recorded.clear();
+	Noises = { { CamSound::Echo, Event(AudioEvent::PLAY, Sfx::SplashIn, 1), 0.5f, 0.25f } };
+	Mixer->camera(Noises);
+	const ClipSpec Splash = clipSpec(Sfx::SplashIn);
+	TestTrue(TEXT("an echoed recording is handed back as an echo"), Mixer->recorded.size() == 1 && Mixer->recorded[0].echo
+		&& Mixer->recorded[0].sfx == Sfx::SplashIn && Mixer->recorded[0].variant == 1
+		&& Mixer->recorded[0].pitch == Splash.pitch * 0.5f && Mixer->recorded[0].volume == Splash.volume * 0.25f);
 	return true;
 }
 
