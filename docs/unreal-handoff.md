@@ -294,6 +294,13 @@ off the Mac. In order:
     Manila Room's boards. The mixer plays them with no Unreal change, so if
     they sound right in the Web build they should here.
 
+11. **Distant sounds** (30 October 2026). Stand still on Level 0 for a minute
+    or two: a door shuts somewhere far off, from one side, muffled, with the
+    halls ringing after it. `LEVEL=1` a steel clang, `LEVEL=3` the pipes
+    knocking, `LEVEL=4` a far balloon; the Poolrooms (`LEVEL=2`) stay quiet.
+    Again no Unreal code: the sim plays them and the mixer loads every clip
+    up to `SFX_COUNT`.
+
 A session on the Mac itself (`claude remote-control` in the repository) could
 build, run the tests and read the log directly; from the cloud each Unreal
 change has waited on a build and a pasted log.

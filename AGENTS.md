@@ -52,6 +52,38 @@ boards (`StepWood`) wherever that room stands. What will bite:
   replaying perfectly: check `grep -o 'level=[0-9]' | sort | uniq -c` on a new
   recording before keeping it. `KEY_HOLD=2` took it through all three levels.
 
+# Distant sounds (October 2026)
+
+Every level but the Poolrooms is heard from somewhere else, now and then: a
+fire door on Level 0 (`Sfx::FarDoor`), steel dropped on Level 1 (`FarClang`),
+the Red Halls' pipes (`FarKnock`), a balloon in LEVEL FUN (`FarPop`). Like the
+footsteps, both builds play them with no platform code. What will bite:
+
+- **Which sound a level makes is `LevelRules::distant`** (core/level_rules.h);
+  `Sim::updateDistant` (place.cpp) decides when, which variant, the bearing,
+  pitch and volume. Every 35-85 s, a 20-70 s lead after arriving, shortened
+  to 45% as sanity goes; held back on the title and death cards and in the
+  Manila Room.
+- **It draws from `distantRng`, never `grng`.** grng decides blackouts and
+  spawns, so a sound drawn from it would move them, and every capture and
+  trace with them. `distantRng` is seeded per level and visit in
+  `applyLevel`, and draws its five numbers whether or not the sound is then
+  held back, so where you stood never changes what plays next. The
+  regression checks both.
+- **The distance is in the clip, not the mix.** Neither raylib nor the mixer
+  filters a one-shot, so each clip is made far away (`farAway` in
+  port/sounds.cpp: two poles of low-pass for the walls, a 30 Hz DC block,
+  then a Schroeder reverb for the building). Its peak is set per kind so the
+  loudest 100 ms sit, A-weighted, level with a carpet footfall (the door) up
+  to 6 dB over it (the clang), before the play's volume of 0.32-0.54. The
+  DC block is not optional: without it a slam's half cycle left an offset
+  of 3% of full scale through the low-pass.
+- **A `pitch` local in the sim shadows `Sim::pitch`,** which the Unreal
+  module's `-Wshadow -Werror` refuses (`tools/unreal-check.sh` caught it, the
+  sandbox build did not). The playback rate is `rate`.
+- walk-l0-l2.trace was re-recorded: main's replay of the new one fails at
+  frame 110 on `audioHash` alone, the first door.
+
 # Unreal draws the Web build's world (October 2026)
 
 The Unreal port no longer lights anything with Unreal: every material is

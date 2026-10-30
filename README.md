@@ -559,6 +559,12 @@ Details that reward paying attention:
   slap the warehouse throws back on Level 1's concrete, a bright click that
   rings round the Poolrooms' tile, and a hollow knock on the Manila Room's
   boards.
+- **The rest of the level is out there** — now and then, from somewhere you
+  cannot see: a fire door shutting far down Level 0's halls, steel dropped
+  across Level 1's warehouse and ringing for seconds, the Red Halls' pipes
+  knocking, a balloon going somewhere in LEVEL FUN. Each comes from its own
+  direction, through the walls, and more often as your sanity goes. The
+  Poolrooms keep their quiet.
 - **Footsteps in the dark** — when the entity chases, you *hear* it: heavy
   footfalls, panned to its bearing and fading with distance, even around
   corners you can't see past.

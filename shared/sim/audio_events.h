@@ -17,6 +17,10 @@ enum class Sfx : uint8_t {
     StepConcrete,     // 4: the player's footfalls on Level 1's and the Red Halls' slab,
     StepTile,         // 4: ...on the Poolrooms' tile,
     StepWood,         // 4: ...and on the Manila Room's boards (Step is carpet)
+    FarDoor,          // 3: a fire door shutting somewhere on Level 0 (Distant::Door)
+    FarClang,         // 3: steel dropped across Level 1's warehouse
+    FarKnock,         // 3: the Red Halls' pipes knocking
+    FarPop,           // 3: a balloon going, a long way off in LEVEL FUN
 };
 
 // What the ambience synth (audio.cpp) chases. The rules write each field where

@@ -77,6 +77,7 @@ void Sim::setPaused(bool on, double now) {
         nextBlackout += held;
         if (blackoutEnd > 0) blackoutEnd += held;   // -1: no blackout running
         nextWhisper += held;
+        nextDistant += held;
         runStart += held;
         ent.nextSpawn += held;
         nextPack += held;
@@ -176,6 +177,8 @@ void Sim::applyLevel(int lv, double now) {
     for (auto &d : dogs) d.st = DState::Gone;
     nextPack = now + (lv == 3 ? 8 + grng.f01() * 8 : 1e9);
     nextHowl = now + 12 + grng.f01() * 20;
+    distantRng = Rng(hash64((uint64_t)world.seed ^ ((uint64_t)lv << 40) ^ ((uint64_t)world.visit << 48) ^ 0xD157A47ULL));
+    nextDistant = now + DISTANT_LEAD + distantRng.f01() * DISTANT_SPAN;
     valvesTurned.clear(); pipesShut = false; valveT = 0;
     taken.clear(); coinsWorld.clear();
     // Chalk is kept per level for the whole descent; beginDescent clears it.

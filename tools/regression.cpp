@@ -596,6 +596,55 @@ int main() {
             last=zc;
         }
     }
+    {
+        // The level heard from elsewhere: one clip per level but the
+        // Poolrooms', played when due from a bearing on its own stream, never
+        // over a card or into the Manila Room, and never touching grng.
+        const int lv0=sim.level; const bool man0=sim.inManila, menu0=sim.inMenu; const float death0=sim.deathT;
+        const Sfx want[NLEVELS]={ Sfx::FarDoor, Sfx::FarClang, Sfx::Click, Sfx::FarKnock, Sfx::FarPop };
+        const double now=5000;
+        for (int lv=0;lv<NLEVELS;++lv) {
+            sim.level=lv; sim.inManila=false; sim.inMenu=false; sim.deathT=0;
+            sim.nextDistant=now; sim.audio.clear();
+            const uint64_t g0=sim.grng.s;
+            sim.updateDistant(now);
+            CHECK(sim.grng.s==g0);
+            if (lv==2) { CHECK(sim.audio.empty()); continue; }
+            CHECK(sim.audio.size()==1);
+            const AudioEvent &e=sim.audio.back();
+            CHECK(e.kind==AudioEvent::PLAY && e.sfx==want[lv] && e.variant<3);
+            CHECK(e.set==(AudioEvent::SET_PITCH|AudioEvent::SET_VOLUME|AudioEvent::SET_PAN));
+            CHECK(e.pan>=-1 && e.pan<=1 && e.volume>0.3f && e.volume<0.56f);
+            CHECK(sim.nextDistant>=now+Sim::DISTANT_GAP*0.45 && sim.nextDistant<=now+Sim::DISTANT_GAP+Sim::DISTANT_SPAN);
+            // Not due yet: nothing.
+            sim.audio.clear(); sim.updateDistant(now+1); CHECK(sim.audio.empty());
+        }
+        // Held back over the title card, the death card and in the Manila
+        // Room, with the same draws, so the next one is the same either way.
+        for (int hold=0;hold<3;++hold) {
+            sim.level=0; sim.inMenu=hold==0; sim.deathT=hold==1?1.0f:0.0f; sim.inManila=hold==2;
+            sim.nextDistant=now; sim.audio.clear();
+            const Rng before=sim.distantRng;
+            sim.updateDistant(now);
+            CHECK(sim.audio.empty() && sim.nextDistant>now);
+            const uint64_t held=sim.distantRng.s;
+            sim.distantRng=before; sim.nextDistant=now;
+            sim.inMenu=false; sim.deathT=0; sim.inManila=false;
+            sim.updateDistant(now);
+            CHECK(sim.audio.size()==1 && sim.distantRng.s==held);
+        }
+        for (Sfx k : { Sfx::FarDoor, Sfx::FarClang, Sfx::FarKnock, Sfx::FarPop }) {
+            CHECK(clipSpec(k).variants==3);
+            for (int v=0;v<3;++v) {
+                Pcm pcm=clipPcm(k,v);
+                int peak=0;
+                for (short x : pcm) peak=std::max(peak,std::abs((int)x));
+                CHECK(pcm.front()==0 && pcm.back()==0 && peak>4000 && peak<20000 && pcm.size()<(size_t)SAMPLE_RATE*5);
+            }
+        }
+        sim.level=lv0; sim.inManila=man0; sim.inMenu=menu0; sim.deathT=death0;
+        sim.audio.clear();
+    }
 
     // ---- the catch ends the run, and only out of a committed lunge. The bare
     // proximity test this replaced fired the instant you came inside 1.25 m,

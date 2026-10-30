@@ -31,6 +31,7 @@ void Sim::updateAmbience(float dt, double now) {
     ambience.hum = blackout ? 0.12f : inManila ? 0.22f : 1.0f;   // the Manila Room is quiet
 
     updateRoomSound(blackout);
+    updateDistant(now);
     if (updateSanity(dt, blackout, now)) return;
 
     // In the slide, the building starts moving on you.
@@ -262,4 +263,26 @@ void Sim::updateManila(float dt, double now) {
         sanityWarnT = 4.0f;
         sanityLine = "the hum has worked its way in behind your eyes.";
     }
+}
+
+// Somewhere else on the level, something happens: the sim picks when, which
+// clip and from which way. The clips sound far off and through walls, and
+// nothing stands where they come from: it is never a thing to find.
+void Sim::updateDistant(double now) {
+    const Distant kind = LEVEL_RULES[level].distant;
+    if (kind == Distant::None || now < nextDistant) return;
+    Rng &r = distantRng;
+    nextDistant = now + (DISTANT_GAP + r.f01() * DISTANT_SPAN) * (0.45 + 0.55 * sanity);
+    const int variant = r.ri(0, 2);
+    const float bearing = r.f01() * TAU, rate = 0.92f + r.f01() * 0.16f, volume = 0.32f + r.f01() * 0.22f;
+    // Not over the title card or the death card, and not into the Manila
+    // Room's quiet. The draws above happen either way, so the stream does not
+    // depend on where you were standing when a sound came due.
+    if (inMenu || deathT > 0 || inManila) return;
+    const Sfx sfx = kind == Distant::Door ? Sfx::FarDoor : kind == Distant::Clang ? Sfx::FarClang
+                  : kind == Distant::Knock ? Sfx::FarKnock : Sfx::FarPop;
+    play(sfx, variant)
+        .atPan(clampf(portableCos(bearing) * r2x + portableSin(bearing) * r2z, -1.0f, 1.0f))
+        .atPitch(rate)
+        .atVolume(volume);
 }
