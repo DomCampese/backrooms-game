@@ -32,6 +32,24 @@ untouched code buries the change that matters.
   CREDITS.md and the docs.
 - No first person, no "we", no addressing the reader.
 
+## Register
+
+Code, comments, docs, commit messages and PR descriptions are technical
+writing, not copy for the game. Say what the code does, with its parameters
+and units. Describe a sound by its synthesis (filters, frequencies, decay),
+a level by its rules, a feature by what the player can do.
+
+- No figurative or atmospheric language: no "underfoot", "the hall rings",
+  "the building settles", "keeps its quiet", "something waits".
+- No personification of code, levels or sounds.
+- No selling: a PR says what changed, how it was verified and what to check,
+  not why it is exciting.
+- The README describes features plainly too. It is documentation, not a
+  trailer.
+
+Bad: `// A fire door down the halls: the leaf meeting its frame.`
+Good: `// Door: latch click, then a 52-72 Hz thud; variants 1-2 add a rebound.`
+
 ## Words and constructions to cut
 
 These read as filler or as generated text. Remove them from code, comments,

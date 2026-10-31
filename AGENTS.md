@@ -24,22 +24,17 @@ HLSL together. What the Mac build still lacks is docs/unreal-handoff.md,
 
 # Every session makes the game better to play (October 2026)
 
-Work here has drifted into bikeshedding: small, safe changes that are easy to
-prove and that no player would notice, such as moving a constant into shared
-code, adding a proof harness, polishing the docs or adding one more sound
-clip. Each of those was correct, and none of them made the game better.
+Each session's main item is a change a player would notice in the first ten
+minutes: new gameplay, a new threat or mechanic, a level that plays
+differently, entity behaviour, real meshes in place of boxes, a visible
+rendering improvement, or a bug a player would hit. Moving code into shared/,
+adding proof harnesses, doc edits and single new clips are not a session's
+main item; do them only alongside one.
 
-So each session's main item is a real step a player would notice in their
-first ten minutes and call an improvement: new gameplay, a new threat or
-mechanic, a level that plays differently, smarter entities, real meshes where
-boxes stand, a visibly better look, or a bug a player would hit. Small fixes
-and tidying are welcome only alongside that work, never instead of it. If a
-change would fit a one-line changelog no player would care about, it is not
-the session's main item.
+The proof rules in this file still apply. Do not choose work because it is
+easy to prove. A PR states what a player will notice and why it was chosen.
 
-The proof rules in this file still apply in full. Proof serves the feature;
-don't pick work because it is easy to prove. A PR says what a player will
-notice, and why this was the most valuable thing to do that day.
+Write all of it plainly (docs/readability.md, "Register").
 
 # Unreal draws the Web build's world (October 2026)
 
