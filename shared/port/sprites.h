@@ -27,7 +27,7 @@ struct ActorSprite {
 // Which two frames of a walk sheet a gait phase falls between, and how far.
 // Cross-fading rather than snapping matters at this frame count: six frames
 // over two steps is about one frame every 0.35 m, and a hard cut at that rate
-// strobes. Faded, the ghost is where a fast-moving limb would be smeared anyway.
+// strobes. A cross-fade looks like motion blur.
 void gaitFrames(float phase, int frames, int &f0, int &f1, float &t);
 
 // Dog i, if it is drawn (out of the pack's Gone state and within 42 m).

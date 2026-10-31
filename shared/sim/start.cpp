@@ -27,7 +27,7 @@ void simBegin(Sim &sim, const SimStart &s, double now) {
 
 void simPlace(Sim &sim, const SimStart &s) {
     World &world = sim.world;
-    // A position means the same on every storey: the one you stand on is at y = 0.
+    // A position means the same on every storey: the current storey is at y = 0.
     if (s.storeyed && world.storeyH > 0.0f) {
         world.setStorey(s.storey);
         Vec2 sp = world.findOpenSpot(sim.px, sim.pz);

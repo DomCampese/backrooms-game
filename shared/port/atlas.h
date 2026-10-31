@@ -9,12 +9,10 @@
 // Where each fitting sits in the fixtures atlas, and how big it is on the wall.
 //
 // One table, shared by the atlas that draws them and the mesher that hangs
-// them, because the quad stretches its cell to fit: draw a fitting at one
-// aspect and hang it at another and it comes out squashed. A faceplate is a
-// thing everybody has seen ten thousand times, so a wrong one reads as wrong
-// immediately — the first version of this drew each fitting inside part of a
-// square cell and hung the whole cell, and every outlet in the building came
-// out a narrow vertical sliver.
+// them, because the quad stretches its cell to fit: drawn at one aspect and
+// placed at another, a fitting is squashed. The first version drew each fitting
+// in part of a square cell and placed the whole cell, and every outlet came out
+// as a narrow vertical sliver.
 // FIX_MANILA is not a fitting but a tile of the Manila Room's wallpaper, and
 // FIX_NOTE one of the notes left on its table; both live here because the
 // fixtures mesh is where the room's decals go.

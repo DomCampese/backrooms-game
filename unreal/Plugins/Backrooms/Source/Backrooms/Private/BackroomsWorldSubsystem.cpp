@@ -363,7 +363,7 @@ void UBackroomsWorldSubsystem::Tick(float DeltaTime)
 	Render->ShowBackdrop(GetWorld(), Camera);
 	if (bRun)
 	{
-		// The sim owns which storey is current (it rebases as you climb).
+		// The sim owns which storey is current (it rebases when the player changes storey).
 		StreamAround(BackroomsCoords::ToUnreal({ Game->px, 0.0f, Game->pz }), DeltaTime);
 		ShowFrame(simView(*Game).eye);
 	}

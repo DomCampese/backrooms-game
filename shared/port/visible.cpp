@@ -88,10 +88,9 @@ std::vector<VisibleChunk> visibleChunks(World &w, const ChunkViewer &v,
                     int cx = pcx + dx + ex, cz = pcz + dz + ez;
                     if (!through(p1, cx, cz, rel * w.storeyH)) continue;
                     consider(w.storey + rel, cx, cz, rel * w.storeyH);
-                    // Stairs stack: the flight you are looking up often lands
-                    // beside the next one, and through that one's opening is
-                    // the storey after. Its own chunk is all you can see of it,
-                    // and only through both openings.
+                    // Stairs stack: a flight often lands beside the next one,
+                    // whose opening shows the storey after. Only that
+                    // feature's own chunk is visible, through both openings.
                     Portal chain[STOREY_REACH]; chain[0] = p1;
                     for (int depth = 2; depth <= STOREY_REACH; ++depth) {
                         if (!portalOf(cx, cz, rel > 0 ? depth - 1 : -depth, chain[depth - 1])) break;

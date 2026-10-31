@@ -1,27 +1,13 @@
-// THE BACKROOMS
-// raylib + OpenGL 3.3 natively; WebGL 2 (GLSL ES 3.00) under Emscripten.
-// Procedural worlds plus embedded CC0 materials and revolver.
-//
-// Module map:
-//   util        hashes, RNG, value noise, shared palette
-//   shaders     world + post-process GLSL
-//   textures    every surface, synthesized at startup
-//   sfx         one-shot sounds (footsteps, gunshot, ...)
-//   audio       streaming ambience synth (hum, drone)
-//   game_audio  every sound handle; plays the sim's audio events
-//   levels      per-level look/feel tables
-//   world       infinite maze: chunk gen, meshing, collision, line of sight
-//   sim/        game state and rules, stepped once a tick
-//   game        the platform: window, input, assets, the tick
-//   render      3D scene pass, viewmodel, HUD, overlays
+// The Web build's entry point: raylib and OpenGL 3.3 natively, WebGL 2 (GLSL ES
+// 3.00) under Emscripten. AGENTS.md has the module map.
 #include "game.h"
 
 #ifdef PLATFORM_WEB
 #include <emscripten/emscripten.h>
 
-// A browser tab owns its own event loop: a `while (!WindowShouldClose())` here
-// never yields, so the page hangs before the first frame is ever presented.
-// The game is driven by requestAnimationFrame instead, which is what the 0 is.
+// A browser tab owns its event loop: a `while (!WindowShouldClose())` here never
+// yields, so the page hangs before the first frame. The 0 below means the loop
+// runs on requestAnimationFrame.
 //
 // Game is heap-allocated and deliberately never deleted. With
 // simulate_infinite_loop set, emscripten_set_main_loop unwinds out of main()

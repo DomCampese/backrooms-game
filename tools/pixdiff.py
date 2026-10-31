@@ -13,9 +13,8 @@ import sys
 try:
     from PIL import Image
 except ImportError:
-    # A fresh sandbox has no Pillow, and the bare traceback tells you nothing
-    # about what to do next — usually after a sweep you just waited ten minutes
-    # for. tools/sandbox-setup.sh installs it; this is the manual escape hatch.
+    # A fresh sandbox has no Pillow. tools/sandbox-setup.sh installs it; this
+    # prints how to install it by hand.
     sys.exit("pixdiff needs Pillow:  pip3 install pillow   "
              "(tools/sandbox-setup.sh does this for you)")
 

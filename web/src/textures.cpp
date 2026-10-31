@@ -27,13 +27,12 @@ Texture2D finishTexture(Image img, bool tiled) {
     return t;
 }
 
-// A SMILER, as the lore has it: no body you can pin down, just a shape of
-// darker dark with a grin and two eyes floating in it. Two sheets on the same
-// ENT_FRAMES x ENT_ROWS grid as the other residents. `glow` = false is the fog
-// body, lit and fogged like anything else; `glow` = true is the eyes and
-// teeth alone, drawn unlit on top, because the grin in an unlit corridor is
-// the whole of the creature. Frames churn the fog rather than stride; the
-// shared gait still drives them, so the smoke boils faster as it closes.
+// The Smiler: a dark, smoky shape with a grin and two eyes. Two sheets on the
+// same ENT_FRAMES x ENT_ROWS grid as the other hunters. `glow` = false is the
+// body, lit and fogged like any billboard; `glow` = true is the eyes and teeth
+// only, drawn unlit on top so they stay visible in the dark. The frames animate
+// the smoke instead of a stride; the gait still drives them, so the smoke moves
+// faster when it moves faster.
 Texture2D makeSmilerTex(bool glow) {
     const int FW = ENT_FRAME_W, FH = ENT_FRAME_H, W = FW * ENT_FRAMES, H = FH * ENT_ROWS;
     Image img = GenImageColor(W, H, BLANK);
@@ -42,8 +41,8 @@ Texture2D makeSmilerTex(bool glow) {
     for (int f = 0; f < ENT_FRAMES; f++) {
         int fx = f * FW, fy = hr * FH;
         float ph = (float)f / ENT_FRAMES * TAU;
-        // 0 = turned away (no face at all), 1 = full on. The face slides and
-        // narrows across the head as it comes round.
+        // 0 = turned away (no face), 1 = facing the camera. The face moves and
+        // narrows across the head as it turns.
         float look = (hr < ENT_ROW_LEAN_L) ? (float)hr / ENT_ROW_FACE : 1.0f;
         float shear = (hr == ENT_ROW_LEAN_L) ? -14.0f : (hr == ENT_ROW_LEAN_R) ? 14.0f : 0.0f;
         auto off = [&](float y) { return shear * clampf((252.0f - y) / 250.0f, 0, 1); };
@@ -53,13 +52,13 @@ Texture2D makeSmilerTex(bool glow) {
             Color c = BLANK;
             if (!glow) {
                 // Silhouette: a head, broad hunched shoulders, then smoke
-                // thinning toward the floor. Ragged by drifting noise.
+                // thinning toward the floor, with a noisy edge.
                 float half = y < 70  ? 26.0f * sqrtf(fmaxf(0, 1 - powf((y - 42) / 30.0f, 2)))
                            : y < 120 ? 26.0f + (y - 70) * 0.55f
                                      : 53.0f - (y - 120) * 0.30f;
                 float n = fbm2(x * 0.06f + sinf(ph) * 1.3f, y * 0.035f - ph * 0.45f, 91u, 4);
                 float edge = half * (0.75f + 0.55f * n) - fabsf(dx);
-                float fade = clampf((256.0f - y) / 110.0f, 0, 1);   // dissolves toward the floor
+                float fade = clampf((256.0f - y) / 110.0f, 0, 1);   // fades out toward the floor
                 float a = clampf(edge / 14.0f, 0, 1) * fade * (0.55f + 0.45f * n);
                 if (a > 0.01f) {
                     unsigned char v = (unsigned char)(6 + 10 * n);
@@ -69,14 +68,14 @@ Texture2D makeSmilerTex(bool glow) {
                 float sx = 1.0f / (0.45f + 0.55f * look);           // narrower while turning
                 float fcx = cx - (1.0f - look) * 12.0f;
                 float u = (x - fcx) * sx, g = 0;
-                // eyes: tilted slits, hot centres and a halo
+                // eyes: tilted slits with bright centres and a halo
                 for (int side = -1; side <= 1; side += 2) {
                     float ex = u - side * 13.0f, ey = (y - 36) + side * ex * 0.18f;
                     float d = ex * ex / 36.0f + ey * ey / 6.0f;
                     g = fmaxf(g, clampf(1.6f - d, 0, 1));
                     g = fmaxf(g, 0.35f * expf(-d * 0.15f));
                 }
-                // the grin: a crescent far wider than any mouth, lined with teeth
+                // the grin: a very wide crescent lined with teeth
                 float mu = u / 34.0f;
                 if (fabsf(mu) < 1.0f) {
                     float top = 52 + 6 * mu * mu, bot = 52 + 18 * (1 - mu * mu) * 0.9f + 4;
@@ -91,7 +90,7 @@ Texture2D makeSmilerTex(bool glow) {
                         float tooth = reach < fang * 1.05f ? 1.0f : 0.0f;
                         g = fmaxf(g, tooth * (0.85f + 0.15f * (1 - fabsf(mu))));
                     }
-                    // faint glow bleeding off the lips
+                    // faint glow around the mouth
                     float lip = fminf(fabsf(y - top), fabsf(y - bot));
                     g = fmaxf(g, 0.25f * expf(-lip * 0.25f) * (1 - fabsf(mu)));
                 }
@@ -107,13 +106,11 @@ Texture2D makeSmilerTex(bool glow) {
 
 // Where one leg is at a given point in the gait, as a fraction of full stride.
 //
-// Not a sine. A leg spends about 60% of a cycle planted — sliding backwards
-// under the body at the speed the body moves forward — and the other 40%
-// swinging through, off the floor. A sine gets you a walk that skates, and
-// worse, it is symmetric: sin(60 deg) and sin(120 deg) put the ankle in exactly
-// the same place, so half the frames of an evenly sampled sheet come out
-// duplicates. Measured on the first version of this sheet, frames 1 and 2
-// differed by 129 pixels out of 1900 and frames 4 and 5 by 96.
+// Not a sine. A leg is planted for about 60% of the cycle (moving backwards
+// under the body at walking speed) and swings through, off the floor, for the
+// other 40%. A sine also repeats poses: sin(60 deg) and sin(120 deg) put the
+// ankle in the same place, so half the frames of an evenly sampled sheet were
+// duplicates (frames 1 and 2 differed by 129 of 1900 pixels, 4 and 5 by 96).
 //
 // `x` runs -1 (trailing) to +1 (leading); `lift` is 0 planted, 1 at the top of
 // the swing.
@@ -123,16 +120,14 @@ static void legPose(float ph, float &x, float &lift) {
     else           { float t = (ph - 0.6f) / 0.4f; x = -1.0f + 2.0f * t; lift = sinf(t * 3.14159265f); }
 }
 
-// PIRATE CLARK, six frames of a walk.
+// Pirate Clark, six walk frames.
 //
-// The pose is the one this generator always drew; what moves between frames is
-// where the limbs are. Each limb swings about its own pivot and its offset is
-// scaled by how far down the limb the scanline is, so a leg pivots at the hip
-// and travels furthest at the boot rather than sliding sideways as a block.
+// Each limb swings about its own pivot, with its offset scaled by how far down
+// the limb the scanline is, so a leg pivots at the hip and moves most at the
+// boot.
 //
-// The two legs are not mirror images. He has a peg on the right, and a peg does
-// not stride — it is planted and swung stiffly from the hip. Giving the real leg
-// a longer throw than the peg is what turns a walk into his walk.
+// The legs differ: the right is a peg leg, which swings stiffly from the hip
+// with a shorter stride than the real leg, which gives him a limp.
 Texture2D makeClarkTex() {
     const int FW = ENT_FRAME_W, FH = ENT_FRAME_H, W = FW * ENT_FRAMES, H = FH * ENT_ROWS;
     Image img = GenImageColor(W, H, BLANK);
@@ -148,19 +143,17 @@ Texture2D makeClarkTex() {
     for (int hr = 0; hr < ENT_ROWS; hr++)
     for (int f = 0; f < ENT_FRAMES; f++) {
     fx = f * FW; fy = hr * FH;
-    // 0 = looking away over his shoulder, 1 = facing you. The head, hat, beard
-    // and eye all ride it; the body does not turn, because the thing that makes
-    // this read is the head moving independently of the walk.
+    // 0 = looking away, 1 = facing the camera. The head and face turn; the
+    // body does not.
     float look = (hr < ENT_ROW_LEAN_L) ? (float)hr / (ENT_ROW_FACE) : 1.0f;
     float headShift = -(1.0f - look) * 9.0f;
-    // He tips into where he is going, from the feet up — they stay planted.
+    // Lean into the direction of travel, pivoting at the feet.
     float shear = (hr == ENT_ROW_LEAN_L) ? -12.0f : (hr == ENT_ROW_LEAN_R) ? 12.0f : 0.0f;
     // How far sideways the body is at a given height: the lean, pivoting at the
-    // boots, plus the head turn over the top 80 px. Everything stamped on him
-    // after the scanline loop — the eyepatch, the eye, the skull, the bandolier
-    // — has to go through this too. Those stamps only paint pixels that are
-    // already opaque, so a stamp at the unsheared position silently lands on
-    // empty background and vanishes: on the first lean row his eye went out.
+    // boots, plus the head turn over the top 80 px. Everything stamped after the
+    // scanline loop (eyepatch, eye, skull, bandolier) must use this too. Stamps
+    // only paint already opaque pixels, so one at the unsheared position lands
+    // on background and disappears: on the first lean row his eye was missing.
     auto bodyOff = [&](float y) {
         float o = shear * clampf((252.0f - y) / 250.0f, 0, 1);
         if (y < 80) o += headShift * clampf((80.0f - y) / 60.0f, 0, 1);
@@ -170,11 +163,11 @@ Texture2D makeClarkTex() {
     float lx0, ll0, rx0, rl0;
     legPose(ph, lx0, ll0);           // the real leg
     legPose(ph + 0.5f, rx0, rl0);    // and the peg, half a cycle behind it
-    // A peg is not a leg: it is planted and swung stiffly from the hip, with
-    // barely any throw and almost no lift. That asymmetry is the limp.
+    // The peg swings stiffly from the hip with little stride and almost no
+    // lift, which makes the limp.
     float legReal = lx0 * 7.0f,  liftReal = ll0 * 7.0f;
     float legPeg  = rx0 * 4.0f,  liftPeg  = rl0 * 2.5f;
-    float armL = -rx0 * 5.5f, armR = -lx0 * 4.5f;   // arms answer the opposite leg
+    float armL = -rx0 * 5.5f, armR = -lx0 * 4.5f;   // arms swing opposite the legs
     float hemSway = lx0 * 2.4f;
     for (int y = 2; y < 252; y++) {
         float wob = (vnoise2(0.05f * y, 3.7f, 77u) - 0.5f) * 7.0f;
@@ -200,7 +193,7 @@ Texture2D makeClarkTex() {
             float t = (y - 62) / 103.0f;
             float halfw = (t < 0.10f) ? 12 + t * 110 : (y < 150 ? 23 - 5 * t : 22 + (y - 150) * 0.35f);
             float hem = (y > 158) ? (vnoise2(0.6f * y, 5.5f, 71u) - 0.5f) * 4 : 0;
-            // heavy wool does not keep up with the legs inside it
+            // the coat moves less than the legs
             float sway = (y > 138) ? hemSway * (y - 138) / 27.0f : 0.0f;
             hspan(y, cx + sway, halfw + rag + hem, body);
         }
@@ -230,9 +223,8 @@ Texture2D makeClarkTex() {
         int xx = fx + x + (int)bodyOff(30.0f + (x - 46) / 9.0f);
         if (xx >= 0 && xx < W && p[y * W + xx].a) { p[y * W + xx] = { 58, 52, 46, 255 }; p[(y + 1) * W + xx] = { 48, 43, 38, 255 }; }
     }
-    // Single glowing eye; the left is under the patch. It is only lit on the row
-    // where he is facing you — eyeshine you can see means something is looking
-    // back, so it must not be there while his head is turned away.
+    // One glowing eye; the left is under the patch. It is lit only on the row
+    // where he faces the camera, never while his head is turned away.
     if (look > 0.55f) {
         float ex = 64 + 7.5f + bodyOff(36.0f), ey = 36;
         for (int dy = -7; dy <= 7; dy++) for (int dx = -7; dx <= 7; dx++) {
@@ -249,7 +241,7 @@ Texture2D makeClarkTex() {
     }
     // hook where the right hand should be
     {
-        float hx = 64 + 31 + armR, hy = 194;   // it is on the end of the arm that just swung
+        float hx = 64 + 31 + armR, hy = 194;   // follows the right arm's swing
         for (int dy = -6; dy <= 8; dy++) for (int dx = -7; dx <= 7; dx++) {
             float d = sqrtf((float)(dx * dx + dy * dy));
             if (fabsf(d - 5.0f) < 1.4f && dy > -3) put((int)(hx + dx), (int)(hy + dy), { 150, 150, 158, 255 });
@@ -257,7 +249,7 @@ Texture2D makeClarkTex() {
         for (int y = 186; y < 191; y++) hspan(y, hx, 2, { 120, 120, 126, 255 });     // hook base
         for (int q = -1; q <= 1; q++) put((int)(hx + 4), (int)(hy + q), { 224, 226, 234, 255 }); // glint
     }
-    // the movie-poster details: skull on the hat, bandolier, brass buttons
+    // details: skull on the hat, bandolier, brass buttons
     auto putIf = [&](int x, int y, Color c) {
         x += fx + (int)bodyOff((float)y); y += fy;
         if (x >= 0 && x < W && y >= 0 && y < H && p[y * W + x].a) p[y * W + x] = c;
@@ -283,8 +275,7 @@ Texture2D makeClarkTex() {
     return finishTexture(img, false);
 }
 
-// THE PARTYGOER =): pale yellow, painted-on smile, striped party hat. It was
-// here before the bunting went up. It will be here after.
+// The Partygoer (LEVEL FUN): pale yellow, painted-on smile, striped party hat.
 Texture2D makePartygoerTex() {
     const int FW = ENT_FRAME_W, FH = ENT_FRAME_H, W = FW * ENT_FRAMES, H = FH * ENT_ROWS;
     Image img = GenImageColor(W, H, BLANK);
@@ -296,18 +287,15 @@ Texture2D makePartygoerTex() {
     };
     Color skin = { 208, 182, 84, 255 };
     Color skin2 = { 176, 150, 62, 255 };
-    // It walks like something wearing a body rather than living in one: the legs
-    // do the work and the arms barely answer, which is most of why it is worse
-    // to look at than Clark.
+    // The legs move and the arms barely swing, so it walks stiffly.
     for (int hr = 0; hr < ENT_ROWS; hr++)
     for (int f = 0; f < ENT_FRAMES; f++) {
     fx = f * FW; fy = hr * FH;
-    // 0 = looking away over his shoulder, 1 = facing you. The head, hat, beard
-    // and eye all ride it; the body does not turn, because the thing that makes
-    // this read is the head moving independently of the walk.
+    // 0 = looking away, 1 = facing the camera. The head and face turn; the
+    // body does not.
     float look = (hr < ENT_ROW_LEAN_L) ? (float)hr / (ENT_ROW_FACE) : 1.0f;
     float headShift = -(1.0f - look) * 9.0f;
-    // He tips into where he is going, from the feet up — they stay planted.
+    // Lean into the direction of travel, pivoting at the feet.
     float shear = (hr == ENT_ROW_LEAN_L) ? -12.0f : (hr == ENT_ROW_LEAN_R) ? 12.0f : 0.0f;
     float ph = (float)f / ENT_FRAMES;
     float lx0, ll0, rx0, rl0;
@@ -316,8 +304,8 @@ Texture2D makePartygoerTex() {
     float legL = lx0 * 6.0f, liftL = ll0 * 5.5f;
     float legR = rx0 * 6.0f, liftR = rl0 * 5.5f;
     float armSw = -lx0 * 2.2f;
-    // Same rule as Clark: its face is painted on, so the smile and the eyes have
-    // to travel with the head or they end up on the wall behind it.
+    // As with Clark, the face is stamped after the body, so the smile and eyes
+    // must use the head's offset or they land on the background.
     auto bodyOff = [&](float y) {
         float o = shear * clampf((252.0f - y) / 250.0f, 0, 1);
         if (y < 76) o += headShift * clampf((76.0f - y) / 54.0f, 0, 1);
@@ -339,7 +327,7 @@ Texture2D makePartygoerTex() {
             float hem = (y > 190) ? (vnoise2(0.6f * y, 2.5f, 171u) - 0.5f) * 5 : 0;
             hspan(y, cx, halfw + rag + hem, skin);
         }
-        if (y > 78 && y <= 178) {   // arms, hanging a little too still
+        if (y > 78 && y <= 178) {   // arms, barely swinging
             float t = (y - 78) / 100.0f;
             float off = 21 + 8 * t;
             hspan(y, cx - off - armSw * t, 3.4f + rag * 0.4f, skin2);
@@ -358,7 +346,7 @@ Texture2D makePartygoerTex() {
             }
         }
     }
-    // something sweet dripped down it once and never dried
+    // drips down the body
     for (int x = fx; x < fx + FW; x++) {
         if (lat(x - fx, 7, 191u) < 0.82f) continue;
         int len = 30 + (int)(lat(x - fx, 9, 192u) * 90);
@@ -368,7 +356,7 @@ Texture2D makePartygoerTex() {
                 c.r = cl8(c.r * 0.82f); c.g = cl8(c.g * 0.80f); c.b = cl8(c.b * 0.72f);
             }
     }
-    // the face: two dot eyes and a smile that was painted on, not grown
+    // the face: two dot eyes and a painted smile
     auto putIf = [&](int x, int y, Color c) {
         x += fx + (int)bodyOff((float)y); y += fy;
         if (x >= 0 && x < W && y >= 0 && y < H && p[y * W + x].a) p[y * W + x] = c;
@@ -381,7 +369,7 @@ Texture2D makePartygoerTex() {
     for (int s = -1; s <= 1; s += 2)
         for (int dy = -3; dy <= 3; dy++) for (int dx = -3; dx <= 3; dx++)
             if (dx * dx + dy * dy < 7) putIf(64 + s * 7 + dx, 36 + dy, ink);   // eyes
-    {   // striped cone hat, slightly askew; nobody remembers putting it on
+    {   // striped cone hat, slightly tilted
         Color ha = { 196, 60, 54, 255 }, hb = { 84, 138, 192, 255 };
         for (int y = 2; y <= 26; y++) {
             float t = (y - 2) / 24.0f;
@@ -396,24 +384,16 @@ Texture2D makePartygoerTex() {
 
 // ---------------------------------------------------------------- wall scrawl
 //
-// What an earlier wanderer wrote on the wall, drawn stroke by stroke rather
-// than blitted from a font. Everything else in this project is synthesized;
-// this was the one surface that fell back to raylib's bitmap font, and it
-// showed — blocky digital type on a wall that is supposed to carry somebody's
-// handwriting.
+// Handwritten wall text, drawn stroke by stroke instead of with raylib's bitmap
+// font, which looked like blocky digital type.
 //
-// A glyph is a handful of control points in a unit box, which is far too few
-// to look like writing on its own. Three things turn them into a hand:
-// Catmull-Rom through the control points, so coarse points give smooth curves
-// rather than a polygon; a wobble that pulls the path off course at low
-// frequency, so no two letters are drawn quite alike; and a pen whose width
-// varies along the stroke, so the line thins where the hand moved fast and
-// pools where it slowed or turned.
+// A glyph is a few control points in a unit box. Three things make it look
+// handwritten: a Catmull-Rom spline through the points, a low-frequency wobble
+// so no two letters are identical, and a pen width that varies along the
+// stroke (thinner where fast, thicker at slow parts and turns).
 //
 // Points are two digits each, x then y, '0'-'9' over the glyph box with y
-// running down. That resolution is deliberately coarse — the spline and the
-// wobble carry the detail, and a table of exact coordinates would be both
-// unreadable and a false promise of precision in something meant to be shaky.
+// down. The coarse grid is deliberate; the spline and wobble add the detail.
 struct Glyph { char ch; const char *stroke[3]; };
 static const Glyph GLYPHS[] = {
     { 'A', { "0924406499", "2676", nullptr } },
@@ -466,9 +446,8 @@ static const Glyph GLYPHS[] = {
 };
 
 
-// One dab of the pen. Ink pools rather than stacking: overlapping dabs take the
-// darker alpha instead of summing, or every junction and turn would blow out to
-// a solid blob while the straights stayed thin.
+// One dab of the pen. Overlapping dabs take the higher alpha instead of adding,
+// or every junction and turn would become a solid blob.
 static void inkDab(Color *p, int W, int H, float cx, float cy, float rad, Color ink, float strength,
                    int cl, int ct, int cr, int cb) {
     int x0 = (int)(cx - rad) - 1, x1 = (int)(cx + rad) + 1;
@@ -488,7 +467,7 @@ static void inkDab(Color *p, int W, int H, float cx, float cy, float rad, Color 
         Color &c = p[y * W + x];
         float ca = c.a / 255.0f;
         if (a <= ca) continue;
-        float t = (a - ca) / (1.0f - ca + 1e-4f);   // how much new ink shows here
+        float t = (a - ca) / (1.0f - ca + 1e-4f);   // how much new ink is added
         c.r = cl8(c.r + (ink.r - c.r) * t);
         c.g = cl8(c.g + (ink.g - c.g) * t);
         c.b = cl8(c.b + (ink.b - c.b) * t);
@@ -496,8 +475,8 @@ static void inkDab(Color *p, int W, int H, float cx, float cy, float rad, Color 
     }
 }
 
-// Catmull-Rom through the control points, so four coarse points make a curve
-// and not a bent wire.
+// Catmull-Rom through the control points, so a few coarse points make a
+// smooth curve.
 static void splineAt(const float *px, const float *py, int n, float t, float &ox, float &oy) {
     if (n == 1) { ox = px[0]; oy = py[0]; return; }
     float u = t * (n - 1);
@@ -511,15 +490,14 @@ static void splineAt(const float *px, const float *py, int n, float t, float &ox
     oy = py[i0] * b0 + py[i1] * b1 + py[i2] * b2 + py[i3] * b3;
 }
 
-// One stroke of the pen, wobbling off course and varying its pressure. Returns
-// the lowest point it reached, which is where a drip would start if this stroke
-// is the one that gets one.
+// One pen stroke, with wobble and varying width. Returns the stroke's lowest
+// point, where a drip starts if this stroke gets one.
 static void penStroke(Color *p, int W, int H, const float *cxs, const float *cys, int n,
                       Color ink, float wid, Rng &r, float &lowX, float &lowY,
                       int cl, int ct, int cr, int cb) {
     float ph1 = r.f01() * TAU, ph2 = r.f01() * TAU, ph3 = r.f01() * TAU;
-    float wob = wid * (0.55f + r.f01() * 0.7f);     // how far this stroke strays
-    float lean = (r.f01() - 0.5f) * 0.10f;          // and which way it drifts overall
+    float wob = wid * (0.55f + r.f01() * 0.7f);     // wobble amplitude
+    float lean = (r.f01() - 0.5f) * 0.10f;          // overall drift
     int steps = 12 + (int)(n * 9);
     lowY = -1e9f; lowX = 0;
     for (int s = 0; s <= steps; s++) {
@@ -527,8 +505,8 @@ static void penStroke(Color *p, int W, int H, const float *cxs, const float *cys
         float x, y; splineAt(cxs, cys, n, t, x, y);
         x += sinf(t * 5.3f + ph1) * wob + sinf(t * 11.7f + ph2) * wob * 0.35f + lean * wid * t * 3.0f;
         y += cosf(t * 4.1f + ph2) * wob * 0.8f + sinf(t * 13.1f + ph3) * wob * 0.25f;
-        // pressure: thin where the hand ran, heavier at the ends and on the
-        // slow parts, plus a little grain so no two strokes weigh the same
+        // width: thinner on fast parts, thicker at the ends and slow parts,
+        // plus a little noise
         float ends = 0.55f + 0.45f * sinf(t * 3.14159f);
         float press = ends * (0.72f + 0.5f * (0.5f + 0.5f * sinf(t * 7.9f + ph3)));
         float rad = wid * clampf(press, 0.30f, 1.5f);
@@ -538,9 +516,8 @@ static void penStroke(Color *p, int W, int H, const float *cxs, const float *cys
     }
 }
 
-// Paint ran. One or two per phrase, from the bottom of a stroke, thinning and
-// fading as gravity takes it — the thing that most says "wet paint on a wall"
-// rather than "text drawn on a wall".
+// A paint drip: one or two per phrase, from the bottom of a stroke, thinning
+// and fading as it runs down.
 static void inkDrip(Color *p, int W, int H, float x, float y, float wid, Color ink, Rng &r,
                     int cl, int ct, int cr, int cb) {
     int len = 6 + r.ri(0, 34);
@@ -551,14 +528,13 @@ static void inkDrip(Color *p, int W, int H, float x, float y, float wid, Color i
         if (yy > cb) break;
         inkDab(p, W, H, x + drift * i, yy, wid * (0.62f - 0.42f * t), ink, (1.0f - t) * 0.75f, cl, ct, cr, cb);
     }
-    if (y + len * 0.9f < cb)   // the bead that gathered at the end and dried there
+    if (y + len * 0.9f < cb)   // a dot at the end of the drip
         inkDab(p, W, H, x + drift * len, y + len * 0.9f, wid * 0.42f, ink, 0.5f, cl, ct, cr, cb);
 }
 
-// How much room each character takes. Letters are drawn at a jittered height,
-// so the advance has to leave slack or a wide letter runs into its neighbour —
-// "NO CLIP" came out as "NO QIP" before this. A space is nearly a full letter:
-// below that the words stop reading as separate words.
+// Advance per character. Letters are drawn at random heights, so the advance
+// leaves slack or a wide letter overlaps the next ("NO CLIP" came out as
+// "NO QIP"). A space is nearly a full letter wide, or the words run together.
 static float glyphAdvance(char ch) {
     if (ch == ' ') return 0.92f;
     if (ch == '.' || ch == ',' || ch == '\'' || ch == ':' || ch == '!') return 0.52f;
@@ -569,7 +545,7 @@ static float glyphAdvance(char ch) {
 // One phrase, laid out left to right on a baseline that is not quite level.
 static void drawScrawl(Color *p, int W, int H, const char *text, float x, float y,
                        float h, Color ink, Rng &r, int cl, int ct, int cr, int cb) {
-    float pen = x, tilt = (r.f01() - 0.5f) * 0.09f;   // the whole line runs slightly downhill
+    float pen = x, tilt = (r.f01() - 0.5f) * 0.09f;   // the line slopes slightly
     float wid = h * (0.055f + r.f01() * 0.03f);
     int dripsLeft = r.ri(1, 2);
     int glyphs = 0;
@@ -577,13 +553,13 @@ static void drawScrawl(Color *p, int W, int H, const char *text, float x, float 
     int dripEvery = glyphs > 0 ? glyphs / (dripsLeft + 1) + 1 : 1;
     int seen = 0;
     for (const char *c = text; *c; c++) {
-        char ch = *c >= 'a' && *c <= 'z' ? (char)(*c - 32) : *c;   // one shaky case, as on a wall
+        char ch = *c >= 'a' && *c <= 'z' ? (char)(*c - 32) : *c;   // upper case only
         float adv = glyphAdvance(ch) * h * 0.62f;
         if (ch == ' ') { pen += adv; continue; }
         const Glyph *g = nullptr;
         for (const Glyph &cand : GLYPHS) if (cand.ch == ch) { g = &cand; break; }
         if (!g) { pen += adv; continue; }
-        // every letter its own size and slant — a hand does not repeat itself
+        // each letter gets its own size and slant
         float gh = h * (0.88f + r.f01() * 0.24f);
         float slant = (r.f01() - 0.5f) * 0.22f;
         float base = y + tilt * (pen - x) + (r.f01() - 0.5f) * h * 0.10f;
@@ -618,11 +594,10 @@ static float scrawlWidth(const char *text, float h) {
     return w;
 }
 
-// Printed lettering: the same glyph splines as the scrawl, drawn with an even
-// pen and no wobble, so they come out as a clean round-stroke sans. raylib's
-// own font is an 8 px bitmap; scaled onto a can label or a carton it is a
-// staircase, and nothing printed in a factory looks like that. `h` is the cap
-// height in pixels, `weight` the stroke half-width as a fraction of it.
+// Printed lettering: the scrawl's glyph splines drawn with an even pen and no
+// wobble, giving a clean sans. raylib's 8 px bitmap font looked stepped when
+// scaled onto a can or carton. `h` is the cap height in pixels, `weight` the
+// stroke half-width as a fraction of it.
 static float printWidth(const char *text, float h) {
     float w = 0;
     for (const char *c = text; *c; c++) w += (*c == ' ' ? 0.55f : *c == 'I' || *c == '1' ? 0.40f : 0.78f) * h;
@@ -680,12 +655,9 @@ Texture2D makeScrawlTex() {
     const int W = 1024, H = 1024, CW = W / 4, CH = H / 8;
     Image img = GenImageColor(W, H, BLANK);
     Color *p = (Color *)img.data;
-    // Thirty-two of them, so that seeing the same line twice in one run means
-    // something rather than meaning the pool is small. They are all somebody
-    // trying to leave a fact behind: a count, a warning, a rule they worked out.
-    // Several are Level 0's own lore passed hand to hand — the carpet fluid
-    // that "is not water", the tearing paper of a noclip wall, the red that
-    // means the Red Rooms, the one room where the hum goes quiet.
+    // 32 phrases, so repeats are rare. Several refer to Level 0's wiki lore:
+    // the carpet fluid that "is not water", noclip walls, the Red Rooms, and
+    // the Manila Room.
     static const char *LINES[32] = {
         "NO CLIP",              "dont stare",           "its not water",        "the exit lies",
         "he hears the flares",  "keep walking",         "it hums at night",     "wrong door =)",
@@ -848,7 +820,7 @@ static void drawVendingFront(Color *p, int W, int H) {
             for (int c = 0; c < VEND_COLS; c++) {
                 uint32_t e = ih(r, c, 0x7E4u);
                 float cx = w.x0 + (c + 0.5f) * pitch;
-                bool stuck = (r == 3 && c == 1);                  // hung up on the spiral, forever
+                bool stuck = (r == 3 && c == 1);                  // one can stuck in its spiral
                 bool empty = !stuck && e % 6 == 0;
                 if (!empty) {
                     // A can front-on, drawn in its own frame so the stuck one can lean
@@ -963,7 +935,7 @@ static void drawVendingFront(Color *p, int W, int H) {
             return d < 0.2f ? Color{ 22, 22, 24, OP } : Color{ 140, 142, 146, OP };
         });
         text("COINS", 0.365f, 1.058f, 4.5f, Color{ 40, 40, 44, OP });
-        // the note acceptor, taped over by someone who knew what it takes
+        // the note acceptor, taped over
         fill(0.215f, 0.86f, 0.405f, 1.01f, [&](int, int, float u, float v) {
             float s = 1.0f + 0.35f * (v < 0.06f ? 1.0f : 0.0f);
             if (fabsf(v - 0.42f) < 0.035f && u > 0.10f && u < 0.90f) return Color{ 6, 6, 8, OP };
@@ -1009,7 +981,7 @@ static void drawVendingFront(Color *p, int W, int H) {
         });
     }
 
-    // -- the sticker every one of them has, on the kick rail under the flap
+    // -- a sticker on the kick rail under the flap
     {
         const float x0 = -0.34f, x1 = -0.06f, y0 = 0.085f, y1 = 0.195f;
         fill(x0, y0, x1, y1, [&](int x, int y, float u, float v) {
@@ -1088,9 +1060,8 @@ Texture2D makeFixturesTex() {
             box(x - t / 2, y - t / 2, x - t / 2 + t - 1, y - t / 2 + t - 1, c);
         }
     };
-    // Nothing down here has been wiped in years. Dirt gathers in the corners of
-    // a plate and along the underside of every louvre, which is most of what
-    // makes moulded plastic read as moulded plastic and not a grey rectangle.
+    // Dirt in the corners of each plate and under each louvre, so moulded plastic
+    // does not look like a flat grey rectangle.
     auto grime = [&](int x0, int y0, int x1, int y1, uint32_t s, float amt) {
         for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++) {
             if (x < 0 || y < 0 || x > W - 1 || y > H - 1) continue;
@@ -1100,7 +1071,7 @@ Texture2D makeFixturesTex() {
             c.r = cl8(c.r * v); c.g = cl8(c.g * v); c.b = cl8(c.b * v);
         }
     };
-    const unsigned char OP = 254;   // textured, opaque, no relief bump — see AGENTS.md
+    const unsigned char OP = 254;   // textured, opaque, no relief (AGENTS.md, alpha coding)
 
     // --- a duplex outlet, intact and with the cover torn off. Both fill their
     // rect: the plate *is* the fitting, so there is no margin to leave.
@@ -1113,11 +1084,10 @@ Texture2D makeFixturesTex() {
         box(x0, y0, x1, y0 + 3, lipHi); box(x0, y0, x0 + 3, y1, lipHi);
         box(x0, y1 - 3, x1, y1, lipLo); box(x1 - 3, y0, x1, y1, lipLo);
         if (variant == 0) {
-            // A duplex receptacle at its real proportions (the plate is 1.28 px
-            // a millimetre): each face a disc with flats top and bottom, two
-            // blade slots — the neutral the longer — over a D-shaped ground.
-            // The old one drew 17 mm slots and a ground that was a third slot
-            // lying on its side, which is no socket anywhere.
+            // A duplex receptacle at real proportions (1.28 px per mm): each face a
+            // disc with flats top and bottom, two blade slots (the neutral is
+            // longer) and a D-shaped ground. The old version had 17 mm slots and
+            // a horizontal slot for the ground.
             auto cover = [&](float d) { return clampf(0.5f - d, 0.0f, 1.0f); };
             auto blend = [&](int x, int y, Color c, float a) {
                 if (a <= 0) return;
@@ -1148,10 +1118,10 @@ Texture2D makeFixturesTex() {
                 blend(x, y, { 92, 88, 78, OP }, cover(fabsf(dx * 0.34f + dy * 0.94f) - 0.7f) * cover(sqrtf(dx * dx + dy * dy) - 4.0f));
             }
         } else {
-            // Half the cover is gone. What is left is the hole, the yoke still
-            // screwed to the box, and two wire ends nobody made safe.
+            // Half the cover is missing, showing the hole, the yoke screwed to the
+            // box, and two bare wire ends.
             box(x0 + 30, y0, x1, y1, { 24, 22, 21, OP });
-            for (int y = y0; y <= y1; y++) {          // a torn edge, not a cut one
+            for (int y = y0; y <= y1; y++) {          // a ragged edge
                 int w = 6 + (int)(lat(y, 3, 0xF1u) * 14);
                 box(x0 + 30, y, x0 + 30 + w, y, plate);
                 box(x0 + 30 + w, y, x0 + 31 + w, y, lipLo);
@@ -1190,8 +1160,8 @@ Texture2D makeFixturesTex() {
         grime(x0, y0, x1, y1, 0xB3u, 0.32f);
     }
 
-    // --- return-air grille. Louvres are lit on top and dark underneath, which
-    // is the whole read: without the dark line it is a striped rectangle.
+    // --- return-air grille. Louvres are light on top and dark underneath;
+    // without the dark line it looks like a striped rectangle.
     {
         const int *r = FIXPX[FIX_GRILLE];
         int x0 = r[0], y0 = r[1], x1 = r[0] + r[2] - 1, y1 = r[1] + r[3] - 1;
@@ -1227,7 +1197,7 @@ Texture2D makeFixturesTex() {
         grime(x0, y0, x1, y1, 0xD5u, 0.36f);
     }
 
-    // --- the fire-exit sign. It points down a corridor like any other.
+    // --- the fire-exit sign, with an arrow.
     {
         const int *r = FIXPX[FIX_SIGN];
         int x0 = r[0], y0 = r[1], x1 = r[0] + r[2] - 1, y1 = r[1] + r[3] - 1;
@@ -1253,9 +1223,9 @@ Texture2D makeFixturesTex() {
         grime(x0, y0, x1, y1, 0xE9u, 0.40f);
     }
 
-    // --- the Manila Room's paper: the beige of a manila folder, "reminiscent
-    // of manila paper" as the lore puts it, with a small printed diamond
-    // lattice and a fibre grain. Every term repeats inside 128 px (the lattice
+    // --- the Manila Room's wallpaper: manila-folder beige (the wiki describes
+    // it as "reminiscent of manila paper"), with a small diamond lattice and a
+    // fibre grain. Every term repeats inside 128 px (the lattice
     // is 32 px, the grain is a per-pixel hash) so tiles butt without a seam.
     {
         const int *r = FIXPX[FIX_MANILA];
@@ -1269,9 +1239,8 @@ Texture2D makeFixturesTex() {
             p[(r[1] + y) * W + r[0] + x] = { cl8(226 * k), cl8(206 * k), cl8(158 * k), OP };
         }
     }
-    // --- a note from the table: lined paper gone soft and yellow, ruled in
-    // faint blue, with a few lines of cramped pencil. Unreadable at the size it
-    // is seen; the words are in the game's overlay when you pick them up.
+    // --- a note on the table: yellowed lined paper with a few lines of pencil.
+    // Not readable at this size; the text is shown in the HUD when read.
     {
         const int *r = FIXPX[FIX_NOTE];
         int x0 = r[0], y0 = r[1], x1 = r[0] + r[2] - 1, y1 = r[1] + r[3] - 1;
@@ -1294,14 +1263,11 @@ Texture2D makeFixturesTex() {
     }
     // --- plain galvanised metal, covering the pixel at UV (0.375, 0.75).
     //
-    // That is not an arbitrary corner: `addSolidBox` hardcodes exactly that UV
-    // for every face it emits, and the props atlas keeps its plain metal there
-    // for the same reason. Two atlases agreeing on where "plain metal" lives is
-    // what lets the conduit and sprinkler bodies — geometry, not decals — go
-    // through the same helper as everything else. Move it and they sample a
-    // transparent cell and vanish without a word. The atlas doubled in width
-    // for the vending machine, which moved that UV from pixel (192, 384) to
-    // (384, 384): the strip between the diffuser and the exit sign.
+    // `addSolidBox` uses that UV (PLAIN_UV) for every face, and the props atlas
+    // has plain metal there too, so conduit and sprinkler bodies can use the
+    // same helper. If it moves, they sample a transparent cell and disappear.
+    // Widening the atlas for the vending machine moved that UV from pixel
+    // (192, 384) to (384, 384), between the diffuser and the exit sign.
     {
         const int ox = 300, oy = 371, w = 180, h = 26;   // contains (384, 384), 12 px clear each way
         for (int y = oy; y < oy + h; y++) for (int x = ox; x < ox + w; x++) {
@@ -1316,15 +1282,12 @@ Texture2D makeFixturesTex() {
 // A carton, in two regions of the props atlas' left strip (the UVs are in
 // addProp, world_mesh.cpp): its side, y 2-297, and its top, y 312-507.
 //
-// The old cardboard was one noise field with a band of tape round the middle,
-// mapped whole onto every face, the top included — every box was taped round
-// its waist, which is not how anyone has ever packed one. A regular slotted
-// carton is taped along the seam where its top flaps meet, and the tape laps
-// over the edge and a hand's width down each end. Its sides carry the flutes
-// of the corrugation showing through the liner, the printed handling marks, the
-// box-maker's certificate stamp, and floor dirt along the bottom. The top has
-// the flap seam, the tape, and the shipping label with its barcode. These
-// cartons are the only cover on Clark's level, so they are looked at hard.
+// The old texture was one noise field with a band of tape round the middle,
+// on every face. A real carton is taped along the seam where the top flaps
+// meet, with the tape running over the edge and down each end. The sides have
+// corrugation showing through, handling marks, the maker's stamp and floor dirt
+// along the bottom; the top has the flap seam, the tape and a shipping label.
+// Cartons are the only cover on Level 0, so players see them up close.
 static void drawCarton(Color *p, int W) {
     const Color ink = { 42, 36, 30, 215 };
     auto kraft = [&](int x, int y, float flutePitch, bool vertical) {
@@ -1377,7 +1340,7 @@ static void drawCarton(Color *p, int W) {
         float a = ink.a / 255.0f;
         d.r = cl8(d.r + (ink.r - d.r) * a); d.g = cl8(d.g + (ink.g - d.g) * a); d.b = cl8(d.b + (ink.b - d.b) * a);
     }
-    // what was in it, flexo-printed a little unevenly: the building's supplies
+    // contents, printed slightly unevenly
     printText(p, W, 512, "ALMOND WATER", SX + 26, SY + 128, 17, ink, 0.09f, 0.5f);
     printText(p, W, 512, "24 X 330ML", SX + 56, SY + 156, 11, ink, 0.09f, 0.5f);
     printText(p, W, 512, "THIS SIDE UP", SX + 82, SY + 60, 9, ink, 0.09f, 0.2f);
@@ -1396,11 +1359,10 @@ static void drawCarton(Color *p, int W) {
             q.r = cl8(q.r + (ink.r - q.r) * cov); q.g = cl8(q.g + (ink.g - q.g) * cov); q.b = cl8(q.b + (ink.b - q.b) * cov);
         }
     }
-    // addPropBox maps u across each side face mirrored as seen from outside the
-    // box, which nothing printed on cardboard ever showed until now: the
-    // lettering came out backwards on every face. Flip the whole side region
-    // (the tape and edges are symmetric) rather than the mesher's UVs, which
-    // every other prop shares.
+    // addPropBox maps u across each side face mirrored as seen from outside,
+    // so lettering came out backwards. Flip the whole side region here (the
+    // tape and edges are symmetric) rather than the mesher's UVs, which every
+    // other prop shares.
     for (int y = SY; y < SY + SH; y++) std::reverse(p + y * W + SX, p + y * W + SX + SW);
     // ---- the top, 236 x 196 from (10, 312): two flaps meeting across the middle
     const int TX = 10, TY = 312, TW = 236, TH = 196;
@@ -1415,7 +1377,7 @@ static void drawCarton(Color *p, int W) {
         if (seam < 17) c = tape(TX + x, TY + y, 17 - seam);
         p[(TY + y) * W + TX + x] = c;
     }
-    // the shipping label: white, a barcode, an address nobody will ever read
+    // the shipping label: white, a barcode, an address
     {
         const int LX = 150, LY = 332, LW = 86, LH = 60;             // crateBody() samples exactly this rect
         for (int y = 0; y < LH; y++) for (int x = 0; x < LW; x++) {
@@ -1624,7 +1586,7 @@ Texture2D makeDogTex() {
             if (part == 2) v *= 0.72f;                                  // the far legs, in the body's shadow
             p[y * W + f * FW + x] = { cl8(46 * v), cl8(29 * v), cl8(26 * v), cl8(255 * a) };
         }
-        // the two pale eyes that find you before you find them
+        // two pale eyes
         for (int e = 0; e < 2; e++)
             for (int dy = 0; dy < 2; dy++) for (int dx = 0; dx < 3; dx++)
                 p[(72 + dy - e) * W + f * FW + 21 + dx + e * 6] = { 226, 216, 176, 255 };
@@ -1634,13 +1596,12 @@ Texture2D makeDogTex() {
 
 // The almond water can, unwrapped for a real cylinder: the label as a strip
 // round the barrel (top two thirds; u wraps once round), then the lid and the
-// base as squares below it. Nothing is shaded in — the geometry is real and
-// the world shader lights it — except what printing and pressing put there.
+// base as squares below it. No lighting is painted in; the world shader
+// lights the mesh.
 //
-// 576 px square, three times what it was: the can is held up to the camera to
-// drink, where the old 192 px label came out soft and its raylib bitmap
-// wordmark came out a staircase. The layout is the old one scaled by three, so
-// buildCanMesh's UVs (fractions of the atlas) did not have to move.
+// 576 px square, three times the old size, because the can is held close to
+// the camera when drinking. The layout is the old one scaled by three, so
+// buildCanMesh's UVs did not change.
 Texture2D makeAlmondWrapTex() {
     const int K = 3, W = 192 * K, H = 192 * K;
     const int SIDE_H = 128 * K;                   // rows 0..SIDE_H-1 wrap round the barrel
@@ -1656,9 +1617,8 @@ Texture2D makeAlmondWrapTex() {
     const Color cream = { 246, 241, 226, 255 };
     const Color ink   = {  74,  50,  33, 255 };
     const Color inkSoft = { 104, 74, 50, 255 };
-    // Drawn aluminium: fine lines round the can from the ironing die, and the
-    // soft bands a curved mirror picks up from any room, so the metal reads as
-    // metal even before the light moves across it.
+    // Drawn aluminium: fine lines round the can and soft reflection bands, so it
+    // looks metallic under static light.
     auto alu = [&](int x, int y, float k) {
         float band = 0.5f + 0.5f * sinf(y * 0.11f + 0.8f) * sinf(y * 0.037f);
         float line = (fbm2(x * 0.004f, y * 0.9f, 4471u, 2) - 0.47f) * 0.10f;
@@ -1679,9 +1639,9 @@ Texture2D makeAlmondWrapTex() {
         else               c = alu(x, y, 0.94f);             // the base roll
         put(x, y, c);
     }
-    // gold hairlines inside the brown rules: printers love them
+    // gold hairlines inside the brown rules
     for (int x = 0; x < W; x++) { put(x, 31 * K, { 190, 150, 82, 255 }); put(x, 98 * K, { 190, 150, 82, 255 }); }
-    // The artwork twice round, so something readable faces you from most angles.
+    // The artwork appears twice round the can, so it is visible from most angles.
     for (int rep = 0; rep < 2; rep++) {
         int cx = (48 + rep * 96) * K, cy = 52 * K;
         // the almond: a pointed oval with its ridged skin, lit from the upper left
@@ -1765,9 +1725,9 @@ Texture2D makeAlmondWrapTex() {
             put(ox + x, oy + y, c);
         }
     }
-    // a date code inkjetted on the base, the one thing on it that is not metal
+    // an inkjet date code on the base
     printText(p, W, H, "2002 14:07", 64 * K + 58, SIDE_H + 118, 8, { 40, 40, 44, 220 }, 0.10f, 0.5f);
-    // ---- wear, so it doesn't read as showroom stock
+    // ---- wear and scratches
     for (int y = 0; y < H; y++)
         for (int x = 0; x < W; x++) {
             Color &c = p[y * W + x];
@@ -1781,7 +1741,7 @@ Texture2D makeAlmondWrapTex() {
     Texture2D t = LoadTextureFromImage(img);
     UnloadImage(img);
     GenTextureMipmaps(&t);
-    SetTextureFilter(t, TEXTURE_FILTER_TRILINEAR);     // held up close and seen far off on a floor
+    SetTextureFilter(t, TEXTURE_FILTER_TRILINEAR);     // seen both close up and at a distance
     return t;
 }
 
@@ -1791,9 +1751,8 @@ Texture2D makeAlmondWrapTex() {
 //   (1,0) body    — moulded plastic for the sides, back and underside
 //   (0,1) front   — speaker grille and the transport keys
 //   (1,1) reel    — one hub with tape wound on it, for the two spinning discs
-// 512 px, four times what it was: it is carried in the hand, a foot from the
-// eye, where a 64 px face is a smear. The layout is the old one at 4x, so
-// buildDeckMesh's UVs did not move.
+// 512 px, four times the old size, because it is held close to the camera.
+// The layout is the old one at 4x, so buildDeckMesh's UVs did not change.
 Texture2D makeDeckTex() {
     const int K = 4, W = 128 * K, H = 128 * K, T = 64 * K;
     Image img = GenImageColor(W, H, BLANK);
@@ -1821,8 +1780,8 @@ Texture2D makeDeckTex() {
     const Color tapeHi  = {  86,  62,  50, 255 };
     const Color hub     = { 178, 174, 170, 255 };   // light plastic: the slots have to read against it
     const Color printC  = { 206, 208, 212, 255 };   // the silk-screened legends
-    // ---- (0,0), (1,0), (0,1): plastic with the fine spark-erosion texture every
-    // piece of consumer electronics was moulded with, rubbed shiny at the edges
+    // ---- (0,0), (1,0), (0,1): plastic with a fine moulded texture, shinier at
+    // the edges
     for (int ty = 0; ty < 2; ty++) for (int tx = 0; tx < 2; tx++) {
         if (ty == 1 && tx == 1) continue;             // the reel tile is drawn from scratch
         int ox = tx * T, oy = ty * T;
@@ -1908,15 +1867,14 @@ Texture2D makeDeckTex() {
             if (rad > 1.0f) c = bay;                             // outside the flange: the dark bay
             else if (rad > 0.42f) {                              // wound tape, in fine rings
                 float ring = sinf(rad * 520.0f) * 0.25f + sinf(rad * 61.0f) * 0.25f + 0.5f;
-                float sheen = 0.5f + 0.5f * cosf(ang * 2.0f);    // the pack catches light across one axis
+                float sheen = 0.5f + 0.5f * cosf(ang * 2.0f);    // a highlight across one axis
                 ring = ring * 0.7f + sheen * 0.3f;
                 c = { cl8(tape.r + ring * (tapeHi.r - tape.r)), cl8(tape.g + ring * (tapeHi.g - tape.g)),
                       cl8(tape.b + ring * (tapeHi.b - tape.b)), 255 };
                 if (rad > 0.985f) c = { 40, 30, 26, 255 };      // the pack's edge
             } else {
-                // The hub: three slots cut through it, which is the only thing
-                // that says whether the reel is turning, and six drive teeth
-                // round its bore.
+                // The hub: three slots (which show the reel turning) and six drive
+                // teeth round the bore.
                 float sl = fmodf(ang + TAU, 2.0943951f);
                 bool slot = rad > 0.14f && rad < 0.34f && sl < 0.62f;
                 float tooth = fmodf(ang + TAU, 1.0471976f);
@@ -1930,7 +1888,7 @@ Texture2D makeDeckTex() {
     Texture2D t = LoadTextureFromImage(img);
     UnloadImage(img);
     GenTextureMipmaps(&t);
-    SetTextureFilter(t, TEXTURE_FILTER_TRILINEAR);     // in the hand, and on the floor across a room
+    SetTextureFilter(t, TEXTURE_FILTER_TRILINEAR);     // seen both close up and at a distance
     return t;
 }
 

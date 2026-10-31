@@ -8,18 +8,14 @@ SHOTS=${SHOTS_DIR:-$ROOT/shots}
 mkdir -p "$SHOTS"
 if [[ $(uname -s) == Linux ]]; then
     export DISPLAY=${DISPLAY:-:99}
-    # Check for an Xvfb on THIS display, not for any Xvfb at all. The old test
-    # was `pgrep -x Xvfb`, which is true as soon as one exists anywhere — so
-    # asking for a second display (say two worktrees verifying side by side)
-    # silently skipped the launch and every capture died at GLFW with nothing
-    # but ALSA warnings in the log to go on. pgrep -f is read-only, so unlike
-    # the pkill -f trap in AGENTS.md it cannot match and kill this shell.
+    # Check for an Xvfb on this display, not any Xvfb. The old `pgrep -x Xvfb`
+    # was true if one ran on another display, so a second display was never
+    # started and every capture failed at GLFW. pgrep -f only reads, so unlike
+    # pkill -f (AGENTS.md) it cannot kill this shell.
     if ! pgrep -f "Xvfb ${DISPLAY} " >/dev/null; then
-        # A dead Xvfb leaves its socket behind, and a stale socket is
-        # indistinguishable from a live one by existence alone — so waiting for
-        # the socket to appear returns instantly and the capture then dies at
-        # "GLFW: Failed to detect any supported platform" (and the regression
-        # harness, which has no such check, segfaults on the null window).
+        # A dead Xvfb leaves its socket behind, so waiting for the socket would
+        # return at once and the capture would fail at "GLFW: Failed to detect
+        # any supported platform" (the regression harness segfaults instead).
         # Nothing owns this display right now, so clear the socket first and the
         # wait below means what it says.
         rm -f "/tmp/.X11-unix/X${DISPLAY#:}"
@@ -37,13 +33,11 @@ LOG="${OUT%.png}.log"
 if ! env "$@" BACKROOMS_SHOT="$OUT" "${BACKROOMS_BIN:-$ROOT/backrooms}" >"$LOG" 2>&1; then
     cat "$LOG"; exit 1
 fi
-# A failed shader compile does not crash — raylib falls back to its default
-# shader, the frame goes black and the frame rate goes UP — so this grep is the
-# only thing standing between a broken build and a "faster" result. It must stay
-# case-sensitive on ERROR:, which is raylib's own TraceLog prefix: the audio and
-# GLFW stacks print a lowercase "error: XDG_RUNTIME_DIR is invalid or not set"
-# on every headless run in this sandbox, and a case-insensitive match on that
-# aborted the whole sweep after level 0 with nothing that looked like a cause.
+# A failed shader compile does not crash (raylib falls back to its default
+# shader and the frame goes black), so this grep is the only check for it. Keep
+# ERROR: case-sensitive (raylib's TraceLog prefix): every headless run prints a
+# lowercase "error: XDG_RUNTIME_DIR is invalid or not set", and matching that
+# stopped the sweep after level 0.
 if grep -E 'SHADER: .*([Ff]ailed|[Ee]rror)|^ERROR:' "$LOG"; then exit 1; fi
 grep -E 'fps=|BENCH ' "$LOG" || true
 [[ -s "$OUT" ]] || { cat "$LOG"; echo '!! no screenshot written'; exit 1; }

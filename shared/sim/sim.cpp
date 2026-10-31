@@ -5,8 +5,8 @@
 
 void Sim::step(const InputFrame &in, float dt, double now) {
     updateFlashlight(in, dt);
-    // The stranger's marks go down the tick after arrival: applyLevel runs
-    // before a transition has moved you, so px/pz are not yet on this floor.
+    // The pre-placed marks are laid the tick after arrival: applyLevel runs
+    // before a transition moves the player, so px/pz are still the old level's.
     if (chalkSeedPending) { seedStrangerChalk(); chalkSeedPending = false; }
     updateLook(in);
     updateMovement(in, dt, now);
@@ -48,8 +48,8 @@ void Sim::updateHealth(float dt) {
 }
 
 void Sim::menuDrift(float dt, double now) {
-    yaw += dt * 0.085f;                         // slow pan across the hall
-    pitch = portableSin((float)now * 0.22f) * 0.045f;  // faint breathing tilt
+    yaw += dt * 0.085f;                         // slow pan
+    pitch = portableSin((float)now * 0.22f) * 0.045f;  // slow tilt
     fwd = { portableCos(pitch) * portableCos(yaw), portableSin(pitch), portableCos(pitch) * portableSin(yaw) };
     f2x = portableCos(yaw); f2z = portableSin(yaw);
     r2x = -portableSin(yaw); r2z = portableCos(yaw);
@@ -61,7 +61,8 @@ void Sim::menuDrift(float dt, double now) {
 }
 
 void Sim::menuBegin(const InputFrame &in, double now) {
-    // The hand that just died is still on the keys: hold the card a moment.
+    // Ignore input for DEATH_CARD_HOLD, so a key still held from the death
+    // does not dismiss the card.
     if (deathT > DEATH_CARD - DEATH_CARD_HOLD) return;
     if (in.begin) startRun(now);
 }
@@ -70,8 +71,9 @@ void Sim::setPaused(bool on, double now) {
     paused = on;
     if (paused) pausedAt = now;
     else {
-        // Every schedule is an absolute time: slide each by the pause, or a
-        // long one lands a blackout, a whisper and a spawn together on resume.
+        // Every schedule is an absolute time, so shift each by the pause length.
+        // Otherwise a long pause makes a blackout, a whisper and a spawn all
+        // fire on resume.
         double held = now - pausedAt;
         nextFlareRegen += held;
         nextBlackout += held;
@@ -96,7 +98,8 @@ double Sim::blackoutIn(double now, double lead, double span) {
 void Sim::startRun(double now) {
     inMenu = false;
     beginDescent(now);
-    // applyLevel scheduled off however long the menu sat; open the run quiet.
+    // applyLevel's schedule counted from when the menu opened; reset it so
+    // the run starts with no blackout.
     blackoutCur = 1.0f; blackoutEnd = -1;
     nextBlackout = blackoutIn(now, 40, 60);
     nextWhisper = now + 45 + grng.f01() * 60;
@@ -151,14 +154,14 @@ void Sim::applyLevel(int lv, double now) {
     levelEntries++;
     if (lv > deepest) deepest = lv;
     // Read before the increment: the first arrival is visit 0, so a fresh
-    // descent at a given seed generates the maze it always did.
+    // descent at a given seed generates the same maze as before.
     world.visit = (unsigned)visits[lv];
     visits[lv]++;
-    // A can already raised has been paid for: settle it rather than eat it.
+    // A drink in progress still gives its sanity rather than being lost.
     if (drinkT > 0 && !drinkLanded) sanity = clampf(sanity + 0.34f + 0.04f * level, 0.0f, 1.0f);
     drinkT = 0; drinkLanded = false;
-    // Kit comes with you; a deck or a flare left on the last floor would hang
-    // in the new maze at the old coordinates.
+    // Carried items come along. A deck or flare left on the previous level
+    // would otherwise appear in the new maze at its old coordinates.
     deck.carried = true; deck.flying = false; deck.playing = false; deck.t = 0;
     for (FlareProj &f : litFlares) f.active = f.flying = false;
     stopVoice();
@@ -183,7 +186,7 @@ void Sim::applyLevel(int lv, double now) {
     taken.clear(); coinsWorld.clear();
     // Chalk is kept per level for the whole descent; beginDescent clears it.
     chalkSeedPending = !chalkSeeded[lv];
-    // Left set, a Manila Room on the last floor would go on soothing you here.
+    // Left set, a Manila Room on the previous level would keep restoring sanity here.
     manilaNear = inManila = false; noteT = 0; manilaCardT = 0;
     cratesOpened.clear(); crateWasDark = false;
     swimming = false; swimPhase = swimClimb = 0; floatRoll = 0;
@@ -214,7 +217,7 @@ void Sim::dieRun(double now, const char *by, const char *title) {
     bankRecords();
     play(Sfx::Scare);
     stopVoice();
-    beginDescent(now);          // a fresh maze waits behind the card
+    beginDescent(now);          // the next run's maze is ready behind the card
     inMenu = true;
 }
 
@@ -222,10 +225,10 @@ bool Sim::hurtPlayer(double now, float dmg, const char *by, float fromX, float f
     health -= dmg;
     if (health <= 0.001f) { health = 0; dieRun(now, by); return true; }
     hurtT = HURT_GRACE; sinceHurt = 0;
-    // Shoved clear, so the attacker is not on top of you when the grace ends.
+    // Pushed away, so the attacker is not overlapping the player when the grace ends.
     float dx = px - fromX, dz = pz - fromZ, d = portableHypot(dx, dz);
     if (d > 0.01f) { velx = dx / d * 6.0f; velz = dz / d * 6.0f; }
-    play(Sfx::Groan).atPitch(1.3f);   // the floor's groan, pitched up: a body blow
+    play(Sfx::Groan).atPitch(1.3f);   // the floor groan clip, pitched up, as the hit sound
     fear = fmaxf(fear, 0.9f);
     return false;
 }

@@ -17,7 +17,7 @@ constexpr float PLAY_S = 3.0f;
 constexpr float SLOW_SPAN = 0.9f;
 constexpr float SLOW_RATE = 0.32f;
 constexpr int MAX_FRAMES = 64;   // 4.3 s at GRAB_HZ: PLAY_S + SLOW_SPAN and a margin
-constexpr float ECHO_VOLUME = 0.7f;   // a sound off the tape, against the room
+constexpr float ECHO_VOLUME = 0.7f;   // echo volume relative to the live sound
 
 constexpr float PI_F = 3.14159265358979323846f;   // raylib's PI
 constexpr float DEG2RAD_F = PI_F / 180.0f;
@@ -56,7 +56,7 @@ void addBeep(Pcm &p, float at, float dur, float hz, float vol) {
     }
 }
 
-// The lens motor: a whine with the gear train's flutter on it.
+// Zoom motor: a whine with amplitude flutter.
 Pcm motor(float dur, float hz, float vol, uint64_t seed) {
     int n = (int)(dur * SAMPLE_RATE);
     Pcm p(n);
@@ -99,8 +99,7 @@ Pcm switchClip() {
     return p;
 }
 
-// The deck taking the tape: a clunk as the heads load, then the capstan
-// spinning up under it.
+// Transport: a clunk, then a rising motor tone.
 Pcm transportClip() {
     int n = (int)(0.55f * SAMPLE_RATE);
     Pcm p(n);
@@ -115,8 +114,8 @@ Pcm transportClip() {
     return p;
 }
 
-// Tape hiss with the deck's mains hum under it, built to loop: the last
-// LAP s are crossfaded into the start, so the restart has no seam.
+// Tape hiss with mains hum, made to loop: the last LAP s are crossfaded into
+// the start, so the restart has no seam.
 Pcm hissClip() {
     const float LAP = 0.25f;
     int n = (int)(2.0f * SAMPLE_RATE), lap = (int)(LAP * SAMPLE_RATE);
@@ -126,7 +125,7 @@ Pcm hissClip() {
     for (size_t i = 0; i < raw.size(); i++) {
         float t = (float)i / SAMPLE_RATE;
         float w = r.f01() - 0.5f;
-        lp += (w - lp) * 0.35f;      // hiss sits high, but not at the very top
+        lp += (w - lp) * 0.35f;      // gentle low-pass on the hiss
         hp = lp - hp * 0.2f;
         raw[i] = hp * 0.7f + sinf(TAU * 60.0f * t) * 0.03f + sinf(TAU * 120.0f * t) * 0.015f;
     }
@@ -139,8 +138,8 @@ Pcm hissClip() {
     return p;
 }
 
-// How close something that hunts is, 0..1, through walls or not: the tape
-// picks it up as interference before you can see it.
+// How close the hunter or a dog is, 0..1, ignoring walls. The tape shows it as
+// interference before the player can see it.
 float threatOf(const Sim &sim) {
     float th = 0;
     if (sim.ent.st == EState::Stalk || sim.ent.st == EState::Chase || sim.ent.st == EState::Flee)
@@ -150,7 +149,7 @@ float threatOf(const Sim &sim) {
         float dist = hypotf(d.x - sim.px, d.z - sim.pz);
         th = fmaxf(th, smooth01(24.0f, 3.0f, dist) * (d.st == DState::Charge ? 1.0f : 0.6f));
     }
-    // The last of your sanity comes through as noise too.
+    // Low sanity also adds interference.
     if (sim.sanity < 0.25f) th = fmaxf(th, (0.25f - sim.sanity) * 1.6f);
     return clampf(th, 0.0f, 1.0f);
 }
@@ -323,8 +322,8 @@ bool Camcorder::beginReplay() {
     replayOn = false;
     if (count < 8) return false;
     tapeFrom = frameAt(0).tapeT;
-    // The tick that ended the run made sounds (the sting) after the last
-    // frame; they land on the still.
+    // The tick that ended the run played sounds (the sting) after the last
+    // frame; they play over the still frame.
     tapeTo = fmaxf(frameAt(count - 1).tapeT, tapeClock);
     slowFrom = tapeTo - fminf(SLOW_SPAN, (tapeTo - tapeFrom) * 0.3f);
     tapeFrom = fmaxf(tapeFrom, slowFrom - PLAY_S);
@@ -352,8 +351,8 @@ void Camcorder::stepReplay(float dt) {
     if (replayT < STATIC_S) return;
     float tape = tapeAt(replayT - STATIC_S);
     float speed = tape < slowFrom ? 1.0f : SLOW_RATE;
-    // Every sound the run made in this stretch, off the tape: slowed with the
-    // picture, so the last second drags down in pitch with it.
+    // Replay every sound from this stretch of tape, at the playback rate, so
+    // the slowed last second is pitched down too.
     while (nextSound < sounds.size() && sounds[nextSound].tapeT <= tape) {
         if (sounds[nextSound].tapeT > lastTape)
             noises.push_back({ CamSound::Echo, sounds[nextSound].e, speed, ECHO_VOLUME });

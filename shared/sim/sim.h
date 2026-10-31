@@ -16,26 +16,26 @@
 #include <unordered_set>
 #include <vector>
 
-// A thrown flare: arcs, clatters off walls, burns on the floor.
+// A thrown flare: flies, bounces off walls, then burns on the floor.
 struct FlareProj {
     bool active = false, flying = false;
     bool onStorey = true;    // burning on the storey you are on, not one seen through an opening
     float x = 0, y = 0, z = 0, vx = 0, vy = 0, vz = 0, burn = 0;
 };
 
-// The tape player. Playing a tape restores sanity, and a running deck is a
-// noise the Red Halls pack hunts; set down still playing, it draws them to it.
+// The tape player. Playing a tape restores sanity. A playing deck is a noise
+// source for the Red Halls pack, so one set down while playing draws them to it.
 struct TapeDeck {
-    bool carried = true;      // in your coat, or lying where you set it down
+    bool carried = true;      // carried, or lying where it was set down
     bool playing = false;
     float t = 0;              // seconds of tape left to run
     float x = 0, y = 0, z = 0, vx = 0, vy = 0, vz = 0;
-    bool flying = false;      // still in the air after you tossed it
+    bool flying = false;      // still in the air after being thrown
     float yaw = 0;            // heading it was set down at
     float reel = 0;           // hub rotation, radians
 };
 
-// What is in your hands. Keys 1/2/4 pick one; the wheel cycles in this order.
+// The held item. Keys 1/2/4 pick one; the wheel cycles in this order.
 enum Weapon {
     WEAPON_REVOLVER = 0,
     WEAPON_FLARE,
@@ -56,7 +56,7 @@ constexpr int PARTY_COLOURS = 5;
 constexpr int MANILA_NOTE_COUNT = 4;
 extern const char *const MANILA_NOTES[MANILA_NOTE_COUNT][4];
 
-// A chalk arrow. `mine` is false for the two a stranger left on each level;
+// A chalk arrow. `mine` is false for the two pre-placed on each level;
 // `storey` is the floor it was drawn on.
 struct ChalkMark { Vec3 pos; float yaw; bool mine; int storey = 0; };
 
@@ -93,21 +93,22 @@ struct Sim {
     static constexpr double DISTANT_LEAD = 20, DISTANT_GAP = 35, DISTANT_SPAN = 50;
     static constexpr int   MAXAMMO = 6;
     static constexpr float MUZZLE_FLASH = 0.09f;   // s the muzzle flash lights the room
-    // Hiding blinds the hunt, blocks the catch and runs ent.unseen at 2.4x, so
-    // it needs stillness. Two thresholds, so the spot does not flicker while
-    // you settle into it.
-    static constexpr float HIDE_ENTER = 0.4f;   // m/s to be under to tuck in
-    static constexpr float HIDE_BREAK = 1.2f;   // m/s that gives you away
-    static constexpr float HIDE_GRACE = 0.35f;  // s above that before you lose the spot
+    // Hiding stops the hunter tracking you, blocks the catch and runs ent.unseen
+    // at 2.4x, so it requires standing still. Two thresholds, so hiding does
+    // not flicker on and off while the player slows down.
+    static constexpr float HIDE_ENTER = 0.4f;   // m/s to be under to start hiding
+    static constexpr float HIDE_BREAK = 1.2f;   // m/s that ends hiding
+    static constexpr float HIDE_GRACE = 0.35f;  // s above HIDE_BREAK before hiding ends
     static constexpr float TAPE_RUN = 26.0f;    // s: one side of a tape
     static constexpr float TAPE_NOISE = 32.0f;  // m a playing deck carries to the pack
     static constexpr int   ESCAPE_COST = 12;    // doubloons that buy the way out
-    // The catch: he commits from LUNGE_REACH, the commit lasts LUNGE_TIME and
-    // is announced, and only a running commit takes you inside CATCH_REACH.
+    // The catch: the hunter starts a lunge from LUNGE_REACH, the lunge lasts
+    // LUNGE_TIME with a warning, and only a lunge in progress can catch the
+    // player, inside CATCH_REACH.
     static constexpr float LUNGE_REACH = 2.5f;
     static constexpr float LUNGE_TIME = 0.6f;
     static constexpr float CATCH_REACH = 1.25f;
-    static constexpr float DEATH_CARD = 12.0f;  // s the death card holds the title screen: the tape, then the words
+    static constexpr float DEATH_CARD = 12.0f;  // s the death card stays up: the tape playback, then the text
     static constexpr float DEATH_CARD_HOLD = 1.6f;   // s of it no key can dismiss
     // Health. One hit is survivable and a second before healing is not: two
     // hits are past zero, and REGEN_DELAY + 0.6 / REGEN_RATE (16 s) untouched
@@ -117,8 +118,8 @@ struct Sim {
     static constexpr float HURT_GRACE = 1.5f;   // s of immunity after a hit
     static constexpr float REGEN_DELAY = 6.0f;
     static constexpr float REGEN_RATE = 0.06f;  // meter-fraction per second
-    // Where the hunter arrives: the near band is inside the fog and out of
-    // sight; the far band is out in the fog.
+    // Where the hunter spawns: the near band is inside fog range but out of
+    // sight; the far band is beyond fog range.
     static constexpr float SPAWN_NEAR_MIN = 6.0f;
     static constexpr float SPAWN_NEAR_MAX = 17.0f;
     static constexpr float SPAWN_FAR_MIN = 20.0f;
@@ -126,12 +127,13 @@ struct Sim {
     static constexpr float W_TAP = 0.3f;        // s: double-tap window for W-to-run
     static constexpr float ENT_STRIDE = 1.05f;  // m per hunter footfall
     static constexpr float DOG_STRIDE = 0.85f;  // m per dog footfall
-    // Cells the room-size probe marches each way: 20 m, past anything on Level
-    // 0 and short of the Level 1 halls, so a corridor reads near 0 and a hall 1.
+    // Cells the room-size probe steps each way: 20 m, longer than any Level 0
+    // room and shorter than the Level 1 halls, so a corridor measures near 0
+    // and a hall near 1.
     static constexpr int   ROOM_PROBE = 10;
     static constexpr float SLIDE_FROM = 0.10f;  // the fraction of the sanity meter that is the terminal slide
-    // Walls shift within this many cells of you, at gaps that shorten as the
-    // slide deepens.
+    // Walls shift within this many cells of the player, more often as the slide
+    // deepens.
     static constexpr int   SHIFT_RING = 8;
     static constexpr double SHIFT_GAP_MIN = 9.0;
     static constexpr double SHIFT_GAP_SPAN = 22.0;
@@ -163,9 +165,9 @@ struct Sim {
     float px = 0, pz = 0;
     float yaw = 0.8f, pitch = 0.0f;
     float velx = 0, velz = 0;
-    float py = 0, vy = 0;            // feet above the floor of the storey you are on
+    float py = 0, vy = 0;            // feet above the floor of the current storey
     bool storeyNoted = false;        // said "another floor" once this descent
-    float fallFrom = 0;              // highest py since you last stood on something
+    float fallFrom = 0;              // highest py since the player last stood on something
     bool grounded = true;
     bool swimming = false;
     float swimPhase = 0, swimClimb = 0;
@@ -187,8 +189,8 @@ struct Sim {
     float crouchCur = 0;
     bool squeezing = false;
     float squeezeBlend = 0;
-    float softTimer = 0;             // s stood on a rotten patch
-    float softSag = 0;               // how far it has let you down
+    float softTimer = 0;             // s spent on a rotten patch
+    float softSag = 0;               // how far the patch has sagged under the player, m
     double nextGroan = 0;
     float distWalked = 0;
     bool still = false;              // under HIDE_ENTER this tick: what the pack listens for
@@ -207,12 +209,12 @@ struct Sim {
     struct BulletImpact { Vec3 pos, normal; float life; bool body; };
     std::vector<Bullet> bullets;
     std::vector<BulletImpact> bulletImpacts;
-    int flares = MAXFLARES;          // in your coat
+    int flares = MAXFLARES;          // carried
     double nextFlareRegen = 0;
-    FlareProj litFlares[MAXFLARES];  // one slot per flare you can carry
+    FlareProj litFlares[MAXFLARES];  // one slot per carried flare
     TapeDeck deck;
     float drinkT = 0;                // counts down from DRINK_TIME while the can is up
-    bool drinkLanded = false;        // this drink has paid out
+    bool drinkLanded = false;        // this drink's sanity has been added
 
     // ---- the run
     int level = 0;
@@ -221,7 +223,7 @@ struct Sim {
     double nextPack = 0, nextHowl = 0;
     float entDist = 1e9f;            // to the hunter, this tick
     float entPrevX = 0, entPrevZ = 0;   // his position last tick, for his velocity
-    float entDarkCur = 0;            // how hard he smothers the lights
+    float entDarkCur = 0;            // how much the hunter dims nearby lights
     double nextBlackout = 0, blackoutEnd = -1;
     float blackoutCur = 1.0f, fear = 0.0f;
     float whisperT = 0;
@@ -244,8 +246,8 @@ struct Sim {
     bool paused = false;
     double pausedAt = 0;
 
-    // Level 0's Manila Room. manilaNear while one is in the chunks round you,
-    // inManila while you are inside its walls.
+    // Level 0's Manila Room. manilaNear while one is in the loaded chunks
+    // around the player, inManila while the player is inside it.
     bool manilaNear = false, inManila = false, manilaSeen = false, notesRead = false;
     float manilaX = 0, manilaZ = 0;
     int notePage = 0;
@@ -265,7 +267,7 @@ struct Sim {
     std::vector<Vec3> coinsWorld;      // doubloons spilled on the floor
     std::vector<ChalkMark> chalk[NLEVELS];   // per level, cleared by beginDescent
     bool chalkSeeded[NLEVELS]{};
-    bool chalkSeedPending = false;        // lay the stranger's marks next tick, once px/pz are real
+    bool chalkSeedPending = false;        // place the level's two pre-placed marks next tick, once px/pz are set
     std::unordered_set<uint64_t> poppedBalloons, poppedTableBunches;
     struct Confetti { Vec3 pos, vel; float life; uint8_t colour; };   // colour: index into the party palette
     std::vector<Confetti> confetti;
@@ -289,7 +291,7 @@ struct Sim {
     // ---- the tick. step() runs the updates below in this order; each may
     // rely on the ones before it (a shot lands before the hunter reacts).
     void step(const InputFrame &in, float dt, double now);
-    // Title screen: the camera drifts and the world waits. menuDrift runs
+    // Title screen: the camera drifts and the sim is paused. menuDrift runs
     // before the platform streams chunks, menuBegin after.
     void menuDrift(float dt, double now);
     void menuBegin(const InputFrame &in, double now);
@@ -348,7 +350,7 @@ struct Sim {
 
     // ---- pickups and use
     static uint64_t cellKey2(int a, int b) { return ((uint64_t)(uint32_t)a << 32) | (uint32_t)b; }
-    // A cell on the storey you are on. Storey 0 keys as cellKey2.
+    // A cell on the current storey. Storey 0 keys as cellKey2.
     uint64_t cellKey(int a, int b) const {
         return cellKey2(a, b) ^ ((uint64_t)(uint32_t)world.storey * 0x9E3779B97F4A7C15ULL);
     }
@@ -358,14 +360,14 @@ struct Sim {
     // both come through here.
     Pickup pickupAt(int a, int b);
     bool bottleAt(int a, int b);
-    // The surface height a carton stands on in this cell, or -1 for a prop
-    // nobody would set a drink on. Matches the prop AABB tops in gatherCellAABBs.
+    // The surface height a carton stands on in this cell, or -1 for a prop with
+    // no shelf. Matches the prop AABB tops in gatherCellAABBs.
     float bottleShelfY(int a, int b);
     Vec2 pickupSpot(int a, int b);
     bool coinAt(int a, int b);
     bool batteryAt(int a, int b);
     bool tapeAt(int a, int b);
-    bool hideSpotAt(int a, int b);            // furniture big enough to tuck in beside
+    bool hideSpotAt(int a, int b);            // furniture big enough to hide beside
     bool balloonAt(int a, int b, Vec3 &out);
     // A party table's balloon bunch: fills pos[]/colours[] (up to 4) and the
     // knot, returns the count. Drawing and aiming both come through here.
@@ -382,8 +384,8 @@ struct Sim {
     static float sanityDrain(int lv);   // meter-fraction per second
     bool updateSanity(float dt, bool blackout, double now);   // true if it ended the run
     void updateRoomSound(bool blackout);
-    bool shiftAWall();               // wall off one doorway you cannot see
-    bool packDeaf() const;           // quiet enough for the pack to lose you
+    bool shiftAWall();               // close one doorway the player cannot see
+    bool packDeaf() const;           // quiet enough that the pack loses track of the player
     bool clarkLevel() const { return level == 0; }
     const char *hunterName() const { return level == 4 ? "THE PARTYGOER" : level == 0 ? "PIRATE CLARK" : "A SMILER"; }
     bool wayOpen() const { return coins >= ESCAPE_COST; }

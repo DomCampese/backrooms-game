@@ -11,8 +11,8 @@ void streamChunks(World &w, int pcx, int pcz, int rings, const std::function<boo
                 more = want({ pcx + dx, pcz + dz, w.qs, false });
             }
     if (w.storeyH <= 0.0f || !more) return;
-    // A feature's own chunk is where the opening is, and its neighbours are
-    // what you see past the edges of it.
+    // A feature's own chunk holds the opening; its neighbours are what is
+    // visible past its edges.
     for (int rel = -1; rel <= 1 && more; rel += 2)
         for (int dx = -1; dx <= 1 && more; dx++)
             for (int dz = -1; dz <= 1 && more; dz++) {

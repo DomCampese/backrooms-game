@@ -42,7 +42,7 @@ void World::setStorey(int s) {
 bool World::manilaChunk(int cx, int cz, int s) {
     if (level != 0) return false;
     if (manilaTest) return s == 0 && cx == 1 && cz == 0;
-    if (abs(cx) <= 1 && abs(cz) <= 1) return false;          // never near where you wake
+    if (abs(cx) <= 1 && abs(cz) <= 1) return false;          // never near the spawn point
     StoreyScope sc(*this, s);
     return (hash64(key(cx, cz) ^ 0x3A1111AULL ^ (uint64_t)sseed()
                    ^ ((uint64_t)visit * 0xA24BAED4963EE407ULL)) % MANILA_RATE) == 0;
@@ -1151,7 +1151,7 @@ bool World::manilaNear(float x, float z, float &rx, float &rz) {
 bool World::softAt(int ci, int ck) {
     if (level != 0) return false;
     if (manilaAt(ci, ck)) return false;                  // the room has a wooden floor
-    if (abs(ci) <= 10 && abs(ck) <= 10) return false;   // never near where you wake up
+    if (abs(ci) <= 10 && abs(ck) <= 10) return false;   // never near the spawn point up
     if (ih(ci, ck, (uint32_t)sseed() ^ 0x50F7u) % 523 != 0) return false;
     // not on a stair or at the lip of an opening either
     return !pillarAt(ci, ck) && propAt(ci, ck) == PROP_NONE && floorY(ci, ck) == 0.0f && !vflagAt(ci, ck);

@@ -29,8 +29,7 @@ private:
     Sound clips[SFX_COUNT][SFX_MAX_VARIANTS]{};
     Sound sndVoice{};
     Sound echoes[SFX_COUNT][SFX_MAX_VARIANTS]{};   // aliases of `clips`, made on first echo
-    // Looped recordings: the muffled water while your head is under, and LEVEL
-    // FUN's music. Both stream and loop; volumes are eased.
+    // Looped recordings: underwater, and LEVEL FUN's music. Both stream and loop; volumes are eased.
     Music musUnderwater{}, musParty{};
     LoopLevels loopLevels;
 

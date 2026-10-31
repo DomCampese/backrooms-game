@@ -29,7 +29,7 @@ static void capture(Game &g, const char *name) {
     g.sim.updateLook(noInput(g));
     // Fill the complete visible ring; three calls previously left black holes
     // in shots after moving the camera or changing level. And the storeys seen
-    // through an opening, which stream after your own storey's ring: seven
+    // through an opening, which stream after the current storey's ring: seven
     // calls filled the ring and left the floor below an atrium black.
     for (int i=0;i<24;++i) g.streamChunks();
     g.updateOccupancy();
@@ -89,11 +89,11 @@ int main() {
         for (float hz : {30.0f,60.0f,144.0f}) {
             sim.px=deepX*CELL+1;sim.pz=deepZ*CELL+1;
             sim.py=-0.7f;sim.vy=-3;sim.grounded=false;
-            // holding JUMP floats you at the surface
+            // holding JUMP keeps the player at the surface
             for (int i=0;i<(int)(hz*6);++i) CHECK(sim.updateSwimming(1/hz,true));
             CHECK_NEAR(sim.py,WATER_Y-1.35f,0.015f);
             CHECK(!sim.grounded && sim.swimming);
-            // letting go is the dive: you sink, and the floor stops you
+            // releasing it dives: the player sinks until the floor
             for (int i=0;i<(int)(hz*3);++i) sim.updateSwimming(1/hz,false);
             CHECK(sim.py+1.62f<WATER_Y-0.5f);
             CHECK(sim.py>=sim.world.floorY(deepX,deepZ));
@@ -156,10 +156,9 @@ int main() {
     sim.weapon=WEAPON_REVOLVER;sim.paused=true;sim.updateAim(true,.2f);CHECK(!sim.aiming);
     sim.paused=false;sim.ammo=6;
     // Portrait FOV lock. raylib derives fovX from fovy*aspect, so these numbers
-    // are the whole contract: every window at or wider than the authored
-    // 1440x850 must be untouched (the regression sweeps compare those frames),
-    // and a portrait phone must not stay at the ~36-degree keyhole the fixed
-    // 70 made on a 0.46 screen.
+    // are the contract: every window at or wider than 1440x850 is unchanged (the
+    // sweeps compare those frames), and a portrait phone must not get the ~36
+    // degree view the fixed 70 gave on a 0.46 aspect.
     {
         auto fovX=[&](int w,int h,float aim){
             return 2*atanf(tanf(windowFovY(w,h,aim)*DEG2RAD*0.5f)*(float)w/h)*RAD2DEG;};
@@ -229,10 +228,9 @@ int main() {
     // are what turn a model-space radius into that distance. The bare
     // maxRadius<.28f this replaces had no stated margin, and raylib 6.0's
     // UpdateModelAnimation interpolates where 5.5's did not, so the sampled
-    // reload reaches ~5% further at its extreme — 0.2942 m, which tripped the
-    // proxy while the actual clearance was still 44 mm. Failing on a rule the
-    // code does not have is worse than not checking, because the next person
-    // relaxes the number instead of reading it.
+    // reload reaches ~5% further at its extreme (0.2942 m), which failed the old
+    // check while the real clearance was still 44 mm. So this checks the actual
+    // rule.
     CHECK(0.155f + maxRadius * 0.48f < 0.34f);
     printf("Imported reload maximum model-space radius: %.4f m\n",maxRadius);
     sim.ammo=6;sim.weapon=WEAPON_REVOLVER;capture(g,"revolver.png");
@@ -295,10 +293,9 @@ int main() {
                                                     (int32_t)(entry.first>>32),(int32_t)entry.first);
         if(baked) for(const auto &mesh:baked->meshes) CHECK(mesh.vertexCount<=65535);
     }
-    // ---- Level 0 lore. Assert the rules, not the pictures: nothing on the
-    // level but cartons and fallen ceiling, no windows anywhere, and the
-    // Manila Room exactly as the article has it — 8x8 m, a door on each
-    // wall, a table in the middle, a wooden floor and no tubes over it.
+    // ---- Level 0 rules: only cartons and fallen ceiling tiles, no windows, and
+    // the Manila Room as the wiki describes it: 8x8 m, a door in each wall, a
+    // table in the middle, a wooden floor and no tubes over it.
     {
         sim.applyLevel(0,GetTime());
         int bad=0, windows=0, manilas=0;
@@ -416,11 +413,10 @@ int main() {
 
     // ---- a doorway has jambs, and a locked door is a wall.
     //
-    // Three separate things decide whether you can walk through a cell edge —
-    // blocksEdge, the jamb boxes, and the mesher that draws them — and they are
-    // written in different places. Force each case rather than hunting for one
-    // in the map: a rule that depends on the generator happening to produce a
-    // shape is a rule that stops being tested the day it stops producing it.
+    // Three things decide whether a body can pass a cell edge (blocksEdge, the
+    // jamb boxes, and the mesher), in different places. Each case is written
+    // into the world by hand rather than found in the map, so the test does not
+    // depend on what the generator happens to produce.
     {
         sim.applyLevel(0,GetTime());
         int ci=28, ck=28;                        // clear of the spawn room
@@ -428,8 +424,7 @@ int main() {
         ChunkData &cd=sim.world.data(cx,cz);
         int li=ci-cx*CCELLS, lk=ck-cz*CCELLS;
         // Snapshot before clearing. unlockEdge rebakes the chunk, so anything
-        // left flattened here is flattened in every capture taken afterwards —
-        // a harness that quietly edits the world it is also photographing.
+        // left changed here would show in every later capture.
         struct Saved { uint8_t wn, ww, wn1, pi, pr, pi1, pr1; } saved[4];
         for (int d=-1;d<=2;++d) {
             Saved &s=saved[d+1];
@@ -480,27 +475,23 @@ int main() {
         bx=x0+1.0f; bz=z0-0.25f; oz=bz;
         sim.world.collideCircle(bx,bz,Sim::PR,0.0f);
         CHECK(fabsf(bz-oz)<0.001f);
-        // ...and the *geometry* has to move with it. This is the half that was
-        // actually broken: the mesher read the raw wall array, so an unlocked
-        // door went on drawing its locked leaf over an edge you could now walk
-        // through, and a shifted doorway kept its opening on screen over an
-        // edge that had been sealed. Neither reads as a mesher bug — the first
-        // reads as "doors have no collision". Bake the chunk, change what the
-        // overlays say the wall is, bake again, and the wall mesh must differ.
+        // The geometry must change too. The mesher used to read the raw wall
+        // array, so an unlocked door still drew its locked leaf and a shifted
+        // doorway stayed open on screen. Bake the chunk, change the overlay, bake
+        // again, and the wall mesh must differ.
         sim.world.unlockedDoors.clear();           // start from a clean overlay
         cd.wallN[li][lk]=WALL_NONE;
         auto verts=[&](int slot){ g.chunkMeshes.ensure(sim.world,cx,cz);
             return g.chunkMeshes.find(sim.world,sim.world.qs,cx,cz)->meshes[slot].vertexCount; };
         sim.world.rebuildChunk(cx,cz);
         int openVerts=verts(MESH_WALLS);
-        sim.world.shiftEdge(ci,ck,false);          // the building closes it behind you
+        sim.world.shiftEdge(ci,ck,false);          // shift the edge closed
         CHECK(verts(MESH_WALLS) > openVerts);    // a wall appeared
         sim.world.shifted.clear();
         // The locked and open branches emit the *same* three wall boxes — the
         // jambs and the header are identical, and what differs is the leaf, its
-        // handle and the threshold strip, all of which go into MESH_PROPS. So
-        // watch the props slot here: asserted against MESH_WALLS this passes
-        // whatever the mesher does, which is the useless kind of green.
+        // handle and the threshold strip, all in MESH_PROPS. So check the props
+        // slot; a check on MESH_WALLS would always pass.
         cd.wallN[li][lk]=WALL_LOCKED;
         sim.world.rebuildChunk(cx,cz);
         int lockedProps=verts(MESH_PROPS);
@@ -644,9 +635,8 @@ int main() {
         sim.audio.clear();
     }
 
-    // ---- the catch ends the run, and only out of a committed lunge. The bare
-    // proximity test this replaced fired the instant you came inside 1.25 m,
-    // silently — survivable when being caught was free, unfair once it is not.
+    // ---- the catch, only from a lunge. The old proximity test caught the
+    // player as soon as they came within 1.25 m, with no warning.
     {
         sim.applyLevel(0,GetTime()); sim.beginDescent(0);
         sim.inMenu=false; sim.deathT=0; sim.hidden=false; sim.deathCount=0;
@@ -661,8 +651,8 @@ int main() {
         sim.ent.lunge=0; sim.ent.lungeCd=0;
         sim.updateEntity(0.001f, 100.0);
         CHECK(sim.ent.lunge>0 && !sim.inMenu);
-        // a landed commit costs health, not the run: you are shoved clear, get a
-        // moment of immunity, and he reels from the swing
+        // a landed lunge costs health, not the run: the player is pushed away and
+        // gets brief immunity, and he staggers
         sim.health=1; sim.hurtT=0;
         sim.ent.x=sim.px+1.0f; sim.ent.z=sim.pz; sim.ent.lunge=Sim::LUNGE_TIME;
         sim.updateEntity(0.001f, 100.0);
@@ -686,13 +676,12 @@ int main() {
         sim.ent.x=sim.px+1.0f; sim.ent.z=sim.pz; sim.ent.lunge=Sim::LUNGE_TIME;
         sim.distWalked=250; sim.killCount=2;
         sim.updateEntity(0.001f, 100.0);
-        // deathCount must survive the beginDescent inside dieRun: it counts the
-        // runs this session has cost you, and resetting it there made the card
-        // report your first death every single time.
+        // deathCount must survive the beginDescent inside dieRun; resetting it
+        // there made the card always report the first death.
         CHECK(sim.inMenu && sim.deathT>0 && sim.deathCount==1);
         CHECK(strcmp(sim.deathBy,"PIRATE CLARK")==0);
         CHECK(sim.deathM==250 && sim.deathKills==2 && sim.deathTime>99.0f);
-        // ...and the world behind the card is a fresh descent, not the one that killed you
+        // the world behind the card is a fresh descent
         CHECK(sim.level==0 && sim.coins==0 && sim.ent.st==EState::Hidden);
         // ...and look at the card it puts up, since it is the only screen in the
         // game that renders on the title screen rather than over a live run
@@ -703,8 +692,8 @@ int main() {
         sim.deathT=0; sim.inMenu=false;
     }
 
-    // ---- the hunter actually moves now (ENT-01/ENT-02). Look at these: a
-    // walk cycle that does not read as a walk is worse than no walk cycle.
+    // ---- the hunter's movement and walk cycle (ENT-01/ENT-02). Check the
+    // captures by eye too.
     {
         sim.applyLevel(0,GetTime());
         // A fixed spot drifts behind a wall whenever the generator changes, and

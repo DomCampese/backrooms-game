@@ -22,12 +22,11 @@ fi
 echo "==> building rlshim/ from the wheel's cffi headers"
 mkdir -p "$ROOT/rlshim"
 
-# cffi strips the version macros along with every other #define, and the game
-# has to branch on them: raylib 6.0 redefined what SetSoundPan's argument means
-# without renaming it, so a build that cannot tell 5.5 from 6.0 pans every sound
-# to the wrong side and says nothing. Recover the version from the wheel that
-# was just unpacked rather than hardcoding one here — the wheel's first three
-# version components are the raylib release it carries (6.0.1.0 -> 6.0.1).
+# cffi strips the version macros with every other #define, and the game needs
+# them: raylib 6.0 changed SetSoundPan's argument without renaming it, so a
+# build that cannot tell 5.5 from 6.0 pans every sound wrongly. Take the version
+# from the unpacked wheel: its first three components are the raylib release
+# (6.0.1.0 -> 6.0.1).
 RLVER=$(basename "$WHEEL"/raylib-*.dist-info .dist-info | sed 's/^raylib-//')
 RLMAJ=$(echo "$RLVER" | cut -d. -f1)
 RLMIN=$(echo "$RLVER" | cut -d. -f2)
@@ -114,10 +113,7 @@ cat >> "$ROOT/rlshim/raylib.h" <<'COLORS'
 #define RAYWHITE   CLITERAL(Color){ 245, 245, 245, 255 }
 COLORS
 
-# tools/pixdiff.py — the only way to check a visual change numerically, and the
-# thing AGENTS.md tells you to reach for — imports PIL, which a fresh sandbox
-# does not have. Installing it here means the first diff anyone runs works
-# rather than dying on ModuleNotFoundError after a ten-minute sweep.
+# tools/pixdiff.py imports PIL, which a fresh sandbox does not have.
 if ! python3 -c 'import PIL' 2>/dev/null; then
     echo "==> installing Pillow for tools/pixdiff.py"
     pip3 install -q pillow || echo "!! pillow install failed — tools/pixdiff.py will not run"

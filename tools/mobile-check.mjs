@@ -4,16 +4,15 @@
 // show you, and its two failure modes are both silent: a control that has
 // drifted on top of another one still works, it just does the neighbour's job;
 // and a splash screen whose content is taller than the viewport does not
-// scroll, it clips — and the first thing over the edge is ENTER, which reads as
-// the page having failed to load rather than as having more to show.
+// scroll, it clips, and ENTER is the first thing cut off.
 //
 //   node tools/mobile-check.mjs            # checks web/shell.html
 //   node tools/mobile-check.mjs path.html  # or a built web/dist/index.html
 //
 // Needs playwright and a chromium. ESM import does not look at NODE_PATH, and
 // in this sandbox playwright is installed globally rather than in the project,
-// so fall back to the global root explicitly — otherwise the failure is a bare
-// ERR_MODULE_NOT_FOUND that looks like the package is missing when it is not.
+// so fall back to the global root explicitly; otherwise the error is a bare
+// ERR_MODULE_NOT_FOUND.
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import { execSync } from 'node:child_process';
@@ -95,9 +94,8 @@ for (const size of SIZES) {
   // anything keyed to vmin looks fine. A real iPhone in landscape is not like
   // that: Safari's layout viewport is the whole screen height while the
   // visible stage is about two thirds of it, and controls laid out in vmin
-  // reached past their own fractions and piled up — photographed with JUMP on
-  // DRINK, MARK on LOAD and USE on AIM. Squeeze the stage to that ratio and
-  // demand the same invariants.
+  // overlapped (JUMP on DRINK, MARK on LOAD, USE on AIM, photographed on an
+  // iPhone). Squeeze the stage to that ratio and check the same rules.
   const squeezed = await page.evaluate(async () => {
     const st = document.getElementById('stage');
     // Measure BEFORE touching flex: `flex: 0 0 auto` collapses a flex item to
@@ -176,8 +174,8 @@ for (const size of SIZES) {
     let id = 1;
     // Dispatch at the element actually under the point and let it bubble: the
     // handler reads e.target to tell a button press from open screen, so firing
-    // everything at the layer would make every gesture look like open screen —
-    // which is exactly the false pass this check exists to avoid.
+    // everything at the layer would make every gesture look like open screen,
+    // and the button cases would pass wrongly.
     const send = (type, x, y, pid) => {
       const el = document.elementFromPoint(x, y) || layer;
       el.dispatchEvent(new PointerEvent(type, {
@@ -195,7 +193,7 @@ for (const size of SIZES) {
     const sx = w * 0.18, sy = h * 0.78;
     return {
       midTap:   gesture([['pointerdown', ...mid], ['pointerup', ...mid]]),
-      // a tap is allowed to wander a few pixels — a thumb is not a stylus
+      // a tap may move a few pixels
       sloppyTap: gesture([['pointerdown', ...mid],
                           ['pointermove', mid[0] + 6, mid[1] + 5],
                           ['pointerup', mid[0] + 6, mid[1] + 5]]),
@@ -218,10 +216,10 @@ for (const size of SIZES) {
   // ---- one drag has to turn you a useful amount ---------------------------
   // The shell reports a look drag in the same pixels a mouse delta is, and
   // Game::updateLook multiplies by 0.0030 rad/px. So how far one thumb drag
-  // turns you is LOOK_GAIN * px * 0.0030, and a thumb — unlike a mouse — cannot
-  // be lifted and replaced mid-gesture. At the original 1.35 a swipe clean
-  // across a phone was a quarter turn and looking behind you took four of them.
-  // Pin the product rather than the constant: either half can move.
+  // turns is LOOK_GAIN * px * 0.0030, and a thumb cannot be lifted and
+  // repositioned mid-drag. At the original 1.35 a full swipe across a phone was
+  // a quarter turn. Check the product, not the constant, since either factor can
+  // change.
   const RAD_PER_PX = 0.0030;
   const turn = await page.evaluate(async ([w, h]) => {
     const t = Module.__touch;
@@ -243,19 +241,18 @@ for (const size of SIZES) {
     note(size, `a 200 px drag turns ${deg.toFixed(0)} deg, want 60-110`);
 
   // ---- sprint is past the ring, and walking full-tilt is not ---------------
-  // The line has to be somewhere a player can see, which is the edge of the
-  // drawn ring — it used to be at 0.66 of the radius, invisible and easy to
-  // cross by accident. Two probes: a thumb at 0.8 of the radius is walking at
+  // The threshold is the edge of the drawn ring, so the player can see it. It
+  // used to be at 0.66 of the radius, inside the ring, and easy to cross by
+  // accident. Two probes: a thumb at 0.8 of the radius is walking at
   // full speed and must NOT be sprinting; one at 1.2 must be.
   const sprint = await page.evaluate(async ([w, h]) => {
     const t = Module.__touch, layer = document.getElementById('touch');
     const SPRINT_BIT = 512;
     const stick = document.getElementById('stick');
     const R = stick.offsetWidth / 2;
-    // Grab the stick where a player grabs it. A point picked as a fraction of
-    // the viewport instead lands on DUCK on a tall phone — the probe came back
-    // with the crouch bit set and no stick role at all, which reads as "sprint
-    // is broken" rather than "the test poked the wrong control".
+    // Grab the stick by its own rect. A point picked as a fraction of the
+    // viewport landed on DUCK on a tall phone, so the probe pressed crouch
+    // instead.
     const sr = stick.getBoundingClientRect();
     const gx = sr.left + sr.width / 2, gy = sr.top + sr.height / 2;
     const send = (type, x, y, pid) => {

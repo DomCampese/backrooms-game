@@ -1,5 +1,5 @@
-// The place itself: blackouts, whispers, sanity and its slide, walls that
-// move, exits, and Level 0's Manila Room.
+// Blackouts, whispers, sanity and its slide, shifting walls, exits, Level 0's
+// Manila Room, and the distant one-shots.
 #include "../core/fp_strict.h"
 #include "sim.h"
 #include <cmath>
@@ -24,17 +24,17 @@ void Sim::updateAmbience(float dt, double now) {
         blackoutEnd = now + 2.5 + grng.f01() * 4.0;
         nextBlackout = blackoutIn(blackoutEnd, 45, 75);
         if (grng.f01() < 0.45f && ent.st == EState::Hidden)
-            ent.nextSpawn = blackoutEnd + 1.5;   // something arrives in the dark
+            ent.nextSpawn = blackoutEnd + 1.5;   // the hunter spawns as the lights return
         blackout = true;
     }
     blackoutCur += ((blackout ? 0.02f : 1.0f) - blackoutCur) * fminf(1, 18 * dt);
-    ambience.hum = blackout ? 0.12f : inManila ? 0.22f : 1.0f;   // the Manila Room is quiet
+    ambience.hum = blackout ? 0.12f : inManila ? 0.22f : 1.0f;   // the Manila Room has a lower hum
 
     updateRoomSound(blackout);
     updateDistant(now);
     if (updateSanity(dt, blackout, now)) return;
 
-    // In the slide, the building starts moving on you.
+    // During the slide, walls start to shift.
     if (level != 2 && slide > 0.0f && now > nextShift && !inMenu) {
         nextShift = now + SHIFT_GAP_MIN + grng.f01() * SHIFT_GAP_SPAN * (1.0f - slide);
         if (shiftAWall()) shadowsStale = true;
@@ -53,11 +53,11 @@ void Sim::updateAmbience(float dt, double now) {
     }
 }
 
-// The hum swells under a live fitting, and the reverb follows the size of the
-// space you are in.
+// The hum gets louder under a working fitting, and the reverb follows the
+// size of the space the player is in.
 void Sim::updateRoomSound(bool blackout) {
-    // Fittings sit at the centres of the level's uLS grid, the one the shader
-    // lights from, so the nearest is your position rounded to it.
+    // Fittings sit at the centres of the level's uLS grid (the shader's), so
+    // the nearest is the player's position rounded to it.
     float ls = LEVEL_RULES[level].ls;
     float nx = (floorf(px / ls) + 0.5f) * ls, nz = (floorf(pz / ls) + 0.5f) * ls;
     float pd = sqrtf((px - nx) * (px - nx) + (pz - nz) * (pz - nz));
@@ -80,8 +80,8 @@ void Sim::updateRoomSound(bool blackout) {
     ambience.space = clampf(openRun / (ROOM_PROBE * CELL), 0.0f, 1.0f);
 }
 
-// Sanity only drains on its own. Its last SLIDE_FROM is a slide: the view
-// narrows, the whispers close in, your pulse takes over, and zero ends the run.
+// Sanity only drains on its own. Below SLIDE_FROM is the slide: the view
+// narrows, the whispers get louder, the heartbeat plays, and zero ends the run.
 bool Sim::updateSanity(float dt, bool blackout, double now) {
     float drain = sanityDrain(level);
     if (blackout) drain *= 2.2f;
@@ -91,7 +91,7 @@ bool Sim::updateSanity(float dt, bool blackout, double now) {
     if (hidden) drain *= 0.45f;
     else if (crouchCur > 0.7f) drain *= 0.8f;
     drain *= 1.0f + 0.6f * migraine;
-    // The Poolrooms and the Manila Room give some back.
+    // The Poolrooms and the Manila Room restore some.
     sanity = clampf(sanity + ((level == 2 || inManila) ? 0.018f : -drain) * dt, 0.0f, 1.0f);
 
     static const char *SANITY_LINES[] = {
@@ -102,16 +102,16 @@ bool Sim::updateSanity(float dt, bool blackout, double now) {
     };
     int stage = sanity < 0.12f ? 4 : sanity < 0.30f ? 3 : sanity < 0.50f ? 2
               : sanity < 0.72f ? 1 : 0;
-    if (stage > sanityStage) {           // slipped a notch: say so, once
+    if (stage > sanityStage) {           // crossed a threshold: show the warning once
         sanityStage = stage;
         sanityWarnT = 4.0f;
         sanityLine = SANITY_LINES[stage - 1];
     } else if (stage < sanityStage) {
-        sanityStage = stage;             // a can walks it back and re-arms the warning
+        sanityStage = stage;             // a drink raises it again and re-arms the warning
     }
     sanityWarnT = fmaxf(0, sanityWarnT - dt);
 
-    if (sanity < 0.34f && now > nextHeartbeat) {   // your own pulse, quicker and louder in the slide
+    if (sanity < 0.34f && now > nextHeartbeat) {   // heartbeat, faster and louder during the slide
         play(Sfx::Heartbeat).atVolume(clampf(0.55f + 0.45f * slide, 0.0f, 1.0f));
         nextHeartbeat = now + (1.1 + sanity * 3.4) * (1.0f - 0.45f * slide);
     }
@@ -127,8 +127,9 @@ bool Sim::updateSanity(float dt, bool blackout, double now) {
     return false;
 }
 
-// Walls off one doorway near you. Neither cell it joins may be in your line of
-// sight, and both keep two other ways out, so no pocket is sealed.
+// Closes one doorway near the player. Neither cell it joins may be in the
+// player's line of sight, and both keep two other ways out, so no area is
+// sealed off.
 bool Sim::shiftAWall() {
     int ci = cellOf(px), ck = cellOf(pz);
     auto ways = [&](int a, int b) {
@@ -143,7 +144,7 @@ bool Sim::shiftAWall() {
         int a = ci + grng.ri(-SHIFT_RING, SHIFT_RING);
         int b = ck + grng.ri(-SHIFT_RING, SHIFT_RING);
         int d2 = (a - ci) * (a - ci) + (b - ck) * (b - ck);
-        if (d2 < 9) continue;                       // not right on top of you
+        if (d2 < 9) continue;                       // not right next to the player
         bool west = grng.ri(0, 1) != 0;
         if (blocksEdge(west ? world.wallWVal(a, b) : world.wallNVal(a, b))) continue;   // already not a doorway
         int oa = west ? a - 1 : a, ob = west ? b : b - 1;   // the cell on the far side
@@ -159,8 +160,8 @@ bool Sim::shiftAWall() {
     return false;
 }
 
-// Both orientations of exit are checked at every cell, and the scan stops at
-// the first one taken: after applyLevel the old coordinates mean nothing.
+// Both exit orientations are checked at every cell, and the scan stops at
+// the first exit taken: after applyLevel the old coordinates are invalid.
 void Sim::updateExits(double now) {
     if (escapeT > 0) return;
     int ci = cellOf(px), ck = cellOf(pz);
@@ -206,9 +207,9 @@ const char *const MANILA_NOTES[MANILA_NOTE_COUNT][4] = {
       "- left by the ones before you" },
 };
 
-// The second note says the way out is chalked, so chalk it: an arrow outside
+// The second note says the way out is chalked, so draw that arrow: outside
 // whichever of the room's four doors best faces the nearest uncursed exit,
-// looking up to three chunks out.
+// searching up to three chunks away.
 void Sim::markWayOut() {
     int ci = cellOf(manilaX), ck = cellOf(manilaZ);
     float bestD2 = 1e30f, tx = 0, tz = 0;
@@ -247,11 +248,11 @@ void Sim::updateManila(float dt, double now) {
     if (inManila && !wasIn && !manilaSeen) { manilaSeen = true; manilaCardT = 5.0f; }
     manilaCardT = fmaxf(0, manilaCardT - dt);
     noteT = fmaxf(0, noteT - dt);
-    if (noteT > 0 && !inManila) noteT = fminf(noteT, 1.0f);   // walked off with it: let it fade
+    if (noteT > 0 && !inManila) noteT = fminf(noteT, 1.0f);   // the player left the room: fade the note out
 
-    // The hum's migraine builds under Level 0's tubes (about four minutes to
-    // the worst of it), eases anywhere else, fastest in the Manila Room, and
-    // survives a noclip.
+    // The migraine builds under Level 0's tubes (about four minutes to full),
+    // eases anywhere else, fastest in the Manila Room, and is kept through a
+    // noclip.
     bool blackout = now < blackoutEnd;
     if (level == 0 && !inManila && !blackout) {
         migraine = fminf(1.0f, migraine + dt / 240.0f * (0.45f + 0.55f * ambience.panel));

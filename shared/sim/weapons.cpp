@@ -1,4 +1,4 @@
-// What you hold: the revolver and its rounds, flares, the party balloons.
+// Held items: the revolver and its rounds, flares, and shooting the party balloons.
 #include "../core/fp_strict.h"
 #include "sim.h"
 #include <algorithm>
@@ -29,9 +29,9 @@ void Sim::updateWeapons(const InputFrame &in, float dt, double now) {
         wheelCd = 0.25f;
     }
     updateAim(in.playing && in.aim, dt);
-    // A touch AIM latches, so a refused aim must drop it or the button stays
-    // lit over a lowered gun. A reload keeps it: the sights rise when it ends,
-    // as holding RMB through one does.
+    // A touch AIM latches, so a refused aim must drop the latch or the button
+    // stays lit with the gun lowered. A reload keeps it: the sights rise when
+    // the reload ends, as when RMB is held through a reload.
     if (!aiming && !(weapon == WEAPON_REVOLVER && reloadT > 0)) dropAimLatch = true;
     gunCd = fmaxf(0, gunCd - dt);
     muzzleT = fmaxf(0, muzzleT - dt);
@@ -48,7 +48,7 @@ void Sim::updateWeapons(const InputFrame &in, float dt, double now) {
             ammo--; gunCd = SHOT_INTERVAL; muzzleT = MUZZLE_FLASH; recoil = 1.0f; muzzleSmoke = 1.0f;
             play(Sfx::Shot);
             fireBullet();
-            // The report carries: it brings him sooner, or turns his head.
+            // A shot is loud: it brings the hunter's spawn forward, or alerts him.
             if (ent.st == EState::Hidden) ent.nextSpawn = fmin(ent.nextSpawn, now + 5 + grng.f01() * 6);
             else if (ent.st == EState::Stalk) ent.gaze += 0.8f;
         }
@@ -123,7 +123,7 @@ void Sim::bulletHitsDog(int i) {
     } else {
         play(Sfx::Hit);
         float dl = sqrtf(ex * ex + ez * ez) + 1e-4f;
-        d.x += ex / dl * 0.8f; d.z += ez / dl * 0.8f;   // rocked, not repelled
+        d.x += ex / dl * 0.8f; d.z += ez / dl * 0.8f;   // pushed back slightly, not driven off
         world.collideCircle(d.x, d.z, 0.3f, d.dispY);
     }
 }
@@ -134,13 +134,13 @@ void Sim::bulletHitsHunter() {
         play(Sfx::Kill);
         killT = 3.0f; killCount++;
         ent.st = EState::Die; ent.life = 0;
-        for (int c2 = 0; c2 < 5; c2++) {   // he spills his doubloons
+        for (int c2 = 0; c2 < 5; c2++) {   // he drops his doubloons
             float aa = c2 * 1.2566f + grng.f01();
             coinsWorld.push_back({ ent.x + portableCos(aa) * 0.5f, ent.dispY, ent.z + portableSin(aa) * 0.5f });
         }
         bankRecords();
     } else {
-        // Rocked back, staggered, and now he knows where you are.
+        // Pushed back and staggered, and he now knows where the player is.
         play(Sfx::Hit);
         float ex = ent.x - px, ez = ent.z - pz;
         float dd = sqrtf(ex * ex + ez * ez);
@@ -159,14 +159,13 @@ bool Sim::anyFlareLit() const {
     return false;
 }
 
-// Distance on the floor plane only: everything asking is reasoning about a
-// hall, not a stairwell.
+// Horizontal distance only; callers only need it on one storey.
 const FlareProj *Sim::nearestLitFlare(float x, float z) const {
     const FlareProj *pick = nullptr;
     float pickD2 = 1e30f;
     for (const FlareProj &f : litFlares) {
         if (!f.active) continue;
-        if (!f.onStorey) continue;   // a fire on the floor below wards nothing up here
+        if (!f.onStorey) continue;   // a flare on the storey below does not affect this one
         float dx = f.x - x, dz = f.z - z, d2 = dx * dx + dz * dz;
         if (d2 < pickD2) { pickD2 = d2; pick = &f; }
     }
@@ -180,8 +179,9 @@ float Sim::flarePresence(const FlareProj &f, float x, float z) {
     return clampf(f.burn / FLAREFADE, 0, 1) / (1.0f + FLAREFALL * (dx * dx + dz * dz));
 }
 
-// By presence, not distance: a flare guttering at your feet must not hold the
-// light off a fresh one up the hall, or the light jumps the frame it dies.
+// By presence, not distance. A nearly burnt-out flare close to the player
+// would otherwise keep the light from a fresh one further away, and the light
+// would jump when it went out.
 const FlareProj *Sim::dominantFlare(float x, float z) const {
     const FlareProj *pick = nullptr;
     float pickP = 0.0f;
@@ -196,8 +196,8 @@ void Sim::updateFlare(const InputFrame &in, float dt, double now) {
     if (in.playing && deathT <= 0 && flares > 0 && drinkT <= 0 &&
         (in.throwFlare || (weapon == WEAPON_FLARE && in.fire))) {
         flares--;
-        // A free slot, or else the fire with least burn left: overwriting a
-        // burning flare mid-burn made it vanish, light, hiss and all.
+        // A free slot, or else the flare with least burn left. Overwriting a
+        // burning flare made it disappear mid-burn, with its light and sound.
         FlareProj *slot = nullptr;
         for (FlareProj &f : litFlares) {
             if (!f.active) { slot = &f; break; }
@@ -208,7 +208,7 @@ void Sim::updateFlare(const InputFrame &in, float dt, double now) {
         fl.x = px + fwd.x * 0.4f; fl.y = eyeY - 0.15f; fl.z = pz + fwd.z * 0.4f;
         fl.vx = fwd.x * 10.5f; fl.vz = fwd.z * 10.5f; fl.vy = fwd.y * 10.5f + 2.4f;
         play(Sfx::FlareStrike);
-        if (ent.st == EState::Hidden) ent.nextSpawn = fmin(ent.nextSpawn, now + 12 + grng.f01() * 10);  // he hears the strike
+        if (ent.st == EState::Hidden) ent.nextSpawn = fmin(ent.nextSpawn, now + 12 + grng.f01() * 10);  // the strike sound brings his spawn forward
     }
     float hiss = 0;
     for (FlareProj &flare : litFlares) {
@@ -216,11 +216,11 @@ void Sim::updateFlare(const InputFrame &in, float dt, double now) {
         if (flare.flying && !flyFlare(flare, dt)) continue;
         flare.burn -= dt;
         if (flare.burn <= 0) { flare.active = false; continue; }
-        // One on the storey below burns and is drawn, but does not light or
+        // A flare on the storey below burns and is drawn, but does not light or
         // ward this storey.
         flare.onStorey = world.storeyH <= 0.0f || (flare.y > -0.6f && flare.y < world.storeyH - 0.2f);
-        // One hiss channel: the fire with most presence takes it, the same
-        // one the renderer lights the room by.
+        // One hiss channel: the flare with most presence plays it, the same one
+        // the renderer uses for the point light.
         hiss = fmaxf(hiss, flarePresence(flare, px, pz));
     }
     ambience.hiss = hiss;
@@ -233,7 +233,7 @@ bool Sim::flyFlare(FlareProj &flare, float dt) {
     flare.x += flare.vx * dt; flare.y += flare.vy * dt; flare.z += flare.vz * dt;
     float ox = flare.x, oz = flare.z;
     world.collideCircle(flare.x, flare.z, 0.07f, flare.y);
-    if (fabsf(ox - flare.x) > 1e-5f) flare.vx *= -0.35f;   // clatter off walls
+    if (fabsf(ox - flare.x) > 1e-5f) flare.vx *= -0.35f;   // bounce off walls
     if (fabsf(oz - flare.z) > 1e-5f) flare.vz *= -0.35f;
     float fg = world.groundAt(flare.x, flare.z, flare.y);
     if (flare.y < fg + 0.04f && flare.vy < 0) {
@@ -249,7 +249,7 @@ bool Sim::flyFlare(FlareProj &flare, float dt) {
     return true;
 }
 
-// LEVEL FUN's ceiling balloon in this cell, if one floats here unpopped.
+// LEVEL FUN's ceiling balloon in this cell, if there is one and it is not popped.
 bool Sim::balloonAt(int a, int b, Vec3 &out) {
     if (level != 4) return false;
     if (poppedBalloons.count(cellKey2(a, b))) return false;
@@ -261,13 +261,13 @@ bool Sim::balloonAt(int a, int b, Vec3 &out) {
     return true;
 }
 
-// Without the renderer's sway, which is small next to the hit radius.
+// Ignores the renderer's sway, which is small compared with the hit radius.
 int Sim::tableBalloonBunch(int a, int b, Vec3 *pos, uint8_t *colours, Vec3 &tie) {
     if (level != 4 || world.propAt(a, b) != PROP_PARTY_TABLE) return 0;
     uint32_t h = ih(a, b, pickupSalt() ^ 0x8A11u);
     if (h % 3 != 0) return 0;                       // most tables, not all
     float tx = a * CELL + 1.0f, tz = b * CELL + 1.0f;
-    float ty = world.floorY(a, b) + 0.74f;          // knotted at the tabletop
+    float ty = world.floorY(a, b) + 0.74f;          // tied at the tabletop
     tie = { tx, ty, tz };
     int nb = 2 + (int)(h % 3);
     for (int k = 0; k < nb; k++) {
@@ -305,7 +305,7 @@ bool Sim::popBalloonAt(Vec3 point) {
                 return true;
             }
         }
-        if (!poppedTableBunches.count(cellKey2(ca, cb))) {   // a table bunch: all of it goes
+        if (!poppedTableBunches.count(cellKey2(ca, cb))) {   // a table bunch: all of it pops
             Vec3 bpos[4], tie; uint8_t bcol[4];
             int nb = tableBalloonBunch(ca, cb, bpos, bcol, tie);
             for (int k = 0; k < nb; k++) {

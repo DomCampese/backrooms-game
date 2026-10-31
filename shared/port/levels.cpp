@@ -39,12 +39,12 @@ const LevelSurfaces LEVEL_SURFACES[NLEVELS] = {
 
 // -------------------------------------------------- CPU-side light estimate
 // mirrors the shader's hash so billboard tinting matches the room lighting.
-// Keep this in step with roomLight()/tonemap() in shaders.cpp: the two are one
-// lighting model with two implementations, and when they drift what you see is
-// sprites lit for a different room than the one they are standing in.
+// Keep this in step with roomLight()/tonemap() in shaders.cpp. They are one
+// lighting model in two places; if they drift, sprites are lit differently
+// from the room around them.
 // uRoomMask and uLamp, mirrored: Game sets both every frame alongside the
 // shader uniforms, so a sprite in the Manila Room is lit by its chandelier
-// and not by the tubes that aren't there.
+// and not by its masked-off tubes.
 static float gMaskCPU[4] = { 0, 0, 0, 0 }, gLampCPU[4] = { 0, 0, 0, 0 };
 void setLightExtrasCPU(const float mask[4], const float lamp[4]) {
     for (int i = 0; i < 4; i++) { gMaskCPU[i] = mask[i]; gLampCPU[i] = lamp[i]; }
@@ -65,12 +65,12 @@ float lightAtCPU(float x, float y, float z, float blackout,
                         float entX, float entZ, float entDark, float vary) {
     float bx = floorf((x - ls * 0.5f) / ls + 0.5f), bz = floorf((z - ls * 0.5f) / ls + 0.5f);
     float sum = 0;
-    // Storeys, exactly as roomLight() takes them: which floor this point is
-    // on, its own tubes (less any over an opening), and — standing where there
-    // is no ceiling — the tubes of the floor above that hang over the hole.
+    // Storeys, as roomLight() handles them: which floor this point is on, that
+    // floor's tubes (less any over an opening), and, where there is no ceiling,
+    // the tubes of the floor above that hang over the hole.
     const float SH = gStoreyCPU.storeyH;
-    // Nearest storey floor, not "30 cm below counts as the floor below": a
-    // sprite standing in a sunken pit is still on your storey.
+    // Nearest storey floor, so a sprite in a sunken area is still on the
+    // current storey.
     int rel = SH > 0.0f ? (int)floorf((y + SH * 0.5f) / SH) : 0;
     int ci0 = (int)floorf(x / 2.0f), ck0 = (int)floorf(z / 2.0f);
     int layers = (SH > 0.0f && rel < 1 && (occCPU(ci0, ck0, chanOf(rel)) & OCC_OPEN_ABOVE)) ? 2 : 1;
@@ -89,26 +89,26 @@ float lightAtCPU(float x, float y, float z, float blackout,
         if (h < dead) continue;
         float out = 1.0f - vary * (h * TUBE_OUTPUT_SPREAD - floorf(h * TUBE_OUTPUT_SPREAD));   // same spread as lightState()
         if (lx >= gMaskCPU[0] && lx <= gMaskCPU[2] && lz >= gMaskCPU[1] && lz <= gMaskCPU[3]) continue;
-        // the panel is a rectangle, and the shader shades from the point on it
-        // closest to the surface — mirror that, or a sprite standing under a
-        // fitting comes out dimmer than the floor it is standing on
+        // the panel is a rectangle, and the shader uses the point on it closest
+        // to the surface; do the same, or a sprite under a fitting comes out
+        // dimmer than the floor below it
         float cx = clampf(x, lx - PANEL_HALF, lx + PANEL_HALF);
         float cz = clampf(z, lz - PANEL_HALF, lz + PANEL_HALF);
         float d2 = (cx - x) * (cx - x) + (lly - y) * (lly - y) + (cz - z) * (cz - z);
         float st = 1.0f;
-        if (entDark > 0.01f) {   // mirror the shader: the fluorescents near it die
+        if (entDark > 0.01f) {   // as the shader: tubes near the hunter dim
             float ed = sqrtf((lx - entX) * (lx - entX) + (lz - entZ) * (lz - entZ));
             float t = clampf((ed - 2.0f) / 7.0f, 0.0f, 1.0f); t = t * t * (3 - 2 * t);
             st = (1.0f - entDark) + entDark * t;
         }
-        // mirror the shader's window, so billboard tinting doesn't step at the
-        // light-cell boundaries either
+        // the shader's fade window, so billboard tinting does not step at
+        // light-cell boundaries
         float wx = clampf((1.5f * ls - fabsf(lx - x)) / (0.20f * 1.5f * ls), 0.0f, 1.0f);
         float wz = clampf((1.5f * ls - fabsf(lz - z)) / (0.20f * 1.5f * ls), 0.0f, 1.0f);
         wx = wx * wx * (3 - 2 * wx); wz = wz * wz * (3 - 2 * wz);
-        // A sprite is a billboard with no normal worth speaking of, so take the
-        // shader's wrap at its softest — the value a surface facing the light
-        // edge-on would get — rather than a lambert against a made-up normal.
+        // A billboard has no useful normal, so use the shader's wrap at its
+        // softest (the value for a surface edge-on to the light) instead of a
+        // Lambert term against an invented normal.
         float w = clampf(PANEL_HALF / sqrtf(d2 + PANEL_HALF * PANEL_HALF), 0.10f, 0.80f);
         float ndl = (0.55f + w) / (1.0f + w);
         sum += out * st / (1.0f + 0.22f * d2) * 5.4f * mul * ndl * wx * wz;
@@ -122,15 +122,14 @@ float lightAtCPU(float x, float y, float z, float blackout,
         if (d2 < 90.0f) sum += gLampCPU[3] * 3.2f / (1.0f + 0.26f * d2) * 0.6f;
     }
     float lit = sum * blackout + ambT;
-    if (entDark > 0.01f) {   // and the surface pool of shadow around it
+    if (entDark > 0.01f) {   // and the dimming around the hunter
         float fd = sqrtf((x - entX) * (x - entX) + (z - entZ) * (z - entZ));
         float t = clampf((fd - 0.8f) / 5.7f, 0.0f, 1.0f); t = t * t * (3 - 2 * t);
         lit *= (1.0f - entDark) + entDark * t;
     }
-    // The world pass tone-maps before anything reaches the screen; props and
-    // billboards are drawn with raylib's unlit shader and never go through it,
-    // so the estimate has to come out the far side of the same curve or every
-    // sprite in the game sits at a different exposure from the room around it.
+    // The world pass tone-maps its output. Props and billboards use raylib's
+    // unlit shader, so the estimate must go through the same curve, or sprites
+    // have a different exposure from the room.
     lit *= 0.70f;
     lit = (lit * (2.51f * lit + 0.03f)) / (lit * (2.43f * lit + 0.59f) + 0.14f);
     return clampf(lit, 0.0f, 1.0f);

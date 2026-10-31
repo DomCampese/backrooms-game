@@ -19,11 +19,9 @@ command -v em++ >/dev/null || {
     echo "emcc not found. Install emsdk and 'source emsdk_env.sh' first." >&2; exit 1; }
 
 # raylib for the browser, built as WebGL 2 rather than the Makefile's default
-# WebGL 1. That is not a preference: the world shader uses dFdx and texelFetch,
-# which are core in GLSL ES 3.00 and simply absent from ES 2.0, so an ES2 build
-# fails to compile the shader — and a failed compile in raylib does not crash,
-# it silently falls back to the default shader and renders a black frame faster
-# than the real one (see AGENTS.md). There is no partial-credit version of this.
+# WebGL 1. The world shader uses dFdx and texelFetch, which GLSL ES 2.0 lacks.
+# A failed compile does not crash: raylib falls back to its default shader and
+# draws a black frame (AGENTS.md).
 if [ ! -f "$RAYLIB_SRC/libraylib.a" ]; then
     echo "building raylib $RAYLIB_TAG for web..."
     rm -rf "$ROOT/.raylib-web"

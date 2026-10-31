@@ -54,21 +54,19 @@ Pcm makeFootstep(uint32_t seed, bool through = false)
                 * env2;
         }
 
-        // Tiny bit of texture
+        // a little decaying noise
         float noise =
             (r.f01() * 2.0f - 1.0f) *
             expf(-t * 120.0f) *
             0.03f;
 
-        // Mix
         float sample = heel + toe + noise;
 
-        // Soft saturation for punch
+        // soft saturation
         sample = tanhf(sample * 1.45f);
 
-        // Through a wall the transient goes first and everything above a few
-        // hundred Hz goes with it. What is left is the thump, which is exactly
-        // what you hear through a plasterboard partition.
+        // Through a wall: two-pole low-pass, which removes the transient and
+        // everything above a few hundred Hz.
         if (through) {
             wallA += 0.055f * (sample - wallA);
             wallB += 0.055f * (wallA - wallB);
@@ -196,7 +194,7 @@ Pcm makeClick() {
     return d;
 }
 
-// a balloon giving up: sharp latex burst, then the rubbery flap of the skin
+// Balloon pop: a short noise burst, then a falling-pitch sine for the skin.
 Pcm makeBalloonPop() {
     int n = (int)(0.16f * SAMPLE_RATE);
     Pcm d(n);
@@ -206,8 +204,8 @@ Pcm makeBalloonPop() {
         float t = i / (float)SAMPLE_RATE;
         float wn = r.f01() * 2 - 1;
         lp += 0.5f * (wn - lp);
-        float burst = (wn * 0.7f + lp) * expf(-t * 150.0f) * 2.4f;             // the crack
-        float flap = sinf(TAU * (150.0f - 320.0f * t) * t) * expf(-t * 26.0f) * 0.5f; // skin snap
+        float burst = (wn * 0.7f + lp) * expf(-t * 150.0f) * 2.4f;             // burst
+        float flap = sinf(TAU * (150.0f - 320.0f * t) * t) * expf(-t * 26.0f) * 0.5f; // skin
         float s = tanhf((burst + flap) * 1.6f);
         d[i] = (short)(clampf1(s) * 30000);
     }
@@ -225,7 +223,7 @@ Pcm makeFlareStrike() {
         lp += 0.30f * (wn - lp);
         float scratch = (wn - lp) * expf(-t * 34.0f) * 1.3f;                  // striker scrape
         float pop = sinf(TAU * 150.0f * t) * expf(-t * 42.0f) * 0.8f;  // ignition pop
-        float swell = (wn - lp) * (1 - expf(-t * 9.0f)) * expf(-t * 2.6f) * 0.5f; // hiss hands off to synth
+        float swell = (wn - lp) * (1 - expf(-t * 9.0f)) * expf(-t * 2.6f) * 0.5f; // hiss onset; the ambience synth continues it
         d[i] = (short)(clampf1(tanhf(scratch + pop + swell)) * 30000);
     }
     return d;
@@ -241,10 +239,10 @@ Pcm makeGunshot() {
         float wn = r.f01() * 2 - 1;
         lp += 0.60f * (wn - lp);
         lp2 += 0.07f * (wn - lp2);
-        float crack = lp * expf(-t * 170.0f) * 2.8f;                          // supersonic crack
-        float body = lp2 * expf(-t * 16.0f) * 2.4f;                           // blast body
+        float crack = lp * expf(-t * 170.0f) * 2.8f;                          // crack
+        float body = lp2 * expf(-t * 16.0f) * 2.4f;                           // body
         float thump = sinf(TAU * (72.0f - 30.0f * t) * t) * expf(-t * 8.0f) * 1.2f;
-        float tail = lp2 * expf(-t * 3.2f) * 0.4f;                            // hallway slap-back
+        float tail = lp2 * expf(-t * 3.2f) * 0.4f;                            // tail
         float s = tanhf((crack + body + thump + tail) * 1.9f) * expf(-t * 0.9f);
         d[i] = (short)(clampf1(s) * 32000);
     }
@@ -268,7 +266,7 @@ Pcm makeWinChime() {
     return d;
 }
 
-// two low thumps, close together — held breath while it lingers right beside you
+// Heartbeat: two low thumps close together.
 Pcm makeHeartbeat() {
     int n = (int)(1.0f * SAMPLE_RATE);
     Pcm d(n);
@@ -286,7 +284,7 @@ Pcm makeHeartbeat() {
     return d;
 }
 
-// a tape found: two detuned, warbling low tones through a bed of hiss — melancholy, not triumphant
+// Tape found: two detuned low tones with pitch wobble, over hiss.
 Pcm makeTapeChime() {
     int n = (int)(1.6f * SAMPLE_RATE);
     Pcm d(n);
@@ -306,8 +304,7 @@ Pcm makeTapeChime() {
     return d;
 }
 
-// A seized wheel giving way: a rising metallic squeal that grinds in steps,
-// then the flat clunk of the gate seating home.
+// Valve: a rising metallic squeal, gated at 9 Hz, then a low clunk at 0.86 s.
 Pcm makeValveTurn() {
     int n = (int)(1.15f * SAMPLE_RATE);
     Pcm d(n);
@@ -317,7 +314,7 @@ Pcm makeValveTurn() {
         float t = i / (float)SAMPLE_RATE;
         float wn = r.f01() * 2 - 1;
         lp += 0.4f * (wn - lp);
-        // the squeal climbs as the wheel turns, and stutters as it catches
+        // rising squeal, gated on and off
         float phase = t * 9.0f; phase -= floorf(phase);
         float grind = (phase > 0.35f) ? 1.0f : 0.55f;
         float squeal = sinf(TAU * (620.0f + 260.0f * t) * t) * 0.30f
@@ -496,27 +493,28 @@ Pcm makeFarPop(int variant)
     return farAway(d, 1200.0f, 1.4f, 0.7f, 0.32f);
 }
 
-// A bark: a hard glottal burst, a shout of noise-driven formants, a snap shut.
+// Bark: a falling-pitch harmonic voice through a noise band, with a fast attack
+// and decay.
 Pcm makeDogBark(uint32_t seed, bool through = false) {
     int n = (int)(0.42f * SAMPLE_RATE);
     float wallA = 0, wallB = 0;
     Pcm d(n);
     Rng r((uint64_t)seed * 7919u + 13u);
-    float f0 = 155.0f + r.f01() * 70.0f;      // how big the animal reads
+    float f0 = 155.0f + r.f01() * 70.0f;      // base pitch per variant
     float lp = 0, bp = 0;
     for (int i = 0; i < n; i++) {
         float t = i / (float)SAMPLE_RATE;
         float wn = r.f01() * 2 - 1;
         lp += 0.30f * (wn - lp);
-        // pitch drops sharply through the bark, the way a real one does
+        // pitch falls 42% over the bark
         float f = f0 * (1.0f - 0.42f * t / 0.42f);
         float voice = sinf(TAU * f * t) * 0.55f
                     + sinf(TAU * f * 2.0f * t) * 0.28f
                     + sinf(TAU * f * 3.0f * t) * 0.14f;
-        bp += 0.45f * (lp - bp);             // a rough vocal-tract band
+        bp += 0.45f * (lp - bp);             // noise band
         float env = (1.0f - expf(-t * 700.0f)) * expf(-t * 13.0f);
         float s = (voice * (0.75f + 0.25f * bp) + bp * 0.8f) * env;
-        if (through) {   // through the red brick it stops being a bark and becomes a thud
+        if (through) {   // through a wall: two-pole low-pass
             wallA += 0.048f * (s - wallA);
             wallB += 0.048f * (wallA - wallB);
             s = wallB * 0.70f;
@@ -526,7 +524,7 @@ Pcm makeDogBark(uint32_t seed, bool through = false) {
     return d;
 }
 
-// The pack calling to each other across the halls — long, and not quite a dog.
+// Howl: a long tone with a wavering, slowly falling pitch.
 Pcm makeDogHowl() {
     int n = (int)(1.9f * SAMPLE_RATE);
     Pcm d(n);
@@ -547,11 +545,8 @@ Pcm makeDogHowl() {
     return d;
 }
 
-// The sound a floor makes just before it stops being one. No impact and no
-// resolution: a low resonant groan with a stick-slip stutter over it, which is
-// what deflecting timber actually does and, more to the point, is a sound with
-// no end — it tells you something is still happening and gives you nothing to
-// relax about. A creak that resolves would read as scenery.
+// Floor groan (rotten patch): a low resonant groan with a stick-slip stutter
+// over it and no final impact, so it does not sound finished.
 Pcm makeFloorGroan() {
     int n = (int)(1.30f * SAMPLE_RATE);
     Pcm d(n);
@@ -560,15 +555,15 @@ Pcm makeFloorGroan() {
     for (int i = 0; i < n; i++) {
         float t = i / (float)SAMPLE_RATE;
         float wn = r.f01() * 2 - 1;
-        lp += 0.08f * (wn - lp);        // the body of it: timber, not air
+        lp += 0.08f * (wn - lp);        // low-passed noise body
         lp2 += 0.35f * (wn - lp2);
-        // stick-slip: the joint holds, slips a little, holds again. The rate
-        // climbs across the sound so it reads as getting worse, not as a loop.
+        // stick-slip gating; the rate rises over the clip so it does not sound
+        // like a loop
         float ph = t * (5.0f + 6.0f * t); ph -= floorf(ph);
         float slip = ph < 0.22f ? 1.0f : 0.25f;
         float body = (sinf(TAU * (74.0f - 12.0f * t) * t) * 0.55f
                     + sinf(TAU * (113.0f - 18.0f * t) * t) * 0.25f) * slip;
-        float fibre = (lp2 - lp) * 0.30f * slip;          // dry splitting over the top
+        float fibre = (lp2 - lp) * 0.30f * slip;          // high band noise
         float env = (1.0f - expf(-t * 12.0f)) * (t < 1.12f ? 1.0f : expf(-(t - 1.12f) * 14.0f));
         d[i] = (short)(clampf1(tanhf((body + lp * 1.4f + fibre) * 1.25f)) * env * 26000);
     }
@@ -610,14 +605,12 @@ Pcm gulpPcm() {
     return d;
 }
 
-// Someone else's voice, off a cassette that has been played too many times.
-// A glottal pulse train through two formant resonators, syllables strung into
-// phrases with breath between them, the whole thing under tape hiss, wow and
-// the odd dropout. It is deliberately just short of intelligible: the words
-// are not the point, the fact that there was once a person saying them is.
+// The tape voice: a pulse train through two formant resonators, in syllables
+// and phrases with pauses, under tape hiss, pitch wobble and dropouts. Not
+// intelligible on purpose.
 //
-// Built to loop — the deck runs it end to end for as long as the tape lasts —
-// so it opens and closes inside a breath, and the seam is crossfaded.
+// The deck loops it for the length of a tape, so it starts and ends in a pause
+// and the seam is crossfaded.
 Pcm tapeVoicePcm() {
     const int SR = SAMPLE_RATE;
     const float LEN = 7.5f;
@@ -625,33 +618,33 @@ Pcm tapeVoicePcm() {
     Pcm d(n);
     Rng r(0x7A9E4D02ULL);
 
-    // ---- lay out the phrasing first: a syllable is a pitch, two formants and
-    // an envelope, and speech is syllables in runs with pauses between runs.
+    // ---- phrasing first: a syllable is a pitch, two formants and an envelope;
+    // phrases are runs of syllables with pauses between them.
     struct Syl { float t0, t1, f0, F1, F2, amp; };
     const int MAXSYL = 96;
     Syl syl[MAXSYL];
     int nsyl = 0;
-    float cur = 0.30f;                            // opens in silence, so the loop seam lands in a breath
+    float cur = 0.30f;                            // starts in silence, so the loop seam is in a pause
     while (cur < LEN - 0.70f && nsyl < MAXSYL) {
         int words = 2 + (int)(r.f01() * 4.0f);
-        float base = 96.0f + r.f01() * 26.0f;     // this speaker's pitch for this phrase
+        float base = 96.0f + r.f01() * 26.0f;     // this phrase's base pitch
         for (int i = 0; i < words && cur < LEN - 0.70f && nsyl < MAXSYL; i++) {
             float dur = 0.10f + r.f01() * 0.16f;
-            // declination: a phrase falls away as it runs out of breath
+            // pitch falls over each phrase
             float fall = 1.0f - 0.16f * (i / (float)words);
             Syl &s = syl[nsyl++];
             s.t0 = cur; s.t1 = cur + dur;
             s.f0 = base * fall * (0.94f + r.f01() * 0.12f);
-            // vowel space: F1 low/high pairs with F2, roughly as real vowels do
+            // F1/F2 pairs, roughly matching real vowels
             s.F1 = 300.0f + r.f01() * 480.0f;
             s.F2 = 1000.0f + r.f01() * 1150.0f;
             s.amp = 0.72f + r.f01() * 0.28f;
             cur = s.t1 + 0.012f + r.f01() * 0.045f;
         }
-        cur += 0.34f + r.f01() * 0.62f;           // breath between phrases
+        cur += 0.34f + r.f01() * 0.62f;           // pause between phrases
     }
 
-    // dropouts: a worn tape loses the signal for a moment here and there
+    // dropouts: short gaps in the signal
     const int NDROP = 5;
     float dropT[NDROP], dropL[NDROP];
     for (int i = 0; i < NDROP; i++) { dropT[i] = r.f01() * LEN; dropL[i] = 0.03f + r.f01() * 0.09f; }
@@ -663,7 +656,7 @@ Pcm tapeVoicePcm() {
     float peak = 1e-6f;
     for (int i = 0; i < n; i++) {
         float t = i / (float)SR;
-        // wow and flutter: the capstan has never run true
+        // wow and flutter
         float wow = 1.0f + 0.013f * sinf(TAU * 2.9f * t) + 0.006f * sinf(TAU * 0.63f * t);
 
         while (si < nsyl && t > syl[si].t1) si++;
@@ -674,8 +667,7 @@ Pcm tapeVoicePcm() {
             // envelope: quick on, slower off, so syllables run into each other
             float env = clampf1(fminf(u / 0.16f, (1.0f - u) / 0.34f)) * s.amp;
 
-            // glottal source: a sawtooth is close enough once the formants have
-            // had it, plus a little breath noise through the same filters
+            // source: a sawtooth plus a little noise, through the formant filters
             phase += s.f0 * wow / SR;
             phase -= floorf(phase);
             float src = (2.0f * phase - 1.0f) * 0.75f + (r.f01() * 2.0f - 1.0f) * 0.10f;
@@ -690,11 +682,11 @@ Pcm tapeVoicePcm() {
             y2b = y1b; y1b = yb;
             voice = (ya * (1.0f - ra * ra) * 1.9f + yb * (1.0f - rb * rb) * 1.1f);
         } else {
-            // let the filters ring down rather than snapping to zero
+            // let the filters decay rather than cutting to zero
             y1a *= 0.995f; y2a *= 0.995f; y1b *= 0.995f; y2b *= 0.995f;
         }
 
-        // tape bed: hiss, plus a touch of mains hum bleeding off the heads
+        // tape hiss plus a little mains hum
         float wn = r.f01() * 2.0f - 1.0f;
         hissLp += 0.30f * (wn - hissLp);
         float bed = hissLp * 0.075f + sinf(TAU * 50.0f * t) * 0.010f;
@@ -706,7 +698,7 @@ Pcm tapeVoicePcm() {
         }
 
         float s2 = voice * drop * 0.85f + bed;
-        // block DC so the resonators can't walk the signal off centre
+        // DC block, so the resonators do not drift off centre
         dcy = s2 - dcx + 0.995f * dcy; dcx = s2;
         tmp[i] = dcy;
         float av = fabsf(dcy);
@@ -752,8 +744,8 @@ std::string clipRecording(Sfx sfx, int variant) {
     return stem + std::to_string(variant + 1) + ".ogg";
 }
 
-// The seeds give each variant its own voice; the hunter's steps are heavier
-// than the player's, and each dog in the pack has its own bark.
+// Each variant has its own seed. The hunter's steps use different seeds from
+// the player's, and each dog has its own bark.
 Pcm clipPcm(Sfx sfx, int variant) {
     switch (sfx) {
     case Sfx::Step:           return makeFootstep(100 + variant * 17);
@@ -793,8 +785,8 @@ PanGains panGains(float bearing) {
 void LoopLevels::step(const LoopCue &cue, float dt, float hum) {
     float k = 1 - expf(-3.0f * dt);
     underwater += ((cue.underwater ? 0.5f : 0.0f) - underwater) * (1 - expf(-8.0f * dt));
-    // LEVEL FUN: the loop played slow and flat, its pitch wandering like a
-    // stretched tape. It ducks with the lights in a blackout.
+    // LEVEL FUN: the music plays slowed and flat, with a slowly wandering
+    // pitch, and is quieter during a blackout.
     party += ((cue.party ? 0.32f * hum : 0.0f) - party) * k;
     t += dt;
     partyPitch = 0.84f + 0.025f * sinf(t * 0.41f) + 0.008f * sinf(t * 1.9f);
