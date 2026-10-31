@@ -555,10 +555,9 @@ Details that reward paying attention:
   bunch goes at once.
 
   <p align="center"><img src="docs/confetti.png" width="440" alt="A popped balloon and its confetti"></p>
-- **Footsteps follow the floor** — a soft thud on Level 0's carpet, a hard
-  slap the warehouse throws back on Level 1's concrete, a bright click that
-  rings round the Poolrooms' tile, and a hollow knock on the Manila Room's
-  boards.
+- **Footsteps per floor** — separate synthesized clips for carpet (Levels 0
+  and 4), concrete (Levels 1 and 3), tile (Level 2) and wood (the Manila
+  Room).
 - **Footsteps in the dark** — when the entity chases, you *hear* it: heavy
   footfalls, panned to its bearing and fading with distance, even around
   corners you can't see past.

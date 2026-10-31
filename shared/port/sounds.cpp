@@ -80,24 +80,21 @@ Pcm makeFootstep(uint32_t seed, bool through = false)
     return d;
 }
 
-// A footfall on something hard: a heel strike of filtered noise with a body
-// thump under it, the toe a beat later, and the room answering. Concrete is a
-// dull slap that the warehouse throws back once; the Poolrooms' tile a bright
-// click that rings off the next wall and the one after; the Manila Room's
-// boards a hollow knock in a small room. The carpet step (makeFootstep) is
-// the soft one, and stays as it was.
+// Footstep on a hard floor: band-passed noise for the heel and toe, a decaying
+// sine for the body, a one-pole low-pass, then one or two low-passed echo taps.
+// Voice holds the per-floor parameters. Carpet uses makeFootstep instead.
 Pcm makeHardStep(uint32_t seed, Footing floor)
 {
     struct Voice {
-        float click;      // the heel's noise band, Hz
+        float click;      // heel band-pass centre, Hz
         float clickQ;
         float clickDecay; // 1/s
-        float body;       // the thump under it, Hz
+        float body;       // body sine, Hz
         float bodyDecay;
         float bodyGain;
-        float echo1, echo1Gain, echo2, echo2Gain;   // reflections, s
-        float gain;       // a hard floor is louder than carpet: about 5 dB (A-weighted), not 11
-        float top;        // a shoe's sole takes the edge off: one pole, Hz
+        float echo1, echo1Gain, echo2, echo2Gain;   // echo tap delays (s) and gains
+        float gain;       // output gain; sets each floor about 5 dB(A) over carpet
+        float top;        // one-pole low-pass cutoff, Hz
     };
     const Voice v = floor == Footing::Tile ? Voice{ 3600.0f, 1.4f, 130.0f, 118.0f, 55.0f, 0.35f,
                                                     0.047f, 0.30f, 0.096f, 0.16f, 0.40f, 6000.0f }
@@ -107,13 +104,13 @@ Pcm makeHardStep(uint32_t seed, Footing floor)
                                                     0.038f, 0.22f, 0.0f, 0.0f, 0.48f, 4500.0f };
     Rng r((uint64_t)seed * 2000u + 7u);
     const float toeDelay = 0.055f + r.f01() * 0.02f;
-    const float detune = 0.92f + r.f01() * 0.16f;   // each variant its own shoe
+    const float detune = 0.92f + r.f01() * 0.16f;   // per-variant frequency scale
     const float tail = v.echo2 > 0 ? v.echo2 : v.echo1;
     const int dry = (int)(0.16f * SAMPLE_RATE);
     const int n = dry + (int)(tail * SAMPLE_RATE) + (int)(0.02f * SAMPLE_RATE);
 
-    // The dry footfall: two RBJ band-passes over the same noise, one for the
-    // heel and one, a little higher, for the toe.
+    // Dry signal: two RBJ band-passes over the same noise, heel and toe (toe at
+    // 1.35x the heel's centre).
     std::vector<float> d(dry);
     auto band = [](float f, float q, float &b0, float &a1, float &a2) {
         float w = TAU * f / SAMPLE_RATE, alpha = sinf(w) / (2.0f * q), a0 = 1.0f + alpha;
@@ -138,7 +135,7 @@ Pcm makeHardStep(uint32_t seed, Footing floor)
         float heelEnv = (1.0f - expf(-t * 2500.0f)) * expf(-t * v.clickDecay);
         float bodyEnv = (1.0f - expf(-t * 900.0f)) * expf(-t * v.bodyDecay);
         float sample = h * 3.2f * heelEnv + sinf(TAU * body * t) * v.bodyGain * bodyEnv;
-        // The boards ring with a second, higher mode: the hollow under them.
+        // Wood adds a second body mode at 2.37x.
         if (floor == Footing::Wood) sample += sinf(TAU * body * 2.37f * t) * 0.35f * expf(-t * 48.0f) * bodyEnv;
         float tt = t - toeDelay;
         if (tt > 0.0f) {
@@ -148,13 +145,13 @@ Pcm makeHardStep(uint32_t seed, Footing floor)
         sole += soften * (sample - sole);
         d[i] = sole;
     }
-    // Then the room: the same footfall, quieter and duller each time it comes back.
+    // Echo taps: each a delayed, low-passed copy of the dry signal.
     std::vector<float> out(n, 0.0f);
     const struct { float delay, gain; } taps[3] = { { 0.0f, 1.0f }, { v.echo1, v.echo1Gain }, { v.echo2, v.echo2Gain } };
     for (const auto &tap : taps) {
         if (tap.gain <= 0.0f) continue;
         int at = (int)(tap.delay * SAMPLE_RATE);
-        float lp = 0, k = tap.delay > 0.0f ? 0.35f : 1.0f;   // the echoes lose their top
+        float lp = 0, k = tap.delay > 0.0f ? 0.35f : 1.0f;   // echo taps are low-passed
         for (int i = 0; i < dry && at + i < n; i++) {
             lp += k * (d[i] - lp);
             out[at + i] += lp * tap.gain;
@@ -162,7 +159,7 @@ Pcm makeHardStep(uint32_t seed, Footing floor)
     }
     Pcm pcm(n);
     for (int i = 0; i < n; i++) {
-        // A short fade at the end, so a clip cut by its length does not click.
+        // 10 ms fade-out, so the clip ends on zero.
         float fade = clampf1((float)(n - 1 - i) / (0.01f * SAMPLE_RATE));
         pcm[i] = (short)(clampf1(tanhf(out[i] * v.gain * 1.3f) * fade) * 30000.0f);
     }

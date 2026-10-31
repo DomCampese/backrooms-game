@@ -288,11 +288,10 @@ off the Mac. In order:
    `unreal/Saved/backrooms_best` holds it. F3 in a run draws the fps,
    position, chunk and hunter line in the top left.
 
-10. **Footsteps** (29 October 2026). Walk on each level: carpet on Level 0,
-    a hard slap on Level 1's concrete (`LEVEL=1 make unreal-play`), a bright
-    ringing click on the Poolrooms' dry tile (`LEVEL=2`), a knock on the
-    Manila Room's boards. The mixer plays them with no Unreal change, so if
-    they sound right in the Web build they should here.
+10. **Footsteps** (29 October 2026). Walk on Level 0 (carpet), Level 1
+    (`LEVEL=1 make unreal-play`, concrete), Level 2 (tile) and in the Manila
+    Room (wood). No Unreal code changed; the mixer loads the new clips, so
+    they should match the Web build.
 
 A session on the Mac itself (`claude remote-control` in the repository) could
 build, run the tests and read the log directly; from the cloud each Unreal

@@ -569,10 +569,9 @@ int main() {
         w.data=pcm.data(); ExportWave(w,"drinking.wav");
     }
     {
-        // Footsteps follow the floor: each level's footing, and the Manila
-        // Room's boards wherever it stands. The hard floors start and end
-        // silent (no click at either end of a clip), stay under clipping,
-        // and sit above the carpet in pitch, tile highest.
+        // stepSfx maps each level's footing, and the Manila Room to wood. The
+        // hard-floor clips start and end on zero, peak below clipping, and
+        // order by zero crossings: carpet < wood < concrete < tile.
         const int lv0=sim.level; const bool man0=sim.inManila;
         const Sfx want[NLEVELS]={ Sfx::Step, Sfx::StepConcrete, Sfx::StepTile, Sfx::StepConcrete, Sfx::Step };
         for (int lv=0;lv<NLEVELS;++lv) { sim.level=lv; sim.inManila=false; CHECK(sim.stepSfx()==want[lv]); }

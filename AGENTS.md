@@ -22,13 +22,12 @@ build's code only drawing and playing it, a shader change in the GLSL and the
 HLSL together. What the Mac build still lacks is docs/unreal-handoff.md,
 "Parity".
 
-# Footsteps follow the floor (October 2026)
+# Footstep clip per floor material (October 2026)
 
-The first feature built for both builds at once. The player's footfalls and
-landings sound like the floor underfoot: Level 0's and LEVEL FUN's carpet (the
-old `Sfx::Step`, unchanged to the byte), Level 1's and the Red Halls' slab
-(`StepConcrete`), the Poolrooms' tile (`StepTile`), and the Manila Room's
-boards (`StepWood`) wherever that room stands. What will bite:
+Player footsteps and landings use a clip per floor material: carpet on Levels
+0 and 4 (`Sfx::Step`, unchanged), concrete on Levels 1 and 3
+(`StepConcrete`), tile on Level 2 (`StepTile`), wood inside the Manila Room
+(`StepWood`). What will bite:
 
 - **The floor is a rule, `LevelRules::footing`** (core/level_rules.h), so the
   sim can read it; `Sim::stepSfx()` picks the clip. It has to agree with the
@@ -37,11 +36,9 @@ boards (`StepWood`) wherever that room stands. What will bite:
 - **New `Sfx` go at the end of the enum** and `SFX_COUNT` follows the last.
   Both builds load every clip up to it (`GameAudio::load`, `SoundMixer::load`),
   so the Mac plays the new steps with no Unreal code at all.
-- **The hard steps are quieter than they want to be.** Straight out of the
-  synth they measured 10-12 dB louder than the carpet (A-weighted), which
-  jumps out of the mix: `makeHardStep`'s gains put them about 5 dB over it.
-  The carpet thud sits where the ear is least sensitive, so compare
-  A-weighted, not RMS.
+- **Compare loudness A-weighted, not RMS.** Without gain the hard-floor clips
+  measured 10-12 dB(A) over carpet; `makeHardStep`'s gains put them about
+  5 dB over. Carpet's energy is mostly below 200 Hz, so RMS overstates it.
 - **The trace hashes the sound** (`audioHash` in each digest), so a change to
   which clip plays is a change to the golden: walk-l0-l2.trace was
   re-recorded for this, and main's replay of the new one fails at frame 150,

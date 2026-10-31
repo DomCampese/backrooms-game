@@ -3,9 +3,9 @@
 // (light colour and output, fog, gloss) is platform data in shared/port/levels.h, which
 // extends this table rather than repeating it.
 
-// What a level's floor is underfoot, which the footsteps sound like: the
-// surface the mesher lays there (shared/port/levels.cpp's LEVEL_SURFACES).
-// Wood is the Manila Room's boards, wherever that room stands.
+// Floor material, which picks the footstep clip (Sim::stepSfx). Must match the
+// floor surface in shared/port/levels.cpp's LEVEL_SURFACES. Wood is used only
+// inside the Manila Room.
 enum class Footing : unsigned char { Carpet, Concrete, Tile, Wood };
 
 struct LevelRules {
