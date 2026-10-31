@@ -36,6 +36,11 @@ struct Entity {
     // scheme as the player's bobPhase.
     float gait = 0;
     int hp = 3;
-    float wpx = 0, wpz = 0;   // chase waypoint: next cell centre on the path to the player
+    float wpx = 0, wpz = 0;   // waypoint: next cell centre on the route to the player or a noise
     double repathT = 0;       // when to recompute the route
+    // While stalking, he walks toward the last noise he heard (Sim::hunterListen).
+    bool tracking = false;
+    float heardX = 0, heardZ = 0;
+    // A new stalk starts with no noise heard and no route.
+    void forgetTrack() { tracking = false; repathT = 0; }
 };

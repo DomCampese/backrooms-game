@@ -274,6 +274,7 @@ void Sim::updateDevKeys(const DevKeys &dev, double now) {
         Vec2 spot = world.findOpenSpot(px + f2x * 12, pz + f2z * 12);
         ent.x = spot.x; ent.z = spot.y;
         ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.hp = 3; ent.stagger = 0;
+        ent.forgetTrack();
     }
     if (dev.chase) {
         if (ent.st == EState::Hidden) {

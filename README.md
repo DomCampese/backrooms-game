@@ -233,6 +233,11 @@ soundscape, and things that live there. Exits lead deeper — usually.
 
 The wandering entity — **Pirate Clark** on Level 0, **a Smiler** on Level 1 and in the Red Halls, **the Partygoer =)**
 in LEVEL FUN — stalks out of the fog, and gives chase if you stare too long.
+While it stalks it listens. A shot, a sprint, a struck flare or a playing tape
+deck draws it toward the sound at a slow walk, and you hear its footsteps
+coming. It stops while you look at it. Crouching, standing still or hiding by
+cover keeps it from hearing you, and a playing deck set down elsewhere draws
+it away from you.
 
 <p align="center"><img src="docs/partygoer.png" width="300" alt="The Partygoer"></p>
 

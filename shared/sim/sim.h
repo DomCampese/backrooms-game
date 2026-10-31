@@ -100,7 +100,8 @@ struct Sim {
     static constexpr float HIDE_BREAK = 1.2f;   // m/s that ends hiding
     static constexpr float HIDE_GRACE = 0.35f;  // s above HIDE_BREAK before hiding ends
     static constexpr float TAPE_RUN = 26.0f;    // s: one side of a tape
-    static constexpr float TAPE_NOISE = 32.0f;  // m a playing deck carries to the pack
+    static constexpr float TAPE_NOISE = 32.0f;  // m a playing deck carries to the pack and the hunter
+    static constexpr float FLARE_STRIKE_NOISE = 30.0f;   // m a struck flare carries
     static constexpr int   ESCAPE_COST = 12;    // doubloons that buy the way out
     // The catch: the hunter starts a lunge from LUNGE_REACH, the lunge lasts
     // LUNGE_TIME with a warning, and only a lunge in progress can catch the
@@ -126,6 +127,11 @@ struct Sim {
     static constexpr float SPAWN_FAR_SPAN = 10.0f;
     static constexpr float W_TAP = 0.3f;        // s: double-tap window for W-to-run
     static constexpr float ENT_STRIDE = 1.05f;  // m per hunter footfall
+    // A stalking hunter walks toward a noise he hears at STALK_SPEED, slower
+    // than the player walks, and stops while the player looks at him. Within
+    // STALK_ARRIVE of the spot he has nothing left to follow.
+    static constexpr float STALK_SPEED = 1.4f;   // m/s
+    static constexpr float STALK_ARRIVE = 1.0f;  // m
     static constexpr float DOG_STRIDE = 0.85f;  // m per dog footfall
     // Cells the room-size probe steps each way: 20 m, longer than any Level 0
     // room and shorter than the Level 1 halls, so a corridor measures near 0
@@ -390,7 +396,9 @@ struct Sim {
     const char *hunterName() const { return level == 4 ? "THE PARTYGOER" : level == 0 ? "PIRATE CLARK" : "A SMILER"; }
     bool wayOpen() const { return coins >= ESCAPE_COST; }
     void spawnHunter();
-    float packNoise(float &x, float &z) const;   // how far the loudest noise carries, and where
+    float loudestNoise(float &x, float &z) const;   // how far the loudest noise carries, and where
+    void hunterListen();             // a stalking hunter who hears a noise starts walking to it
+    void hunterStepToward(float tx, float tz, float spd, float dt);   // along the cell router
     bool updateDog(int i, float dt, double now, float noise, float nsx, float nsz);   // true if it ended the run
     bool hunterChase(float dt, double now, bool entVisible, float &fearT);   // true if it ended the run
 

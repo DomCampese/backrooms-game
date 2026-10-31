@@ -23,6 +23,7 @@ void Sim::updateEntity(float dt, double now, bool forceSpawn) {
         Vec2 spot = world.findOpenSpot(px + fwd.x * 8, pz + fwd.z * 8);
         ent.x = spot.x; ent.z = spot.y;
         ent.st = EState::Stalk; ent.gaze = -100; ent.life = 0; ent.unseen = 0; ent.hp = 3; ent.stagger = 0;
+        ent.forgetTrack();
     }
     float fearT = 0.06f;
     ent.stagger = fmaxf(0.0f, ent.stagger - dt);
@@ -53,8 +54,14 @@ void Sim::updateEntity(float dt, double now, bool forceSpawn) {
             ent.life += dt;
             fearT = entVisible ? 0.45f : 0.15f;
             if (entVisible) ent.gaze += dt;
+            hunterListen();
+            if (ent.tracking && !entVisible) {
+                float hx = ent.heardX - ent.x, hz = ent.heardZ - ent.z;
+                if (hx * hx + hz * hz < STALK_ARRIVE * STALK_ARRIVE) ent.tracking = false;
+                else hunterStepToward(ent.heardX, ent.heardZ, STALK_SPEED, dt);
+            }
             if (ent.gaze > 1.6f || (entVisible && entDist < 8) || (entDist < 3.0f && !hidden)) { ent.st = EState::Chase; ent.repathT = 0; }
-            else if (ent.life > 24 && !entVisible) ent.st = EState::Hidden, ent.nextSpawn = now + 18 + grng.f01() * 35;
+            else if (ent.life > 24 && !entVisible && !ent.tracking) ent.st = EState::Hidden, ent.nextSpawn = now + 18 + grng.f01() * 35;
         }
         if (ent.st == EState::Chase && hunterChase(dt, now, entVisible, fearT)) return;
         if (ent.st == EState::Flee) {   // runs from the nearest flare, or from the player once none are lit
@@ -163,6 +170,7 @@ void Sim::spawnHunter() {
     ent.x = sx; ent.z = sz;
     ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.hp = 3; ent.stagger = 0;
     ent.gait = 0;   // standing still when first seen
+    ent.forgetTrack();
     ent.dispY = world.groundAt(ent.x, ent.z, py + 1.0f);
 }
 
@@ -183,24 +191,7 @@ bool Sim::hunterChase(float dt, double now, bool entVisible, float &fearT) {
     }
     float chaseSpd = 3.3f + 1.0f * clampf(1 - entDist / 25.0f, 0, 1) + (ent.lunge > 0 ? 3.2f : 0.0f);
     if (ent.stagger > 0) chaseSpd *= 0.35f;
-    // Straight at the player when he can see them; otherwise along the cell router.
-    ent.repathT -= dt;
-    float wdx = ent.wpx - ent.x, wdz = ent.wpz - ent.z;
-    if (ent.repathT <= 0 || wdx * wdx + wdz * wdz < 0.20f) {
-        ent.repathT = 0.25;
-        int eci = cellOf(ent.x), eck = cellOf(ent.z);
-        int oi, ok;
-        if (entDist > 2.5f && !world.lineOfSight(ent.x, ent.z, px, pz) &&
-            world.pathStep(eci, eck, cellOf(px), cellOf(pz), oi, ok) && !(oi == eci && ok == eck)) {
-            ent.wpx = oi * CELL + 1.0f; ent.wpz = ok * CELL + 1.0f;
-        } else {
-            ent.wpx = px; ent.wpz = pz;
-        }
-    }
-    float sx = ent.wpx - ent.x, sz = ent.wpz - ent.z, sl = sqrtf(sx * sx + sz * sz) + 1e-4f;
-    ent.x += sx / sl * chaseSpd * dt;
-    ent.z += sz / sl * chaseSpd * dt;
-    world.collideCircle(ent.x, ent.z, 0.38f, ent.dispY);
+    hunterStepToward(px, pz, chaseSpd, dt);
     ent.unseen = entVisible ? 0 : ent.unseen + dt * (hidden ? 2.4f : (crouchCur > 0.7f ? 1.7f : 1.0f));
     if (ent.unseen > 6 && (entDist > 14 || hidden)) ent.st = EState::Hidden, ent.nextSpawn = now + 25 + grng.f01() * 40;
     if (hidden && entDist < 2.2f && closeCallT <= 0) {   // close by, but he has not seen the hidden player
@@ -215,6 +206,41 @@ bool Sim::hunterChase(float dt, double now, bool entVisible, float &fearT) {
     return false;
 }
 
+// Straight at the target when he can see it; otherwise along the cell router.
+void Sim::hunterStepToward(float tx, float tz, float spd, float dt) {
+    ent.repathT -= dt;
+    float wdx = ent.wpx - ent.x, wdz = ent.wpz - ent.z;
+    if (ent.repathT <= 0 || wdx * wdx + wdz * wdz < 0.20f) {
+        ent.repathT = 0.25;
+        int eci = cellOf(ent.x), eck = cellOf(ent.z);
+        int oi, ok;
+        float tdx = tx - ent.x, tdz = tz - ent.z;
+        if (sqrtf(tdx * tdx + tdz * tdz) > 2.5f && !world.lineOfSight(ent.x, ent.z, tx, tz) &&
+            world.pathStep(eci, eck, cellOf(tx), cellOf(tz), oi, ok) && !(oi == eci && ok == eck)) {
+            ent.wpx = oi * CELL + 1.0f; ent.wpz = ok * CELL + 1.0f;
+        } else {
+            ent.wpx = tx; ent.wpz = tz;
+        }
+    }
+    float sx = ent.wpx - ent.x, sz = ent.wpz - ent.z, sl = sqrtf(sx * sx + sz * sz) + 1e-4f;
+    ent.x += sx / sl * spd * dt;
+    ent.z += sz / sl * spd * dt;
+    world.collideCircle(ent.x, ent.z, 0.38f, ent.dispY);
+}
+
+// He hears what the pack hears, measured from where he stands, and keeps the
+// newest spot. He does not follow a hidden player's own noise, only one at
+// least as loud as a struck flare: a shot, the strike, a playing deck carried.
+void Sim::hunterListen() {
+    float nx, nz;
+    float reach = loudestNoise(nx, nz);
+    float dx = nx - ent.x, dz = nz - ent.z;
+    if (dx * dx + dz * dz >= reach * reach) return;
+    bool atPlayer = nx == px && nz == pz;
+    if (atPlayer && hidden && reach < FLARE_STRIKE_NOISE) return;
+    ent.tracking = true; ent.heardX = nx; ent.heardZ = nz;
+}
+
 // The pack hunts by sound and is faster than the player, so running does not
 // work. Flares turn them, a shot kills one, and silence loses them.
 void Sim::updateDogs(float dt, double now) {
@@ -223,7 +249,7 @@ void Sim::updateDogs(float dt, double now) {
         return;
     }
     float nsx, nsz;
-    float noise = packNoise(nsx, nsz);
+    float noise = loudestNoise(nsx, nsz);
 
     if (now > nextHowl && deathT <= 0) {
         nextHowl = now + 26 + grng.f01() * 34;
@@ -254,7 +280,7 @@ void Sim::updateDogs(float dt, double now) {
 
 // How far the loudest noise carries this tick, in metres, and where it is.
 // Usually the player; a playing deck that was set down is a separate source.
-float Sim::packNoise(float &x, float &z) const {
+float Sim::loudestNoise(float &x, float &z) const {
     float noise = 5.0f;
     x = px; z = pz;
     if (sprinting) noise = 20.0f;
@@ -268,7 +294,7 @@ float Sim::packNoise(float &x, float &z) const {
     if (muzzleT > 0 || gunCd > SHOT_INTERVAL - 0.07f) { noise = 45.0f; x = px; z = pz; }   // a shot
     bool justStruck = false;   // a flare's strike, whichever flare
     for (const FlareProj &f : litFlares) if (f.active && f.burn > FLAREBURN - 0.6f) justStruck = true;
-    if (justStruck) { noise = 30.0f; x = px; z = pz; }
+    if (justStruck) { noise = FLARE_STRIKE_NOISE; x = px; z = pz; }
     return noise;
 }
 

@@ -303,6 +303,10 @@ off the Mac. In order:
     knocks, `LEVEL=4`: balloon pop, `LEVEL=2`: none. No Unreal code changed;
     the mixer loads every clip up to `SFX_COUNT`.
 
+12. **The hunter walks toward noise** (31 October 2026). On Level 0, F3 then
+    `E`, turn away and fire: his footsteps come closer. Turn to face him and
+    he stands still. No Unreal code changed; it is sim behaviour.
+
 A session on the Mac itself (`claude remote-control` in the repository) could
 build, run the tests and read the log directly; from the cloud each Unreal
 change has waited on a build and a pasted log.

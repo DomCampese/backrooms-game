@@ -68,6 +68,30 @@ Levels 0 and 4 (`Sfx::Step`, unchanged), concrete on Levels 1 and 3
   machine, and check a new recording reached every level with
   `grep -o 'level=[0-9]' | sort | uniq -c`.
 
+# The hunter walks toward noise (October 2026)
+
+A stalking hunter (Levels 0, 1, 3 and 4) used to stand where he spawned. Now
+he hears the loudest noise each tick and walks toward it at `STALK_SPEED`
+(1.4 m/s). He stops while the player looks at him (`entVisible`). Both builds
+get it with no platform code: his footsteps and pose already follow his
+movement.
+
+- **He hears what the pack hears.** `Sim::loudestNoise` (was `packNoise`)
+  gives the reach and the source for both. A source closer to him than its
+  reach sets `ent.tracking` and `heardX/Z` (`Sim::hunterListen`).
+- **A hidden player's own noise is ignored**, unless it reaches
+  `FLARE_STRIKE_NOISE` (a shot, a strike, a playing deck carried), as the
+  pack's rule is. Without that he walked onto a hidden player.
+- **He despawns after 24 s only while not tracking.** Within `STALK_ARRIVE`
+  of the spot he stops tracking until he hears something new.
+- **Chase and stalk share `hunterStepToward`.** The chase's routing moved into
+  it unchanged: walk-l0-l2.trace replays with every digest matching, and it
+  includes a chase. The trace never has him stalking out of sight, so it does
+  not cover the walk; the regression's ENT-05 block does.
+- **A new stalk calls `Entity::forgetTrack`**, at all three places that set
+  `EState::Stalk` from Hidden (`spawnHunter`, F3 `E`, the forced spawn).
+  Without it he walks to a spot heard in the last stalk.
+
 # Distant one-shots (October 2026)
 
 Levels 0, 1, 3 and 4 play a muffled one-shot at intervals from a random

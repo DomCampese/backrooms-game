@@ -801,6 +801,50 @@ int main() {
         sim.deck.playing=false; sim.deck.carried=true;
     }
 
+    // ---- a stalking hunter walks to what he hears and stops while watched (ENT-05)
+    {
+        sim.applyLevel(0,GetTime()); sim.beginDescent(0); sim.inMenu=false; sim.deathT=0;
+        float sx=41, sz=41; bool clear=false;
+        for (int k=0;k<4000 && !clear;++k) {
+            float cx=(k%60)*CELL+41, cz=(k/60)*CELL+41;
+            clear = sim.world.lineOfSight(cx,cz,cx+12.5f,cz) && sim.world.floorY(cellOf(cx),cellOf(cz))==0
+                 && sim.world.floorY(cellOf(cx+12),cellOf(cz))==0;
+            if (clear) { sx=cx; sz=cz; }
+        }
+        CHECK(clear);
+        sim.px=sx; sim.pz=sz; sim.py=0; sim.velx=sim.velz=0; sim.sprinting=false; sim.crouchCur=0;
+        sim.hidden=false; sim.muzzleT=0; sim.gunCd=0; sim.deck.playing=false; sim.deck.carried=true;
+        for (FlareProj &f : sim.litFlares) f.active=false;
+        auto face=[&](float yaw){ sim.yaw=yaw; sim.pitch=0; sim.updateLook(noInput(g)); };
+        auto stalkAt=[&](float d){
+            sim.ent.x=sim.px+d; sim.ent.z=sim.pz; sim.ent.dispY=0; sim.ent.hp=3; sim.ent.stagger=0;
+            sim.ent.st=EState::Stalk; sim.ent.gaze=0; sim.ent.life=0; sim.ent.forgetTrack();
+        };
+        auto run=[&](float s){ for (int i=0;i<(int)(s*60);++i) sim.updateEntity(1.0f/60,100.0+i/60.0); };
+        // Standing still, 12 m away and looking the other way: he hears nothing and stays put.
+        face(PI); stalkAt(12.0f); run(2.0f);
+        CHECK(!sim.ent.tracking && fabsf(sim.ent.x-(sim.px+12.0f))<1e-4f);
+        // A shot carries 45 m: he walks toward it, slower than a walk.
+        sim.muzzleT=0.05f; run(1.0f/60); sim.muzzleT=0;
+        CHECK(sim.ent.tracking && sim.ent.heardX==sim.px);
+        run(1.0f);
+        float walked=(sim.px+12.0f)-sim.ent.x;
+        CHECK(walked>Sim::STALK_SPEED*0.8f && walked<Sim::STALK_SPEED*1.1f && sim.ent.st==EState::Stalk);
+        // Turned to face him he stops; turned away again he comes on.
+        face(0); float x0=sim.ent.x; run(0.5f);
+        CHECK(sim.ent.st==EState::Stalk && sim.ent.x==x0);
+        face(PI); run(0.5f); CHECK(sim.ent.x<x0-0.5f);
+        // Hidden, the player's own noise does not draw him; a playing deck set
+        // down elsewhere does, and he goes to the deck.
+        stalkAt(4.0f); sim.hidden=true; run(0.5f);
+        CHECK(!sim.ent.tracking && sim.ent.st==EState::Stalk);
+        sim.deck.carried=false; sim.deck.playing=true; sim.deck.x=sim.px+8.0f; sim.deck.z=sim.pz;
+        run(1.0f/60); CHECK(sim.ent.tracking && sim.ent.heardX==sim.deck.x);
+        run(4.0f); CHECK(fabsf(sim.ent.x-sim.deck.x)<Sim::STALK_ARRIVE+0.1f && sim.ent.st==EState::Stalk);
+        sim.deck.playing=false; sim.deck.carried=true; sim.hidden=false;
+        sim.ent.st=EState::Hidden;
+    }
+
     // ---- the building moves when you are not looking (PAC-03)
     {
         sim.applyLevel(0,GetTime()); sim.beginDescent(0); sim.inMenu=false;
