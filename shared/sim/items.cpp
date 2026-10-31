@@ -1,5 +1,5 @@
-// Things in the world: loose pickups, drinking, the tape deck, the use key,
-// chalk, and Level 1's supply crates.
+// Loose pickups, drinking, the tape deck, the use key, chalk, and Level 1's
+// supply crates.
 #include "../core/fp_strict.h"
 #include "sim.h"
 #include <cmath>
@@ -26,7 +26,7 @@ float Sim::bottleShelfY(int a, int b) {
 bool Sim::bottleAt(int a, int b) {
     if (world.pillarAt(a, b) || world.poolAt(a, b)) return false;
     if (world.propAt(a, b)) {
-        // On furniture a carton is far likelier than on bare floor.
+        // A carton is much more likely on furniture than on bare floor.
         if (bottleShelfY(a, b) < 0) return false;
         if (world.propAt(a, b) == PROP_MANILA_TABLE) return true;   // the cupboard under it
         return ih(a, b, pickupSalt() ^ 0xA1A2u) % 4 == 0;
@@ -34,8 +34,8 @@ bool Sim::bottleAt(int a, int b) {
     return ih(a, b, pickupSalt() ^ 0xA1A1u) % 137 == 0;
 }
 
-// The payout lands on the middle swallow, not the keypress, so the animation
-// is what you wait through.
+// Sanity is added at the middle swallow, not on the key press, so the player
+// has to wait through the animation.
 void Sim::updateDrink(float dt) {
     if (drinkT <= 0) return;
     float el = DRINK_TIME - drinkT;             // s since the can went up
@@ -44,14 +44,14 @@ void Sim::updateDrink(float dt) {
         stamina = 1.0f;
         fear *= 0.35f;
         boostT = 8.0f;
-        sanity = clampf(sanity + 0.34f + 0.04f * level, 0.0f, 1.0f);   // more back the deeper you are
+        sanity = clampf(sanity + 0.34f + 0.04f * level, 0.0f, 1.0f);   // more on deeper levels
         sanityWarnT = 0;
     }
     drinkT = fmaxf(0.0f, drinkT - dt);
 }
 
 Pickup Sim::pickupAt(int a, int b) {
-    // A key is placed, not hashed, and its position means something: nothing masks it.
+    // A key is placed by the generator, not hashed, so nothing overrides it.
     if (world.keyAt(a, b)) return Pickup::Key;
     // Nothing lies on a flight or over a hole.
     if (world.storeyH > 0.0f && (world.vflagAt(a, b) & (VF_STAIR | VF_HOLE))) return Pickup::None;
@@ -62,8 +62,8 @@ Pickup Sim::pickupAt(int a, int b) {
     return Pickup::None;
 }
 
-// Level 0's first visit on storey 0 salts with the bare seed, so a fresh
-// descent opens on the pickups it always did.
+// Level 0's first visit on storey 0 uses the bare seed, so a fresh descent
+// has the same pickups as before.
 uint32_t Sim::pickupSalt() const {
     return (uint32_t)world.seed ^ ((uint32_t)level * 0x9E3779B9u)
                                 ^ (world.visit * 0x85EBCA6Bu)
@@ -104,9 +104,9 @@ Vec2 Sim::pickupSpot(int a, int b) {
     return { a * CELL + 1.0f, b * CELL + 1.0f };
 }
 
-// A playing tape restores sanity only as far as you can hear it (gone by 14 m,
-// less through a wall), while the pack hears it from TAPE_NOISE: a deck set
-// far enough out to draw them does nothing for you.
+// A playing tape restores sanity only within earshot (none past 14 m, less
+// through a wall), but the pack hears it from TAPE_NOISE. So a deck set far
+// enough away to lure them gives the player no sanity.
 void Sim::updateTapeDeck(const InputFrame &in, float dt, double now) {
     deckNoteT = fmaxf(0, deckNoteT - dt);
 
@@ -117,12 +117,12 @@ void Sim::updateTapeDeck(const InputFrame &in, float dt, double now) {
             deck.t = TAPE_RUN;
             deckNoteT = 2.6f; deckNote = "the tape runs. someone is talking.";
             play(Sfx::Click).atPitch(1.05f);
-            // The hunter comes to noise. Once, on the press: every tick would
-            // pin his next spawn to the length of the tape.
+            // The hunter is drawn to noise. Applied once, on the press; applying it
+            // every tick would hold his next spawn for the whole tape.
             if (ent.st == EState::Hidden)
                 ent.nextSpawn = fmin(ent.nextSpawn, now + 10 + grng.f01() * 9);
         } else if (deck.playing) {
-            // Set down underarm, so it lands a few metres out.
+            // Thrown gently, so it lands a few metres away.
             deck.carried = false; deck.flying = true;
             deck.x = px + fwd.x * 0.4f; deck.y = eyeY - 0.35f; deck.z = pz + fwd.z * 0.4f;
             deck.vx = fwd.x * 5.0f; deck.vz = fwd.z * 5.0f; deck.vy = fwd.y * 5.0f + 1.4f;
@@ -204,8 +204,8 @@ void Sim::collectPickups() {
         if (kind == Pickup::None) continue;
         Vec2 spot = pickupSpot(a, b);
         float ddx = px - spot.x, ddz = pz - spot.y;
-        // A carton on furniture is reached across it, since collision keeps
-        // you off the piece; never through a wall (lineOfSight ignores props).
+        // A carton on furniture is reached across the furniture, since collision
+        // keeps the player off it. Never through a wall (lineOfSight ignores props).
         bool onShelf = kind == Pickup::AlmondWater && bottleShelfY(a, b) >= 0;
         float gr = onShelf ? 1.35f : 0.8f;
         if (ddx * ddx + ddz * ddz >= gr * gr) continue;
@@ -252,8 +252,8 @@ void Sim::collectPickups() {
     }
 }
 
-// E reaches a crate, the Manila notes, a standpipe, a vending machine, a
-// locked door and a deck you set down. They never share a cell.
+// E uses a crate, the Manila notes, a standpipe, a vending machine, a locked
+// door, or a deck that was set down. They never share a cell.
 void Sim::useWhatIsNear() {
     int pci = cellOf(px), pck = cellOf(pz);
     if (level == 1) {
@@ -290,8 +290,8 @@ void Sim::useWhatIsNear() {
             if ((int)valvesTurned.size() >= VALVES_NEEDED && !pipesShut) {
                 pipesShut = true;
                 play(Sfx::Win);
-                // Once a descent: paid per visit, the cursed exit's loop back
-                // here banked the way out without ever facing the hunter.
+                // Once per descent. Paid per visit, the cursed exit's loop back
+                // here let players buy the way out without facing the hunter.
                 if (!pipesPaid) {
                     pipesPaid = true;
                     for (int c2 = 0; c2 < 9; c2++) {
@@ -323,13 +323,13 @@ void Sim::useWhatIsNear() {
             if (ddx * ddx + ddz * ddz > 1.9f * 1.9f) continue;
             if (keys <= 0) {
                 deckNoteT = 2.2f; deckNote = "locked. the key will be somewhere near.";
-                opened = true;   // said once, not once per edge
+                opened = true;   // the message is shown once, not once per edge
                 break;
             }
             keys--;
             world.unlockEdge(a, b, west != 0);
-            // The light's grid is a snapshot rebuilt every six cells walked;
-            // without this the open door goes on casting its shadow.
+            // The occupancy grid is only rebuilt every six cells walked; without
+            // this the open door still casts a shadow.
             shadowsStale = true;
             deckNoteT = 2.2f; deckNote = "the lock turns. the door swings in.";
             play(Sfx::Click).atPitch(0.7f);
@@ -352,15 +352,15 @@ void Sim::markChalk() {
     if (!grounded || !world.lineOfSight(px, pz, x, z)) return;
     auto &marks = chalk[level];
     marks.push_back({{x, world.groundAt(x, z, py) + 0.016f, z}, yaw, true, world.storey});
-    // Over the cap, drop your own oldest: the stranger's arrows are first in
-    // the list and are the rarest thing on the floor.
+    // Over the cap, drop the player's oldest mark. The two pre-placed arrows
+    // are first in the list and must not be dropped.
     if ((int)marks.size() > MAXCHALK)
         for (size_t i = 0; i < marks.size(); i++)
             if (marks[i].mine) { marks.erase(marks.begin() + i); break; }
 }
 
-// A crate stands alone in a cell with nothing else in it, never in front of a
-// way through and never at an arrival point.
+// A crate stands only in an otherwise empty cell, never in a doorway and
+// never at an arrival point.
 bool Sim::crateAt(int a, int b) {
     if (level != 1) return false;
     if (ih(a, b, pickupSalt() ^ 0xC2A7Eu ^ (crateEpoch * 0x9E3779B9u)) % 37 != 0) return false;
@@ -371,8 +371,8 @@ bool Sim::crateAt(int a, int b) {
     return !(abs(a) <= 3 && abs(b) <= 3);
 }
 
-// Contents are a hash of the cell and the epoch: supplies half the time, the
-// lore's junk otherwise.
+// Contents are a hash of the cell and the epoch: supplies half the time, junk
+// from the wiki's item list otherwise.
 void Sim::openCrate(int a, int b) {
     cratesOpened.insert(cellKey2(a, b));
     uint32_t h = ih(a, b, pickupSalt() ^ 0x10075u ^ (crateEpoch * 0x85EBCA6Bu));
@@ -396,7 +396,7 @@ void Sim::openCrate(int a, int b) {
 
 void Sim::updateCrates(double now) {
     if (level != 1) return;
-    // The epoch turns when the lights come back, so nobody sees a crate move.
+    // The epoch advances when a blackout ends, so crates move while the player cannot see.
     bool dark = now < blackoutEnd;
     if (crateWasDark && !dark) { crateEpoch++; cratesOpened.clear(); }
     crateWasDark = dark;

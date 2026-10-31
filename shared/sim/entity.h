@@ -1,41 +1,41 @@
 #pragma once
-// PIRATE CLARK: the thing in the fog. State machine lives in Game::updateEntity.
+// The level's hunter (Clark, a Smiler or the Partygoer) and the Red Halls
+// dogs. The state machines are Sim::updateEntity and Sim::updateDog.
 
 enum class EState { Hidden, Stalk, Chase, Flee, Die };
 
-// The Red Halls have their own residents: a pack that hunts by sound. They are
-// faster than you and cannot be outrun, only broken off — by fire, by a bullet,
-// or by going quiet long enough that they lose the thread.
+// The Red Halls pack hunts by sound. Dogs are faster than the player, so they
+// cannot be outrun; a flare, a shot or staying quiet long enough breaks off a
+// chase.
 enum class DState { Gone, Prowl, Charge, Yelp };
 struct Dog {
     DState st = DState::Gone;
     float x = 0, z = 0, dispY = 0;
-    float wpx = 0, wpz = 0;      // next cell on the route to wherever it's headed
-    float roamX = 0, roamZ = 0;  // where it's nosing about while it hasn't heard you
+    float wpx = 0, wpz = 0;      // next cell on its route
+    float roamX = 0, roamZ = 0;  // wander target while it has not heard the player
     double nextRoam = 0;
     double repathT = 0;
     float life = 0;              // time in the current state
-    float lost = 0;              // how long it has been off your scent
+    float lost = 0;              // s since it last heard the player
     double nextBark = 0;
-    float gait = 0;              // metres run, for the walk cycle — one stride per DOG_STRIDE
+    float gait = 0;              // footfall count: +1 per DOG_STRIDE metres, drives the walk cycle
     int hp = 2;
 };
 struct Entity {
-    float vx = 0, vz = 0;        // world velocity, for the lean — he tips into where he is going
+    float vx = 0, vz = 0;        // world velocity, for the sprite's lean
     EState st = EState::Hidden;
     float x = 0, z = 0;
     double nextSpawn = 12.0;
     float gaze = 0, life = 0, unseen = 0;
-    float dispY = 0;   // smoothed floor height under him, so he doesn't pop on stairs
-    float lunge = 0;     // the committed lunge: a telegraphed 0.6 s burst, and the only way he lands a catch
-    float lungeCd = 0;   // and the breath between attempts, so a missed lunge is a real escape
-    float stagger = 0; // brief hitch after taking a round — he slows, he doesn't leave
-    // Gait phase, counting footfalls: it gains 1 per stride, so an integer is a
-    // foot hitting the floor. It drives the walk-cycle frame AND the footfall
-    // sound off the same number, which is the whole reason the animation and
-    // the audio cannot drift apart. Same scheme as the player's bobPhase.
+    float dispY = 0;   // smoothed floor height, so he does not jump on stairs
+    float lunge = 0;     // s left in a lunge (LUNGE_TIME); only a lunge can catch the player
+    float lungeCd = 0;   // s before he can lunge again
+    float stagger = 0; // s of slowdown after being shot; he does not flee
+    // Footfall count: +1 per stride, so an integer is a footfall. Drives both the
+    // walk-cycle frame and the footstep sound, so they stay in step. Same
+    // scheme as the player's bobPhase.
     float gait = 0;
     int hp = 3;
-    float wpx = 0, wpz = 0;   // current chase waypoint (next cell centre on the path to you)
+    float wpx = 0, wpz = 0;   // chase waypoint: next cell centre on the path to the player
     double repathT = 0;       // when to recompute the route
 };

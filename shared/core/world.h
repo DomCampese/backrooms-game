@@ -196,8 +196,8 @@ struct VertFeat {
 enum VertFlag : uint8_t {
     VF_STAIR    = 1,    // this storey's floor here is a flight or a landing (World::stairY)
     VF_OPENUP   = 2,    // no ceiling: the space runs on up into the storey above
-    VF_HOLE     = 4,    // no floor: you look, and fall, into the storey below
-    VF_WALKHOLE = 8,    // ...but a flight comes up through it, so it can be walked down
+    VF_HOLE     = 4,    // no floor: the storey below shows through, and a body falls into it
+    VF_WALKHOLE = 8,    // a flight comes up through the hole, so it can be walked down
     VF_KEEP     = 16,   // a feature or its margin: nothing else is placed here
     VF_NOWALK   = 32,   // not part of this storey's 2D floor graph (connectivity, flood fills)
 };

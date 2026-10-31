@@ -1,17 +1,17 @@
-// What hunts you: the level's hunter (Pirate Clark, a Smiler, the Partygoer)
-// and the Red Halls pack.
+// The level's hunter (Pirate Clark, a Smiler, the Partygoer) and the Red Halls
+// pack.
 #include "../core/fp_strict.h"
 #include "sim.h"
 #include <cmath>
 
-// Sound only: cover means nothing to the pack, and a deck running in your
-// coat gives you away however still you are.
+// The pack hunts by sound only. Cover does not hide the player, and a
+// carried deck that is playing gives them away even when standing still.
 bool Sim::packDeaf() const {
     return still && !(deck.playing && deck.carried);
 }
 
 void Sim::updateEntity(float dt, double now, bool forceSpawn) {
-    // The Poolrooms are a refuge: nothing hunts there.
+    // Nothing hunts on Level 2.
     if (level == 2) {
         ent.st = EState::Hidden; ent.nextSpawn = now + 60; entDist = 1e9f;
         entDarkCur += (0 - entDarkCur) * fminf(1, 4 * dt);
@@ -28,7 +28,7 @@ void Sim::updateEntity(float dt, double now, bool forceSpawn) {
     ent.stagger = fmaxf(0.0f, ent.stagger - dt);
     entDist = 1e9f;
     if (ent.st == EState::Hidden) {
-        if (sprinting) ent.nextSpawn -= 1.5 * dt;   // running feet carry
+        if (sprinting) ent.nextSpawn -= 1.5 * dt;   // sprinting brings the spawn forward
         if (now > ent.nextSpawn) spawnHunter();
     } else {
         float gaitFromX = ent.x, gaitFromZ = ent.z;
@@ -37,10 +37,10 @@ void Sim::updateEntity(float dt, double now, bool forceSpawn) {
         float dirDot = (entDist > 0.01f) ? (fwd.x * ex + fwd.z * ez) / entDist : 1;
         bool entLos = world.lineOfSight(px, pz, ent.x, ent.z);
         bool entVisible = entDist < 36 && dirDot > 0.86f && entLos;
-        if (crouchCur > 0.7f && entDist > 7) entVisible = false;   // low and quiet: hard to pick out
+        if (crouchCur > 0.7f && entDist > 7) entVisible = false;   // crouched and over 7 m away: not visible to him
         if (hidden) entVisible = false;
         if (ent.st == EState::Stalk || ent.st == EState::Chase) {
-            // Any fire within 6 m turns him, whichever was thrown first.
+            // Any flare within 6 m makes him flee, whichever was thrown first.
             const FlareProj *fire = nearestLitFlare(ent.x, ent.z);
             if (fire) {
                 float fx = ent.x - fire->x, fz = ent.z - fire->z;
@@ -57,7 +57,7 @@ void Sim::updateEntity(float dt, double now, bool forceSpawn) {
             else if (ent.life > 24 && !entVisible) ent.st = EState::Hidden, ent.nextSpawn = now + 18 + grng.f01() * 35;
         }
         if (ent.st == EState::Chase && hunterChase(dt, now, entVisible, fearT)) return;
-        if (ent.st == EState::Flee) {   // bolts from the nearest fire, or from you once they are out
+        if (ent.st == EState::Flee) {   // runs from the nearest flare, or from the player once none are lit
             fearT = 0.18f;
             ent.life += dt;
             const FlareProj *from = nearestLitFlare(ent.x, ent.z);
@@ -67,8 +67,8 @@ void Sim::updateEntity(float dt, double now, bool forceSpawn) {
             world.collideCircle(ent.x, ent.z, 0.38f, ent.dispY);
             if (ent.life > 3.0f) { ent.st = EState::Hidden; ent.nextSpawn = now + 25 + grng.f01() * 35; }
         }
-        // His gait counts footfalls by distance covered, in every state: an
-        // integer is a boot landing, which is both the sound here and the
+        // His gait counts footfalls by distance covered, in every state. An
+        // integer is a footfall, used for both the sound here and the
         // walk-cycle frame render.cpp draws.
         float moved = portableHypot(ent.x - gaitFromX, ent.z - gaitFromZ);
         float lastGait = ent.gait;
@@ -76,9 +76,8 @@ void Sim::updateEntity(float dt, double now, bool forceSpawn) {
         if (ent.gait > 4096.0f) ent.gait -= 4096.0f;   // an even integer keeps the cycle continuous
         if (floorf(ent.gait) > floorf(lastGait) && entDist < 22.0f && deathT <= 0) {
             float inv = entDist > 0.01f ? 1.0f / entDist : 0.0f;
-            float sd = clampf((ex * inv) * r2x + (ez * inv) * r2z, -1.0f, 1.0f);   // + is to your right
-            // Through a wall, the dull set and quieter: a wall costs you the
-            // certainty of where he is.
+            float sd = clampf((ex * inv) * r2x + (ez * inv) * r2z, -1.0f, 1.0f);   // + is to the player's right
+            // Through a wall, use the muffled clips and a lower volume.
             int pick = grng.ri(0, 3);
             float occ = entLos ? 1.0f : 0.45f;
             play(entLos ? Sfx::EntStep : Sfx::EntStepThrough, pick)
@@ -92,7 +91,7 @@ void Sim::updateEntity(float dt, double now, bool forceSpawn) {
             if (ent.life > 1.2f) { ent.st = EState::Hidden; ent.nextSpawn = now + 90 + grng.f01() * 60; }
         }
     }
-    // Measured, because three states move him in three places.
+    // Measured from his position, because three states move him in different places.
     if (dt > 1e-5f) {
         ent.vx = (ent.x - entPrevX) / dt;
         ent.vz = (ent.z - entPrevZ) / dt;
@@ -107,21 +106,21 @@ void Sim::updateEntity(float dt, double now, bool forceSpawn) {
     fear += (fearT - fear) * fminf(1, 2.2f * dt);
     if (whisperT > 0) fear = fmaxf(fear, 0.22f);
     fear = fmaxf(fear, (1.0f - sanity) * 0.60f);
-    // The lights die in a pool around him, worse the closer the hunt.
+    // Lights near him dim, more so the closer he is to catching the player.
     float darkT = (ent.st == EState::Chase) ? 1.0f
                 : (ent.st == EState::Stalk)  ? 0.45f
                 : (ent.st == EState::Flee)   ? 0.2f : 0.0f;
     if (level == 2) darkT *= 0.5f;
     entDarkCur += (darkT - entDarkCur) * fminf(1, 1.6f * dt);
-    // No growl: a state must not announce itself through walls. His footfalls
-    // and the lunge are what you hear.
+    // No growl: his state must not be audible through walls. Only his
+    // footsteps and the lunge make sound.
     ambience.growl = 0.0f;
     audioEvent(AudioEvent::AMBIENCE).mix = ambience;
 }
 
-// Three arrivals: ahead where your route bends out of sight, round any
-// corner, or out in the fog. The near two must be out of your line of sight,
-// inside the fog.
+// Three spawn options: ahead where the player's route turns out of sight,
+// round any corner, or out in the fog. The first two must be out of the
+// player's line of sight and inside fog range.
 void Sim::spawnHunter() {
     auto unseenSpot = [&](float wx, float wz, float &ox, float &oz) {
         Vec2 s = world.findOpenSpot(wx, wz);
@@ -134,8 +133,8 @@ void Sim::spawnHunter() {
     bool placed = false;
     float roll = grng.f01();
     if (roll < 0.45f) {
-        // Walk the router's path along your heading and take the first cell
-        // out of sight: a cell you could have walked to, not one behind a wall.
+        // Follow the router's path along the player's heading and take the first
+        // cell out of sight, so it is reachable, not behind a wall.
         int ci = cellOf(px), ck = cellOf(pz);
         int ti = cellOf(px + f2x * 26.0f), tk = cellOf(pz + f2z * 26.0f);
         for (int step = 0; step < 20 && !placed; step++) {
@@ -148,7 +147,7 @@ void Sim::spawnHunter() {
             placed = unseenSpot(cx, cz, sx, sz);
         }
     } else if (roll < 0.80f) {
-        // Round a corner, any bearing: a few tries almost always find one.
+        // Round a corner at any bearing; a few tries almost always find one.
         for (int tries = 0; tries < 16 && !placed; tries++) {
             float a = grng.f01() * TAU;
             float d = SPAWN_NEAR_MIN + grng.f01() * (SPAWN_NEAR_MAX - SPAWN_NEAR_MIN);
@@ -167,23 +166,24 @@ void Sim::spawnHunter() {
     ent.dispY = world.groundAt(ent.x, ent.z, py + 1.0f);
 }
 
-// He takes you only out of a committed lunge: it starts inside LUNGE_REACH,
-// is announced, and lasts LUNGE_TIME. Sprinting away breaks it; walking does not.
+// He catches the player only during a lunge, which starts inside LUNGE_REACH,
+// has a warning, and lasts LUNGE_TIME. Sprinting away escapes it; walking
+// does not.
 bool Sim::hunterChase(float dt, double now, bool entVisible, float &fearT) {
     fearT = entDist < 8 ? 1.0f : 0.8f;
     ent.lunge = fmaxf(0, ent.lunge - dt);
     ent.lungeCd = fmaxf(0, ent.lungeCd - dt);
-    // A stair's height between you is a flight to climb, not a reach.
+    // Ignore a catch across a large height difference on stairs.
     bool level2 = fabsf(ent.dispY - py) < 1.4f;
     if (entDist < LUNGE_REACH && level2 && ent.lunge <= 0 && ent.lungeCd <= 0 && !hidden) {
         ent.lunge = LUNGE_TIME;
-        ent.lungeCd = LUNGE_TIME + 1.2f;   // a breath between attempts
+        ent.lungeCd = LUNGE_TIME + 1.2f;   // pause between lunges
         play(Sfx::Scare).atPitch(0.62f).atVolume(0.85f);
         fearT = 1.0f;
     }
     float chaseSpd = 3.3f + 1.0f * clampf(1 - entDist / 25.0f, 0, 1) + (ent.lunge > 0 ? 3.2f : 0.0f);
     if (ent.stagger > 0) chaseSpd *= 0.35f;
-    // Straight at you when he can see you; otherwise along the cell router.
+    // Straight at the player when he can see them; otherwise along the cell router.
     ent.repathT -= dt;
     float wdx = ent.wpx - ent.x, wdz = ent.wpz - ent.z;
     if (ent.repathT <= 0 || wdx * wdx + wdz * wdz < 0.20f) {
@@ -203,20 +203,20 @@ bool Sim::hunterChase(float dt, double now, bool entVisible, float &fearT) {
     world.collideCircle(ent.x, ent.z, 0.38f, ent.dispY);
     ent.unseen = entVisible ? 0 : ent.unseen + dt * (hidden ? 2.4f : (crouchCur > 0.7f ? 1.7f : 1.0f));
     if (ent.unseen > 6 && (entDist > 14 || hidden)) ent.st = EState::Hidden, ent.nextSpawn = now + 25 + grng.f01() * 40;
-    if (hidden && entDist < 2.2f && closeCallT <= 0) {   // right there, and he does not know
+    if (hidden && entDist < 2.2f && closeCallT <= 0) {   // close by, but he has not seen the hidden player
         closeCallT = 3.0f;
         play(Sfx::Heartbeat);
     }
     if (entDist < CATCH_REACH && level2 && ent.lunge > 0 && !hidden && hurtT <= 0) {
         if (hurtPlayer(now, ENTITY_HIT, hunterName(), ent.x, ent.z)) return true;
-        // Landed: the lunge is spent and he reels from his own swing.
+        // A hit: the lunge ends and he staggers.
         ent.lunge = 0; ent.lungeCd = HURT_GRACE + 1.0f; ent.stagger = 0.8f;
     }
     return false;
 }
 
-// The pack hunts by sound. Faster than you, so running never works: fire turns
-// them, a round puts one down, and silence loses them.
+// The pack hunts by sound and is faster than the player, so running does not
+// work. Flares turn them, a shot kills one, and silence loses them.
 void Sim::updateDogs(float dt, double now) {
     if (level != 3) {
         for (auto &d : dogs) d.st = DState::Gone;
@@ -231,7 +231,7 @@ void Sim::updateDogs(float dt, double now) {
         for (auto &d : dogs) if (d.st != DState::Gone) live++;
         if (live > 0) play(Sfx::Howl).atPan(0);
     }
-    // One at a time, so the hall fills up rather than swarming.
+    // They arrive one at a time, not all at once.
     if (now > nextPack) {
         nextPack = now + 14 + grng.f01() * 16;
         for (auto &d : dogs) {
@@ -253,7 +253,7 @@ void Sim::updateDogs(float dt, double now) {
 }
 
 // How far the loudest noise carries this tick, in metres, and where it is.
-// Usually you; a deck set down playing is its own source.
+// Usually the player; a playing deck that was set down is a separate source.
 float Sim::packNoise(float &x, float &z) const {
     float noise = 5.0f;
     x = px; z = pz;
@@ -277,7 +277,7 @@ bool Sim::updateDog(int i, float dt, double now, float noise, float nsx, float n
     float ddx = px - d.x, ddz = pz - d.z;
     float dist = sqrtf(ddx * ddx + ddz * ddz) + 1e-4f;
     d.life += dt;
-    if (d.st == DState::Yelp) {          // shot or burned: bolts, then gone
+    if (d.st == DState::Yelp) {          // shot or burned: runs, then despawns
         float rx = d.x - px, rz = d.z - pz, rl = sqrtf(rx * rx + rz * rz) + 1e-4f;
         d.x += rx / rl * 7.5f * dt; d.z += rz / rl * 7.5f * dt;
         d.gait += 7.5f * dt;
@@ -293,7 +293,7 @@ bool Sim::updateDog(int i, float dt, double now, float noise, float nsx, float n
             }
         }
         float sdx = nsx - d.x, sdz = nsz - d.z;
-        bool heard = sqrtf(sdx * sdx + sdz * sdz) < noise;   // the noise, not you
+        bool heard = sqrtf(sdx * sdx + sdz * sdz) < noise;   // the noise source, not the player
         if (d.st == DState::Prowl) {
             if (heard) { d.st = DState::Charge; d.life = 0; d.lost = 0; d.repathT = 0; }
             else if (d.life > 55) d.st = DState::Gone;
@@ -301,8 +301,8 @@ bool Sim::updateDog(int i, float dt, double now, float noise, float nsx, float n
             d.lost = heard ? 0.0f : d.lost + dt;
             if (d.lost > 6.0f) { d.st = DState::Prowl; d.life = 0; }
         }
-        // Prowling noses about on its own business; only a charge comes for
-        // the noise, or the noise rules would mean nothing.
+        // A prowling dog wanders on its own; only a charging dog goes to the
+        // noise, or noise would have no effect on what they do.
         float spd = (d.st == DState::Charge) ? 5.6f : 2.1f;
         float tgx, tgz;
         if (d.st == DState::Charge) { tgx = nsx; tgz = nsz; }
@@ -343,7 +343,7 @@ bool Sim::updateDog(int i, float dt, double now, float noise, float nsx, float n
                 .atPitch(0.92f + grng.f01() * 0.2f)
                 .atVolume(clampf(1.5f * occ / (1.0f + (dogLos ? 0.05f : 0.10f) * dist * dist), 0.0f, 0.95f));
         }
-        // Cover does not stop them; only stillness with no deck in your coat.
+        // Cover does not stop them; only standing still with no playing deck carried.
         if (dist < 1.15f && deathT <= 0 && hurtT <= 0 && !packDeaf()) {
             if (hurtPlayer(now, PACK_BITE, "THE PACK", d.x, d.z)) return true;
         }

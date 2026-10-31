@@ -37,7 +37,7 @@ struct InputFrame {
     bool reload = false, throwFlare = false, flashlight = false;
     bool use = false, drink = false, chalk = false;
 
-    bool begin = false;           // title screen: any key but F11, a click, or a touch start gesture
+    bool begin = false;           // title screen: any key except F11, a click, or a touch start gesture
     DevKeys dev;
     float screenFov = 70.0f;      // base vertical FOV for the window, deg (windowFovY, shared/port/view.h)
     bool forceSpawn = false;      // headless capture: put the hunter in view on this tick

@@ -1,4 +1,4 @@
-// The player's body: looking, walking, swimming, falling, hiding, storeys.
+// The player: looking, walking, swimming, falling, hiding, storeys.
 #include "../core/fp_strict.h"
 #include "sim.h"
 #include <cmath>
@@ -8,7 +8,7 @@ void Sim::updateFlashlight(const InputFrame &in, float dt) {
         if (flashOn || battery > 0.001f) {
             flashOn = !flashOn;
             play(Sfx::Click).atPitch(flashOn ? 1.0f : 0.85f);
-        } else play(Sfx::Click).atPitch(0.55f);   // dead battery: just the switch
+        } else play(Sfx::Click).atPitch(0.55f);   // dead battery: switch click only
     }
     flashCur += ((flashOn ? 1.0f : 0.0f) - flashCur) * fminf(1, 25 * dt);
     if (flashOn) {
@@ -39,8 +39,9 @@ void Sim::updateSprint(bool requested, bool moving, bool crouched, float dt) {
     stamina = clampf(stamina + (sprinting ? -SPRINT_DRAIN * dt : dt / 6.0f), 0, 1);
 }
 
-// Holding rise swims up to the surface float and holds it; letting go sinks
-// you, which is the dive. Exponential drag behaves the same at any frame rate.
+// Holding rise swims up to the surface and stays there; releasing it sinks,
+// which is how the player dives. Exponential drag behaves the same at any
+// frame rate.
 bool Sim::updateSwimming(float dt, bool rise) {
     float bottom = world.groundAt(px, pz, py);
     swimming = world.poolAt(cellOf(px), cellOf(pz)) && bottom < WATER_Y - 1.4f && py < WATER_Y - 0.35f;
@@ -50,7 +51,7 @@ bool Sim::updateSwimming(float dt, bool rise) {
     vy += (desired - vy) * (1 - portableExp(-5.0f * dt));
     py += vy * dt;
     if (py < bottom) { py = bottom; vy = fmaxf(vy, 0); }
-    // Held at the surface rather than bobbing out of it in a row of jumps.
+    // Held at the surface, rather than jumping out of the water repeatedly.
     if (py > FLOAT_PY && rise) { py = FLOAT_PY; vy = fminf(vy, 0); }
     swimPhase += dt * (1.1f + 0.45f * portableHypot(velx, velz));
     return true;
@@ -60,7 +61,7 @@ void Sim::updateSqueeze(bool held, float dt) {
     if (held) squeezing = true;
     else if (squeezing) {
         // Stay narrow until the full radius fits: expanding inside a gap lets
-        // collision push you out through the far side of a thin wall.
+        // collision push the player through the far side of a thin wall.
         AABB boxes[MAX_NEARBY_AABBS];
         int n = 0, a = cellOf(px), b = cellOf(pz);
         for (int x = -1; x <= 1; ++x) for (int z = -1; z <= 1; ++z)
@@ -86,12 +87,12 @@ void Sim::updateMovement(const InputFrame &in, float dt, double now) {
     float il = sqrtf(ix * ix + iz * iz);
     bool moving = il > 0.01f;
     if (moving) { ix /= il; iz /= il; }
-    if (moving) { ix *= in.moveScale; iz *= in.moveScale; }   // half a stick push is half a speed
+    if (moving) { ix *= in.moveScale; iz *= in.moveScale; }   // speed is proportional to stick deflection
     updateSqueeze(in.playing && in.squeeze, dt);
     bool inWater = world.poolAt(cellOf(px), cellOf(pz)) && py < WATER_Y - 0.08f;
     bool crouched = in.crouch && !inWater;
     crouchCur += ((crouched ? 1.0f : 0.0f) - crouchCur) * fminf(1, 10 * dt);
-    // Double-tap W: a second press inside W_TAP runs until W is let go.
+    // Double-tap W: a second press within W_TAP sprints until W is released.
     wTapT = fmaxf(0, wTapT - dt);
     if (!in.touch && in.forwardPressed) { if (wTapT > 0) wSprint = true; wTapT = W_TAP; }
     if (!in.forward) wSprint = false;
@@ -114,8 +115,8 @@ void Sim::updateMovement(const InputFrame &in, float dt, double now) {
         float ledge = world.groundAt(px, pz, py);
         if (ledge > py + MAX_STEP) {
             if (py + EYE_H < WATER_Y + 0.03f) {
-                // Under water you cannot pass a basin riser; surface and the
-                // same edge lifts you out.
+                // Under water the player cannot cross a basin riser; at the
+                // surface the same edge lifts the player out.
                 px = oldX; pz = oldZ; velx = velz = 0;
             } else {
                 swimClimb += ledge - py; py = ledge; vy = 0; grounded = true; swimming = false;
@@ -124,8 +125,8 @@ void Sim::updateMovement(const InputFrame &in, float dt, double now) {
             }
         }
     }
-    // Distance actually covered drives footsteps, bob and records: running into
-    // a wall is not a sprint.
+    // Distance actually covered drives footsteps, bob and records, so running
+    // into a wall does not count as moving.
     float spd = portableHypot(px - oldX, pz - oldZ) / fmaxf(dt, 0.0001f);
     distWalked += spd * dt;
 
@@ -146,8 +147,8 @@ void Sim::updateMovement(const InputFrame &in, float dt, double now) {
     if (!afloat && in.jumpPressed && grounded) { vy = inWater ? 4.3f : 5.6f; grounded = false; }
     if (grounded) {
         if (py > groundY + 0.05f && world.poolAt(cellOf(px), cellOf(pz))) { grounded = false; vy = 0; }  // pool edge: drop in
-        // Off anything taller than a step you fall; the glide below would
-        // lower you off a cabinet as if it were a ramp.
+        // Off anything taller than a step the player falls. The glide below
+        // would otherwise lower the player off a cabinet as if it were a ramp.
         else if (groundY < py - MAX_STEP) { grounded = false; vy = 0; }
         else {   // stairs, steps, furniture edges: glide to the new floor height
             py += (groundY - py) * fminf(1, 14 * dt);
@@ -184,9 +185,9 @@ void Sim::updateMovement(const InputFrame &in, float dt, double now) {
 
     updateGait(spd, speed, inWater, dt);
 
-    // The window's base FOV, plus the sprint and aim pulls and the slide's
-    // narrowing. The pulls are the same vertical degrees at every screen shape;
-    // at 1440x850 this is 70 / 79 / 62 / 55.
+    // The window's base FOV plus the sprint, aim and slide offsets. The offsets
+    // are the same vertical degrees at every window shape; at 1440x850 this is
+    // 70 / 79 / 62 / 55.
     float fovT = in.screenFov + (sprinting ? 9.0f : -8.0f * aimBlend) - slide * 15.0f;
     fovT = clampf(fovT, 50.0f, 115.0f);
     fov += (fovT - fov) * fminf(1, 6 * dt);
@@ -194,8 +195,8 @@ void Sim::updateMovement(const InputFrame &in, float dt, double now) {
     updateHiding(spd, dt);
 }
 
-// Level 0's rotten patches give way to Level 1 after 0.9 s. They warn first:
-// the floor sags under you and the subfloor groans, faster as it worsens.
+// Standing on a Level 0 rotten patch for 0.9 s drops the player to Level 1.
+// Before that the floor sags and the groan sound repeats faster.
 void Sim::updateSoftFloor(float dt, double now) {
     // The patch is dished, so standing in it puts py below zero; test against
     // the dip, or the trapdoor never fires.
@@ -215,7 +216,7 @@ void Sim::updateSoftFloor(float dt, double now) {
             ent.st = EState::Hidden; ent.nextSpawn = now + 20;
         }
     } else softTimer = fmaxf(0.0f, softTimer - dt * 2.0f);
-    // Eased, and quadratic in the time stood: the last of the give comes fastest.
+    // Eased, and quadratic in time spent on the patch, so the sag speeds up.
     softSag += (softTimer / 0.9f * softTimer / 0.9f * 0.065f - softSag) * fminf(1, 9 * dt);
 }
 
@@ -230,8 +231,8 @@ void Sim::updateGait(float spd, float speed, bool inWater, float dt) {
     bobPhase += (spd * dt / strideLen) * (grounded ? 1.0f : 0.0f);
     eyeY = EYE_H - 0.55f * crouchCur - landDip - softSag + py - portableCos(bobPhase * 6.28318f) * 0.032f * bobAmt;
     if (swimming) {
-        // Two swells that never line up and a dip each stroke, fading as you
-        // sink below the surface float.
+        // Two sine swells at unrelated rates plus a dip each stroke, fading out
+        // as the player sinks below the surface.
         floatT += dt;
         float surf = clampf(1.0f - (FLOAT_PY - py) / 0.8f, 0, 1);
         float swell = 0.075f * portableSin(floatT * 1.55f) + 0.03f * portableSin(floatT * 2.6f + 1.3f);
@@ -244,7 +245,7 @@ void Sim::updateGait(float spd, float speed, bool inWater, float dt) {
     } else floatRoll *= portableExp(-6 * dt);
     eyeY -= swimClimb;
     if (floorf(bobPhase) > floorf(lastPhase)) {
-        int v = grng.ri(0, 3);   // wading, a stroke pitched up is a leg pushing through water
+        int v = grng.ri(0, 3);   // wading uses the swim stroke clip, pitched up
         play(inWater ? Sfx::SwimStroke : stepSfx(), v)
             .atPitch((inWater ? 1.15f : 0.9f) + grng.f01() * 0.22f)
             .atVolume((0.35f + 0.3f * bobAmt) * (inWater ? 1.2f : 1.0f));
@@ -254,8 +255,8 @@ void Sim::updateGait(float spd, float speed, bool inWater, float dt) {
     if (bobPhase > 4096.0f) bobPhase -= 4096.0f;
 }
 
-// Hiding needs cover and stillness: under HIDE_ENTER to tuck in, and above
-// HIDE_BREAK for HIDE_GRACE to lose it. The pack listens for stillness alone.
+// Hiding needs cover and stillness: under HIDE_ENTER to start, and above
+// HIDE_BREAK for HIDE_GRACE to end. The pack only checks stillness.
 void Sim::updateHiding(float speed, float dt) {
     nearCover = false;
     if (crouchCur > 0.75f) {
@@ -278,11 +279,11 @@ void Sim::updateHiding(float speed, float dt) {
 }
 
 // Everything with a position moves by the pitch, so nothing jumps: a flare on
-// the landing below is still on that landing. The hunter follows you onto the
-// flight if he was close behind, and otherwise loses you.
+// the landing below stays on that landing. The hunter follows the player onto
+// the flight if he was close behind, and otherwise loses track.
 void Sim::changeStorey(int dir, double now) {
     const float sh = dir * world.storeyH;
-    // The flight you are on, looked up before the accessors switch storey.
+    // The player's flight, looked up before the accessors switch storey.
     VertFeat used; int ucx = 0, ucz = 0; bool onFlight = false;
     {
         int ci = cellOf(px), ck = cellOf(pz);
@@ -300,7 +301,7 @@ void Sim::changeStorey(int dir, double now) {
         if (!f.active) continue;
         f.y -= sh;
         f.onStorey = f.y > -0.6f && f.y < world.storeyH - 0.2f;
-        // A flare in the air lands where it is: its arc was against the old floor.
+        // A flare in the air keeps its position; its arc was relative to the old floor.
         if (f.flying) { f.flying = false; f.vx = f.vy = f.vz = 0; }
     }
     if (!deck.carried) { deck.y -= sh; if (deck.flying) { deck.flying = false; deck.vx = deck.vy = deck.vz = 0; } }
@@ -312,7 +313,7 @@ void Sim::changeStorey(int dir, double now) {
     ent.dispY -= sh;
     if (ent.st != EState::Hidden && ent.st != EState::Die) {
         if (ent.st == EState::Chase && entDist < 16.0f && onFlight) {
-            // On the flight you used: below you if you climbed, above if you came down.
+            // On the flight the player used: below if they climbed, above if they came down.
             float u, v;
             if (used.kind == VK_STAIRWELL) { u = dir > 0 ? 1.0f : 3.0f; v = dir > 0 ? 3.0f : 3.2f; }
             else {
