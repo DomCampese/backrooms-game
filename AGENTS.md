@@ -167,23 +167,20 @@ the Web build's (unreal/README.md, "How the world is drawn").
 
 # Camcorder and recovered tape (October 2026)
 
-The code: shared/port/camcorder.{h,cpp} (`Camcorder`: the controls, zoom,
-night shot, interference, the tape's frames and sounds, the playback clock,
-the clips and the OSD as `HudDraw`s), web/src/camcorder.{h,cpp}
-(`CamcorderReel`: the reel, `TAPE_FS`, the sound handles) and the world
-shader's `uIR`. In Unreal the reel is `UBackroomsReel` and the tape look is
+The camera is never held (removed 31 October 2026: no V, no CAM button, no
+viewfinder, zoom, night shot or infrared lamp). It records the whole run, a
+small REC mark (`Camcorder::recMark`) sits in the top left in play, and the
+tape plays back on the death card.
+
+The code: shared/port/camcorder.{h,cpp} (`Camcorder`: interference, the
+tape's frames and sounds, the playback clock, the clips, the REC mark and the
+playback's OSD as `HudDraw`s) and web/src/camcorder.{h,cpp} (`CamcorderReel`:
+the reel, `TAPE_FS`, the sound handles). In Unreal the reel is `UBackroomsReel` and the tape look is
 `M_BackroomsTape` (Shaders/BackroomsTape.ush, written 27 October 2026).
 
-- **The sim never sees the camera.** `Camcorder::control` runs between
-  `readInput` and `trace.step` and removes fire, aim, reload and the wheel
-  from the `InputFrame`. If it ran after the trace, a recorded run would
-  replay with the gun firing every time night shot was switched.
-- **Raising the camera does not need `in.playing`; toggling night shot
-  does.** A headless capture never captures the cursor, so `BACKROOMS_CAM`
-  stayed down until that check was split.
-- **On touch, the zoom reads AIM as a press, not a hold.** The sim drops the
-  touch AIM latch every tick it refuses an aim (`dropAimLatch`), and with the
-  camera up every aim is refused.
+- **The sim never sees the camera.** The tape reads the sim after each step
+  and touches no input.
+- **The REC mark hides while F3 is up**, which writes in the same corner.
 - **The reel is one render texture, at most 2048 px on a side**, which is all
   WebGL 2 guarantees. A frame is 288 px on its long side and the reel holds
   64 of them, 4.3 s at 15 Hz; at 1440x850 that is 7 x 10 cells and 14 MB.
@@ -195,9 +192,9 @@ shader's `uIR`. In Unreal the reel is `UBackroomsReel` and the tape look is
   too. Where nothing is drawn, both hold the level's clear colour: raylib's
   clear, and in Unreal a 4 km box of `M_BackroomsClear` around the eye
   (`ShowBackdrop`).
-- **`TAPE_FS` takes its coordinates from `gl_FragCoord`, not the quad.** One
-  shader draws both the scene target and a reel frame, sampling either
-  through `uCellA`/`uCellB` as uv rectangles with v up the picture. raylib's
+- **`TAPE_FS` takes its coordinates from `gl_FragCoord`, not the quad.** It
+  samples reel frames through `uCellA`/`uCellB` as uv rectangles with v up
+  the picture. raylib's
   y runs down and a framebuffer's rows run up; `cellUV` converts.
 - **Echoed sounds play on aliases** (`GameAudio::echo`, `LoadSoundAlias`). A
   raylib clip keeps the pitch it was last given. Setting the slow-motion
@@ -207,8 +204,8 @@ shader's `uIR`. In Unreal the reel is `UBackroomsReel` and the tape look is
   then the card. `DEATH_CARD_HOLD` is unchanged, so a key still skips it.
 - **The camera requests its sounds; it does not play them.**
   `Camcorder::noises` is the list, drained by `CamcorderReel::playNoises`
-  (raylib) or `SoundMixer::camera` (Unreal). `Zoom` and `Hiss` mean "unless
-  already playing", which only the platform knows. An `Echo` of a recording
+  (raylib) or `SoundMixer::camera` (Unreal). `Hiss` means "unless already
+  playing", which only the platform knows. An `Echo` of a recording
   (the water, the party music) is not the mixer's to play: it comes back in
   `SoundMixer::recorded` marked `echo`, and `UBackroomsSound` plays it on its
   own component (`Player(path, true)`), so a live play of the same recording
@@ -230,7 +227,9 @@ shader's `uIR`. In Unreal the reel is `UBackroomsReel` and the tape look is
   node (`TAPE_CODE`, pasted into a stand-in for the material template): DXC to
   SPIR-V, spirv-cross back to GLSL, Mesa for all three. 50 states, 15.3 M
   pixels, none differ; each of eleven small changes planted in the .ush and
-  the material code was caught. It needs DXC (the GitHub release tarball) and
+  the material code was caught. That was before night shot and the live
+  viewfinder were cut from the shaders and the check (31 October 2026); it
+  has not been run since. It needs DXC (the GitHub release tarball) and
   `apt install spirv-cross`. It found two things:
   - **Write GLSL's matrices as GLSL writes them, with the vector on the
     left** (`mul(v, M)`). Writing the rows out with `mul(M, v)` rounded 1/255
@@ -249,8 +248,8 @@ shader's `uIR`. In Unreal the reel is `UBackroomsReel` and the tape look is
   game (`-game`), which cannot build materials. After the tape landed, a
   project last opened in the editor before it had every material except
   `M_BackroomsTape`. `Load` refused them all and the world was black under a
-  working HUD. The tape is optional now (a warning, and the viewfinder shows
-  the plain scene). `make unreal-play` also builds the materials headless when
+  working HUD. The tape is optional now (a warning, and the death card shows
+  no tape). `make unreal-play` also builds the materials headless when
   one is missing or the surfaces, the editor's Python or the recordings
   changed since the last good build (`unreal/Saved/materials.digest`). Opening
   the editor builds them too but writes no digest, so the next play builds
@@ -258,8 +257,8 @@ shader's `uIR`. In Unreal the reel is `UBackroomsReel` and the tape look is
 - **The eye always sees a lighter tape** (`POST_FS` and BackroomsPost.ush,
   31 October 2026). The post pass has TAPE_FS's line wobble, chroma smear,
   lifted blacks, scanlines, block noise, tracking band, head switching and
-  dropouts at about half strength, with no toggle. It is not the viewfinder:
-  through the camcorder `TAPE_FS` replaces the post pass as before. The
+  dropouts at about half strength, with no toggle. On the death card
+  `TAPE_FS` replaces the post pass as before. The
   numbers are its own, not shared with TAPE_FS, so tuning the tape does not
   move the eye. The post pass reads 21 taps (was 15): 15 and 16 are the luma's
   neighbours, 17 to 20 the chroma taps. The HLSL port was checked by reading
@@ -1159,7 +1158,7 @@ build's, in `web/src/`.
 | `port/sounds.{h,cpp}`, `port/ambience.{h,cpp}`, `port/mixer.{h,cpp}` | the synthesized clips and which are recordings; the ambience synth; a software mixer for a port |
 | `port/chunk_mesh.{h,cpp}` | the chunk mesher (`bakeChunkGeometry`), `ChunkMesh` slots |
 | `port/mesh_builder.{h,cpp}`, `port/atlas.{h,cpp}`, `port/palette.h` | `MB`, `addPropBox`, `addSolidBox`, `PLAIN_UV`; the fixtures atlas layout and tile sizes; `cl8`, `PARTY_RGBA` |
-| `port/camcorder.{h,cpp}` | the camcorder: viewfinder, night shot, zoom, interference, the tape and its playback, clips and OSD |
+| `port/camcorder.{h,cpp}` | the camcorder's tape: interference, the frames and their playback, clips, the REC mark and the playback's OSD |
 | `sim/entity.h` | `Entity` (Clark on Level 0, the Smiler on 1 and 3, the Partygoer on 4) and `Dog` state |
 | `world_mesh.{h,cpp}`, `mesh_upload.h` | `bakeChunk` (the mesher's output as raylib meshes), `ChunkMeshCache` |
 | `object_meshes.{h,cpp}` | can, tape deck, reels, flare, supply crate |
@@ -1446,7 +1445,6 @@ light flicker, so the same command twice gives comparable images. Frames go to
 | `BACKROOMS_MANILA=1` | put a Manila Room in the chunk east of spawn (centre x 48, z 16) |
 | `BACKROOMS_STOREY=n` | start on storey n (Level 0) |
 | `BACKROOMS_RECORD=path` | record the sim's inputs, for `./replay` (shared/sim/trace.h) |
-| `BACKROOMS_CAM=1` | camcorder up from frame 2; `2` for night shot |
 | `BACKROOMS_CHASE=1` | the hunter spawned on frame 300 chases; with `BACKROOMS_POS=15,15,0.8` and seed 1337 it catches you on frame 410, so the tape plays from there |
 | `BACKROOMS_CLEAN=1` | no intro fade or HUD |
 | `BACKROOMS_TIME=t` | fix rendering time (not the sim's) |

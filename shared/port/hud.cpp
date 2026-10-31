@@ -144,16 +144,15 @@ void Hud::titleCard(float timeF) {
                   b.longestRun % 60),
               sw / 2, sh * 2 / 3 + hud(62), hud(16), { 140, 132, 100, 200 });
     std::string tc = in.touch
-        ? fmt("STICK move    AIM taps the sights up and down    LAMP torch    ITEM cycle    CAM camcorder    bank %d doubloons to leave",
+        ? fmt("STICK move    AIM taps the sights up and down    LAMP torch    ITEM cycle    bank %d doubloons to leave",
               Sim::ESCAPE_COST)
-        : fmt("WASD move    SHIFT run    C squeeze    F flashlight    1/2/4 item    V camcorder    bank %d doubloons to leave",
+        : fmt("WASD move    SHIFT run    C squeeze    F flashlight    1/2/4 item    bank %d doubloons to leave",
               Sim::ESCAPE_COST);
     textC(tc, sw / 2, sh - hud(42), hud(15), { 128, 122, 96, 170 });
 }
 
 void Hud::play(double now, double elapsed, bool &everFlashed) {
-    const bool filming = in.filming;
-    if (!filming && sim.drinkT <= 0 && (sim.weapon == WEAPON_REVOLVER || (sim.weapon == WEAPON_FLARE && sim.flares > 0))) {
+    if (sim.drinkT <= 0 && (sim.weapon == WEAPON_REVOLVER || (sim.weapon == WEAPON_FLARE && sim.flares > 0))) {
         // The crosshair dot fades as the sights come up.
         HudDraw d{ HudDraw::Circle };
         d.x = sw / 2; d.y = sh / 2; d.r = (float)hud(1.5f); d.col = fade({ 230, 220, 190, 110 }, 1 - sim.aimBlend);
@@ -180,8 +179,8 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         textC("if you're reading this, you've already noclipped", sw / 2, sh / 3 + hud(66), hud(18),
               fade({ 160, 150, 110, 255 }, ta * 0.9f));
         const char *t3 = in.touch
-            ? "STICK walk   push past its ring to run   DUCK crouch   SQUEEZE   JUMP   LAMP torch   ITEM cycle   DRINK   MARK chalk   USE vend/pick up   CAM camcorder"
-            : "WASD walk   SHIFT or W W run   CTRL crouch   C squeeze   SPACE jump   F flashlight   1/2/4 item   3 drink   M chalk   E vend/pick up   V camcorder";
+            ? "STICK walk   push past its ring to run   DUCK crouch   SQUEEZE   JUMP   LAMP torch   ITEM cycle   DRINK   MARK chalk   USE vend/pick up"
+            : "WASD walk   SHIFT or W W run   CTRL crouch   C squeeze   SPACE jump   F flashlight   1/2/4 item   3 drink   M chalk   E vend/pick up";
         textC(t3, sw / 2, sh - hud(60), hud(16), fade({ 140, 132, 100, 255 }, ta * 0.8f));
         const Records &b = sim.best;
         if (b.escapes || b.kills || b.metres || b.wins) {
@@ -245,16 +244,16 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         textC(sim.tapeLine, sw / 2, sh - hud(122), hud(15), fade({ 150, 140, 118, 230 }, a * 0.9f));
     }
     if (in.captureHint) textC("click to capture mouse", sw / 2, sh / 2 + hud(80), hud(20), { 200, 190, 150, 200 });
-    if (!filming) textR(fmt("%d", in.fps), sw - hud(14), hud(12), hud(16), { 190, 180, 140, 150 });
+    textR(fmt("%d", in.fps), sw - hud(14), hud(12), hud(16), { 190, 180, 140, 150 });
     // The flashlight hint until it is first used, then its state.
     if (sim.flashOn) everFlashed = true;
-    if (!everFlashed && elapsed > 9.0 && !filming)
+    if (!everFlashed && elapsed > 9.0)
         // Not an em dash: raylib's default font stops at Latin-1, and anything
         // past it draws as a "?". U+00B7 is inside the range.
         textR("F · flashlight", sw - hud(16), sh - hud(28), hud(16), { 190, 180, 140, 160 });
-    else if (sim.flashOn && !filming)
+    else if (sim.flashOn)
         textR("[ flashlight ]", sw - hud(16), sh - hud(26), hud(14), { 235, 225, 180, 120 });
-    if (!filming) {   // the sanity meter, always shown
+    {   // the sanity meter, always shown
         const int w = hud(90), x = sw - w - hud(16), y = sh - hud(60), th = hud(5);
         rect(x - hud(1), y - hud(1), w + hud(2), th + hud(2), { 0, 0, 0, 120 });
         // Cream, shading to red as it empties; it pulses near the end.
@@ -290,7 +289,7 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         float a = clampf(sim.sanityWarnT / 1.2f, 0, 1) * clampf((4.0f - sim.sanityWarnT) / 0.4f, 0, 1);
         textC(sim.sanityLine, sw / 2, sh / 2 + hud(96), hud(19), fade({ 206, 176, 176, 255 }, a * 0.9f));
     }
-    if (!filming && (sim.flashOn || sim.battery < 0.99f)) {   // the battery meter, once the flashlight has been used
+    if (sim.flashOn || sim.battery < 0.99f) {   // the battery meter, once the flashlight has been used
         const int w = hud(90), x = sw - w - hud(16), y = sh - hud(44), th = hud(5);   // a row below the sanity meter
         rect(x - hud(1), y - hud(1), w + hud(2), th + hud(2), { 0, 0, 0, 120 });
         Rgba bar = sim.battery < 0.15f ? Rgba{ 220, 90, 70, 190 } : Rgba{ 200, 190, 150, 150 };
@@ -300,7 +299,7 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
             textR("battery low", sw - hud(16), sh - hud(78), hud(13), fade({ 220, 120, 100, 220 }, pulse));
         }
     }
-    if (!filming) {   // the inventory, bottom left; the selected weapon is lit
+    {   // the inventory, bottom left; the selected weapon is lit
         Rgba selc = { 235, 200, 130, 210 }, dimc = { 150, 138, 112, 110 };
         if (sim.tapes > 0) text(fmt("tapes  ×%d", sim.tapes), hud(16), sh - hud(138), hud(16), { 172, 162, 190, 170 });
         if (sim.keys > 0) text(fmt("keys  ×%d", sim.keys), hud(16), sh - hud(160), hud(16), { 214, 186, 110, 190 });
@@ -344,7 +343,7 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         box(HudDraw::GradientH, 0, 0, e, sh, r0, r1);
         box(HudDraw::GradientH, sw - e, 0, e, sh, r1, r0);
     }
-    if (!filming && sim.stamina < 0.98f) {   // the sprint bar, bottom centre
+    if (sim.stamina < 0.98f) {   // the sprint bar, bottom centre
         const int w = hud(220), x = sw / 2 - w / 2, y = sh - hud(42), th = hud(6);
         rect(x - hud(1), y - hud(1), w + hud(2), th + hud(2), { 0, 0, 0, 120 });
         rect(x, y, (int)(w * sim.stamina), th, sim.sprintExhausted ? Rgba{ 190, 100, 66, 180 } : Rgba{ 200, 180, 120, 160 });
@@ -368,7 +367,7 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         coverLine = "[ crouched ]";
         coverCol = { 180, 170, 140, 120 };
     }
-    if (coverLine && !filming) textC(coverLine, sw / 2, sh - hud(62), hud(14), coverCol);
+    if (coverLine) textC(coverLine, sw / 2, sh - hud(62), hud(14), coverCol);
     if (sim.level == 3 && sim.valveT > 0) {   // a valve was just closed
         float a = clampf(sim.valveT / 1.6f, 0, 1);
         if (sim.pipesShut) {

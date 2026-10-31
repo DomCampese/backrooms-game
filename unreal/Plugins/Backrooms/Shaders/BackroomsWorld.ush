@@ -44,7 +44,7 @@ struct FBRUniforms
 	float Gloss, Vary, Faulty, Wet, WetFrom;
 	float4 RoomMask, Lamp;
 	float3 LampCol;
-	float Macro, Board, ObjRefl, IR;
+	float Macro, Board, ObjRefl;
 	float2 OccOrigin;
 	float OccN;
 	float StoreyH, Storey, DrawRel;
@@ -366,14 +366,6 @@ float3 BRRoomLight(FBRUniforms U, inout FBRFrag F, Texture2D Occ, float3 P, floa
 		float3 Fcol = float3(1.0, 0.42, 0.15) * Fi;
 		Light += Fcol * Ndl;
 		if (F.Gloss > 0.10) Light += Fcol * (BRSheen(N, V, Lf, Shin) * F.Gloss * 0.55);
-	}
-	if (U.IR > 0.01)
-	{
-		float3 Iv = P - U.ViewPos;
-		float Id2 = dot(Iv, Iv);
-		float3 Inn = Iv * rsqrt(max(Id2, 1e-6));
-		float Spread = 0.30 + 0.70 * pow(max(dot(Inn, U.FlashDir), 0.0), 3.0);
-		Light += (U.IR * Spread * 6.0 / (1.0 + 0.14 * Id2)) * clamp(dot(N, -Inn) * 0.7 + 0.3, 0.0, 1.0);
 	}
 	if (U.Lamp.w > 0.01)
 	{

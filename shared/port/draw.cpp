@@ -150,7 +150,7 @@ ObjMat objMat(ObjMesh m) {
 
 float objGloss(ObjMesh m) { return m == ObjMesh::Flare ? FLARE_GLOSS : -1.0f; }
 
-FrameLight frameLight(Sim &sim, float now, float ir) {
+FrameLight frameLight(Sim &sim, float now) {
     FrameLight l{};
     l.time = now;
     l.blackout = sim.blackoutCur * (sim.whisperT > 0 ? 0.86f : 1.0f);   // lights dim during a whisper
@@ -160,7 +160,6 @@ FrameLight frameLight(Sim &sim, float now, float ir) {
         l.flash *= clampf(sim.battery / 0.15f, 0.15f, 1.0f) * (0.7f + 0.3f * lowFlick);
     }
     l.flashDir = sim.fwd;
-    l.ir = ir;
     l.flick = 0.91f + 0.09f * sinf(now * 31.0f) * sinf(now * 47.3f + 1.3f);
     // One flare point light: the flare with the most presence at the player
     // (Sim::dominantFlare), so a nearly burnt-out flare does not keep the light
@@ -230,14 +229,6 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
     const LevelCfg &lc = LEVELS[sim.level];
     float ambLumP = (lc.amb.x + lc.amb.y + lc.amb.z) / 3.0f;
     float edSend = (sim.ent.st == EState::Hidden) ? 0.0f : sim.entDarkCur;
-    // The camcorder's infrared lamp on what is drawn unlit, as the world shader has it.
-    auto irLum = [&](float x, float y, float z) {
-        if (light.ir <= 0.01f) return 0.0f;
-        float dx = x - sim.px, dy = y - sim.eyeY, dz = z - sim.pz;
-        float d2 = dx * dx + dy * dy + dz * dz, d = sqrtf(d2) + 1e-4f;
-        float ahead = fmaxf((dx * sim.fwd.x + dy * sim.fwd.y + dz * sim.fwd.z) / d, 0.0f);
-        return light.ir * (0.30f + 0.70f * ahead * ahead * ahead) * 6.0f / (1.0f + 0.14f * d2);
-    };
     auto propLum = [&](float x, float y, float z) {
         float lum = lightAtCPU(x, y, z, sim.blackoutCur, lc.ls, lc.wallH - LIGHT_DROP, lc.dead, lc.lightMul, ambLumP,
                                sim.ent.x, sim.ent.z, edSend, lc.vary);
@@ -245,7 +236,7 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             float fx = x - flarePos.x, fy = y - flarePos.y, fz = z - flarePos.z;
             lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fx * fx + fy * fy + fz * fz)), 0.0f, 1.0f);
         }
-        lum = clampf(lum + irLum(x, y, z), 0.0f, 1.0f);
+        lum = clampf(lum, 0.0f, 1.0f);
         return 0.18f + 0.82f * lum;   // minimum brightness
     };
     // Loose objects, placed by the same rules the sim uses (simScene); only the
@@ -399,7 +390,7 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             float fx = sp.litAt.x - flarePos.x, fz = sp.litAt.z - flarePos.z;
             lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fx * fx + fz * fz)), 0.0f, 1.0f);
         }
-        lum = clampf(lum + irLum(sp.litAt.x, sp.litAt.y, sp.litAt.z), 0.0f, 1.0f);
+        lum = clampf(lum, 0.0f, 1.0f);
         unsigned char l8 = cl8(40 + 215 * lum);
         unsigned char al = cl8(255 * clampf(expf(-dd * c.fogDen) * 1.6f, 0, 1) * sp.fade);
         spriteDraw(out, ShapeTex::Dog, sp, sp.frame0, { l8, l8, l8, cl8(al * (1.0f - sp.blend)) });
@@ -432,7 +423,7 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             float fvx = sim.ent.x - flarePos.x, fvz = sim.ent.z - flarePos.z;
             lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fvx * fvx + fvz * fvz)), 0.0f, 1.0f);
         }
-        lum = clampf(lum + irLum(sp.litAt.x, sp.litAt.y, sp.litAt.z), 0.0f, 1.0f);
+        lum = clampf(lum, 0.0f, 1.0f);
         float fogf = expf(-sim.entDist * c.fogDen);
         unsigned char lum8 = cl8(40 + 215 * lum);
         unsigned char al = cl8(255 * clampf(fogf * 1.6f, 0, 1) * sp.fade);
