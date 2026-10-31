@@ -1,6 +1,7 @@
 #include "../core/fp_strict.h"
 #include "sounds.h"
 #include "../core/hash.h"
+#include "../core/level_rules.h"
 #include "../core/vec.h"
 #include <cmath>
 
@@ -77,6 +78,92 @@ Pcm makeFootstep(uint32_t seed, bool through = false)
     }
 
     return d;
+}
+
+// Footstep on a hard floor: band-passed noise for the heel and toe, a decaying
+// sine for the body, a one-pole low-pass, then one or two low-passed echo taps.
+// Voice holds the per-floor parameters. Carpet uses makeFootstep instead.
+Pcm makeHardStep(uint32_t seed, Footing floor)
+{
+    struct Voice {
+        float click;      // heel band-pass centre, Hz
+        float clickQ;
+        float clickDecay; // 1/s
+        float body;       // body sine, Hz
+        float bodyDecay;
+        float bodyGain;
+        float echo1, echo1Gain, echo2, echo2Gain;   // echo tap delays (s) and gains
+        float gain;       // output gain; sets each floor about 5 dB(A) over carpet
+        float top;        // one-pole low-pass cutoff, Hz
+    };
+    const Voice v = floor == Footing::Tile ? Voice{ 3600.0f, 1.4f, 130.0f, 118.0f, 55.0f, 0.35f,
+                                                    0.047f, 0.30f, 0.096f, 0.16f, 0.40f, 6000.0f }
+                  : floor == Footing::Wood ? Voice{ 1300.0f, 1.1f, 70.0f, 165.0f, 26.0f, 0.95f,
+                                                    0.021f, 0.18f, 0.0f, 0.0f, 0.52f, 3000.0f }
+                                           : Voice{ 1900.0f, 0.9f, 95.0f, 74.0f, 38.0f, 0.75f,
+                                                    0.038f, 0.22f, 0.0f, 0.0f, 0.48f, 4500.0f };
+    Rng r((uint64_t)seed * 2000u + 7u);
+    const float toeDelay = 0.055f + r.f01() * 0.02f;
+    const float detune = 0.92f + r.f01() * 0.16f;   // per-variant frequency scale
+    const float tail = v.echo2 > 0 ? v.echo2 : v.echo1;
+    const int dry = (int)(0.16f * SAMPLE_RATE);
+    const int n = dry + (int)(tail * SAMPLE_RATE) + (int)(0.02f * SAMPLE_RATE);
+
+    // Dry signal: two RBJ band-passes over the same noise, heel and toe (toe at
+    // 1.35x the heel's centre).
+    std::vector<float> d(dry);
+    auto band = [](float f, float q, float &b0, float &a1, float &a2) {
+        float w = TAU * f / SAMPLE_RATE, alpha = sinf(w) / (2.0f * q), a0 = 1.0f + alpha;
+        b0 = alpha / a0;
+        a1 = -2.0f * cosf(w) / a0;
+        a2 = (1.0f - alpha) / a0;
+    };
+    float hb0, ha1, ha2, tb0, ta1, ta2;
+    band(v.click * detune, v.clickQ, hb0, ha1, ha2);
+    band(v.click * detune * 1.35f, v.clickQ, tb0, ta1, ta2);
+    float hx1 = 0, hx2 = 0, hy1 = 0, hy2 = 0, tx1 = 0, tx2 = 0, ty1 = 0, ty2 = 0;
+    const float body = v.body * detune;
+    const float soften = 1.0f - expf(-TAU * v.top / SAMPLE_RATE);
+    float sole = 0;
+    for (int i = 0; i < dry; i++) {
+        float t = (float)i / SAMPLE_RATE;
+        float x = r.f01() * 2.0f - 1.0f;
+        float h = hb0 * x - hb0 * hx2 - ha1 * hy1 - ha2 * hy2;   // b1 = 0, b2 = -b0
+        hx2 = hx1; hx1 = x; hy2 = hy1; hy1 = h;
+        float y = tb0 * x - tb0 * tx2 - ta1 * ty1 - ta2 * ty2;
+        tx2 = tx1; tx1 = x; ty2 = ty1; ty1 = y;
+        float heelEnv = (1.0f - expf(-t * 2500.0f)) * expf(-t * v.clickDecay);
+        float bodyEnv = (1.0f - expf(-t * 900.0f)) * expf(-t * v.bodyDecay);
+        float sample = h * 3.2f * heelEnv + sinf(TAU * body * t) * v.bodyGain * bodyEnv;
+        // Wood adds a second body mode at 2.37x.
+        if (floor == Footing::Wood) sample += sinf(TAU * body * 2.37f * t) * 0.35f * expf(-t * 48.0f) * bodyEnv;
+        float tt = t - toeDelay;
+        if (tt > 0.0f) {
+            float toeEnv = (1.0f - expf(-tt * 2500.0f)) * expf(-tt * v.clickDecay * 1.4f);
+            sample += y * 1.6f * toeEnv;
+        }
+        sole += soften * (sample - sole);
+        d[i] = sole;
+    }
+    // Echo taps: each a delayed, low-passed copy of the dry signal.
+    std::vector<float> out(n, 0.0f);
+    const struct { float delay, gain; } taps[3] = { { 0.0f, 1.0f }, { v.echo1, v.echo1Gain }, { v.echo2, v.echo2Gain } };
+    for (const auto &tap : taps) {
+        if (tap.gain <= 0.0f) continue;
+        int at = (int)(tap.delay * SAMPLE_RATE);
+        float lp = 0, k = tap.delay > 0.0f ? 0.35f : 1.0f;   // echo taps are low-passed
+        for (int i = 0; i < dry && at + i < n; i++) {
+            lp += k * (d[i] - lp);
+            out[at + i] += lp * tap.gain;
+        }
+    }
+    Pcm pcm(n);
+    for (int i = 0; i < n; i++) {
+        // 10 ms fade-out, so the clip ends on zero.
+        float fade = clampf1((float)(n - 1 - i) / (0.01f * SAMPLE_RATE));
+        pcm[i] = (short)(clampf1(tanhf(out[i] * v.gain * 1.3f) * fade) * 30000.0f);
+    }
+    return pcm;
 }
 
 Pcm makeJumpscare() {
@@ -477,7 +564,8 @@ Pcm tapeVoicePcm() {
 ClipSpec clipSpec(Sfx sfx) {
     switch (sfx) {
     case Sfx::Step: case Sfx::SwimStroke:
-    case Sfx::EntStep: case Sfx::EntStepThrough: return { 4, 1.0f, 1.0f };
+    case Sfx::EntStep: case Sfx::EntStepThrough:
+    case Sfx::StepConcrete: case Sfx::StepTile: case Sfx::StepWood: return { 4, 1.0f, 1.0f };
     case Sfx::SplashIn: case Sfx::SplashOut:
     case Sfx::Bark: case Sfx::BarkThrough:       return { 3, 1.0f, 1.0f };
     case Sfx::Hit:       return { 1, 1.7f, 0.40f };
@@ -507,6 +595,9 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::Step:           return makeFootstep(100 + variant * 17);
     case Sfx::EntStep:        return makeFootstep(300 + variant * 23);
     case Sfx::EntStepThrough: return makeFootstep(300 + variant * 23, true);
+    case Sfx::StepConcrete:   return makeHardStep(500 + variant * 19, Footing::Concrete);
+    case Sfx::StepTile:       return makeHardStep(600 + variant * 29, Footing::Tile);
+    case Sfx::StepWood:       return makeHardStep(700 + variant * 13, Footing::Wood);
     case Sfx::Bark:           return makeDogBark(400 + variant * 31);
     case Sfx::BarkThrough:    return makeDogBark(400 + variant * 31, true);
     case Sfx::SplashIn: case Sfx::SplashOut: case Sfx::SwimStroke: return {};

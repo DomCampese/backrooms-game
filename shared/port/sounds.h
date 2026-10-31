@@ -14,7 +14,7 @@ constexpr int SAMPLE_RATE = 44100;
 
 using Pcm = std::vector<int16_t>;   // mono, SAMPLE_RATE
 
-constexpr int SFX_COUNT = (int)Sfx::EntStepThrough + 1;
+constexpr int SFX_COUNT = (int)Sfx::StepWood + 1;
 constexpr int SFX_MAX_VARIANTS = 4;
 
 // How many variants a PLAY of `sfx` may pick from, and the pitch and volume its

@@ -14,6 +14,9 @@ enum class Sfx : uint8_t {
     BarkThrough,      // 3: the same voices heard through a wall
     EntStep,          // 4: the hunter's footfalls
     EntStepThrough,   // 4
+    StepConcrete,     // 4: player footsteps, Footing::Concrete (Step is Carpet)
+    StepTile,         // 4: Footing::Tile
+    StepWood,         // 4: Footing::Wood
 };
 
 // What the ambience synth (audio.cpp) chases. The rules write each field where

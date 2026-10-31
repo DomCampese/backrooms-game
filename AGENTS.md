@@ -22,6 +22,33 @@ build's code only drawing and playing it, a shader change in the GLSL and the
 HLSL together. What the Mac build still lacks is docs/unreal-handoff.md,
 "Parity".
 
+# Footstep clip per floor material (October 2026)
+
+Player footsteps and landings use a clip per floor material: carpet on Levels
+0 and 4 (`Sfx::Step`, unchanged), concrete on Levels 1 and 3
+(`StepConcrete`), tile on Level 2 (`StepTile`), wood inside the Manila Room
+(`StepWood`). What will bite:
+
+- **The floor is a rule, `LevelRules::footing`** (core/level_rules.h), so the
+  sim can read it; `Sim::stepSfx()` picks the clip. It has to agree with the
+  floor `LEVEL_SURFACES` (shared/port/levels.cpp) draws: give a level a new
+  floor and change both.
+- **New `Sfx` go at the end of the enum** and `SFX_COUNT` follows the last.
+  Both builds load every clip up to it (`GameAudio::load`, `SoundMixer::load`),
+  so the Mac plays the new steps with no Unreal code at all.
+- **Compare loudness A-weighted, not RMS.** Without gain the hard-floor clips
+  measured 10-12 dB(A) over carpet; `makeHardStep`'s gains put them about
+  5 dB over. Carpet's energy is mostly below 200 Hz, so RMS overstates it.
+- **The trace hashes the sound** (`audioHash` in each digest), so a change to
+  which clip plays is a change to the golden: walk-l0-l2.trace was
+  re-recorded for this, and main's replay of the new one fails at frame 150,
+  the first footfall on concrete, on `audioHash` alone.
+- **`tools/record-trace.sh` takes `KEY_HOLD`** (seconds a key is held, 0.9 by
+  default). A fresh container ran the game at about 1.4 fps, F3 and N fell
+  between frames at 0.9, and two recordings never left Level 0 while
+  replaying perfectly: check `grep -o 'level=[0-9]' | sort | uniq -c` on a new
+  recording before keeping it. `KEY_HOLD=2` took it through all three levels.
+
 # Unreal draws the Web build's world (October 2026)
 
 The Unreal port no longer lights anything with Unreal: every material is
