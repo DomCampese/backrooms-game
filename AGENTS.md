@@ -22,6 +22,20 @@ build's code only drawing and playing it, a shader change in the GLSL and the
 HLSL together. What the Mac build still lacks is docs/unreal-handoff.md,
 "Parity".
 
+# Every session makes the game better to play (October 2026)
+
+Each session's main item is a change a player would notice in the first ten
+minutes: new gameplay, a new threat or mechanic, a level that plays
+differently, entity behaviour, real meshes in place of boxes, a visible
+rendering improvement, or a bug a player would hit. Moving code into shared/,
+adding proof harnesses, doc edits and single new clips are not a session's
+main item; do them only alongside one.
+
+The proof rules in this file still apply. Do not choose work because it is
+easy to prove. A PR states what a player will notice and why it was chosen.
+
+Write all of it plainly (docs/readability.md, "Register").
+
 # Footstep clip per floor material (October 2026)
 
 Player footsteps and landings use a clip per floor material: carpet on Levels

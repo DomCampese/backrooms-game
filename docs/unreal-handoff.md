@@ -230,6 +230,11 @@ What to expect on the Mac:
 
 ## Next
 
+The list below is what is waiting on the Mac. It is not the work queue. Each
+session's main item is a step forward for the game that a player would notice
+(AGENTS.md, "Every session makes the game better to play"), not more port
+plumbing.
+
 As of 22 October 2026 the world is drawn as the Web build draws it, written
 off the Mac. In order:
 
