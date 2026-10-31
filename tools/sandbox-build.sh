@@ -1,14 +1,14 @@
 #!/bin/bash
 # Build the game against rlshim/ and the wheel's raylib .so. Run
-# tools/sandbox-setup.sh once first. You will run this one dozens of times.
+# tools/sandbox-setup.sh once first.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 SO=$(ls "$PWD"/.rlwheel/raylib/_raylib_cffi.cpython-*-linux-gnu.so 2>/dev/null | head -1)
 [ -n "$SO" ] || { echo "no raylib .so — run tools/sandbox-setup.sh first"; exit 1; }
 # Absolute path plus an rpath, never a relative one: the loader resolves a
 # relative DT_NEEDED against the *current* directory, so a relatively-linked
-# binary dies with "cannot open shared object file" as soon as anything runs it
-# from elsewhere — which tools/shot.sh does on every single screenshot.
+# binary fails with "cannot open shared object file" when run from another
+# directory, as tools/shot.sh does.
 # the wheel's .so is a CPython extension, so link the matching libpython
 PYV=$(basename "$SO" | sed -n 's/.*cpython-\([0-9]\)\([0-9]*\)-.*/\1.\2/p')
 # -ffp-contract=off: no fused multiply-adds, so core's results do not depend on
@@ -26,11 +26,8 @@ shopt -u nullglob
 # Delete the target before compiling, so a failed build cannot leave a working
 # binary behind. c++ only replaces its output on success, so without this the
 # previous ./backrooms survives the failure and the next tools/shot.sh captures
-# THE OLD BUILD — a green-looking screenshot of code that is not the code you
-# just wrote. That has cost this project two separate debugging sessions (see
-# AGENTS.md, "A build failure looks exactly like a passing build if you only
-# read the last line"), because the compiler error scrolls past and the capture
-# afterwards works perfectly.
+# the old build. That cost two debugging sessions (AGENTS.md, "Check that a
+# build printed 'built'").
 #
 # Belt and braces with `set -e`: this way the failure is visible as a missing
 # binary even when someone pipes the build's output through a filter and only

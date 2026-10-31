@@ -2,12 +2,11 @@
 // shared/core and shared/sim and calls generate() directly, so every number
 // below comes from exactly the code the game ships.
 //
-// This exists because screenshots were actively misleading about the layout.
-// From captures alone the halls looked like they ran for hundreds of metres;
-// measuring gave a median sightline of 7 m and 83% occlusion at 20 m. The real
-// defect was enclosure — more than half the cells had no wall on any side —
-// which no screenshot makes obvious. Anyone changing the generator needs to see
-// the numbers move, not the pictures.
+// Screenshots mislead about layout: captures made the halls look hundreds of
+// metres long, but the median sightline was 7 m with 83% occlusion at 20 m. The
+// real problem was enclosure (more than half the cells had no wall on any
+// side), which screenshots do not show. Check these numbers when changing the
+// generator.
 //
 //   tools/sandbox-build.sh mapdump     # builds ./mapdump
 //   ./mapdump --level 0 --seed 1337 --cells 129 --plan 0 0 48 32
@@ -43,8 +42,8 @@ struct Args {
     int lcx = 0, lcz = 0;
 };
 
-// A cell's glyph. Props win over pools because a prop standing in water is
-// still the thing you walk into.
+// A cell's glyph. Props take priority over pools, since a prop in water still
+// blocks movement.
 char cellGlyph(World &w, int a, int b) {
     if (w.pillarAt(a, b)) return '#';
     uint8_t p = w.propAt(a, b);
@@ -302,7 +301,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    // ---- enclosure. The headline number: how much of this is actually rooms.
+    // ---- enclosure: the share of edges that are walls.
     long edges = 0, solidEdges = 0, doorEdges = 0, windowEdges = 0, exitEdges = 0;
     long lockedEdges = 0, keysFound = 0;
     struct Lock { float dx, dz, kx, kz; bool west; };
@@ -360,8 +359,8 @@ int main(int argc, char **argv) {
     printf("  key                             (%ld)\n", keysFound);
     // How full the collision scratch gets. gatherCellAABBs accumulates over the
     // 3x3 around a point into one MAX_NEARBY_AABBS buffer and silently DROPS
-    // every box past the cap — so a cell that overflows is a cell you walk
-    // through a wall in, with nothing anywhere saying so.
+    // every box past the cap, so an overflowing cell lets the player walk
+    // through a wall, with no error.
     {
         int worst = 0, over = 0, wx = 0, wz = 0;
         AABB boxes[512];
@@ -377,7 +376,7 @@ int main(int argc, char **argv) {
         printf("  cells over the cap    %d%s\n", over,
                over ? "   <-- boxes are being dropped: you can walk through walls there" : "");
     }
-    // Where they are, so a capture can actually be pointed at one. A locked
+    // Their positions, so a capture can be pointed at one. A locked
     // door is one chunk in three and nothing else in the dump locates it.
     if (!locks.empty()) {
         printf("  locked doors (first %d of %d), as BACKROOMS_POS:\n",
@@ -502,7 +501,7 @@ int main(int argc, char **argv) {
            biggest, pockets ? inPockets / pockets : 0, bigX, bigZ);
 
     // ---- the ways up and down from this storey, over the chunks the window
-    // covers. "How far to the nearest stair" is the number a player feels.
+    // covers, and the distance to the nearest stair.
     if (w.storeyH > 0.0f) {
         int cr = half / CCELLS, chunksN = 0, withWay = 0;
         int up[4] = {}, down[4] = {};

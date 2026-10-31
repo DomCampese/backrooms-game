@@ -43,7 +43,7 @@ public:
 	UMaterialInterface* Chunk(int32 Slot, bool bBlend) const;
 	// A loose object's material (port/draw.h's ObjMat); in hand it is a
 	// viewmodel, which the room does not shadow. The deck's record lamp has
-	// its own, which breathes by its tint.
+	// its own, which pulses through its tint.
 	UMaterialInterface* Object(ObjMat Mat, bool bViewmodel) const;
 	UMaterialInterface* Lamp(bool bViewmodel, float Tint) const;
 	// The flare in hand: the props atlas at the flare's gloss.
