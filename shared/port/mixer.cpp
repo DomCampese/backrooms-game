@@ -66,7 +66,6 @@ void SoundMixer::camera(std::vector<CamNoise> &noises) {
     auto start = [](Voice &v) { v.pos = 0; v.playing = true; };
     for (const CamNoise &n : noises) {
         switch (n.sound) {
-        case CamSound::Zoom:
         case CamSound::Hiss: {
             Voice &v = camVoices[(int)n.sound];
             if (!v.playing) start(v);

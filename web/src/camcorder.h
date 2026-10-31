@@ -1,8 +1,8 @@
 #pragma once
 // The Web build's half of the camcorder (port/camcorder.h has the rules, the
 // tape's bookkeeping and the OSD): the reel, one render texture of frame
-// cells; the tape look (TAPE_FS) that draws the viewfinder and the playback;
-// and the camera's sounds.
+// cells; the tape look (TAPE_FS) that draws the playback; and the tape's
+// sounds.
 #include "raylib.h"
 #include "port/camcorder.h"
 
@@ -18,13 +18,13 @@ struct CamcorderReel {
     void grab(const Camcorder &cam, int slot, const RenderTexture2D &rt);
     // Plays what the camera asked for and clears the list.
     void playNoises(Camcorder &cam, GameAudio &audio);
-    // The picture through the tape look, covering the window: the scene or the reel.
-    void present(const CamPicture &pic, const RenderTexture2D &scene, float time);
+    // The playback through the tape look, covering the window.
+    void present(const CamPicture &pic, float time);
 
 private:
     Shader shader{};
     int locTime = -1, locRes = -1, locCellA = -1, locCellB = -1, locMix = -1,
-        locNight = -1, locTrack = -1, locStill = -1, locSnow = -1;
-    Sound sndRaise{}, sndLower{}, sndSwitch{}, sndZoom{}, sndTransport{}, sndHiss{};
+        locTrack = -1, locStill = -1, locSnow = -1;
+    Sound sndTransport{}, sndHiss{};
     RenderTexture2D reel{};
 };

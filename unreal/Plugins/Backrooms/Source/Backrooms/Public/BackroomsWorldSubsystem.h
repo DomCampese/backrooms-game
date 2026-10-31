@@ -54,9 +54,8 @@ public:
 
 	bool IsRunning() const { return bRun; }
 	// One frame of a run: the title screen, a pause toggle, or a step, as
-	// Game::tick does them. bCamToggle raises or lowers the camcorder. Dt is
-	// the frame time; the clock is read here.
-	void TickRun(const InputFrame& In, bool bPauseToggled, bool bCamToggle, float Dt);
+	// Game::tick does them. Dt is the frame time; the clock is read here.
+	void TickRun(const InputFrame& In, bool bPauseToggled, float Dt);
 	// The camera for the sim's current view, in Unreal space, and its vertical
 	// field of view in degrees.
 	FTransform ViewTransform(float& OutFovY) const;

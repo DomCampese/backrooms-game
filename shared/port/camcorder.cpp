@@ -19,10 +19,6 @@ constexpr float SLOW_RATE = 0.32f;
 constexpr int MAX_FRAMES = 64;   // 4.3 s at GRAB_HZ: PLAY_S + SLOW_SPAN and a margin
 constexpr float ECHO_VOLUME = 0.7f;   // echo volume relative to the live sound
 
-constexpr float PI_F = 3.14159265358979323846f;   // raylib's PI
-constexpr float DEG2RAD_F = PI_F / 180.0f;
-constexpr float RAD2DEG_F = 180.0f / PI_F;
-
 constexpr Rgba BLACK_RGBA = { 0, 0, 0, 255 };
 
 float smooth01(float e0, float e1, float x) {
@@ -44,59 +40,6 @@ int16_t s16(float v) { return (int16_t)(clampf(v, -1.0f, 1.0f) * 32000.0f); }
 float edges(int i, int n, float edge) {
     float t = (float)i / SAMPLE_RATE, end = (float)(n - i) / SAMPLE_RATE;
     return fminf(1.0f, fminf(t, end) / edge);
-}
-
-void addBeep(Pcm &p, float at, float dur, float hz, float vol) {
-    int a = (int)(at * SAMPLE_RATE), n = (int)(dur * SAMPLE_RATE);
-    if ((int)p.size() < a + n) p.resize(a + n, 0);
-    for (int i = 0; i < n; i++) {
-        float t = (float)i / SAMPLE_RATE;
-        float v = sinf(TAU * hz * t) * vol * edges(i, n, 0.004f);
-        p[a + i] = s16(p[a + i] / 32000.0f + v);
-    }
-}
-
-// Zoom motor: a whine with amplitude flutter.
-Pcm motor(float dur, float hz, float vol, uint64_t seed) {
-    int n = (int)(dur * SAMPLE_RATE);
-    Pcm p(n);
-    Rng r(seed);
-    float lp = 0;
-    for (int i = 0; i < n; i++) {
-        float t = (float)i / SAMPLE_RATE;
-        float flutter = 1.0f + 0.04f * sinf(TAU * 23.0f * t);
-        float ph = hz * flutter * t;
-        lp += (r.f01() - 0.5f - lp) * 0.08f;
-        float v = (sinf(TAU * ph) * 0.5f + sinf(TAU * ph * 2.0f) * 0.3f + sinf(TAU * ph * 3.0f) * 0.12f) * 0.6f + lp * 1.5f;
-        p[i] = s16(v * vol * edges(i, n, 0.03f));
-    }
-    return p;
-}
-
-Pcm raiseClip() {
-    Pcm p = motor(0.16f, 310.0f, 0.22f, 11);
-    addBeep(p, 0.17f, 0.07f, 2650.0f, 0.28f);
-    return p;
-}
-
-Pcm lowerClip() {
-    Pcm p;
-    addBeep(p, 0.0f, 0.045f, 2650.0f, 0.24f);
-    addBeep(p, 0.085f, 0.045f, 2650.0f, 0.24f);
-    return p;
-}
-
-// A slide switch: two clicks a few milliseconds apart.
-Pcm switchClip() {
-    int n = (int)(0.05f * SAMPLE_RATE);
-    Pcm p(n);
-    Rng r(7);
-    for (int i = 0; i < n; i++) {
-        float t = (float)i / SAMPLE_RATE;
-        float a = expf(-t * 900.0f) + 0.6f * (t > 0.012f ? expf(-(t - 0.012f) * 1100.0f) : 0.0f);
-        p[i] = s16((r.f01() - 0.5f) * a * 0.9f + sinf(TAU * 1900.0f * t) * a * 0.25f);
-    }
-    return p;
 }
 
 // Transport: a clunk, then a rising motor tone.
@@ -209,10 +152,6 @@ std::string fmt(const char *f, int a, int b, int c) {
 
 Pcm camcorderClip(CamSound sound) {
     switch (sound) {
-    case CamSound::Raise: return raiseClip();
-    case CamSound::Lower: return lowerClip();
-    case CamSound::Switch: return switchClip();
-    case CamSound::Zoom: return motor(0.3f, 440.0f, 0.16f, 31);
     case CamSound::Transport: return transportClip();
     case CamSound::Hiss: return hissClip();
     default: return {};
@@ -229,56 +168,11 @@ void Camcorder::fitReel(int screenW, int screenH) {
     startTape();
 }
 
-void Camcorder::control(InputFrame &in, const Sim &sim, float dt, bool toggle) {
-    bool allowed = !sim.inMenu && !sim.paused && sim.deathT <= 0 && sim.drinkT <= 0 && sim.winT <= 0;
-    bool lowerFor = in.pickRevolver || in.pickFlare || in.pickDeck || in.drink || in.throwFlare;
-    if (allowed && in.playing && toggle) {
-        up = !up;
-        play(up ? CamSound::Raise : CamSound::Lower);
-    } else if (up && (!allowed || lowerFor)) {
-        up = false;
-        if (allowed) play(CamSound::Lower);
-    }
-    float step = dt / RAISE_S;
-    raise = up ? fminf(1.0f, raise + step) : fmaxf(0.0f, raise - step);
-
-    float target = 1.0f;
-    if (up) {
-        if (in.fire) { night = !night; play(CamSound::Switch); }
-        zoomSet = clampf(zoomSet * powf(1.25f, in.wheel), 1.0f, ZOOM_MAX);
-        // A mouse holds the zoom like it holds the sights; a touch AIM tap
-        // is an edge (the sim drops the latch every tick the aim is refused).
-        if (in.touch && in.aim && !zoomedLast) zoomSet = zoomSet > 1.5f ? 1.0f : 3.0f;
-        target = (!in.touch && in.aim) ? ZOOM_MAX : zoomSet;
-        zoomedLast = in.aim;
-        in.fire = in.aim = in.reload = false;
-        in.wheel = 0;
-        in.look.x /= zoom; in.look.y /= zoom;
-    } else zoomedLast = false;
-    float before = zoom;
-    zoom += (target - zoom) * fminf(1.0f, dt * 5.0f);
-    if (fabsf(target - zoom) > 0.03f && fabsf(zoom - before) > 1e-4f && viewing())
-        play(CamSound::Zoom);
-
-    if (up && night) irCharge = fmaxf(0.0f, irCharge - dt / IR_DRAIN_S);
-    else irCharge = fminf(1.0f, irCharge + dt / IR_RECHARGE_S);
-}
-
-float Camcorder::irLamp() const {
-    return night && irCharge > 0.0f ? clampf(raise * 2.0f - 1.0f, 0.0f, 1.0f) : 0.0f;
-}
-
-float Camcorder::fovY(float baseDeg) const {
-    if (zoom <= 1.0001f) return baseDeg;
-    return 2.0f * atanf(tanf(baseDeg * DEG2RAD_F * 0.5f) / zoom) * RAD2DEG_F;
-}
-
 void Camcorder::startTape() {
     head = count = 0;
     tapeClock = nextGrab = 0;
     sounds.clear();
-    up = false; raise = 0; zoom = zoomSet = 1; track = 0; glitch = 0;
-    irCharge = 1;
+    track = 0; glitch = 0;
 }
 
 int Camcorder::record(const Sim &sim, float dt, float runSeconds, bool reelReady,
@@ -295,7 +189,7 @@ int Camcorder::record(const Sim &sim, float dt, float runSeconds, bool reelReady
     if (!reelReady || tapeClock < nextGrab) return -1;
     nextGrab = tapeClock + 1.0f / GRAB_HZ;
     int slot = head;
-    frames[head] = { tapeClock, runSeconds, night && viewing(), track };
+    frames[head] = { tapeClock, runSeconds, track };
     head = (head + 1) % slots;
     if (count < slots) count++;
     return slot;
@@ -332,7 +226,6 @@ bool Camcorder::beginReplay() {
     lastTape = tapeFrom;
     nextSound = 0;
     while (nextSound < sounds.size() && sounds[nextSound].tapeT <= tapeFrom) nextSound++;
-    up = false; raise = 0; zoom = zoomSet = 1;
     play(CamSound::Transport);
     replayOn = true;
     return true;
@@ -382,14 +275,9 @@ Camcorder::Playhead Camcorder::playhead(float tape) const {
     return { a, b, mix };
 }
 
-CamPicture Camcorder::viewfinderPicture() const {
-    CamCell whole = { 0, 0, 1, 1 };
-    return { false, whole, whole, 0, night ? 1.0f : 0.0f, track, 0, 0 };
-}
-
 CamPicture Camcorder::replayPicture() const {
     CamCell first = cellUV(0);
-    if (replayT < STATIC_S) return { true, first, first, 0, 0, 1, 0, 1 };
+    if (replayT < STATIC_S) return { first, first, 0, 1, 0, 1 };
     float tape = tapeAt(replayT - STATIC_S);
     Playhead p = playhead(tape);
     const Frame &fa = frameAt(p.a), &fb = frameAt(p.b);
@@ -398,36 +286,43 @@ CamPicture Camcorder::replayPicture() const {
     float slow = tape >= slowFrom ? 0.2f : 0.0f;
     float trk = clampf(fa.track + (fb.track - fa.track) * mix + slow + (still ? 0.25f : 0.0f), 0, 1);
     float snow = clampf(1.0f - (replayT - STATIC_S) / 0.18f, 0, 1);
-    return { true, cellUV(p.a), cellUV(p.b), mix, fa.night ? 1.0f : 0.0f, trk, still ? 1.0f : 0.0f, snow };
+    return { cellUV(p.a), cellUV(p.b), mix, trk, still ? 1.0f : 0.0f, snow };
 }
 
-std::vector<HudDraw> Camcorder::viewfinderOsd(int w, int h, float time, float runSeconds,
-                                              const std::tm *clock, const HudMeasure &measure) const {
-    std::vector<HudDraw> out;
-    osd(out, w, h, time, runSeconds, false, false, clock, measure);
-    return out;
-}
-
-std::vector<HudDraw> Camcorder::replayOsd(int w, int h, float time, const std::tm *clock,
+std::vector<HudDraw> Camcorder::replayOsd(int w, int h, const std::tm *clock,
                                           const HudMeasure &measure) const {
     std::vector<HudDraw> out;
     if (replayT < STATIC_S) {
-        osd(out, w, h, time, frameAt(0).runT, true, false, clock, measure);
+        osd(out, w, h, frameAt(0).runT, false, clock, measure);
         return out;
     }
     Playhead p = playhead(tapeAt(replayT - STATIC_S));
     const Frame &fa = frameAt(p.a), &fb = frameAt(p.b);
-    osd(out, w, h, time, fa.runT + (fb.runT - fa.runT) * p.mix, true, replayT >= freezeAt, clock, measure);
+    osd(out, w, h, fa.runT + (fb.runT - fa.runT) * p.mix, replayT >= freezeAt, clock, measure);
     return out;
 }
 
-void Camcorder::osd(std::vector<HudDraw> &out, int sw, int sh, float time, float counterS, bool playback,
+std::vector<HudDraw> Camcorder::recMark(int w, int h, float time) const {
+    std::vector<HudDraw> out;
+    Osd o{ out, w, h };
+    int fs = o.px(16), x = o.px(16), y = o.px(12);
+    float r = fs * 0.28f;
+    int cx = x + (int)r, cy = y + fs / 2;
+    if (fmodf(time, 1.0f) < 0.62f) {
+        o.circle(cx + o.px(1), cy + o.px(1), r, fade(BLACK_RGBA, 0.5f));
+        o.circle(cx, cy, r, { 228, 36, 30, 220 });
+    }
+    o.text("REC", x + (int)(r * 2) + o.px(6), y, fs, { 236, 236, 228, 170 });
+    return out;
+}
+
+void Camcorder::osd(std::vector<HudDraw> &out, int sw, int sh, float counterS,
                     bool still, const std::tm *clock, const HudMeasure &measure) const {
     Osd o{ out, sw, sh };
     int mx = (int)(sw * 0.065f), my = (int)(sh * 0.075f);
     int len = o.px(46), th = o.px(3), fs = o.px(30), small = o.px(22);
     Rgba ink = { 236, 236, 228, 230 };
-    // the viewfinder's corner marks
+    // the camera's corner marks
     for (int cx = 0; cx < 2; cx++) for (int cy = 0; cy < 2; cy++) {
         int x = cx ? sw - mx : mx, y = cy ? sh - my : my;
         int hx = cx ? x - len : x, vy = cy ? y - len : y;
@@ -435,14 +330,7 @@ void Camcorder::osd(std::vector<HudDraw> &out, int sw, int sh, float time, float
         o.rect(cx ? x - th : x, vy, th, len, ink);
     }
     int tx = mx + o.px(22), ty = my + o.px(20);
-    bool blinkOn = fmodf(time, 1.0f) < 0.62f;
-    if (!playback) {
-        if (blinkOn) {
-            o.circle(tx + fs / 3 + o.px(2), ty + fs / 3 + o.px(2), fs / 3.0f, fade(BLACK_RGBA, 0.6f));
-            o.circle(tx + fs / 3, ty + fs / 3, fs / 3.0f, { 228, 36, 30, 245 });
-        }
-        o.text("REC", tx + fs, ty, fs, ink);
-    } else if (still) {
+    if (still) {
         int bw = fs / 4;
         o.rect(tx, ty, bw, fs - o.px(4), ink);
         o.rect(tx + bw * 2, ty, bw, fs - o.px(4), ink);
@@ -452,13 +340,6 @@ void Camcorder::osd(std::vector<HudDraw> &out, int sw, int sh, float time, float
         int px0 = tx + measure("PLAY", fs) + o.px(12);
         o.play(px0, ty, fs * 0.7f, fs - o.px(4), ink);
     }
-    if (!playback && night) {
-        bool flat = irCharge <= 0.0f;
-        if (!flat || blinkOn)
-            o.text(flat ? "NIGHT SHOT  IR --" : "NIGHT SHOT", tx, ty + fs + o.px(10), small,
-                   flat ? Rgba{ 236, 120, 100, 230 } : ink);
-    }
-
     int c = (int)fmaxf(counterS, 0.0f);
     std::string counter = fmt("%d:%02d:%02d", c / 3600, c / 60 % 60, c % 60);
     o.text(counter, sw - mx - o.px(22) - measure(counter.c_str(), fs), ty, fs, ink);
@@ -476,31 +357,5 @@ void Camcorder::osd(std::vector<HudDraw> &out, int sw, int sh, float time, float
         o.text(line, tx, by - fs - o.px(8), fs, ink);
         snprintf(line, sizeof line, "%s %d 1996", MONTHS[clock->tm_mon], clock->tm_mday);
         o.text(line, tx, by, fs, ink);
-    }
-    if (playback) return;
-
-    {   // the battery: three bars of night-shot charge
-        int bw = o.px(52), bh = o.px(24), bx = sw - mx - o.px(22) - bw, bby = by + o.px(4);
-        bool low = irCharge < 0.15f;
-        if (!low || blinkOn) {
-            Rgba bc = low ? Rgba{ 236, 120, 100, 230 } : ink;
-            o.rect(bx, bby, bw, th, bc);
-            o.rect(bx, bby + bh - th, bw, th, bc);
-            o.rect(bx, bby, th, bh, bc);
-            o.rect(bx + bw - th, bby, th, bh, bc);
-            o.rect(bx + bw, bby + bh / 4, th * 2, bh / 2, bc);
-            int bars = (int)ceilf(irCharge * 3.0f - 0.001f);
-            int gap = o.px(3), seg = (bw - 2 * th - 4 * gap) / 3;
-            for (int i = 0; i < bars; i++)
-                o.bare(bx + th + gap + i * (seg + gap), bby + th + gap, seg, bh - 2 * th - 2 * gap, bc);
-        }
-    }
-    if (zoom > 1.03f || zoomSet > 1.03f) {   // W ---|--- T
-        int zw = o.px(220), zx = sw / 2 - zw / 2, zy = my + o.px(26);
-        o.text("W", zx - o.px(26), zy - o.px(8), small, ink);
-        o.text("T", zx + zw + o.px(10), zy - o.px(8), small, ink);
-        o.rect(zx, zy, zw, th, ink);
-        int k = zx + (int)((zoom - 1.0f) / (ZOOM_MAX - 1.0f) * (zw - th));
-        o.rect(k, zy - o.px(9), th * 2, o.px(18) + th, ink);
     }
 }

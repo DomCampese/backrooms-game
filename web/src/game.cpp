@@ -122,7 +122,6 @@ void Game::init() {
     locMacro = GetShaderLocation(worldShader, "uMacro");
     locBoard = GetShaderLocation(worldShader, "uBoard");
     locObjRefl = GetShaderLocation(worldShader, "uObjRefl");
-    locIR = GetShaderLocation(worldShader, "uIR");
     postShader = LoadShaderFromMemory(NULL, POST_FS);
     if (postShader.id == rlGetShaderIdDefault())
         TraceLog(LOG_ERROR, "post shader failed to compile - see the SHADER lines above");
@@ -199,7 +198,6 @@ void Game::init() {
     camReel.load();
     camcorder.fitReel(GetScreenWidth(), GetScreenHeight());
     camReel.fit(camcorder);
-    if (const char *camEnv = getenv("BACKROOMS_CAM")) camKnob = atoi(camEnv);
     chaseKnob = getenv("BACKROOMS_CHASE") != nullptr;
 
     // The look first: applyLevel's schedules start from after its surfaces are made.
@@ -377,15 +375,11 @@ bool Game::tick() {
     bool captureClick = !inCursorHidden() && !shotPath && inMousePressed(MOUSE_BUTTON_LEFT);
     if (captureClick) DisableCursor();
     InputFrame in = readInput(captureClick);
-    if (camKnob && frame == 2) { camcorder.up = true; camcorder.night = camKnob > 1; }
-    camcorder.control(in, sim, dt, inKeyPressed(KEY_V));   // before the trace: what is recorded is what the sim was given
-    webLightCam(camcorder.up);
     if (trace) trace.step(in, dt, now, sim.clockSeed);
     sim.step(in, dt, now);
     if (trace) trace.digest(sim);
     camcorder.logSounds(sim.audio);
-    if (sim.inMenu && sim.deathT > 0 && camcorder.beginReplay())   // the player died: the tape plays on the death card
-        webLightCam(false);
+    if (sim.inMenu && sim.deathT > 0) camcorder.beginReplay();   // the player died: the tape plays on the death card
     camReel.playNoises(camcorder, audio);
     finishStep(false);
     streamChunks();

@@ -35,7 +35,6 @@ struct HudDraw {
 struct HudInput {
     int width, height;        // the window, pixels
     double now;               // the frame's clock (BACKROOMS_TIME pins it)
-    bool filming;             // through the camcorder: its OSD replaces the inventory and meters
     bool replaying;           // the death card's tape is playing
     float cardAlpha;          // and how far its last frame has faded under the card
     bool touch;               // the touch controls are up: hints name buttons, not keys

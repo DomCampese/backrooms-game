@@ -265,21 +265,18 @@ off the Mac. In order:
    death card. Check the type's size against a Web build capture at the same
    window height (each line is scaled so its line height is raylib's size)
    and that centred lines sit centred. The touch hints are the Web build's alone.
-6. **The camcorder** (24 October 2026). V raises it
-   with a motor whine and a beep; the revolver leaves the frame, the OSD comes
-   up (REC, the counter, the date, the battery) and the inventory goes. The
-   wheel and RMB zoom (the W-T bar), LMB switches night shot, whose lamp lights
-   the room as the Web build's does.
-7. **The tape** (27 October 2026). Through the
-   viewfinder the picture is tape: soft colour smeared right, scanlines, a
-   rolling tear when Clark is near (night shot green). Die after a minute of
+6. **The REC mark** (31 October 2026). In play a small blinking red dot
+   and REC sit in the top left, under the HUD, and hide while F3 is up. The
+   handheld camera (V, viewfinder, zoom, night shot) is gone from both builds.
+7. **The tape** (27 October 2026). Die after a minute of
    play and the card plays the last seconds back: snow, the run, slowing,
    a shaking still. A shader error in `M_BackroomsTape` (LogShaderCompilers)
    is the likeliest first failure, then the reel: a playback that is black
    means the capture or the copy into the reel (`UBackroomsReel::Grab`) drew
    nothing; one upside down, that the reel's rows do not run down as
    `cellY` does. `tools/tape-check.sh` proved the shader and the material's
-   code against `TAPE_FS` pixel for pixel, with DXC and spirv-cross.
+   code against `TAPE_FS` pixel for pixel, with DXC and spirv-cross, before
+   night shot and the live viewfinder were cut from them.
 
 8. **Performance** (28 October 2026). `stat
    unit` and `stat gpu` while playing; then Project Settings > Game >

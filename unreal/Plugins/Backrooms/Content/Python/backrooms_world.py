@@ -18,7 +18,7 @@ and builds:
   Unreal's tonemapper;
 - M_BackroomsTape: the camcorder's tape look (BackroomsTape.ush), which
   UBackroomsRender::ShowPost puts in the post material's place while the
-  viewfinder is up or the tape plays back;
+  tape plays back on the death card;
 - M_BackroomsClear: the level's clear colour (MPC_Backrooms' Clear), on the
   backdrop behind everything, as raylib clears its render target to it.
 
@@ -61,7 +61,7 @@ U.Time = Frame.x; U.Blackout = Frame.y; U.Flash = Frame.z; U.FlareInt = Frame.w;
 U.ViewPos = ViewPos.xyz; U.FlashDir = FlashDir.xyz; U.FlarePos = FlarePos.xyz; U.EntPos = EntPos.xyz;
 U.EntDark = Ent.x; U.EntBlock = Ent.y; U.StoreyH = Ent.z; U.Storey = Ent.w;
 U.Amb = Amb.xyz; U.FogCol = FogCol.xyz; U.LightCol = LightCol.xyz; U.LampCol = LampCol.xyz;
-U.FogDen = Air.x; U.IR = Air.y; U.Macro = Air.z; U.Board = Air.w;
+U.FogDen = Air.x; U.Macro = Air.z; U.Board = Air.w;
 U.LS = Tubes.x; U.LY = Tubes.y; U.Dead = Tubes.z; U.LightMul = Tubes.w;
 U.Gloss = GlossOverride >= 0.0 ? GlossOverride : Surface.x;
 U.Vary = Surface.y; U.Faulty = Surface.z; U.Wet = Surface.w;
@@ -111,15 +111,15 @@ return float4(BRPostFinish(P, ViewportUV, Uv, Throb, Taps), 1.0);
 # The tape material's Custom node: TAPE_FS's uniforms from the collection,
 # gl_FragCoord from the pixel position (from the viewport UV it came out a
 # rounding off, which moved the noise on 0.4% of pixels), and its texture:
-# the scene as raylib's
-# render target holds it (as POST_CODE reads it, point sampled), or the reel.
-# The cells' v runs up the picture and Unreal's UV down it.
+# the reel. The cells' v runs up the picture and Unreal's UV down it. Tape.y
+# and TapeFrom.y are spare (they were night shot and the live viewfinder),
+# and the Exposure, Clear, Scene and Depth pins are wired but unread.
 TAPE_CODE = """
 FBRTape P;
 P.Time = Post.x;
 P.Res = View.ViewSizeAndInvSize.xy;
 P.CellA = TapeA; P.CellB = TapeB;
-P.Mix = Tape.x; P.Night = Tape.y; P.Track = Tape.z; P.Still = Tape.w;
+P.Mix = Tape.x; P.Track = Tape.z; P.Still = Tape.w;
 P.Snow = TapeFrom.x;
 float2 FragCoord = float2(PixelPosition.x, P.Res.y - PixelPosition.y);
 FBRTapeLine L = BRTapeLine(P, FragCoord);
@@ -134,16 +134,7 @@ for (int I = 0; I < 7; I++)
     for (int K = 0; K < 2; K++)
     {
         float2 V = float2(Uv[K].x, 1.0 - Uv[K].y);
-        if (TapeFrom.y > 0.5)
-        {
-            Got[K] = Texture2DSampleLevel(Reel, ReelSampler, V, 0.0).rgb;
-        }
-        else
-        {
-            float Depth = SceneTextureLookup(ViewportUVToSceneTextureUV(V, 1), 1, false).r;
-            float3 S = SceneTextureLookup(ViewportUVToSceneTextureUV(V, 14), 14, false).rgb / max(Exposure, 1e-6);
-            Got[K] = saturate(Depth > 1e7 ? Clear.rgb : S);
-        }
+        Got[K] = Texture2DSampleLevel(Reel, ReelSampler, V, 0.0).rgb;
     }
     Frames[I] = lerp(Got[0], Got[1], P.Mix);
 }

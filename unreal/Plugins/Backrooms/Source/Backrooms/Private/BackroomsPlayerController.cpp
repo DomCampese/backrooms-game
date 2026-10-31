@@ -67,7 +67,6 @@ TArray<FControlKeys> ControlKeys()
 		{ EControl::Begin, V::Boolean, { EKeys::Enter, EKeys::SpaceBar } },
 		{ EControl::Look, V::Axis2D, { EKeys::Mouse2D } },
 		{ EControl::Wheel, V::Axis1D, { EKeys::MouseWheelAxis } },
-		{ EControl::Camcorder, V::Boolean, { EKeys::V } },
 	};
 }
 }
@@ -251,7 +250,7 @@ void ABackroomsPlayerController::PlayerTick(float DeltaTime)
 	}
 	In.screenFov = windowFovY(ViewW, ViewH, 0.0f);
 
-	Backrooms->TickRun(In, bPauseToggled, Pressed(EControl::Camcorder), DeltaTime);
+	Backrooms->TickRun(In, bPauseToggled, DeltaTime);
 	float FovY = 70.0f;
 	const FTransform View = Backrooms->ViewTransform(FovY);
 	Eye->SetView(View, FovY, Aspect);

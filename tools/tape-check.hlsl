@@ -10,7 +10,6 @@ cbuffer Uniforms
 	float4 uCellA;
 	float4 uCellB;
 	float uMix;
-	float uNight;
 	float uTrack;
 	float uStill;
 	float uSnow;
@@ -26,7 +25,6 @@ float4 main(float4 Pos : SV_Position) : SV_Target
 	P.CellA = uCellA;
 	P.CellB = uCellB;
 	P.Mix = uMix;
-	P.Night = uNight;
 	P.Track = uTrack;
 	P.Still = uStill;
 	P.Snow = uSnow;

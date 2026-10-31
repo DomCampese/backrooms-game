@@ -68,8 +68,7 @@ public:
 	// The post volume that puts the Web build's post pass in place of
 	// Unreal's tonemapper, spawned into a game world once. With a Tape the
 	// tape look takes the post pass's place, as render.cpp's renderUI draws
-	// one or the other: the live scene in the viewfinder, or frames off Reel
-	// on the death card.
+	// one or the other: frames off Reel on the death card.
 	void ShowPost(UWorld* Where, const CamPicture* Tape = nullptr, UTexture* Reel = nullptr);
 	// What every view of the world pins: exposure at 1, and none of Unreal's
 	// own grading, bloom or lighting. The post volume and the reel's capture.
