@@ -568,6 +568,81 @@ int main() {
         Wave w={}; w.frameCount=(unsigned)pcm.size(); w.sampleRate=SAMPLE_RATE; w.sampleSize=16; w.channels=1;
         w.data=pcm.data(); ExportWave(w,"drinking.wav");
     }
+    {
+        // stepSfx maps each level's footing, and the Manila Room to wood. The
+        // hard-floor clips start and end on zero, peak below clipping, and
+        // order by zero crossings: carpet < wood < concrete < tile.
+        const int lv0=sim.level; const bool man0=sim.inManila;
+        const Sfx want[NLEVELS]={ Sfx::Step, Sfx::StepConcrete, Sfx::StepTile, Sfx::StepConcrete, Sfx::Step };
+        for (int lv=0;lv<NLEVELS;++lv) { sim.level=lv; sim.inManila=false; CHECK(sim.stepSfx()==want[lv]); }
+        sim.level=0; sim.inManila=true; CHECK(sim.stepSfx()==Sfx::StepWood);
+        sim.level=lv0; sim.inManila=man0;
+        auto crossings=[](const Pcm &p) {
+            int n=std::min((int)p.size(),SAMPLE_RATE*6/100), zc=0;
+            for (int i=1;i<n;++i) if ((p[i-1]<0)!=(p[i]<0)) zc++;
+            return zc;
+        };
+        int carpet=crossings(clipPcm(Sfx::Step,0)), last=carpet;
+        for (Sfx k : { Sfx::StepWood, Sfx::StepConcrete, Sfx::StepTile }) {
+            for (int v=0;v<4;++v) {
+                Pcm pcm=clipPcm(k,v);
+                int peak=0;
+                for (short x : pcm) peak=std::max(peak,std::abs((int)x));
+                CHECK(pcm.front()==0 && pcm.back()==0 && peak>8000 && peak<30000);
+            }
+            int zc=crossings(clipPcm(k,0));
+            CHECK(zc>last);
+            last=zc;
+        }
+    }
+    {
+        // updateDistant: the right clip per level, none on Level 2, flags and
+        // ranges as set, grng untouched.
+        const int lv0=sim.level; const bool man0=sim.inManila, menu0=sim.inMenu; const float death0=sim.deathT;
+        const Sfx want[NLEVELS]={ Sfx::FarDoor, Sfx::FarClang, Sfx::Click, Sfx::FarKnock, Sfx::FarPop };
+        const double now=5000;
+        for (int lv=0;lv<NLEVELS;++lv) {
+            sim.level=lv; sim.inManila=false; sim.inMenu=false; sim.deathT=0;
+            sim.nextDistant=now; sim.audio.clear();
+            const uint64_t g0=sim.grng.s;
+            sim.updateDistant(now);
+            CHECK(sim.grng.s==g0);
+            if (lv==2) { CHECK(sim.audio.empty()); continue; }
+            CHECK(sim.audio.size()==1);
+            const AudioEvent &e=sim.audio.back();
+            CHECK(e.kind==AudioEvent::PLAY && e.sfx==want[lv] && e.variant<3);
+            CHECK(e.set==(AudioEvent::SET_PITCH|AudioEvent::SET_VOLUME|AudioEvent::SET_PAN));
+            CHECK(e.pan>=-1 && e.pan<=1 && e.volume>0.3f && e.volume<0.56f);
+            CHECK(sim.nextDistant>=now+Sim::DISTANT_GAP*0.45 && sim.nextDistant<=now+Sim::DISTANT_GAP+Sim::DISTANT_SPAN);
+            // Not due yet: nothing.
+            sim.audio.clear(); sim.updateDistant(now+1); CHECK(sim.audio.empty());
+        }
+        // Skipped on the title card, the death card and in the Manila Room,
+        // with the same number of draws as a play.
+        for (int hold=0;hold<3;++hold) {
+            sim.level=0; sim.inMenu=hold==0; sim.deathT=hold==1?1.0f:0.0f; sim.inManila=hold==2;
+            sim.nextDistant=now; sim.audio.clear();
+            const Rng before=sim.distantRng;
+            sim.updateDistant(now);
+            CHECK(sim.audio.empty() && sim.nextDistant>now);
+            const uint64_t held=sim.distantRng.s;
+            sim.distantRng=before; sim.nextDistant=now;
+            sim.inMenu=false; sim.deathT=0; sim.inManila=false;
+            sim.updateDistant(now);
+            CHECK(sim.audio.size()==1 && sim.distantRng.s==held);
+        }
+        for (Sfx k : { Sfx::FarDoor, Sfx::FarClang, Sfx::FarKnock, Sfx::FarPop }) {
+            CHECK(clipSpec(k).variants==3);
+            for (int v=0;v<3;++v) {
+                Pcm pcm=clipPcm(k,v);
+                int peak=0;
+                for (short x : pcm) peak=std::max(peak,std::abs((int)x));
+                CHECK(pcm.front()==0 && pcm.back()==0 && peak>4000 && peak<20000 && pcm.size()<(size_t)SAMPLE_RATE*5);
+            }
+        }
+        sim.level=lv0; sim.inManila=man0; sim.inMenu=menu0; sim.deathT=death0;
+        sim.audio.clear();
+    }
 
     // ---- the catch ends the run, and only out of a committed lunge. The bare
     // proximity test this replaced fired the instant you came inside 1.25 m,

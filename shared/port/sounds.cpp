@@ -1,8 +1,10 @@
 #include "../core/fp_strict.h"
 #include "sounds.h"
 #include "../core/hash.h"
+#include "../core/level_rules.h"
 #include "../core/vec.h"
 #include <cmath>
+#include <utility>
 
 namespace {
 
@@ -77,6 +79,92 @@ Pcm makeFootstep(uint32_t seed, bool through = false)
     }
 
     return d;
+}
+
+// Footstep on a hard floor: band-passed noise for the heel and toe, a decaying
+// sine for the body, a one-pole low-pass, then one or two low-passed echo taps.
+// Voice holds the per-floor parameters. Carpet uses makeFootstep instead.
+Pcm makeHardStep(uint32_t seed, Footing floor)
+{
+    struct Voice {
+        float click;      // heel band-pass centre, Hz
+        float clickQ;
+        float clickDecay; // 1/s
+        float body;       // body sine, Hz
+        float bodyDecay;
+        float bodyGain;
+        float echo1, echo1Gain, echo2, echo2Gain;   // echo tap delays (s) and gains
+        float gain;       // output gain; sets each floor about 5 dB(A) over carpet
+        float top;        // one-pole low-pass cutoff, Hz
+    };
+    const Voice v = floor == Footing::Tile ? Voice{ 3600.0f, 1.4f, 130.0f, 118.0f, 55.0f, 0.35f,
+                                                    0.047f, 0.30f, 0.096f, 0.16f, 0.40f, 6000.0f }
+                  : floor == Footing::Wood ? Voice{ 1300.0f, 1.1f, 70.0f, 165.0f, 26.0f, 0.95f,
+                                                    0.021f, 0.18f, 0.0f, 0.0f, 0.52f, 3000.0f }
+                                           : Voice{ 1900.0f, 0.9f, 95.0f, 74.0f, 38.0f, 0.75f,
+                                                    0.038f, 0.22f, 0.0f, 0.0f, 0.48f, 4500.0f };
+    Rng r((uint64_t)seed * 2000u + 7u);
+    const float toeDelay = 0.055f + r.f01() * 0.02f;
+    const float detune = 0.92f + r.f01() * 0.16f;   // per-variant frequency scale
+    const float tail = v.echo2 > 0 ? v.echo2 : v.echo1;
+    const int dry = (int)(0.16f * SAMPLE_RATE);
+    const int n = dry + (int)(tail * SAMPLE_RATE) + (int)(0.02f * SAMPLE_RATE);
+
+    // Dry signal: two RBJ band-passes over the same noise, heel and toe (toe at
+    // 1.35x the heel's centre).
+    std::vector<float> d(dry);
+    auto band = [](float f, float q, float &b0, float &a1, float &a2) {
+        float w = TAU * f / SAMPLE_RATE, alpha = sinf(w) / (2.0f * q), a0 = 1.0f + alpha;
+        b0 = alpha / a0;
+        a1 = -2.0f * cosf(w) / a0;
+        a2 = (1.0f - alpha) / a0;
+    };
+    float hb0, ha1, ha2, tb0, ta1, ta2;
+    band(v.click * detune, v.clickQ, hb0, ha1, ha2);
+    band(v.click * detune * 1.35f, v.clickQ, tb0, ta1, ta2);
+    float hx1 = 0, hx2 = 0, hy1 = 0, hy2 = 0, tx1 = 0, tx2 = 0, ty1 = 0, ty2 = 0;
+    const float body = v.body * detune;
+    const float soften = 1.0f - expf(-TAU * v.top / SAMPLE_RATE);
+    float sole = 0;
+    for (int i = 0; i < dry; i++) {
+        float t = (float)i / SAMPLE_RATE;
+        float x = r.f01() * 2.0f - 1.0f;
+        float h = hb0 * x - hb0 * hx2 - ha1 * hy1 - ha2 * hy2;   // b1 = 0, b2 = -b0
+        hx2 = hx1; hx1 = x; hy2 = hy1; hy1 = h;
+        float y = tb0 * x - tb0 * tx2 - ta1 * ty1 - ta2 * ty2;
+        tx2 = tx1; tx1 = x; ty2 = ty1; ty1 = y;
+        float heelEnv = (1.0f - expf(-t * 2500.0f)) * expf(-t * v.clickDecay);
+        float bodyEnv = (1.0f - expf(-t * 900.0f)) * expf(-t * v.bodyDecay);
+        float sample = h * 3.2f * heelEnv + sinf(TAU * body * t) * v.bodyGain * bodyEnv;
+        // Wood adds a second body mode at 2.37x.
+        if (floor == Footing::Wood) sample += sinf(TAU * body * 2.37f * t) * 0.35f * expf(-t * 48.0f) * bodyEnv;
+        float tt = t - toeDelay;
+        if (tt > 0.0f) {
+            float toeEnv = (1.0f - expf(-tt * 2500.0f)) * expf(-tt * v.clickDecay * 1.4f);
+            sample += y * 1.6f * toeEnv;
+        }
+        sole += soften * (sample - sole);
+        d[i] = sole;
+    }
+    // Echo taps: each a delayed, low-passed copy of the dry signal.
+    std::vector<float> out(n, 0.0f);
+    const struct { float delay, gain; } taps[3] = { { 0.0f, 1.0f }, { v.echo1, v.echo1Gain }, { v.echo2, v.echo2Gain } };
+    for (const auto &tap : taps) {
+        if (tap.gain <= 0.0f) continue;
+        int at = (int)(tap.delay * SAMPLE_RATE);
+        float lp = 0, k = tap.delay > 0.0f ? 0.35f : 1.0f;   // echo taps are low-passed
+        for (int i = 0; i < dry && at + i < n; i++) {
+            lp += k * (d[i] - lp);
+            out[at + i] += lp * tap.gain;
+        }
+    }
+    Pcm pcm(n);
+    for (int i = 0; i < n; i++) {
+        // 10 ms fade-out, so the clip ends on zero.
+        float fade = clampf1((float)(n - 1 - i) / (0.01f * SAMPLE_RATE));
+        pcm[i] = (short)(clampf1(tanhf(out[i] * v.gain * 1.3f) * fade) * 30000.0f);
+    }
+    return pcm;
 }
 
 Pcm makeJumpscare() {
@@ -244,6 +332,168 @@ Pcm makeValveTurn() {
         d[i] = (short)(clampf1(tanhf((squeal + scrape + clunk) * 1.5f)) * 30000);
     }
     return d;
+}
+
+// Processing shared by the distant one-shots: two-pole low-pass at `cutoff`,
+// a 30 Hz DC block, then a Schroeder reverb (four damped combs, two
+// all-passes) with an RT60 of `tail` s, mixed `wet`. Normalised to a peak of
+// `level`; each kind's level puts its loudest 100 ms at 0-6 dB(A) over a
+// carpet footstep. Starts and ends on zero.
+Pcm farAway(const std::vector<float> &dry, float cutoff, float tail, float wet, float level)
+{
+    const int n = (int)dry.size() + (int)(tail * SAMPLE_RATE);
+    const float k = 1.0f - expf(-TAU * cutoff / SAMPLE_RATE);
+    std::vector<float> near(n, 0.0f);
+    // Without the DC block the low-passed door clip had a 3% offset.
+    const float hold = expf(-TAU * 30.0f / SAMPLE_RATE);
+    float a = 0, b = 0, prev = 0, dc = 0;
+    for (int i = 0; i < n; i++) {
+        a += k * ((i < (int)dry.size() ? dry[i] : 0.0f) - a);
+        b += k * (a - b);
+        dc = b - prev + hold * dc;
+        prev = b;
+        near[i] = dc;
+    }
+    // Combs with a one-pole low-pass in the feedback path, then two all-passes.
+    const float combs[4] = { 0.0297f, 0.0371f, 0.0411f, 0.0437f };
+    std::vector<float> room(n, 0.0f);
+    for (float delay : combs) {
+        const int len = (int)(delay * SAMPLE_RATE);
+        const float g = powf(10.0f, -3.0f * delay / tail);
+        std::vector<float> line(len, 0.0f);
+        float damp = 0;
+        for (int i = 0, at = 0; i < n; i++) {
+            const float out = line[at];
+            damp += 0.45f * (out - damp);
+            line[at] = near[i] + damp * g;
+            room[i] += out * 0.25f;
+            if (++at == len) at = 0;
+        }
+    }
+    for (float delay : { 0.0050f, 0.0017f }) {
+        const int len = (int)(delay * SAMPLE_RATE);
+        std::vector<float> line(len, 0.0f);
+        for (int i = 0, at = 0; i < n; i++) {
+            const float held = line[at], in = room[i];
+            room[i] = held - 0.7f * in;
+            line[at] = in + 0.7f * held;
+            if (++at == len) at = 0;
+        }
+    }
+    std::vector<float> mix(n);
+    float peak = 1e-6f;
+    for (int i = 0; i < n; i++) {
+        mix[i] = near[i] * (1.0f - wet) + room[i] * wet * 2.2f;
+        peak = fmaxf(peak, fabsf(mix[i]));
+    }
+    Pcm pcm(n);
+    const float g = level / peak;
+    for (int i = 0; i < n; i++) {
+        float edge = clampf1(fminf((float)i, (float)(n - 1 - i)) / (0.004f * SAMPLE_RATE));
+        float fade = clampf1((float)(n - 1 - i) / (0.25f * SAMPLE_RATE));   // 250 ms fade-out
+        pcm[i] = (short)(clampf1(mix[i] * g * edge * fade) * 30000.0f);
+    }
+    return pcm;
+}
+
+// Door: a latch click, then a low thud; variants 1 and 2 add a second, quieter
+// thud 100-150 ms later.
+Pcm makeFarDoor(int variant)
+{
+    Rng r(0xD0025ULL + (uint64_t)variant * 977u);
+    std::vector<float> d((int)(0.7f * SAMPLE_RATE));
+    const float slamAt = 0.07f + r.f01() * 0.05f, thud = 52.0f + r.f01() * 20.0f;
+    const float bounceAt = slamAt + 0.10f + r.f01() * 0.05f, bounce = variant == 0 ? 0.0f : 0.30f + r.f01() * 0.12f;
+    float lp = 0;
+    for (int i = 0; i < (int)d.size(); i++) {
+        float t = (float)i / SAMPLE_RATE;
+        float x = r.f01() * 2.0f - 1.0f;
+        lp += 0.06f * (x - lp);
+        float latch = (x * 0.6f + sinf(TAU * 1850.0f * t) * 0.5f) * expf(-t * 380.0f) * 0.35f;
+        float s = latch;
+        for (const auto &hit : { std::pair<float, float>{ slamAt, 1.0f }, { bounceAt, bounce } }) {
+            float u = t - hit.first;
+            if (u <= 0.0f || hit.second <= 0.0f) continue;
+            float env = (1.0f - expf(-u * 1400.0f)) * expf(-u * 22.0f);
+            s += hit.second * env * (sinf(TAU * thud * u) * 1.1f + lp * 3.0f + sinf(TAU * thud * 2.6f * u) * 0.25f);
+        }
+        d[i] = s;
+    }
+    return farAway(d, 650.0f, 1.5f, 0.55f, 0.60f);
+}
+
+// Clang: four inharmonic bar modes (1, 2.76, 5.40, 8.93) at 190-310 Hz;
+// variant 1 adds one bounce, variant 2 two.
+Pcm makeFarClang(int variant)
+{
+    Rng r(0xC1A26ULL + (uint64_t)variant * 1201u);
+    std::vector<float> d((int)(2.0f * SAMPLE_RATE));
+    const float f0 = 190.0f + r.f01() * 120.0f;
+    const float ratio[4] = { 1.0f, 2.76f, 5.40f, 8.93f }, amp[4] = { 1.0f, 0.6f, 0.35f, 0.2f },
+                decay[4] = { 3.5f, 5.0f, 8.0f, 12.0f };
+    struct Strike { float at, gain; };
+    const Strike strikes[3] = { { 0.0f, 1.0f },
+                                { 0.20f + r.f01() * 0.08f, variant == 0 ? 0.0f : 0.45f },
+                                { 0.36f + r.f01() * 0.06f, variant == 2 ? 0.2f : 0.0f } };
+    for (int i = 0; i < (int)d.size(); i++) {
+        float t = (float)i / SAMPLE_RATE;
+        float x = r.f01() * 2.0f - 1.0f, s = 0;
+        for (const Strike &k : strikes) {
+            float u = t - k.at;
+            if (u <= 0.0f || k.gain <= 0.0f) continue;
+            float ring = 0;
+            for (int m = 0; m < 4; m++) ring += sinf(TAU * f0 * ratio[m] * u) * amp[m] * expf(-u * decay[m]);
+            s += k.gain * (ring * (1.0f - expf(-u * 3000.0f)) + x * 0.8f * expf(-u * 250.0f));
+        }
+        d[i] = s;
+    }
+    return farAway(d, 1500.0f, 2.6f, 0.7f, 0.22f);
+}
+
+// Knock: 3-5 knocks (3 + variant), each spacing 0.84x and gain 0.72x the
+// last; a 95-125 Hz thump plus a 600-740 Hz ring.
+Pcm makeFarKnock(int variant)
+{
+    Rng r(0x7A3E1ULL + (uint64_t)variant * 733u);
+    const int knocks = 3 + variant;
+    std::vector<float> d((int)(1.3f * SAMPLE_RATE));
+    float at[6], gain[6], gap = 0.17f + r.f01() * 0.05f, t0 = 0.0f, g0 = 1.0f;
+    for (int k = 0; k < knocks; k++) {
+        at[k] = t0; gain[k] = g0 * (0.85f + r.f01() * 0.3f);
+        t0 += gap; gap *= 0.84f; g0 *= 0.72f;
+    }
+    const float thump = 95.0f + r.f01() * 30.0f, ring = 600.0f + r.f01() * 140.0f;
+    float lp = 0;
+    for (int i = 0; i < (int)d.size(); i++) {
+        float t = (float)i / SAMPLE_RATE;
+        float x = r.f01() * 2.0f - 1.0f;
+        lp += 0.12f * (x - lp);
+        float s = 0;
+        for (int k = 0; k < knocks; k++) {
+            float u = t - at[k];
+            if (u <= 0.0f) continue;
+            float hit = (1.0f - expf(-u * 2000.0f)) * expf(-u * 45.0f);
+            s += gain[k] * (hit * (sinf(TAU * thump * u) + lp * 2.0f) + sinf(TAU * ring * u) * 0.25f * expf(-u * 22.0f));
+        }
+        d[i] = s;
+    }
+    return farAway(d, 900.0f, 1.2f, 0.5f, 0.36f);
+}
+
+// Pop: the makeBalloonPop burst, run through farAway with a high wet mix.
+Pcm makeFarPop(int variant)
+{
+    Rng r(0xFA2B0ULL + (uint64_t)variant * 409u);
+    std::vector<float> d((int)(0.18f * SAMPLE_RATE));
+    const float flapHz = 130.0f + r.f01() * 50.0f;
+    float lp = 0;
+    for (int i = 0; i < (int)d.size(); i++) {
+        float t = (float)i / SAMPLE_RATE;
+        float x = r.f01() * 2.0f - 1.0f;
+        lp += 0.5f * (x - lp);
+        d[i] = (x * 0.7f + lp) * expf(-t * 150.0f) * 2.4f + sinf(TAU * (flapHz - 320.0f * t) * t) * expf(-t * 26.0f) * 0.5f;
+    }
+    return farAway(d, 1200.0f, 1.4f, 0.7f, 0.32f);
 }
 
 // A bark: a hard glottal burst, a shout of noise-driven formants, a snap shut.
@@ -477,9 +727,11 @@ Pcm tapeVoicePcm() {
 ClipSpec clipSpec(Sfx sfx) {
     switch (sfx) {
     case Sfx::Step: case Sfx::SwimStroke:
-    case Sfx::EntStep: case Sfx::EntStepThrough: return { 4, 1.0f, 1.0f };
+    case Sfx::EntStep: case Sfx::EntStepThrough:
+    case Sfx::StepConcrete: case Sfx::StepTile: case Sfx::StepWood: return { 4, 1.0f, 1.0f };
     case Sfx::SplashIn: case Sfx::SplashOut:
-    case Sfx::Bark: case Sfx::BarkThrough:       return { 3, 1.0f, 1.0f };
+    case Sfx::Bark: case Sfx::BarkThrough:
+    case Sfx::FarDoor: case Sfx::FarClang: case Sfx::FarKnock: case Sfx::FarPop: return { 3, 1.0f, 1.0f };
     case Sfx::Hit:       return { 1, 1.7f, 0.40f };
     case Sfx::Kill:      return { 1, 0.55f, 0.80f };
     case Sfx::Heartbeat: return { 1, 1.0f, 0.55f };
@@ -507,6 +759,9 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::Step:           return makeFootstep(100 + variant * 17);
     case Sfx::EntStep:        return makeFootstep(300 + variant * 23);
     case Sfx::EntStepThrough: return makeFootstep(300 + variant * 23, true);
+    case Sfx::StepConcrete:   return makeHardStep(500 + variant * 19, Footing::Concrete);
+    case Sfx::StepTile:       return makeHardStep(600 + variant * 29, Footing::Tile);
+    case Sfx::StepWood:       return makeHardStep(700 + variant * 13, Footing::Wood);
     case Sfx::Bark:           return makeDogBark(400 + variant * 31);
     case Sfx::BarkThrough:    return makeDogBark(400 + variant * 31, true);
     case Sfx::SplashIn: case Sfx::SplashOut: case Sfx::SwimStroke: return {};
@@ -522,6 +777,10 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::Howl:           return makeDogHowl();
     case Sfx::Gulp:           return gulpPcm();
     case Sfx::Groan:          return makeFloorGroan();
+    case Sfx::FarDoor:        return makeFarDoor(variant);
+    case Sfx::FarClang:       return makeFarClang(variant);
+    case Sfx::FarKnock:       return makeFarKnock(variant);
+    case Sfx::FarPop:         return makeFarPop(variant);
     }
     return {};
 }

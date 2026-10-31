@@ -37,9 +37,12 @@ done
 [ -n "$WID" ] || { echo "record-trace: no game window"; cat "$WORK/game.log"; exit 1; }
 sleep 4   # the first frames build Level 0's surfaces
 
-key() { xdotool keydown --window "$WID" "$1"; sleep 0.9; xdotool keyup --window "$WID" "$1"; sleep 0.9; }
+# KEY_HOLD: how long a key is held, s. 0.9 suits 2-3 fps; a slower box (1.4 fps
+# in a fresh container) missed F3 and N at that, and the walk never left Level 0.
+KEY_HOLD=${KEY_HOLD:-0.9}
+key() { xdotool keydown --window "$WID" "$1"; sleep "$KEY_HOLD"; xdotool keyup --window "$WID" "$1"; sleep "$KEY_HOLD"; }
 hold() { xdotool keydown --window "$WID" "$1"; sleep "$2"; xdotool keyup --window "$WID" "$1"; sleep 0.8; }
-click() { xdotool mousedown 1; sleep 0.9; xdotool mouseup 1; sleep 1.2; }
+click() { xdotool mousedown 1; sleep "$KEY_HOLD"; xdotool mouseup 1; sleep 1.2; }
 look() { xdotool mousemove_relative -- "$1" "$2"; sleep 1; }
 
 key Return                          # begin a run

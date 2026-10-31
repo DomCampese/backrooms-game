@@ -555,6 +555,13 @@ Details that reward paying attention:
   bunch goes at once.
 
   <p align="center"><img src="docs/confetti.png" width="440" alt="A popped balloon and its confetti"></p>
+- **Footsteps per floor** — separate synthesized clips for carpet (Levels 0
+  and 4), concrete (Levels 1 and 3), tile (Level 2) and wood (the Manila
+  Room).
+- **Distant sounds** — every 35-85 s (sooner at low sanity) a muffled one-shot
+  plays from a random direction: a door closing on Level 0, a metal clang on
+  Level 1, pipe knocking on Level 3, a balloon pop on Level 4. None on
+  Level 2.
 - **Footsteps in the dark** — when the entity chases, you *hear* it: heavy
   footfalls, panned to its bearing and fading with distance, even around
   corners you can't see past.
