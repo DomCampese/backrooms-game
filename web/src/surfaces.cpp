@@ -1,37 +1,29 @@
 // World surfaces: the floors, walls and ceilings of every level.
 //
-// Each one is painted as three fields over the same pixels — colour, height in
-// metres, and a gloss mask — and finishSurface turns the height into the packed
-// slopes the shader reads. Three rules hold for everything in this file, and
-// each is here because the surfaces it replaced broke it:
+// Each surface is painted as three fields over the same pixels: colour, height
+// in metres, and a gloss mask. finishSurface turns the height into the packed
+// slopes the shader reads. Rules for everything in this file:
 //
-//  * Relief is authored, never guessed from the paint. The old detail maps
-//    were the albedo's luminance run through a gradient, so the chevrons
-//    printed on Level 0's wallpaper came out embossed, every stain was a dent,
-//    and a grout line was only recessed because it happened to be darker.
-//    A height here is a physical thing: a groove is -0.7 mm, a skirting board
-//    stands 14 mm proud, mortar is raked back 6 mm.
+//  * Relief is authored as height, never derived from colour. The old detail
+//    maps came from the albedo's luminance, so printed chevrons were embossed
+//    and every stain was a dent. Heights are physical: a groove is -0.7 mm, a
+//    skirting stands 14 mm proud, mortar is raked back 6 mm.
 //
-//  * Everything wraps. A texture repeats across the whole building, so any
-//    term that is not periodic at the tile edge puts a seam down every repeat.
-//    The old generators sampled fbm2 straight across 0..W, and it showed: the
-//    damp band's tide line on Level 1 jumped every 3 m along every wall. The
-//    noise below (tnoise/tfbm) wraps on a whole number of lattice cells, and
-//    every scattered feature is drawn with wrapped coordinates.
+//  * Everything wraps at the tile edge, or every repeat shows a seam. The old
+//    generators sampled fbm2 across 0..W, so Level 1's tide line jumped every
+//    3 m. tnoise/tfbm below wrap on a whole number of lattice cells, and
+//    scattered features use wrapped coordinates.
 //
-//  * Things are the size they are. Every generator knows how many metres its
-//    tile spans (floors and ceilings map 2 m to one repeat, walls 3 m across and
-//    tileV down — see WallBuilder in world_mesh.cpp), so a ceiling board is 600-odd mm, a brick is
-//    a brick and a pool tile the same size on the wall as on the floor. The
-//    ones that were not — metre-square ceiling boards, bricks 0.75 m long, pool
-//    tiles 0.25 m on the floor and 0.375 m on the wall — are most of why the
-//    old surfaces read as game textures rather than as building materials.
+//  * Real sizes. Floors and ceilings map 2 m to one repeat, walls 3 m across
+//    and tileV down (WallBuilder in chunk_mesh.cpp), so ceiling boards, bricks
+//    and pool tiles are their real size. The old ones were not (metre-square
+//    ceiling boards, 0.75 m bricks, pool tiles of different sizes on floor and
+//    wall).
 //
-// And every generator ends by matching its mean luma to the surface it
-// replaced (Canvas::matchLuma). The level table's ambients, light multipliers
-// and tools/sweep.sh's exposure bands were all tuned against those surfaces;
-// keeping the mean where it was is what makes this a change of material and
-// not a change of exposure. tools/texdump prints the means.
+// Every generator ends by matching its mean luma to the surface it replaced
+// (Canvas::matchLuma), because the ambients, light multipliers and
+// tools/sweep.sh's bands were tuned against those. tools/texdump prints the
+// means.
 #include "textures.h"
 #include "util.h"
 #include "object_materials.generated.h"
@@ -91,13 +83,12 @@ struct Canvas {
     // number of cells across the tile. `perY` (pixels) repeats it sooner down
     // the tile than the tile itself, for Level 0's paper (see the wallpaper).
     //
-    // Most fields here are smooth at the pixel scale — a 3-cells-a-metre grime
-    // is 14 px across at its finest octave — so each one is evaluated once on
-    // a coarse grid (up to every 8th pixel, keeping three grid steps inside its
-    // finest cell) and read back bilinearly. That took startup from seconds to
-    // a fraction of one. A field is keyed by everything that defines it (seed,
-    // octaves, lattice size, period), so two calls that share a key really are
-    // the same field. Fine fields with no room for a grid are evaluated directly.
+    // Most fields are smooth at pixel scale (a 3-cells-per-metre field is 14 px
+    // across at its finest octave), so each is evaluated once on a coarse grid
+    // (up to every 8th pixel, with three grid steps inside its finest cell) and
+    // read back bilinearly. That cut startup from seconds to under one. A field
+    // is keyed by seed, octaves, lattice size and period, so calls with the
+    // same key share it. Fine fields are evaluated directly.
     struct Field {
         uint64_t key = 0;
         int cx = 1, cy = 1, ph = 1, sx = 1, sy = 1, gw = 0, gh = 0;
@@ -158,9 +149,9 @@ struct Canvas {
         r[i] += (cr - r[i]) * t; g[i] += (cg - g[i]) * t; b[i] += (cb - b[i]) * t;
     }
     // Scale the colours so the mean luma is `target` (see the top of the file).
-    // `light` weights the channels by what actually reaches the eye under the
-    // level's light: under the Red Halls' near-pure red, two bricks with the
-    // same luma can differ by a fifth.
+    // `light` weights the channels by the level's light colour: under the Red
+    // Halls' almost pure red light, two bricks with the same luma can differ
+    // in brightness by a fifth.
     void matchLuma(float target, Vector3 light = { 1, 1, 1 }) {
         double s = 0;
         float wr = 0.299f * light.x, wg = 0.587f * light.y, wb = 0.114f * light.z;
@@ -193,8 +184,8 @@ struct Marks {
             if (t > m) m = t;
         }
     }
-    // A wandering line: `turn` is how hard it steers per step, `kink` the odd
-    // sharp change of heading that makes a crack a crack and not a hair.
+    // A wandering line: `turn` is how much it steers per step, `kink` the chance
+    // of an occasional sharp change of heading.
     void walk(Rng &r, float x, float y, float ang, int steps, float stepLen, float turn, float rad,
               float kink = 0.0f, float taper = 0.0f) {
         for (int s = 0; s < steps; s++) {
@@ -242,13 +233,10 @@ Surface finishSurface(const Canvas &c, float gain) {
 
 // ------------------------------------------------------------ paper walls
 //
-// Level 0 and LEVEL FUN are both papered, and paper is hung the same way
-// whatever is printed on it: in 0.75 m drops off a roll, butted at a seam that
-// has lifted a little, over a vinyl with a fine stipple emboss, above a skirting
-// board. SKIRT is that board's height. It was a 27 cm band of flat brown paint
-// before, which is a dado rail's height rather than a skirting's; a commercial
-// fit-out uses a 100-150 mm board, and the outlets (0.32 m, world_mesh.cpp) now sit
-// clear above it the way they do in a real room.
+// Level 0 and LEVEL FUN are both papered: 0.75 m drops with slightly lifted
+// seams, a fine stipple emboss, above a skirting board. SKIRT is the board's
+// height (it was a 27 cm painted band; real skirting is 100-150 mm). The
+// outlets at 0.32 m sit above it.
 const float SKIRT = 0.12f;
 
 // The paper itself, for a pixel `sx` pixels into its drop: relief (seam, lifted
@@ -256,21 +244,17 @@ const float SKIRT = 0.12f;
 void paperRelief(Canvas &c, int i, int x, int y, int sx, float &tone, int perY) {
     const float mm = 0.001f;
     float h = 0.0f;
-    // The emboss: commercial vinyl is never smooth. A fine stipple, 0.1 mm deep,
-    // is what makes a wall catch light as a material instead of as a print.
+    // The emboss: a fine stipple, 0.1 mm deep.
     h += (c.nz((float)x, (float)y, 170, 170, 0x77A1u, 2, perY) - 0.5f) * 0.20f * mm;
-    // The seam: a hairline gap, and the edge of the next drop lifting off the
-    // wall for a centimetre — which the light finds from above, and which is
-    // most of what says "wallpaper" rather than "painted".
+    // The seam: a hairline gap, and the edge of the next drop lifted off the wall
+    // for a centimetre.
     if (sx < 2) { h -= 0.15f * mm; tone *= 0.93f; }
     else if (sx < 14) { float t = 1.0f - (sx - 2) / 12.0f; h += 0.22f * mm * t * t; }
     c.ht[i] = h;
 }
 
-// The skirting, for a pixel `hgt` metres above the floor. Stained timber with
-// its grain along the board, 14 mm proud of the wall, with a bullnose on top
-// that the ceiling light catches as a bright line — the one detail that makes
-// the join between wall and floor read as joinery.
+// The skirting, for a pixel `hgt` metres above the floor: stained timber with
+// the grain along the board, 14 mm proud of the wall, with a bullnose on top.
 void skirting(Canvas &c, int i, int x, int y, float hgt, float cr, float cg, float cb) {
     const float PROUD = 0.014f, NOSE = 0.012f;
     float grain = c.nz((float)x, (float)y, 2.0f, 260.0f, 0x5B1u, 3);
@@ -280,10 +264,10 @@ void skirting(Canvas &c, int i, int x, int y, float hgt, float cr, float cg, flo
     if (hgt > SKIRT - NOSE) {                           // the bullnose, a quarter round back to the wall
         float t = (hgt - (SKIRT - NOSE)) / NOSE;
         h = PROUD * sqrtf(sat(1.0f - t * t));
-        v *= 1.0f + 0.10f * t;                           // worn pale where every mop and toe has hit it
+        v *= 1.0f + 0.10f * t;                           // worn paler
     }
     if (hgt < 0.006f) v *= 0.80f;                        // the shadow where it meets the floor
-    // scuffs: black rubber from shoes and a vacuum cleaner, low on the board
+    // black scuffs, low on the board
     float scuff = c.nz((float)x, (float)y, 9.0f, 60.0f, 0x5B3u, 2);
     if (scuff > 0.70f && hgt < SKIRT * 0.7f) v *= 1.0f - (scuff - 0.70f) * 1.3f;
     c.set(i, cr * v, cg * v, cb * v);
@@ -295,21 +279,21 @@ void skirting(Canvas &c, int i, int x, int y, float hgt, float cr, float cg, flo
 
 // ---------------------------------------------------------------- Level 0
 //
-// The wallpaper in the photograph: vertical pinstripe bands, a narrow scroll
-// strip between them, pairs of chevrons pointing up the wall — the "90s
-// chevron-styled" paper of the Oshkosh store. The motif is Amini Allight's CC0
+// The wallpaper from the photograph: vertical pinstripe bands, a narrow scroll
+// strip between them, and pairs of chevrons pointing up (the wiki's "90s
+// chevron-styled" paper). The motif is Amini Allight's CC0
 // texture (assets/materials/README.md), embedded as luminance and printed in
 // ochre ink over the game's mono-yellow ground.
 //
 // 1024 px for the 3 m the wall UVs span, and the 256 px motif repeats exactly
 // four times across it: a period that does not divide the texture puts half a
-// chevron down every seam (AGENTS.md). The roll seams sit on the motif's own
-// repeat, 0.75 m apart, because that is where a paperhanger butts two drops.
+// chevron at every seam (AGENTS.md). The roll seams are on the motif's repeat,
+// 0.75 m apart.
 //
 // Vertically the paper has a second constraint: on a storeyed level a wall
 // taller than one tile carries on from the tile's 0.75-2.25 m band, repeating
-// it (wallV/voidFace in world_mesh.cpp). So everything on the paper repeats every
-// 1.5 m (512 px) down the tile — the noise runs on that period, and anything
+// it (wallV/voidFace in chunk_mesh.cpp). So everything on the paper repeats every
+// 1.5 m (512 px) down the tile; the noise uses that period, and anything
 // that depends on height (the damp, the dust line under the ceiling, the
 // skirting) stays outside the band.
 Surface makeWallpaperSurface() {
@@ -334,8 +318,8 @@ Surface makeWallpaperSurface() {
         float tone = 1.0f;
         paperRelief(c, i, x, y, sx, tone, BAND);
         base *= tone;
-        // Mono-yellow ground, ochre-olive ink; the ink fades where the paper
-        // has yellowed hardest, which is what keeps it from reading as new.
+        // Yellow ground, ochre-olive ink; the ink fades where the paper is most
+        // yellowed, so it looks old.
         float r = 232 * base, g = 216 * base, b = 160 * base;
         float k = ink * (0.50f - 0.18f * grime);
         r = r * (1 - k) + 128 * base * k; g = g * (1 - k) + 112 * base * k; b = b * (1 - k) + 52 * base * k;
@@ -347,13 +331,12 @@ Surface makeWallpaperSurface() {
             if (damp > 0.52f) {
                 float t = std::min(0.50f, (damp - 0.52f) * 1.8f) * reach;
                 c.blend(i, 104, 96, 60, t);
-                c.ht[i] -= 0.00012f * t;                           // the paper cockles where it has been wet
+                c.ht[i] -= 0.00012f * t;                           // the paper ripples where it was wet
             }
         }
         // Just above the board: the caulk line and the shade under the nosing.
         if (hgt < SKIRT + 0.02f) c.mul(i, 0.90f + 0.10f * (hgt - SKIRT) / 0.02f);
-        // Under the ceiling: the grey of dust carried up by warm air, a real
-        // thing on any wall above a heat source, heaviest in the last 30 cm.
+        // Under the ceiling: a grey dust band, heaviest in the top 30 cm.
         float dust = sstep(2.55f, 3.0f, hgt);
         if (dust > 0) c.blend(i, 150, 142, 112, 0.22f * dust * (0.6f + 0.8f * grime));
         c.gl[i] = 0.55f;
@@ -365,15 +348,13 @@ Surface makeWallpaperSurface() {
 
 // Contract carpet: level loop, tufted in rows along one direction, in a heather
 // of four yarns. At 2 mm a pixel the loops themselves are resolved — two pixels
-// a loop, alternate rows offset half a loop, the way a tufting machine stitches
-// them — so up close the floor has a weave and at distance it mips down to the
-// same soft colour it always was. Each loop is one yarn and sits at its own
-// height, and the needle rows show as the faint striation along the run that
-// real carpet has ("rowing"). The yarns are close in colour on purpose: the
-// fleck is a texture, not a pattern.
+// a loop, alternate rows offset half a loop, so close up the floor has a weave
+// and at a distance it mips to the old flat colour. Each loop is one yarn at
+// its own height, and the rows show as faint stripes along the run. The yarns
+// are close in colour so the fleck does not form a pattern.
 //
-// Clean, as asked: no wear lanes, no stains. The rotten cells bring their own
-// damp tint in geometry (world_mesh.cpp), and the wet patches were removed.
+// Clean, as requested: no wear paths or stains. The rotten cells get their dark
+// tint from the mesher (chunk_mesh.cpp).
 Surface makeCarpetSurface() {
     const int N = 1024, LOOPS = N / 2;
     Canvas c(N, N, 2.0f, 2.0f);
@@ -390,13 +371,13 @@ Surface makeCarpetSurface() {
         int k = 0;
         for (float acc = Y[0].w; k < 3 && u > acc; acc += Y[++k].w) {}
         float r = Y[k].r, g = Y[k].g, b = Y[k].b;
-        // the odd fleck yarn, a shade off the rest: berber, not noise
+        // an occasional fleck yarn, slightly different in colour
         uint32_t fl = hs >> 24;
         if (fl < 3) { r *= 0.80f; g *= 0.78f; b *= 0.76f; }
         else if (fl > 252) { r *= 1.10f; g *= 1.10f; b *= 1.06f; }
-        float shade = 0.96f + 0.08f * c.nz((float)x, (float)y, 7, 7, 0xCA42u, 3);   // pile lying different ways
+        float shade = 0.96f + 0.08f * c.nz((float)x, (float)y, 7, 7, 0xCA42u, 3);   // pile direction variation
         float rowing = 1.0f + (lat(row % (N / 2), 0, 0xCA43u) - 0.5f) * 0.035f;
-        float v = shade * rowing * ((y & 1) ? 0.93f : 1.0f);   // the row gap sits in the loops' shadow
+        float v = shade * rowing * ((y & 1) ? 0.93f : 1.0f);   // darker between rows
         c.set(i, r * v, g * v, b * v);
         // One loop is two pixels square: the top of the loop, and the row gap
         // between it and the next row down.
@@ -411,16 +392,13 @@ Surface makeCarpetSurface() {
 namespace {
 
 // A suspended ceiling: square boards on an exposed T-bar grid. The grid is
-// painted steel, 24 mm across, and it is *lighter* than the boards and stands
-// proud of them — the old ceiling drew it as a dark groove, which is a tile
-// floor's grout, not a ceiling's grid. Between bar and board there is a hairline
-// of shadow where the square-cut board edge sits on the flange; that shadow and
-// the bar's own light face are what make a drop ceiling read as one.
+// painted steel, 24 mm wide, lighter than the boards and standing proud of them
+// (the old ceiling drew it as a dark groove, like floor grout). A hairline
+// shadow runs where each board edge sits on the flange.
 //
-// The boards are fine-fissured mineral fibre: the worm-track fissures are short
-// strokes stamped one by one (a level set of noise, which is what they were,
-// draws long meandering lines and came out as a ceiling of water trails),
-// with pinholes scattered between and a speckle in the fibre.
+// The boards are fissured mineral fibre. The fissures are short strokes stamped
+// one by one (a noise level set gave long wandering lines that looked like
+// water trails), with pinholes and a speckle in the fibre.
 Surface boardCeiling(int N, int boards, float tileM, float br, float bg, float bb,
                      float gr, float gg, float gb, int worms, uint32_t seed, float targetLuma) {
     Canvas c(N, N, tileM, tileM);
@@ -477,36 +455,31 @@ Surface boardCeiling(int N, int boards, float tileM, float br, float bg, float b
 
 }   // namespace
 
-// Level 0's ceiling: 2 ft boards, the size in the photograph and in every
-// office. A floor or ceiling maps 2 m to one repeat, so three boards to a
-// repeat puts each at 667 mm — as near 600 as a whole number allows — and the
-// grid lines at multiples of 2/3 m in world space. That lands one line through
-// the centre of every light fitting (cell corners, at 2 + 4k m) and the tray's
-// 0.69 m half-width on the next line out, so a troffer fills a 2 x 2 board bay
-// the way a lay-in fitting does. The metre-square boards before were a third
-// again too big, which is most of why the ceiling looked like a grid texture.
+// Level 0's ceiling: 2 ft boards, as in the photograph. A ceiling maps 2 m to
+// one repeat, so three boards per repeat makes each 667 mm (the nearest whole
+// number of boards to 600 mm), with grid lines every 2/3 m in world space. That
+// puts a line through the centre of every light fitting (cell corners, at
+// 2 + 4k m) and the tray's 0.69 m half-width on the next line, so a troffer
+// fills a 2 x 2 board bay. The old boards were a metre square.
 Surface makeCeilingSurface() {
     return boardCeiling(768, 3, 2.0f, 208, 202, 181, 222, 220, 210, 240, 0xCE11u, 187.6f);
 }
 
 // ---------------------------------------------------------------- Level 1
 //
-// Poured walls, cast against plywood. Level 1's walls are one tile floor to
-// slab (3 m across, 4.2 m up — WallBuilder::tileV in world_mesh.cpp), so this texture knows the
-// height of everything it draws. The pour went up in three 1.4 m lifts, each
-// against two 1.5 m form sheets, and the forms leave everything that makes
-// concrete look cast rather than rendered:
+// Poured concrete walls, cast against plywood. Level 1's walls are one tile
+// floor to ceiling (3 m across, 4.2 m up; WallBuilder::tileV in chunk_mesh.cpp),
+// so features are at real heights. Three 1.4 m lifts, each against two 1.5 m
+// form sheets, which leave:
 //  * each sheet's own tone and a ghost of its wood grain, with a fin of grout
 //    where two sheets met;
 //  * the lift joints, a hairline with a lip;
 //  * four form-tie holes per sheet — most patched with grout a shade lighter,
 //    some left open, and those bleeding rust down the wall;
-//  * bugholes, the air that rose through the pour and was trapped against the
-//    form, so they crowd toward the top of every lift.
-// Then the building's own history: damp and a tide line at the foot (the
-// lore's "bland, discolored walls"), runs of wet down the face, and a few real
-// cracks — stroked, jagged and branching, where the old ones were a level set
-// that closed into loops and read as a contour map.
+//  * bugholes (trapped air), more toward the top of every lift.
+// Then damp and a tide line at the foot (the wiki's "bland, discolored walls"),
+// wet streaks down the face, and a few cracks, drawn as jagged branching
+// strokes (the old noise level set formed closed loops like a contour map).
 Surface makeConcreteWallSurface() {
     const int W = 1024, H = 1024;
     const float WM = 3.0f, HM = 4.2f, LIFT = 1.4f, SHEET = 1.5f;
@@ -551,7 +524,7 @@ Surface makeConcreteWallSurface() {
         float dj = fabsf(wrapd(wx, 0.0f, SHEET)) / mx;
         if (dj < 1.0f) v *= 0.80f;
         else if (dj < 3.0f) h += 0.0005f * (1.0f - (dj - 1.0f) / 2.0f);
-        // lift joints at 1.4 and 2.8 m, wandering a few mm as a real one does
+        // lift joints at 1.4 and 2.8 m, wandering a few mm
         for (float jy : { LIFT, 2 * LIFT }) {
             float d = (hgt - jy - jointCol[x]) / my;
             if (fabsf(d) < 0.8f) { v *= 0.70f; h -= 0.0008f; }
@@ -587,9 +560,8 @@ Surface makeConcreteWallSurface() {
         v *= 1.0f - 0.14f * (1.0f - hgt / HM);                     // darker toward the floor
         float r = 149 * v, g = 147 * v, b = 141 * v;
         if (rust > 0) { r = lerpf(r, 128 * v, rust); g = lerpf(g, 88 * v, rust); b = lerpf(b, 58 * v, rust); }
-        // The damp band: "bland, discolored walls" is what standing water in a
-        // fog does to the foot of a wall — darker and greener to about a metre,
-        // an uneven tide line, and the odd run of wet climbing above it.
+        // The damp band: darker and greener to about a metre, an uneven tide
+        // line, and occasional wet streaks above it.
         float tide = tideCol[x];
         float climb = c.nz(fx, fy, 6.0f, 1.2f, 93u, 3);
         if (climb > 0.62f) tide += (climb - 0.62f) * 1.6f;
@@ -611,10 +583,8 @@ Surface makeConcreteWallSurface() {
     return finishSurface(c, 1.0f);
 }
 
-// A warehouse slab, power-trowelled: the blades leave overlapping arcs burnished
-// a shade darker and smoother than the paste between them, and those swirls are
-// the first thing anyone notices about a real warehouse floor. Under them a
-// curing mottle, sand in the surface, the odd pop-out where a stone near the top
+// A warehouse slab, power-trowelled: overlapping arcs, slightly darker and
+// smoother than the surface between them. Under them a curing mottle, sand in the surface, the odd pop-out where a stone near the top
 // spalled, two hairline shrinkage cracks, and black rubber scuffs where carts
 // turned. Matte overall: the Level 1 lore pass took the sheen off this floor
 // deliberately (its puddles come from the shader), and the burnish only moves
@@ -717,19 +687,14 @@ Surface makeConcreteCeilSurface() {
 
 // ---------------------------------------------------------------- Red Halls
 //
-// Brick at the size brick is: 215 x 65 mm with 10 mm joints, which makes a
-// course 75 mm and a wall 3 m tall exactly forty of them. Along the wall a
-// 3 m repeat holds thirteen, so each is 231 mm on centre — within a couple of
-// millimetres of the real thing. The old brick was 0.75 m long and a quarter of
-// a metre tall: a wall of breeze blocks with a brick's colouring.
+// Real brick size: 215 x 65 mm with 10 mm joints, so a course is 75 mm and a
+// 3 m wall has forty. A 3 m repeat holds thirteen along the wall, 231 mm on
+// centre. The old brick was 0.75 m by 0.25 m.
 //
-// Stretcher bond, every brick its own firing (a tone off its index, the odd
-// dark header, the ends flashed darker where they faced the kiln fire), a
-// rounded arris, a pitted face, and mortar raked back 6 mm so the joints are
-// real shadow lines under a torch. Mortar is mortar-grey gone dirty; under the
-// Red Halls' light that reads as a dull line between redder bricks, which is
-// how a real brick wall reads under a red lamp. Salt blooms out of it in
-// patches, and soot-dark rot spreads in others.
+// Stretcher bond, each brick with its own tone (from its index, with some dark
+// headers and darker ends), a rounded edge, a pitted face, and mortar raked
+// back 6 mm so joints cast shadows under the flashlight. Dirty grey mortar, with
+// patches of white salt and dark rot.
 Surface makeRedBrickSurface() {
     const int N = 1024, COURSES = 40, BRICKS = 13;
     Canvas c(N, N, 3.0f, 3.0f);
@@ -784,10 +749,10 @@ Surface makeRedBrickSurface() {
         c.gl[i] = gloss;
     }
     // Matched on red alone. The Red Halls' light is (1, 0.22, 0.15) and their
-    // ambient smaller still; at these levels the tone curve's toe swallows the
-    // green and blue entirely, so red is all that reaches the eye. Matched on
-    // luma — even luma weighted by that light — the new brick (grey mortar,
-    // more green in it) rendered a tenth darker than the old in the capture.
+    // ambient smaller still; at these levels the tone curve's toe removes green
+    // and blue entirely, so only red is visible. Matched on luma (even luma
+    // weighted by that light), the new brick (grey mortar, more green) rendered
+    // a tenth darker than the old.
     c.matchLuma(0.299f * 106.9f, { 1.0f, 0.0f, 0.0f });
     return finishSurface(c, 1.0f);
 }
@@ -797,12 +762,10 @@ Surface makeRedBrickSurface() {
 // Glazed white tile at 1/6 m (a 6-inch tile), 64 px each: twelve to a 2 m floor
 // repeat and eighteen to a 3 m wall repeat, so a wall and the floor it stands
 // on carry the same grid and their grout lines meet at the foot of the wall.
-// The joints are 8 mm and recessed 2.5 mm, every tile has a small cushion edge
-// rather than the old seven-pixel pillow (which is where the "chocolate bar"
-// look came from), and every tile is set very slightly off true: a tilt of a
-// few tenths of a degree, different each tile. That lippage is invisible face
-// on and is the whole reason a real tiled wall breaks a reflection up tile by
-// tile, which in a hall this glossy is what reads as ceramic.
+// The joints are 8 mm and recessed 2.5 mm, and each tile has a small cushion
+// edge (the old seven-pixel bevel looked like a chocolate bar). Each tile is
+// tilted a few tenths of a degree, differently per tile, which is invisible
+// face on but breaks up reflections tile by tile.
 Surface makeTileSurface(bool wall) {
     const int T = wall ? 18 : 12, TP = 64, N = T * TP;
     const float M = wall ? 3.0f : 2.0f;
@@ -904,14 +867,11 @@ Surface makePartyWallSurface() {
     return finishSurface(c, 1.0f);
 }
 
-// Banquet-hall carpet, the kind every function room and hotel ballroom has: a
-// burgundy ground under an old-gold trellis, a rosette in every diamond, navy
-// sprigs and quatrefoils, on a 2/3 m repeat. Muted on purpose: bright gold on
-// a regular grid read as floor tiles at ten metres. The old floor
-// was a flat saturated red sprinkled with confetti, which read as a toy; a
-// function-room carpet is busy on purpose, so the dirt does not show. Cut pile,
-// so the pile shade shifts in soft patches. The confetti is still ground in —
-// it is the party's floor — but sparser and trodden flat.
+// Banquet-hall carpet: a burgundy ground under a gold trellis, a rosette in each
+// diamond, navy sprigs and quatrefoils, on a 2/3 m repeat. Muted, because bright
+// gold on a regular grid looked like floor tiles at a distance. The old floor
+// was flat red with confetti. Cut pile, so the shade varies in soft patches.
+// Some flattened confetti is still in it.
 Surface makePartyCarpetSurface() {
     const int N = 768, REP = 256;                        // three repeats of 2/3 m to the 2 m tile
     Canvas c(N, N, 2.0f, 2.0f);
@@ -973,9 +933,8 @@ Surface makePartyCarpetSurface() {
     return finishSurface(c, 1.0f);
 }
 
-// The party hall's ceiling has gone dark: black acoustic board on a black grid,
-// the way function rooms paint them so the lights are all you see. Same
-// construction as Level 0's, 0.5 m boards.
+// LEVEL FUN's ceiling: black acoustic board on a black grid. Same construction
+// as Level 0's, with 0.5 m boards.
 Surface makePartyCeilSurface() {
     return boardCeiling(512, 4, 2.0f, 22, 20, 25, 30, 29, 33, 120, 0xFA27u, 19.3f);
 }

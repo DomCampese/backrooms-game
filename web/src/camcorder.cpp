@@ -43,8 +43,8 @@ void CamcorderReel::grab(const Camcorder &cam, int slot, const RenderTexture2D &
     BeginTextureMode(reel);
     // Copied, not blended: the scene target's alpha is below 1 wherever
     // something translucent was drawn (decals, the contact shadows, water,
-    // glass), and the screen shows its colour regardless. Blended over black
-    // the tape came out darker there than the eye saw it. GL_ONE, GL_ZERO,
+    // glass), but the screen shows its colour regardless. Blended over black,
+    // those areas came out darker on the tape than on screen. GL_ONE, GL_ZERO,
     // GL_FUNC_ADD: rlgl's names for them are #defines the sandbox's headers lose.
     rlSetBlendFactors(1, 0, 0x8006);
     BeginBlendMode(BLEND_CUSTOM);

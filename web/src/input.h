@@ -1,32 +1,28 @@
 #pragma once
-// One place the game asks "is the player doing this", so a platform with no
-// keyboard and no mouse can answer.
+// All player input goes through these, so touch devices can answer them.
 //
-// Natively — and on a desktop browser — every one of these is the raylib call
-// it is named after, inlined, and the generated code is identical. On a phone
-// there is no pointer to lock and no key to press: web/shell.html draws the
-// touch controls, publishes their state, and web/src/input_web.cpp folds that state
-// into the same answers. Game code does not know which happened.
+// Natively and in a desktop browser each one is the raylib call it is named
+// after, inlined (identical generated code). On a touch device web/shell.html
+// draws the controls and publishes their state, and web/src/input_web.cpp
+// answers from it.
 //
-// Use these rather than the raylib functions anywhere the *player's* intent is
-// being read. Window-level keys (F11) are not player intent and stay direct.
+// Use these instead of raylib's input functions for player input. Window keys
+// (F11) are not player input and stay direct.
 #include "raylib.h"
 
 #ifdef PLATFORM_WEB
 
 // Copy the touch state for this frame. Called once at the top of Game::tick, so
-// that every query below sees one coherent snapshot — a button read twice in a
-// frame must not answer differently the second time.
+// every query below sees the same snapshot within a frame.
 void webInputPoll();
 // 1.0 unless a thumbstick is pushed part way, so movement stays analog on a
 // stick and unchanged for anything that returns booleans.
 float webMoveScale();
 // The touch AIM button latches rather than being held (input_web.cpp). The game
-// decides when an aim is legal, so it needs a way to drop a latch it has
-// refused — otherwise the button sits lit over a gun that never comes up.
+// decides when an aim is allowed, so it drops a latch it refused; otherwise the
+// button stays lit with the gun lowered.
 void webReleaseAim();
-// The CAM button is lit while the camcorder is up; the game decides that, not
-// the finger, so it is told rather than working it out.
+// The CAM button is lit while the camcorder is up, as the game reports.
 void webLightCam(bool on);
 
 bool    inKeyDown(int key);
@@ -36,12 +32,11 @@ bool    inMousePressed(int button);
 Vector2 inMouseDelta();
 float   inWheel();
 bool    inCursorHidden();
-// True only when the on-screen controls are up. The HUD asks so it can name the
-// buttons the player actually has: a title card telling a phone to press WASD
-// is telling it to do something it cannot.
+// True only when the on-screen controls are up, so the HUD names touch buttons
+// instead of keys.
 bool    inTouchActive();
-// A tap on open screen or a push of the stick — what "tap anywhere to descend"
-// means on a device whose only other way in is one small button.
+// A tap on open screen or a push of the stick: starts a run from the title
+// screen on touch.
 bool    webStartGesture();
 
 #else

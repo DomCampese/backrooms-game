@@ -59,13 +59,14 @@ void Game::renderScene(double now) {
     SetShaderValue(worldShader, locOccN, &occN, SHADER_UNIFORM_FLOAT);
 
     BeginTextureMode(rt);
-    // Long pool galleries fade into atmospheric colour beyond the streamed ring.
+    // The Poolrooms clear to their fog colour, since its halls are longer than the
+    // streamed area.
     ClearBackground(sim.level==2 ? Color{48,70,66,255} : BLACK);
     BeginMode3D(cam);
     // This storey's chunks in view, then the other storeys' that an opening
     // shows, each nearest first (port/visible.h). After this storey's, so the
-    // floors and ceilings you are between have already filled the depth buffer
-    // and most of the other floor is rejected before it is lit.
+    // floors and ceilings around the player have already filled the depth
+    // buffer and most of the other storeys fail the depth test before shading.
     const ChunkViewer viewer{ { sim.px, sim.eyeY, sim.pz }, sim.fwd, view.eye, view.up, cam.fovy,
                               rt.texture.width, rt.texture.height };
     const std::vector<VisibleChunk> inView = visibleChunks(sim.world, viewer, [&](int storey, int cx, int cz) {
@@ -111,19 +112,16 @@ void Game::renderScene(double now) {
     sceneBuf.clear();
     sceneDraws(sim, light, timeF, sceneBuf);
     for (const SceneDraw &d : sceneBuf) drawScene(d, cam);
-    // Looking through the camcorder, whatever is in the other hand is out of frame.
+    // While the camcorder is up, the held item is not drawn.
     const Held held = camcorder.viewing() ? Held::None : heldItem(sim);
     if (held != Held::None) {
-        // Held against a wall, the can falls inside that wall's shadow and goes
-        // black in your hands. A viewmodel shouldn't be shadowed by the room it
-        // is being held in, so switch the occlusion grid off for this one draw
-        // — uOccN of 0 makes lightVis return "lit" everywhere — and put it back
-        // straight after. Perspective still does the foreshortening.
+        // Next to a wall the held item falls in the wall's shadow and goes black.
+        // Turn the occlusion grid off for this draw (uOccN = 0 makes lightVis
+        // return lit everywhere) and restore it straight after.
         float occOff = 0.0f;
         SetShaderValue(worldShader, locOccN, &occOff, SHADER_UNIFORM_FLOAT);
-        // ...and give it a floor of ambient, so a can held up in an unlit stretch
-        // of corridor is still legible rather than a silhouette. Only lifts where
-        // the room is genuinely dark; anywhere lit, the panels dominate this.
+        // Also give it a minimum ambient, so it is visible in an unlit corridor.
+        // This only matters where the room is dark.
         const Vec3 &la = LEVELS[sim.level].amb;
         Vector3 vmAmb = { fmaxf(la.x, 0.150f), fmaxf(la.y, 0.142f), fmaxf(la.z, 0.128f) };
         SetShaderValue(worldShader, locAmb, &vmAmb, SHADER_UNIFORM_VEC3);
@@ -142,16 +140,16 @@ void Game::renderScene(double now) {
     EndTextureMode();
 }
 
-// Held geometry belongs to the scene pass: perspective, room lighting and
-// post-processing all affect it just as they affect the can and the deck.
+// Held geometry is drawn in the scene pass, so perspective, room lighting and
+// post-processing apply to it as to the can and the deck.
 void Game::drawHeldWeapon(const Camera3D &cam) {
     Vector3 right{sim.r2x, 0, sim.r2z};
     Vector3 up = Vector3Normalize(Vector3CrossProduct(right, toRl(sim.fwd)));
     const Matrix m = heldMatrix(heldWeapon(sim, simView(sim)));
     SetShaderValue(worldShader, locGloss, &REVOLVER_GLOSS, SHADER_UNIFORM_FLOAT);
     revolver.pose(sim.reloadT,sim.gunCd,sim.ammo);
-    // Its steel reflects the room (uObjRefl in the world shader); nothing
-    // else drawn has metal in its detail map, so nothing else pays for it.
+    // The room reflection (uObjRefl in the world shader) is on only for the
+    // revolver, the one object with metal in its detail map.
     float refl = 1.0f;
     SetShaderValue(worldShader, locObjRefl, &refl, SHADER_UNIFORM_FLOAT);
     revolver.draw(mats[MAT_PROPS],m);

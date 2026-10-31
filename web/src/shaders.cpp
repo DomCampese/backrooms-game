@@ -56,8 +56,8 @@ uniform float uFaulty;           // share of tubes that stutter
 uniform float uWet;              // Level 0's sodden carpet: 1 = damp patches on the floor
 uniform float uWetFrom;          // where on the patch field they start: 0.60 L0 carpet, 0.78 L1 puddles
 uniform vec4 uRoomMask;          // x0,z0,x1,z1: ceiling panels centred in here are dark (the Manila Room)
-uniform vec4 uLamp;              // xyz: the one spare point light — the Manila Room's chandelier, or
-                                 // the nearest stairwell's landing batten — w: its output (0 = none near)
+uniform vec4 uLamp;              // xyz: the spare point light (the Manila Room's chandelier or
+                                 // the nearest stairwell's landing batten); w: its output, 0 = none
 uniform vec3 uLampCol;           // ...and its colour: filament warm, or fluorescent
 uniform float uMacro;            // world-space tone wander on tiled surfaces (SURF_MACRO)
 uniform float uBoard;            // suspended-ceiling board pitch, metres; 0 = none (CEIL_BOARD)
@@ -68,16 +68,16 @@ float gGloss;
 uniform sampler2D texture2;      // occupancy grid (material normal-map slot)
 uniform vec2 uOccOrigin;         // world cell coords of texel (0,0)
 uniform float uOccN;             // grid side in cells; 0 = no grid, everything lit
-uniform float uEntBlock;         // 1 while the thing is out — it occludes light too
+uniform float uEntBlock;         // 1 while the hunter is present: it casts a shadow
 uniform float uStoreyH;          // floor-to-floor pitch; 0 on a level that is one floorplan
-uniform float uStorey;           // the storey you are on, for its tubes' own failures
-uniform float uDrawRel;          // which storey the mesh being drawn belongs to, relative to yours
+uniform float uStorey;           // the current storey, for its tube hash
+uniform float uDrawRel;          // which storey the mesh being drawn belongs to, relative to the current one
 out vec4 finalColor;
 
-// Storeys (World::storeyH). The storey you stand on is always the one at y = 0,
+// Storeys (World::storeyH). The current storey is always the one at y = 0,
 // and the ones above and below are drawn a pitch up or down, seen through the
 // openings between them. Which one a fragment belongs to decides whose tubes
-// light it, and which byte of the occupancy grid its shadows march: r is yours,
+// light it, and which byte of the occupancy grid its shadows march: r is this storey,
 // g the storey below, b the one above. Two storeys off there is no grid; it is
 // taken as open. gChan picks the byte by a dot product, not a branch.
 int gRel = 0;
@@ -96,7 +96,7 @@ float storeyOffset(float st){ return fract(st * @STOREY_HASH_STEP@) * @STOREY_HA
 const float PANEL_HALF = @PANEL_HALF@;
 
 // How lit the shaded point came out. roomLight() fills this in so the fog can be
-// lit by the same room the surface is — set once per fragment, read at the end.
+// lit like the surface. Set once per fragment, read at the end.
 float gLightLum = 0.0;
 
 float lhash(vec2 g){ return fract(sin(dot(g, vec2(@TUBE_HASH_X@,@TUBE_HASH_Z@)))*@TUBE_HASH_SCALE@); }
@@ -153,8 +153,8 @@ bool pillarBlocks(ivec2 c, vec2 a, vec2 invDir, float dist){
 }
 // Does light from `a` reach `b`? Walls are a floorplan extruded to full height,
 // so this is a 2D grid march: step cell to cell and test the edge we cross.
-// Doorways, window glass and open gaps aren't in the grid, so light pours
-// through them — which is where the shafts across dark corridors come from.
+// Doorways, window glass and open gaps are not in the grid, so light passes
+// through them.
 float lightVis(vec2 a, vec2 b){
     if (uOccN < 1.0) return 1.0;
     vec2 d = b - a;
@@ -222,9 +222,8 @@ float panelVis(vec2 lc, vec2 p, float spread){
     }
     return vis;
 }
-// the hunter is solid too: catch it in a beam and it throws a shadow down the
-// hall. It's a body, not a column — a ray that passes over its head still gets
-// through, so the beam clears it onto the ceiling behind.
+// The hunter also casts a shadow. He is a body, not a full-height column: a ray
+// passing over his head still gets through.
 float entVis(vec3 a, vec3 b){
     if (uEntBlock < 0.5) return 1.0;
     vec2 d = b.xz - a.xz;
@@ -239,25 +238,24 @@ float entVis(vec3 a, vec3 b){
     return max(side, over);
 }
 // One normalized Blinn lobe with a Schlick edge term. Every surface down here is
-// a dielectric, so the sheen is weak head-on and strong at a grazing angle —
-// that Fresnel ramp is what makes wet tile read as ceramic instead of as paper,
-// and it is the entire reason the poolrooms have a floor you can see the lights in.
+// a dielectric, so the highlight is weak head-on and strong at grazing angles.
+// This is what makes the Poolrooms' tile reflect the lights.
 float sheen(vec3 N, vec3 V, vec3 L, float shin){
     float nh = max(dot(N, normalize(L + V)), 0.0);
     float u = 1.0 - max(dot(V, N), 0.0), u2 = u*u;
     float f = 0.045 + 0.955*(u2*u2*u);                      // Schlick, by multiplies not pow()
     return pow(nh, shin) * (shin + 8.0) * 0.03978874 * f;   // (n+8)/8pi normalization
 }
-// The nine fittings of your storey's grid around P, then — where upMask has
-// any bit set — the nine of the storey above, lit, shadowed and summed. Bit
+// The nine fittings of the current storey's grid around P, then, where upMask
+// has any bit set, the nine of the storey above: lit, shadowed and summed. Bit
 // (dx+1)*3 + (dz+1) of each mask says whether the fitting at base + (dx, dz)
 // is there (see the fitting masks in roomLight).
 //
 // ONE loop, and the masks multiply rather than branch. The first version
 // called a nine-fitting function twice, and in a desktop browser the floor
-// below an atrium — the only place both calls run — came out black while
-// every native build lit it. Nothing else differs there, so it reads as the
-// same family of ANGLE miscompile as the lightState note in AGENTS.md.
+// below an atrium (the only place both calls run) came out black while native
+// builds lit it, probably the same ANGLE miscompile as the lightState note in
+// AGENTS.md.
 vec3 panelSum(vec3 P, vec3 N, vec2 base, vec2 shP, float ownLY, float soOwn, float soUp,
               int ownMask, int upMask){
     vec3 light = vec3(0.0);
@@ -277,42 +275,36 @@ vec3 panelSum(vec3 P, vec3 N, vec2 base, vec2 shP, float ownLY, float soOwn, flo
             float ed = distance(lc.xz, uEntPos.xz);
             st *= mix(1.0, smoothstep(2.0, 9.0, ed), uEntDark);
         }
-        // A ceiling diffuser is a 1.24 m square of glowing plastic, not a point.
-        // Treating it as a point put a hard little hotspot under every fitting and
-        // made the falloff far too even everywhere else. Shade instead from the
-        // point on the panel *closest to the surface* — the standard representative
-        // point — which costs two clamps and gives the near field the soft, broad
-        // pour of light a real fluorescent tray actually throws.
+        // A ceiling panel is a 1.24 m square, not a point. A point light gave a
+        // hard hotspot under every fitting and too even a falloff elsewhere.
+        // Shade from the point on the panel closest to the surface (the usual
+        // representative point), which costs two clamps and gives a soft
+        // falloff near the fitting.
         vec3 lp = vec3(clamp(P.x, lc.x - PANEL_HALF, lc.x + PANEL_HALF), ly,
                        clamp(P.z, lc.z - PANEL_HALF, lc.z + PANEL_HALF));
         vec3 ld = lp - P;
         float d2 = dot(ld,ld);
         float atten = 1.0/(1.0 + 0.22*d2);
-        // Only the 3x3 panels around this point are summed, and that window is a
-        // hard cut: at the edge of it a light is still worth ~8% of full, then
-        // vanishes the instant P crosses into the next cell. That draws a
-        // straight seam along every light-cell boundary — the lines on the
-        // floor. Fade each panel out before it leaves the set so nothing pops.
+        // Only the 3x3 panels around this point are summed. Without a fade, a
+        // light still at ~8% at the window's edge disappears when P crosses into
+        // the next cell, leaving a seam along every light-cell boundary. Fade
+        // each panel out before it leaves the window.
         vec2 wf = 1.0 - smoothstep(vec2(0.80), vec2(1.0), abs(lc.xz - P.xz)/(1.5*uLS));
         atten *= wf.x * wf.y;
         if (atten < 1e-5) continue;
         if (st*atten < 0.004) continue;              // too faint to be worth tracing
         // Two taps across the panel up close for a little penumbra, one beyond.
-        // Tracing across it at every range looked better and cost about three
-        // times as much, which was too much. The taps must close up onto the
-        // centre before the switch: cutting from two taps to one at a fixed
-        // range drew a hard sphere around every panel, and that showed as big
-        // bright circles and arcs across the floor and walls.
-        // The march gives up after a fixed number of cells, and where it gives up
-        // the shadow simply stops — and because the DDA spends one step per cell
-        // crossed, the contour where it runs out is |dx|+|dz| = const: a diamond,
-        // whose sides are straight diagonals across open floor. That is where the
-        // lines on the ground came from. Fade each light's shadow out well inside
-        // the budget so the march never truncates in view.
+        // Two taps at every range cost about three times as much. The taps must
+        // converge on the centre before the switch: cutting from two taps to one
+        // at a fixed range drew bright circles and arcs around every panel.
+        // The march stops after a fixed number of cells, and the shadow stops with
+        // it. The DDA takes one step per cell, so the cutoff is |dx|+|dz| = const,
+        // a diamond, which drew diagonal lines on the floor. Fade each light's
+        // shadow out well before the cap, so the march never truncates in view.
         float l1 = abs(lc.x - shP.x) + abs(lc.z - shP.y);   // shP is a vec2: .y is world z
-        // Gone by 15 m, which is 7.5 cells — inside the 8-cell march, so it can
-        // never truncate mid-view. It also means most of the nine lights skip
-        // tracing altogether, which is where the time comes back.
+        // Gone by 15 m (7.5 cells), inside the 8-cell march, so it never
+        // truncates in view. Most of the nine lights then skip tracing, which
+        // saves the time.
         float sw = 1.0 - smoothstep(10.0, 15.0, l1);
         float vis;
         // Nor is a fitting a storey up, shining down the hole this point is
@@ -339,13 +331,11 @@ vec3 panelSum(vec3 P, vec3 N, vec2 base, vec2 shP, float ownLY, float soOwn, flo
         st *= mix(0.18, 1.0, vis);
         if (st <= 0.001) continue;
         vec3 Ln = ld * inversesqrt(max(d2, 1e-6));
-        // Soften the terminator by how big the panel looks from here, not by a
-        // fixed amount. The old 0.55/0.45 half-lambert handed 45% of full
-        // brightness to every surface edge-on to the light, which is most of why
-        // the place read as one flat wash — but replacing it with a hard lambert
-        // put a different fault in: the ceiling sits *level with* the fittings, so
-        // its light arrives edge-on, and a hard terminator there turned the
-        // surface relief into black mould-like blotches across every tile. A
+        // Soften the terminator by the panel's apparent size, not a fixed amount.
+        // The old 0.55/0.45 half-Lambert gave 45% brightness to surfaces edge-on
+        // to the light, which made everything look flat. A hard Lambert failed
+        // on the ceiling, which is level with the fittings and lit edge-on: the
+        // surface relief turned into dark blotches. A
         // 1.24 m panel a foot away genuinely has a terminator a foot wide; one
         // across the room genuinely has a crisp one. sin of the half-angle it
         // subtends is that width, and it costs an inversesqrt.
@@ -360,22 +350,22 @@ vec3 roomLight(vec3 P, vec3 N){
     vec3 light = vec3(0.0);
     vec3 V = normalize(uViewPos - P);
     float shin = mix(20.0, 210.0, gGloss);
-    // reflection ray, for picking the point on a panel this surface can actually
-    // see a highlight from — see the representative-point note below
+    // reflection ray, for picking the point on a panel that gives this surface's
+    // highlight (see the representative-point note below)
     vec3 R = reflect(-V, N);
     // Bias along geometry, never tile relief: a perturbed floor normal can
     // move the lookup across an adjoining wall and light a strip behind it.
     vec2 shP = P.xz + normalize(fragN).xz * 0.16;
-    // Storeys: your own storey's tubes, less any that would hang in an
-    // opening; and where this point has no ceiling (bit 4), the tubes of the
-    // storey above that hang over the hole as well — the light that falls
-    // down a stairwell, into a double-height hall. Which fittings are there is
+    // Storeys: the current storey's tubes, less any that would hang in an
+    // opening; and where this point has no ceiling (bit 4), also the tubes of
+    // the storey above that hang over the hole (light down a stairwell or into
+    // a double-height hall). Which fittings are there is
     // one fetch of the fitting masks (the occupancy texture's second n rows,
     // World::buildOccupancy): a byte per storey, and the ninth bits in alpha.
     // A fitting a storey up shines down the hole exactly where it exists up
     // there and is missing here, because a hole above is an opening below.
-    // Only near an opening, which bit 6 marks: everywhere else — nearly every
-    // fragment — is the plain nine-panel sum, for one extra fetch.
+    // Only near an opening (bit 6). Everywhere else, nearly every fragment,
+    // is the plain nine-panel sum, for one extra fetch.
     int own = uStoreyH > 0.0 ? occAt(ivec2(floor(shP * 0.5))) : 0;
     int ownMask = 511, upMask = 0;
     if ((own & @OCC_NEAR_OPENING@) != 0){
@@ -397,17 +387,14 @@ vec3 roomLight(vec3 P, vec3 N){
     float ownLY = uLY + float(gRel) * uStoreyH;
     light += panelSum(P, N, base, shP, ownLY, storeyOffset(uStorey + float(gRel)),
                       storeyOffset(uStorey + float(gRel + 1)), ownMask, upMask);
-    // Specular, once, for the one panel the surface is actually reflecting.
-    // Running a lobe per light inside the loop cost about a fifth of the frame on
-    // every level — including the matte ones, whose gloss is far too low for the
-    // result to be visible — and it was the wrong answer anyway: a mirror shows
-    // you what the reflection ray hits, not a blur of everything overhead. Trace
-    // the ray to the ceiling plane, look up whichever fitting is there, and clamp
-    // to its rectangle. The highlight that falls out is the panel's own shape
-    // stretched across the floor, which is what makes wet tile read as wet tile.
-    // 0.10 not 0.005: below about a tenth the lobe is worth a thousandth of the
-    // room light and you cannot see it at any exposure, but the levels that are
-    // nearly matte were still paying a shadow march per fragment to compute it.
+    // Specular, once, for the panel the reflection ray hits. A lobe per light
+    // in the loop cost about a fifth of the frame on every level (even matte
+    // ones) and gave a blur instead of a reflection. Trace the ray to the
+    // ceiling plane, look up the fitting there, and clamp to its rectangle; the
+    // highlight is the panel's shape stretched across the floor.
+    // 0.10, not 0.005: below that the lobe is about a thousandth of the room
+    // light and not visible, but nearly matte levels still paid a shadow march
+    // per fragment for it.
     if (gGloss > 0.10 && R.y > 0.02){
         float t = (ownLY - P.y) / R.y;
         if (t > 0.0){
@@ -424,37 +411,32 @@ vec3 roomLight(vec3 P, vec3 N){
                 float d2 = dot(ld, ld);
                 float lobe = sheen(N, V, ld*inversesqrt(max(d2,1e-6)), shin)
                              *gGloss*st*2.6/(1.0 + 0.22*d2);
-                // Work out the lobe before tracing whether the panel is visible,
-                // not after. It is a sharp highlight, so on any given frame it is
-                // nonzero over a small band of the screen — and the trace is a
-                // whole DDA. Testing the cheap thing first is where the poolrooms
-                // got their frame time back.
+                // Compute the lobe before tracing visibility. It is nonzero over a
+                // small part of the screen and the trace is a full DDA, so testing
+                // the cheap part first saves most of the Poolrooms' cost.
                 if (lobe > 0.002) light += uLightCol*(lobe*lightVis(sp.xz, shP));
             }
         }
     }
-    // Bounce fill, split by which way the surface looks. Flat ambient from every
-    // direction is the other half of why this place read as a wash: a real room's
-    // fill comes mostly off the lit ceiling, so up-facing surfaces catch far more
-    // of it than down-facing ones, and that alone gives an unlit corner some shape.
+    // Bounce fill, by surface direction. Flat ambient also made everything look
+    // flat; real fill light comes mostly off the lit ceiling, so up-facing
+    // surfaces get more than down-facing ones, which gives unlit corners shape.
     float hemi = 0.5 + 0.5*N.y;
     vec3 amb = uAmb * mix(vec3(1.05), uLightCol*1.75, hemi) * (0.35+0.65*uBlackout);
     // The level table's ambients were picked against a tone curve with no toe,
     // which returned about 1.25x its input near black; the filmic curve returns
-    // about 0.21x there, so the same figure now arrives roughly six times darker
-    // and the Red Halls fell from "almost black" to nothing readable at all.
-    // Lift it back — but only where the toe is actually eating it. A flat six-fold
-    // multiplier was the first attempt and it blew the poolrooms out to white
-    // paper: that level's ambient is four times any other's, high enough that it
-    // was never in the toe to begin with, so it got a correction it did not need.
+    // about 0.21x there, so the same value is about six times darker and the Red
+    // Halls became unreadable. Lift it back, but only in the toe. A flat six-fold
+    // multiplier blew the Poolrooms out to white: its ambient is four times any
+    // other level's and was never in the toe.
     amb *= 1.0 + 5.5/(1.0 + 40.0*amb);
     light += amb;
-    // a pool of shadow drapes the room lighting around the hunter (lamps + ambient)
+    // dim the room lighting around the hunter (lamps and ambient)
     if (uEntDark > 0.01){
         float fd = distance(P.xz, uEntPos.xz);
         light *= mix(1.0, smoothstep(0.8, 6.5, fd), uEntDark);
     }
-    // the flashlight and the flare cut through that dark — they are how you find it
+    // the flashlight and the flare are not dimmed by it
     if (uFlash > 0.01){
         vec3 fv = P - uViewPos;
         float fd2 = dot(fv,fv);
@@ -509,16 +491,14 @@ vec3 roomLight(vec3 P, vec3 N){
 }
 
 // What the air itself is lit to between the eye and this fragment. The eye and
-// the torch sit at the same point, so along any one view ray the cone term is
-// constant and the whole in-scatter integral collapses to an arctangent — an
-// exact answer for the price of one atan, no ray marching at all.
+// the flashlight are at the same point, so along a view ray the cone term is
+// constant and the in-scatter integral reduces to one atan, with no ray march.
 //
 //   I(t) = cone * 7.5/(1 + 0.10 t^2)  ->  int_0^d = cone * 7.5 * atan(d*k)/k, k = sqrt(0.10)
 //
 // The flare is off-axis, so its integral is the same shape about the ray's point
-// of closest approach to it. Both together are what puts a visible beam in the
-// air and a halo round a burning flare, which is most of what "atmosphere" means
-// in a corridor you cannot see the end of.
+// of closest approach to it. Together they give the visible flashlight beam and
+// the halo round a burning flare.
 vec3 inScatter(vec3 ro, vec3 rd, float d){
     vec3 s = vec3(0.0);
     if (uFlash > 0.01){
@@ -555,9 +535,9 @@ void main(){
     gGloss = uGloss;
     // Which storey this fragment is on: the one whose mesh it is, which the
     // renderer sets per chunk (uDrawRel). It used to be worked out from the
-    // height, and a sunken floor more than 30 cm down on your own storey was
-    // then lit as the storey below, with that storey's tubes and shadow grid:
-    // the bottom of every pit came out black.
+    // height, and a sunken floor more than 30 cm down on the current storey was
+    // lit as the storey below, with that storey's tubes and shadow grid, so the
+    // bottom of every pit came out black.
     if (uStoreyH > 0.0){
         gRel = int(floor(uDrawRel + 0.5));
         gChan = chanFor(gRel);
@@ -569,8 +549,7 @@ void main(){
         if (fragC.a < 0.1){                          // light panel (emissive, flickers)
             vec2 g = floor((fragPos.xz - uLS*0.5)/uLS + 0.5);
             float st = lightState(g, storeyOffset(uStorey + float(gRel)));
-            // A dead diffuser is still a sheet of white plastic catching the room,
-            // not a hole in the ceiling — that is what the first term is for.
+            // The first term lights a dead panel by the room, so it is not black.
             col = vec3(0.72,0.70,0.65) * roomLight(fragPos, vec3(0.0,-1.0,0.0)) + uLightCol*5.2*st;
             col *= 0.93 + 0.07*sin(fragUV.x*33.0)*sin(fragUV.y*33.0);   // prismatic lens ribs
             gLightLum = max(gLightLum, st);
@@ -594,7 +573,7 @@ void main(){
             float w2 = sin(fragPos.x*5.1 - uTime*2.2 + fragPos.z*1.3);
             vec3 Nw = normalize(N + vec3(0.055*w2 + 0.03*w1, 0.0, 0.045*w1 - 0.025*w2));
             vec3 light = roomLight(fragPos, Nw);
-            // water is the glossiest thing in the building whatever the level says
+            // water is always glossy, whatever the level's gloss
             float fres = 0.03 + 0.97*pow(1.0 - abs(dot(V, Nw)), 5.0);
             col = fragC.rgb * (light*0.75 + uAmb*1.4) * (0.85 + 0.15*w1);
             col += light * fres * 0.45;
@@ -629,21 +608,18 @@ void main(){
         // a detail alpha above 0.99 (objects are 128, the neutral map 250), and
         // only opaque textured geometry (vertex alpha 254-255) is a building
         // surface rather than a decal fading out.
-        // A texture repeats every 2-3 m and every stain and patch of grime in
-        // it repeats too, in a grid, which is the single strongest tell that a
-        // floor is generated. One octave of world-space value noise, a couple of
-        // metres across, makes the tone wander instead; a second octave cost
-        // more frame than it was worth (tools/bench.sh). Arithmetic only: see
+        // A texture repeats every 2-3 m, and so do its stains, in a visible grid.
+        // One octave of world-space value noise, a couple of metres across,
+        // varies the tone to hide it; a second octave cost too much frame time
+        // (tools/bench.sh). Arithmetic only: see
         // lightState.
         vec3 Ng = normalize(fragN);
         float world = step(0.99, fragC.a) * step(0.99, detail.a);
         vec2 mp = mix(vec2(fragPos.x + fragPos.z, fragPos.y), fragPos.xz, step(0.7, abs(Ng.y)));
         float wander = vnoise(mp*0.45 + 11.3);
         texel.rgb *= 1.0 + (wander - 0.5) * 2.0 * uMacro * world;
-        // A suspended ceiling is a few hundred boards that have been replaced
-        // one at a time over years: each its own shade, some yellowed, and the
-        // odd one water-stained — a tan blot with the dark tide ring round it
-        // that every office ceiling has somewhere. Per board in world space,
+        // Each ceiling board gets its own shade, some are yellowed, and some are
+        // water-stained (a tan blot with a dark ring). Per board in world space,
         // hashed with the storey, so no two floors share a stain and none
         // repeats. The T-bar (within 16 mm of a grid line) is left alone.
         if (uBoard > 0.0){
@@ -688,15 +664,12 @@ void main(){
             gGloss = max(gGloss, 0.62*wet);
             Nb = normalize(mix(Nb, normalize(fragN), wet));
         }
-        // The revolver reflects the room. Metal is almost nothing but
-        // reflection: stainless steel is the ceiling along its top strap, the
-        // walls down its flats and the floor underneath, and shaded by diffuse
-        // light alone (which is all it had) it read as grey plastic. There is
-        // no environment map, so the room is approximated from what this
-        // fragment already knows: how lit it is (gLightLum, set by roomLight)
-        // and the colour of the tubes and of the level — a dark floor below the
-        // horizon, walls at it, the lit ceiling above, and the fittings as a hot
-        // band overhead that sharpens with gloss. Roughness blurs a metal's
+        // The revolver reflects the room. With diffuse light only, the stainless
+        // steel looked like grey plastic. There is no environment map, so the
+        // room is approximated from this fragment's light level (gLightLum, set
+        // by roomLight) and the tube and level colours: a dark floor below the
+        // horizon, walls at it, the lit ceiling above, and a bright band for the
+        // fittings overhead that sharpens with gloss. Roughness blurs a metal's
         // reflection but does not dim it, so metal reflects at full weight and
         // keeps a fifth of its diffuse; the walnut gets 4% at normal incidence,
         // rising with gloss at a grazing angle. Object maps carry metalness in
@@ -744,11 +717,9 @@ void main(){
         }
         aOut = max(fragC.a * texel.a, backlit);      // translucent contact shadows + scrawl decals
         if (noclip){
-            // Reality is thin here, and the torn bands show what is behind
-            // it: a flat, over-bright nothing on an ordinary exit, and on a
-            // cursed one (vertex alpha 247) the crimson of
-            // the Red Rooms. A faint shimmer runs all the time, torn or not,
-            // so a wanderer who stops and looks can find it.
+            // The torn bands show a flat bright colour on an ordinary exit and
+            // dark red on a cursed one (vertex alpha 247). A faint shimmer runs
+            // all the time, so a player who stops and looks can spot the exit.
             float shimmer = 0.035 * sin(uTime*23.0 + fragPos.y*41.0 + fragPos.x*7.0 + fragPos.z*7.0);
             vec3 behind = fragC.a < 0.975 ? vec3(0.55, 0.03, 0.02) : vec3(1.25, 1.18, 0.95);   // 247 cursed, 250 not
             col = mix(col * (1.0 + shimmer), behind * (0.6 + 0.4*gLightLum), tear * 0.55);
@@ -756,16 +727,15 @@ void main(){
         }
     }
     float f = clamp(exp(-dist*uFogDen), 0.0, 1.0);
-    // Fog used to be one flat colour everywhere, which meant the far end of a
-    // pitch-dark corridor glowed exactly as much as the far end of a lit one.
-    // Tint it by how lit the thing behind it is instead, so distance reads as
-    // depth and darkness stays dark.
+    // Fog used to be one flat colour, so the far end of a dark corridor glowed
+    // as much as a lit one. Its brightness now follows the light level of the
+    // surface behind it.
     vec3 fogc = uFogCol * mix(0.10, 1.0, uBlackout) * (0.45 + 1.15*clamp(gLightLum, 0.0, 1.0));
     col = mix(fogc, col, f);
     // the beam and the flare light the air on the way here, not just the surface
     vec3 rd = (fragPos - uViewPos) / max(dist, 1e-4);
     // Scaled by the level's own fog density, because the air is what does the
-    // scattering — a level with clear air should not have a visible beam. The
+    // scattering: a level with clear air has no visible beam. The
     // flashlight has its own weaker scattering weight above; reducing this
     // shared factor would also dim the flare halo.
     col += inScatter(uViewPos, rd, dist) * (uFogDen * 0.10);
@@ -787,8 +757,8 @@ void main(){
         uv += uWater*0.0018*vec2(sin(uv.y*24.0+uTime*1.3),sin(uv.x*21.0-uTime));
         uv = clamp(uv,vec2(0.002),vec2(0.998));
     }
-    // The migraine throbs: a slow double pulse, like a heartbeat behind the
-    // eyes, that pinches the image in a little and splits its colour.
+    // The migraine: a slow double pulse that zooms the image in slightly and
+    // splits its colour.
     float throb = 0.0;
     if (uMigraine > 0.0) {
         float ph = fract(uTime * 1.05);
@@ -823,7 +793,7 @@ void main(){
     c += g * (0.012 + 0.055*uFear);                   // film grain
     float d = length(dir);
     c *= 1.0 - smoothstep(0.34, 0.95, d)*(0.42 + 0.34*uFear + 0.30*throb); // vignette
-    c *= 1.0 - 0.05*throb;                               // and the whole frame dims on the beat
+    c *= 1.0 - 0.05*throb;                               // the frame dims on the pulse
     c *= 0.994 + 0.006*sin(uTime*377.0);             // mains-hum luma shimmer
     c = mix(c,c*vec3(0.48,0.86,0.80)+vec3(0.015,0.07,0.065),uWater*0.75);
     finalColor = vec4(c, 1.0);

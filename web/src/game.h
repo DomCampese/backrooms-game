@@ -34,7 +34,7 @@ enum MatSlot {
     MAT_COUNT,
 };
 
-// Shots against the level's triangles: the chunk meshes of your storey and the
+// Shots against the level's triangles: the chunk meshes of the current storey and the
 // ones above and below, so a round fired down a stairwell hits the flight.
 struct MeshTracer : SolidTracer {
     World &world;
@@ -75,9 +75,9 @@ struct Game {
     Mesh canMesh{};                            // the almond water can, real geometry
     Mesh deckMesh{}, reelMesh{}, deckLampMesh{};   // the tape player, its reels, its record lamp
     Mesh crateMesh{}, crateLidMesh{};
-    // The light-occlusion grid the shader marches: the floorplan round you,
-    // OCC_N cells wide, recentred as you walk. Four bytes a cell
-    // (World::buildOccupancy): your storey, the one below, the one above.
+    // The light-occlusion grid the shader marches: the floorplan around the
+    // player, OCC_N cells wide, recentred as the player moves. Four bytes a
+    // cell (World::buildOccupancy): this storey, the one below, the one above.
     static constexpr int OCC_N = OCC_CELLS;
     std::vector<unsigned char> occBuf;
     int occOriginI = 0, occOriginK = 0;
@@ -120,8 +120,8 @@ struct Game {
     void enterLevel(int lv);   // its look, then the rules
     void syncLevelLook();                     // applyLevelLook if the sim has entered a level since
     void saveRecords();
-    // Base camera fovy for the window, locking the horizontal view so a
-    // portrait phone does not play through a 34 deg keyhole.
+    // Base camera fovy for the window, fixing the horizontal view so a portrait
+    // phone does not get a 34 deg view.
     float baseFov() const;
     void streamChunks();
     void updateOccupancy();                   // recentre and re-upload the light-occlusion grid

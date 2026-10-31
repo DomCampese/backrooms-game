@@ -1,5 +1,5 @@
 #pragma once
-// Procedural textures — surfaces are composed at startup, including embedded CC0 object tiles.
+// Procedural textures, made at startup, including the embedded CC0 object tiles.
 #include "raylib.h"
 #include "core/world.h"   // VEND_HW, VEND_Y1: the vending machine's body
 #include "core/level_rules.h"
@@ -10,9 +10,9 @@
 // A world surface: its colour, and the detail map the shader reads beside it
 // (texture1: packed tangent slopes in RG, gloss mask in B, alpha 255). Both
 // come out of one generator, because the relief is authored as a height field
-// in metres alongside the paint rather than guessed from the paint afterwards:
-// a printed chevron is flat, a groove between two ceiling boards is not, and
-// the old luminance-derived relief could not tell them apart.
+// in metres alongside the colour, not derived from it: a printed chevron is
+// flat and a groove between ceiling boards is not, which relief derived from
+// luminance could not tell apart.
 struct Surface { Texture2D albedo{}, detail{}; };
 // Upload an image; `tiled` mipmaps it with trilinear + anisotropic filtering and
 // repeat wrapping (see the note in textures.cpp about raylib's filter order).
@@ -21,10 +21,10 @@ Surface makeWallpaperSurface();    // Level 0: mono-yellow chevron vinyl, roll s
 Surface makeCarpetSurface();       // Level 0: heathered level-loop contract carpet
 Surface makeCeilingSurface();      // Level 0: 600 mm fissured mineral board on white T-bar
 // The sheets' frame counts, frame sizes and rows are port/sheets.h's.
-Texture2D makeClarkTex();          // PIRATE CLARK, Level 0's hunter, ENT_FRAMES wide
+Texture2D makeClarkTex();          // Pirate Clark, Level 0's hunter, ENT_FRAMES wide
 Texture2D makeSmilerTex(bool glow);   // the Smiler: fog body, or its unlit eyes and grin; ENT_FRAMES wide
-Texture2D makePartygoerTex();      // the thing that lives at the party
-Texture2D makeScrawlTex();         // graffiti atlas: what earlier wanderers wrote
+Texture2D makePartygoerTex();      // the Partygoer, LEVEL FUN's hunter
+Texture2D makeScrawlTex();         // graffiti atlas: 4 x 8 phrases
 Texture2D makePropsTex();          // prop atlas: cardboard / cabinet / metal
 Texture2D makeFixturesTex();       // fittings atlas: outlets, switch, grille, diffuser, exit sign, metal
 
@@ -36,7 +36,7 @@ Surface makeConcreteCeilSurface();   // Level 1 (+ Red Halls): formed soffit
 Surface makeRedBrickSurface();       // Red Halls: real-size brick in stretcher bond
 // Poolrooms: white glazed tile at one pitch everywhere. Floors and ceilings map
 // 2 m to a texture repeat and walls 3 m, so they need two textures to put the
-// grout lines at the same spacing — and then they meet where wall meets floor.
+// grout lines at the same spacing, so they meet where wall meets floor.
 Surface makeTileSurface(bool wall);
 Surface makePartyWallSurface();      // LEVEL FUN =): party-print vinyl, bunting, smileys
 Surface makePartyCarpetSurface();    // LEVEL FUN =): patterned banquet-hall carpet
@@ -46,7 +46,7 @@ Surface makePartyCeilSurface();      // LEVEL FUN =): black acoustic board on bl
 Surface makeSurface(SurfSlot slot);
 // The tile sizes (FLOOR_TILE_M, WALL_TILE_M, wallTileV) are port/atlas.h's.
 Texture2D makeAOStripTex();        // gradient strip for baked contact-shadow decals
-Texture2D makeDogTex();            // THE RED HALLS: whatever the pack is, seen side-on
+Texture2D makeDogTex();            // the Red Halls dogs, side view
 Texture2D makeAlmondWrapTex();     // almond water can, unwrapped: label strip + lid + base
 Texture2D makeDeckTex();           // the tape player: top / body / front / reel, in one atlas
 

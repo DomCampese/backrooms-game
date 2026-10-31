@@ -24,9 +24,9 @@ void Game::init() {
     cleanShot = getenv("BACKROOMS_CLEAN") != nullptr;
     if (const char *t = getenv("BACKROOMS_TIME")) captureTime = (float)atof(t);
     if (const char *sf = getenv("BACKROOMS_SHOTFRAME")) shotFrame = atoi(sf);
-    // Headless captures schedule no blackouts: blackouts run on the wall clock,
-    // and at a software rasteriser's 2 fps a capture lands inside one and comes
-    // out as black as a failed shader. BACKROOMS_NOBLACKOUT=0 puts them back.
+    // Headless captures schedule no blackouts. Blackouts run on the wall clock,
+    // and at 2 fps a capture often lands in one and comes out black.
+    // BACKROOMS_NOBLACKOUT=0 turns them back on.
     SimStart start;
     start.noBlackout = shotPath != nullptr;
     if (const char *nb = getenv("BACKROOMS_NOBLACKOUT")) start.noBlackout = atoi(nb) != 0;
@@ -46,12 +46,9 @@ void Game::init() {
     InitWindow(1440, 850, "THE BACKROOMS");
     SetExitKey(KEY_NULL);
 #ifdef PLATFORM_WEB
-    // raylib's web resize callback clamps the canvas to screenMin before it
-    // sizes it, so a 640x400 floor renders a 412 px phone at 640 wide and lets
-    // CSS squash the result back down: the whole world comes out horizontally
-    // compressed, which reads as a bad FOV rather than as a window-size bug.
-    // The browser is the window manager here; it will not hand us anything
-    // absurd.
+    // raylib's web resize callback clamps the canvas to the minimum size first,
+    // so a 640x400 minimum rendered a 412 px phone at 640 wide and CSS squashed
+    // it horizontally. In a browser a small minimum is safe.
     SetWindowMinSize(240, 240);
 #else
     SetWindowMinSize(640, 400);
@@ -77,18 +74,18 @@ void Game::init() {
     deckMesh = buildDeckMesh();
     reelMesh = buildReelMesh();
     deckLampMesh = buildDeckLampMesh();
-    // Alpha 250, not 255: the shader takes a detail alpha above 0.99 to mean
-    // "a tiled world surface" and lays its world-space variation (uMacro,
-    // uBoard) over only those. Object maps are 128; this neutral one serves the
-    // decals, fixtures and held objects, and must stay out of that test while
-    // still reading as level-relative gloss (anything over 0.75).
+    // Alpha 250, not 255: the shader applies its world-space variation (uMacro,
+    // uBoard) only where detail alpha is above 0.99 (tiled world surfaces).
+    // Object maps are 128. This neutral map is used by decals, fixtures and
+    // held objects, so it must fail that test but still count as
+    // level-relative gloss (above 0.75).
     Image neutral = GenImageColor(1, 1, {128, 128, 255, 250});
     neutralDetail = LoadTextureFromImage(neutral);
     UnloadImage(neutral);
 
     worldShader = LoadShaderFromMemory(WORLD_VS, worldFragmentShader().c_str());
-    // A failed compile silently falls back to raylib's default shader, which
-    // renders a plausible-looking but completely wrong scene. Say so instead.
+    // A failed compile falls back to raylib's default shader without an error,
+    // so log one.
     if (worldShader.id == rlGetShaderIdDefault())
         TraceLog(LOG_ERROR, "world shader failed to compile - see the SHADER lines above");
     locTime = GetShaderLocation(worldShader, "uTime");
@@ -145,9 +142,9 @@ void Game::init() {
         SetTextureWrap(texOcc, TEXTURE_WRAP_CLAMP);
     }
     // Every material needs the occupancy grid, or its shadows are wrong: an
-    // unbound sampler reads as white, the occlusion code takes that for "wall
-    // everywhere", and the object turns black. Count comes from the enum, so a
-    // new slot cannot be added without being initialised here.
+    // unbound sampler reads as white, which the shader treats as walls
+    // everywhere, and the object turns black. The count comes from the enum, so
+    // a new slot is always initialised here.
     for (int i = 0; i < MAT_COUNT; i++) {
         mats[i] = LoadMaterialDefault();
         mats[i].shader = worldShader;
@@ -179,12 +176,12 @@ void Game::init() {
     }
     if (const char *lvEnv = getenv("BACKROOMS_LEVEL")) start.level = atoi(lvEnv) % NLEVELS;
     if (const char *stEnv = getenv("BACKROOMS_STOREY")) { start.storeyed = true; start.storey = atoi(stEnv); }
-    // The torch is the one light you aim, so a fixed-position capture needs it switched on.
+    // The flashlight is off by default; captures of it need it switched on.
     start.flash = getenv("BACKROOMS_FLASH") != nullptr;
     everFlashed = start.flash;
     start.menu = (shotPath == nullptr) || getenv("BACKROOMS_MENU") != nullptr;   // headless shots skip the title
-    // From the window in hand, so a phone's first frame does not open at the
-    // desktop's angle and slide.
+    // From the current window, so a phone's first frame does not start at the
+    // desktop FOV and then change.
     start.fov = baseFov();
 
     snprintf(bestPath, sizeof(bestPath), "%s/.backrooms_best", getenv("HOME") ? getenv("HOME") : ".");
@@ -248,9 +245,9 @@ void Game::saveRecords() {
     sim.recordsChanged = false;
     ::saveRecords(bestPath, sim.best);
 #ifdef PLATFORM_WEB
-    // A tab's filesystem dies with the page: flush to the IndexedDB that
+    // A tab's filesystem is lost with the page: flush to the IndexedDB that
     // web/shell.html mounted over $HOME. shutdown() never runs on the web, so
-    // this is the only place records are persisted there.
+    // this is the only place records are saved there.
     EM_ASM({
         FS.syncfs(false, function (err) { if (err) console.warn("records not saved:", err); });
     });
@@ -330,7 +327,7 @@ bool Game::tick() {
         UnloadRenderTexture(rt);
         rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
         SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);   // post CA/bloom sample past the edges: clamp, don't wrap
-        sim.fov = baseFov();   // a phone turned on its side is framed from the first frame
+        sim.fov = baseFov();   // so a rotated phone gets the right FOV immediately
         camcorder.fitReel(GetScreenWidth(), GetScreenHeight());
         camReel.fit(camcorder);
         if (trace) trace.fov(sim.fov);
@@ -376,7 +373,7 @@ bool Game::tick() {
 
     if (inKeyPressed(KEY_F3)) debugHud = !debugHud;
     if (inKeyPressed(KEY_ESCAPE) && inCursorHidden()) EnableCursor();
-    // A click that captures the mouse is spoken for: it must not also fire.
+    // A click that captures the mouse must not also fire.
     bool captureClick = !inCursorHidden() && !shotPath && inMousePressed(MOUSE_BUTTON_LEFT);
     if (captureClick) DisableCursor();
     InputFrame in = readInput(captureClick);
@@ -387,7 +384,7 @@ bool Game::tick() {
     sim.step(in, dt, now);
     if (trace) trace.digest(sim);
     camcorder.logSounds(sim.audio);
-    if (sim.inMenu && sim.deathT > 0 && camcorder.beginReplay())   // taken: the tape plays on the card
+    if (sim.inMenu && sim.deathT > 0 && camcorder.beginReplay())   // the player died: the tape plays on the death card
         webLightCam(false);
     camReel.playNoises(camcorder, audio);
     finishStep(false);
@@ -437,8 +434,8 @@ InputFrame Game::readInput(bool captureClick) {
     in.use = inKeyPressed(KEY_E);
     in.drink = inKeyPressed(KEY_THREE);
     in.chalk = inKeyPressed(KEY_M);
-    // A tap on open screen or a stick push begins too: a phone has no key.
-    int key = GetKeyPressed();   // F11 is the window's, not a request to begin
+    // On touch, a tap on open screen or a stick push also starts a run.
+    int key = GetKeyPressed();   // F11 toggles fullscreen and does not start a run
     in.begin = (key != 0 && key != KEY_F11) || inMousePressed(MOUSE_BUTTON_LEFT) || webStartGesture();
     if (debugHud) {
         in.dev.blackout = inKeyPressed(KEY_B);
@@ -456,12 +453,11 @@ InputFrame Game::readInput(bool captureClick) {
     return in;
 }
 
-// raylib derives the horizontal angle from fovy times the aspect, so a fixed
-// 70 deg vertical was right only at the 1440x850 window (99.7 deg across) and
-// left a portrait phone a 34 deg keyhole. This locks the horizontal view
-// instead, clamped where a fixed horizontal would go fisheye (a square window)
-// or binoculars (a landscape phone). `aim` widens the top of the band so the
-// sights still narrow the view where the clamp pins the base.
+// raylib derives the horizontal angle from fovy and the aspect, so a fixed 70
+// deg vertical was right only at 1440x850 (99.7 deg across) and gave a portrait
+// phone 34 deg. This fixes the horizontal view instead, clamped so a square
+// window is not too wide and a landscape phone not too narrow. `aim` raises the
+// top of the clamp so aiming still narrows the view when the base is clamped.
 float Game::baseFov() const {
     return windowFovY(GetScreenWidth(), GetScreenHeight(), 0);
 }
@@ -481,8 +477,8 @@ void Game::streamChunks() {
 }
 
 // Keep the shader's light-occlusion grid centred on the player. Rebuilding is a
-// few thousand cell lookups, so only redo it once you've walked far enough that
-// the window is worth moving, or the walls have changed.
+// few thousand cell lookups, so redo it only after the player has moved far
+// enough or the walls have changed.
 void Game::updateOccupancy() {
     World &world = sim.world;
     if (sim.shadowsStale) { occValid = false; sim.shadowsStale = false; }
@@ -492,8 +488,8 @@ void Game::updateOccupancy() {
     world.buildOccupancy(occOriginI, occOriginK, OCC_N, occBuf.data());
     UpdateTexture(texOcc, occBuf.data());
     occValid = true;
-    // The CPU half of the lighting reads the same snapshot, so a sprite on a
-    // flight is lit by the same tubes the treads under it are.
+    // The CPU lighting reads the same snapshot, so a sprite on a flight is lit
+    // by the same tubes as the treads under it.
     StoreyLightCPU sl;
     sl.storeyH = world.storeyH; sl.storey = world.storey;
     sl.occ = occBuf.data(); sl.occN = OCC_N; sl.originI = occOriginI; sl.originK = occOriginK;

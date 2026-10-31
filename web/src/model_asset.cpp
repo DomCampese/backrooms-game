@@ -11,30 +11,24 @@
 
 namespace {
 // raylib 6.0 moved the skeleton off Model and renamed ModelAnimation's frame
-// fields. It is the same data under different names, but the file was written
-// against 5.5 and simply does not compile against 6.0 — which is what
-// tools/sandbox-build.sh links, so the whole game stopped building in the
-// sandbox while `make` against a brew 5.5 kept working. These accessors are the
-// only place that difference is allowed to live.
+// fields. The sandbox links 6.0 and Homebrew gives 5.5, so these accessors are
+// the one place that handles both.
 //
 //   5.5                     6.0
 //   model.boneCount         model.skeleton.boneCount
 //   model.bones             model.skeleton.bones
 //   clip.frameCount         clip.keyframeCount
 //   clip.framePoses[f]      clip.keyframePoses[f]      (both are Transform *)
-//   ModelAnimation::bones   gone — 6.0 keeps only boneCount
+//   ModelAnimation::bones   removed; 6.0 keeps only boneCount
 #if defined(RAYLIB_VERSION_MAJOR) && RAYLIB_VERSION_MAJOR >= 6
 inline int boneCountOf(const Model &m) { return m.skeleton.boneCount; }
 inline BoneInfo *bonesOf(const Model &m) { return m.skeleton.bones; }
 inline int keyframesOf(const ModelAnimation &c) { return c.keyframeCount; }
 inline const Transform *poseOf(const ModelAnimation &c, int f) { return c.keyframePoses[f]; }
-// Two keyframes, both the same pose, and it has to be two.
-//
-// 6.0 also changed UpdateModelAnimation's frame from int to float and made it
-// interpolate, so it reads keyframe f *and* f+1. Hand it a one-keyframe clip and
-// it reads one past the end and segfaults inside the library — which is what
-// the whole game did on startup, with a stack ending in UpdateModelAnimation
-// and nothing in the log. Two identical keyframes interpolate to themselves.
+// Two keyframes of the same pose. It must be two: 6.0's UpdateModelAnimation
+// takes a float frame and interpolates, reading keyframes f and f+1, so a
+// one-keyframe clip reads past the end and crashes inside the library. Two
+// identical keyframes interpolate to the same pose.
 inline ModelAnimation onePoseClip(const Model &m, ModelAnimPose *twoFrames) {
     ModelAnimation a{};
     a.boneCount = boneCountOf(m);
