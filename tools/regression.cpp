@@ -692,6 +692,59 @@ int main() {
         sim.deathT=0; sim.inMenu=false;
     }
 
+    // ---- out of sight and quiet, the hunter goes to where he last saw or
+    // heard the player and searches there; he used to path to the player's
+    // cell through walls. Noise inside packNoise's radius gives him the
+    // player again, and he gives up after SEARCH_TIME without contact.
+    {
+        sim.applyLevel(0,GetTime()); sim.beginDescent(0);
+        sim.inMenu=false; sim.deathT=0; sim.hidden=false; sim.health=1; sim.hurtT=0;
+        sim.velx=sim.velz=0; sim.sprinting=false; sim.crouchCur=0;
+        sim.muzzleT=0; sim.gunCd=0; sim.deck.playing=false; for (auto &f : sim.litFlares) f.active=false;
+        // a spot 14-18 m from the player with no line of sight, both open floor
+        bool found=false; float hx=0,hz=0;
+        for (int t=0;t<400 && !found;++t) {
+            Vec2 p=sim.world.findOpenSpot(40+(t%20)*4.0f, 40+(t/20)*4.0f);
+            Vec2 q=sim.world.findOpenSpot(p.x+16, p.y);
+            float d=hypotf(q.x-p.x,q.y-p.y);
+            if (d>14 && d<18 && !sim.world.lineOfSight(p.x,p.y,q.x,q.y)) {
+                sim.px=p.x; sim.pz=p.y; hx=q.x; hz=q.y; found=true;
+            }
+        }
+        CHECK(found);
+        sim.py=0; sim.yaw=0; sim.pitch=0; sim.updateLook(noInput(g));
+        Vec2 last=sim.world.findOpenSpot(hx+4, hz+4);
+        sim.ent.st=EState::Chase; sim.ent.hp=3; sim.ent.stagger=0; sim.ent.dispY=0;
+        sim.ent.lunge=0; sim.ent.lungeCd=0; sim.ent.repathT=0;
+        sim.ent.x=hx; sim.ent.z=hz; sim.ent.lastX=last.x; sim.ent.lastZ=last.y; sim.ent.lostT=0;
+        float d0=hypotf(sim.ent.x-last.x, sim.ent.z-last.y);
+        for (int i=0;i<30;++i) sim.updateEntity(1.0f/30, 100.0+i/30.0);
+        CHECK(sim.ent.st==EState::Chase && sim.ent.lunge<=0);
+        CHECK(sim.ent.lostT>0.9f && sim.ent.lostT<1.1f);
+        CHECK(sim.ent.lastX==last.x && sim.ent.lastZ==last.y);
+        // he walked at search speed toward the last-known spot
+        CHECK(hypotf(sim.ent.x-last.x, sim.ent.z-last.y) < d0-0.5f || d0<1.5f);
+        // sprinting within 20 m is heard: the last-known spot is the player
+        sim.sprinting=true;
+        sim.ent.x=hx; sim.ent.z=hz;
+        sim.updateEntity(1.0f/30, 102.0);
+        CHECK(sim.ent.lastX==sim.px && sim.ent.lastZ==sim.pz && sim.ent.lostT==0);
+        // standing still out of sight, he gives up after SEARCH_TIME
+        sim.sprinting=false;
+        sim.ent.x=hx; sim.ent.z=hz; sim.ent.lastX=last.x; sim.ent.lastZ=last.y;
+        int frames=0;
+        for (; frames<30*30 && sim.ent.st==EState::Chase; ++frames) {
+            // keep him out of sight and earshot, wherever the search takes him
+            if (hypotf(sim.ent.x-sim.px, sim.ent.z-sim.pz)<12 ||
+                sim.world.lineOfSight(sim.ent.x,sim.ent.z,sim.px,sim.pz)) { sim.ent.x=hx; sim.ent.z=hz; }
+            sim.updateEntity(1.0f/30, 103.0+frames/30.0);
+        }
+        CHECK(sim.ent.st==EState::Hidden);
+        CHECK(frames>=(int)(Sim::SEARCH_TIME*30)-2 && frames<=(int)(Sim::SEARCH_TIME*30)+2);
+        CHECK(sim.health==1 && !sim.inMenu);
+    }
+    printf("PASS hunter searches the last-known spot out of sight, hears sprinting, gives up\n");
+
     // ---- the hunter's movement and walk cycle (ENT-01/ENT-02). Check the
     // captures by eye too.
     {

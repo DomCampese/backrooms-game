@@ -68,6 +68,28 @@ Levels 0 and 4 (`Sfx::Step`, unchanged), concrete on Levels 1 and 3
   machine, and check a new recording reached every level with
   `grep -o 'level=[0-9]' | sort | uniq -c`.
 
+# The hunter can lose the player (October 2026)
+
+In a chase the hunter used to path to the player's cell through any number of
+walls, and gave up only after a fixed time unseen. Now he chases what he
+knows (`Sim::hunterChase`, shared/sim/hunters.cpp).
+
+- **He sees the player** within `HUNTER_SIGHT` (30 m) with line of sight,
+  unless they are hidden or crouched more than 7 m away. **He hears them**
+  inside `packNoise`'s radius, the one the pack uses: 5 m standing, 11 m
+  walking, 20 m sprinting (x0.45 crouched), the tape player, a flare strike, a
+  shot. Either sets `Entity::lastX/lastZ` and zeroes `lostT`
+  (`Sim::hunterNotice`).
+- **Without contact** he walks at `SEARCH_SPEED` to the last-known spot, then
+  to open spots 3-7 m around it, and goes `Hidden` after `SEARCH_TIME` (10 s).
+  He cannot lunge without sight.
+- **Every way into a chase must call `hunterNotice`** (the stare, the shot
+  alert in weapons.cpp, F3's C). Without it he searches wherever the last
+  chase ended.
+- **The search draws from `grng`.** walk-l0-l2.trace has no chase, so it still
+  plays back the same; a recording with a chase out of sight would not.
+- No platform code changed, so both builds get it.
+
 # Distant one-shots (October 2026)
 
 Levels 0, 1, 3 and 4 play a muffled one-shot at intervals from a random
