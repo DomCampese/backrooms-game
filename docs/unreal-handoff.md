@@ -225,8 +225,8 @@ What to expect on the Mac:
 - `mapdump` and the goldens default to visit 0. A headless capture of Level 0
   shows visit 1, and of Level 1 visit 0 (AGENTS.md). Match the visit before
   comparing positions with a capture.
-- AGENTS.md "Things that will bite you" is written for the Web build; most
-  of it dies with the renderer, but the generator and storey entries still hold.
+- AGENTS.md "Known problems" is mostly about the Web build's renderer and
+  tools. The generator, wall and sim entries apply to both builds.
 
 ## Next
 
