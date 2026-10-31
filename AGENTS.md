@@ -254,6 +254,16 @@ yet run on the Mac).
   changed since the last good build (`unreal/Saved/materials.digest`). Opening
   the editor builds them too but writes no digest, so the next play builds
   them once more.
+- **The eye always sees a lighter tape** (`POST_FS` and BackroomsPost.ush,
+  31 October 2026). The post pass has TAPE_FS's line wobble, chroma smear,
+  lifted blacks, scanlines, block noise, tracking band, head switching and
+  dropouts at about half strength, with no toggle. It is not the viewfinder:
+  through the camcorder `TAPE_FS` replaces the post pass as before. The
+  numbers are its own, not shared with TAPE_FS, so tuning the tape does not
+  move the eye. The post pass reads 21 taps (was 15): 15 and 16 are the luma's
+  neighbours, 17 to 20 the chroma taps. The HLSL port was checked by reading
+  only; DXC was not run on it, and no post-check like tools/tape-check.sh
+  exists yet.
 - **The tape's interference reacts to the hunter.** At frame 40 of a
   seed-1337 Level 0 capture the tape is torn because Clark has spawned about
   12 m away, out of sight. That is intended, not a shader bug.
