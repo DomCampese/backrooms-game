@@ -293,6 +293,11 @@ off the Mac. In order:
     Room (wood). No Unreal code changed; the mixer loads the new clips, so
     they should match the Web build.
 
+11. **Distant sounds** (30 October 2026). Wait on Level 0 for up to 70 s:
+    a muffled door sound plays, panned. `LEVEL=1`: clang, `LEVEL=3`: pipe
+    knocks, `LEVEL=4`: balloon pop, `LEVEL=2`: none. No Unreal code changed;
+    the mixer loads every clip up to `SFX_COUNT`.
+
 A session on the Mac itself (`claude remote-control` in the repository) could
 build, run the tests and read the log directly; from the cloud each Unreal
 change has waited on a build and a pasted log.

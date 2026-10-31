@@ -17,6 +17,10 @@ enum class Sfx : uint8_t {
     StepConcrete,     // 4: player footsteps, Footing::Concrete (Step is Carpet)
     StepTile,         // 4: Footing::Tile
     StepWood,         // 4: Footing::Wood
+    FarDoor,          // 3: Distant::Door (Level 0)
+    FarClang,         // 3: Distant::Clang (Level 1)
+    FarKnock,         // 3: Distant::Knock (Level 3)
+    FarPop,           // 3: Distant::Pop (Level 4)
 };
 
 // What the ambience synth (audio.cpp) chases. The rules write each field where

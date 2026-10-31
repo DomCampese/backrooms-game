@@ -49,6 +49,35 @@ Player footsteps and landings use a clip per floor material: carpet on Levels
   replaying perfectly: check `grep -o 'level=[0-9]' | sort | uniq -c` on a new
   recording before keeping it. `KEY_HOLD=2` took it through all three levels.
 
+# Distant one-shots (October 2026)
+
+Levels 0, 1, 3 and 4 play a muffled one-shot at intervals from a random
+bearing: `Sfx::FarDoor`, `FarClang`, `FarKnock`, `FarPop`. Level 2 has none.
+Both builds play them with no platform code. What will bite:
+
+- **Which sound a level makes is `LevelRules::distant`** (core/level_rules.h);
+  `Sim::updateDistant` (place.cpp) decides when, which variant, the bearing,
+  pitch and volume: first 20-70 s after entering, then every 35-85 s, the gap
+  scaled down to 45% at zero sanity. Skipped on the title and death cards and
+  in the Manila Room.
+- **It draws from `distantRng`, never `grng`.** grng decides blackouts and
+  spawns, so a sound drawn from it would move them, and every capture and
+  trace with them. `distantRng` is seeded per level and visit in
+  `applyLevel`, and draws its five numbers whether or not the sound is then
+  skipped, so skipping one does not change the next. The regression checks
+  both.
+- **The filtering is baked into the clip.** Neither raylib nor the mixer
+  filters a one-shot, so `farAway` (port/sounds.cpp) applies a two-pole
+  low-pass, a 30 Hz DC block and a Schroeder reverb when the clip is made.
+  Each kind's peak level puts its loudest 100 ms at 0-6 dB(A) over a carpet
+  footstep, before the play volume of 0.32-0.54. Without the DC block the
+  door clip had a 3% offset.
+- **A `pitch` local in the sim shadows `Sim::pitch`,** which the Unreal
+  module's `-Wshadow -Werror` refuses (`tools/unreal-check.sh` caught it, the
+  sandbox build did not). The playback rate is `rate`.
+- walk-l0-l2.trace was re-recorded. The previous code's replay of the new
+  one first differs at frame 89, on `audio` and `audioHash` only.
+
 # Unreal draws the Web build's world (October 2026)
 
 The Unreal port no longer lights anything with Unreal: every material is
