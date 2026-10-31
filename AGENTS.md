@@ -172,8 +172,7 @@ night shot, interference, the tape's frames and sounds, the playback clock,
 the clips and the OSD as `HudDraw`s), web/src/camcorder.{h,cpp}
 (`CamcorderReel`: the reel, `TAPE_FS`, the sound handles) and the world
 shader's `uIR`. In Unreal the reel is `UBackroomsReel` and the tape look is
-`M_BackroomsTape` (Shaders/BackroomsTape.ush, written 27 October 2026, not
-yet run on the Mac).
+`M_BackroomsTape` (Shaders/BackroomsTape.ush, written 27 October 2026).
 
 - **The sim never sees the camera.** `Camcorder::control` runs between
   `readInput` and `trace.step` and removes fire, aim, reload and the wheel
