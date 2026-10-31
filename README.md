@@ -555,16 +555,13 @@ Details that reward paying attention:
   bunch goes at once.
 
   <p align="center"><img src="docs/confetti.png" width="440" alt="A popped balloon and its confetti"></p>
-- **Footsteps follow the floor** — a soft thud on Level 0's carpet, a hard
-  slap the warehouse throws back on Level 1's concrete, a bright click that
-  rings round the Poolrooms' tile, and a hollow knock on the Manila Room's
-  boards.
-- **The rest of the level is out there** — now and then, from somewhere you
-  cannot see: a fire door shutting far down Level 0's halls, steel dropped
-  across Level 1's warehouse and ringing for seconds, the Red Halls' pipes
-  knocking, a balloon going somewhere in LEVEL FUN. Each comes from its own
-  direction, through the walls, and more often as your sanity goes. The
-  Poolrooms keep their quiet.
+- **Footsteps per floor** — separate synthesized clips for carpet (Levels 0
+  and 4), concrete (Levels 1 and 3), tile (Level 2) and wood (the Manila
+  Room).
+- **Distant sounds** — every 35-85 s (sooner at low sanity) a muffled one-shot
+  plays from a random direction: a door closing on Level 0, a metal clang on
+  Level 1, pipe knocking on Level 3, a balloon pop on Level 4. None on
+  Level 2.
 - **Footsteps in the dark** — when the entity chases, you *hear* it: heavy
   footfalls, panned to its bearing and fading with distance, even around
   corners you can't see past.

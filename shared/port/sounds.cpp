@@ -81,24 +81,21 @@ Pcm makeFootstep(uint32_t seed, bool through = false)
     return d;
 }
 
-// A footfall on something hard: a heel strike of filtered noise with a body
-// thump under it, the toe a beat later, and the room answering. Concrete is a
-// dull slap that the warehouse throws back once; the Poolrooms' tile a bright
-// click that rings off the next wall and the one after; the Manila Room's
-// boards a hollow knock in a small room. The carpet step (makeFootstep) is
-// the soft one, and stays as it was.
+// Footstep on a hard floor: band-passed noise for the heel and toe, a decaying
+// sine for the body, a one-pole low-pass, then one or two low-passed echo taps.
+// Voice holds the per-floor parameters. Carpet uses makeFootstep instead.
 Pcm makeHardStep(uint32_t seed, Footing floor)
 {
     struct Voice {
-        float click;      // the heel's noise band, Hz
+        float click;      // heel band-pass centre, Hz
         float clickQ;
         float clickDecay; // 1/s
-        float body;       // the thump under it, Hz
+        float body;       // body sine, Hz
         float bodyDecay;
         float bodyGain;
-        float echo1, echo1Gain, echo2, echo2Gain;   // reflections, s
-        float gain;       // a hard floor is louder than carpet: about 5 dB (A-weighted), not 11
-        float top;        // a shoe's sole takes the edge off: one pole, Hz
+        float echo1, echo1Gain, echo2, echo2Gain;   // echo tap delays (s) and gains
+        float gain;       // output gain; sets each floor about 5 dB(A) over carpet
+        float top;        // one-pole low-pass cutoff, Hz
     };
     const Voice v = floor == Footing::Tile ? Voice{ 3600.0f, 1.4f, 130.0f, 118.0f, 55.0f, 0.35f,
                                                     0.047f, 0.30f, 0.096f, 0.16f, 0.40f, 6000.0f }
@@ -108,13 +105,13 @@ Pcm makeHardStep(uint32_t seed, Footing floor)
                                                     0.038f, 0.22f, 0.0f, 0.0f, 0.48f, 4500.0f };
     Rng r((uint64_t)seed * 2000u + 7u);
     const float toeDelay = 0.055f + r.f01() * 0.02f;
-    const float detune = 0.92f + r.f01() * 0.16f;   // each variant its own shoe
+    const float detune = 0.92f + r.f01() * 0.16f;   // per-variant frequency scale
     const float tail = v.echo2 > 0 ? v.echo2 : v.echo1;
     const int dry = (int)(0.16f * SAMPLE_RATE);
     const int n = dry + (int)(tail * SAMPLE_RATE) + (int)(0.02f * SAMPLE_RATE);
 
-    // The dry footfall: two RBJ band-passes over the same noise, one for the
-    // heel and one, a little higher, for the toe.
+    // Dry signal: two RBJ band-passes over the same noise, heel and toe (toe at
+    // 1.35x the heel's centre).
     std::vector<float> d(dry);
     auto band = [](float f, float q, float &b0, float &a1, float &a2) {
         float w = TAU * f / SAMPLE_RATE, alpha = sinf(w) / (2.0f * q), a0 = 1.0f + alpha;
@@ -139,7 +136,7 @@ Pcm makeHardStep(uint32_t seed, Footing floor)
         float heelEnv = (1.0f - expf(-t * 2500.0f)) * expf(-t * v.clickDecay);
         float bodyEnv = (1.0f - expf(-t * 900.0f)) * expf(-t * v.bodyDecay);
         float sample = h * 3.2f * heelEnv + sinf(TAU * body * t) * v.bodyGain * bodyEnv;
-        // The boards ring with a second, higher mode: the hollow under them.
+        // Wood adds a second body mode at 2.37x.
         if (floor == Footing::Wood) sample += sinf(TAU * body * 2.37f * t) * 0.35f * expf(-t * 48.0f) * bodyEnv;
         float tt = t - toeDelay;
         if (tt > 0.0f) {
@@ -149,13 +146,13 @@ Pcm makeHardStep(uint32_t seed, Footing floor)
         sole += soften * (sample - sole);
         d[i] = sole;
     }
-    // Then the room: the same footfall, quieter and duller each time it comes back.
+    // Echo taps: each a delayed, low-passed copy of the dry signal.
     std::vector<float> out(n, 0.0f);
     const struct { float delay, gain; } taps[3] = { { 0.0f, 1.0f }, { v.echo1, v.echo1Gain }, { v.echo2, v.echo2Gain } };
     for (const auto &tap : taps) {
         if (tap.gain <= 0.0f) continue;
         int at = (int)(tap.delay * SAMPLE_RATE);
-        float lp = 0, k = tap.delay > 0.0f ? 0.35f : 1.0f;   // the echoes lose their top
+        float lp = 0, k = tap.delay > 0.0f ? 0.35f : 1.0f;   // echo taps are low-passed
         for (int i = 0; i < dry && at + i < n; i++) {
             lp += k * (d[i] - lp);
             out[at + i] += lp * tap.gain;
@@ -163,7 +160,7 @@ Pcm makeHardStep(uint32_t seed, Footing floor)
     }
     Pcm pcm(n);
     for (int i = 0; i < n; i++) {
-        // A short fade at the end, so a clip cut by its length does not click.
+        // 10 ms fade-out, so the clip ends on zero.
         float fade = clampf1((float)(n - 1 - i) / (0.01f * SAMPLE_RATE));
         pcm[i] = (short)(clampf1(tanhf(out[i] * v.gain * 1.3f) * fade) * 30000.0f);
     }
@@ -337,18 +334,17 @@ Pcm makeValveTurn() {
     return d;
 }
 
-// A sound from somewhere else on the level, as it reaches you: the walls
-// between have taken its top (two poles at `cutoff`), and what arrives is
-// mostly the building ringing with it, a Schroeder reverb `tail` seconds to
-// die away by 60 dB. Its peak is `level` of full scale, set per kind so that,
-// A-weighted at its loudest 100 ms, the door is a carpet footfall and the
-// others 0-6 dB over one, before the rules' volume. It starts and ends on zero.
+// Processing shared by the distant one-shots: two-pole low-pass at `cutoff`,
+// a 30 Hz DC block, then a Schroeder reverb (four damped combs, two
+// all-passes) with an RT60 of `tail` s, mixed `wet`. Normalised to a peak of
+// `level`; each kind's level puts its loudest 100 ms at 0-6 dB(A) over a
+// carpet footstep. Starts and ends on zero.
 Pcm farAway(const std::vector<float> &dry, float cutoff, float tail, float wet, float level)
 {
     const int n = (int)dry.size() + (int)(tail * SAMPLE_RATE);
     const float k = 1.0f - expf(-TAU * cutoff / SAMPLE_RATE);
     std::vector<float> near(n, 0.0f);
-    // A slam's half cycle leaves an offset the low-pass keeps: block below 30 Hz.
+    // Without the DC block the low-passed door clip had a 3% offset.
     const float hold = expf(-TAU * 30.0f / SAMPLE_RATE);
     float a = 0, b = 0, prev = 0, dc = 0;
     for (int i = 0; i < n; i++) {
@@ -358,8 +354,7 @@ Pcm farAway(const std::vector<float> &dry, float cutoff, float tail, float wet, 
         prev = b;
         near[i] = dc;
     }
-    // Four combs, each damped in its loop so the tail darkens as it goes, then
-    // two all-passes to smear their echoes into a wash.
+    // Combs with a one-pole low-pass in the feedback path, then two all-passes.
     const float combs[4] = { 0.0297f, 0.0371f, 0.0411f, 0.0437f };
     std::vector<float> room(n, 0.0f);
     for (float delay : combs) {
@@ -395,14 +390,14 @@ Pcm farAway(const std::vector<float> &dry, float cutoff, float tail, float wet, 
     const float g = level / peak;
     for (int i = 0; i < n; i++) {
         float edge = clampf1(fminf((float)i, (float)(n - 1 - i)) / (0.004f * SAMPLE_RATE));
-        float fade = clampf1((float)(n - 1 - i) / (0.25f * SAMPLE_RATE));   // the tail is let go, not cut
+        float fade = clampf1((float)(n - 1 - i) / (0.25f * SAMPLE_RATE));   // 250 ms fade-out
         pcm[i] = (short)(clampf1(mix[i] * g * edge * fade) * 30000.0f);
     }
     return pcm;
 }
 
-// A fire door down the halls: the latch, then the leaf meeting its frame and,
-// on two in three, bouncing once against the closer.
+// Door: a latch click, then a low thud; variants 1 and 2 add a second, quieter
+// thud 100-150 ms later.
 Pcm makeFarDoor(int variant)
 {
     Rng r(0xD0025ULL + (uint64_t)variant * 977u);
@@ -427,8 +422,8 @@ Pcm makeFarDoor(int variant)
     return farAway(d, 650.0f, 1.5f, 0.55f, 0.60f);
 }
 
-// Something steel dropped across the warehouse: a bar's inharmonic modes, and
-// on two in three a bounce or two after it.
+// Clang: four inharmonic bar modes (1, 2.76, 5.40, 8.93) at 190-310 Hz;
+// variant 1 adds one bounce, variant 2 two.
 Pcm makeFarClang(int variant)
 {
     Rng r(0xC1A26ULL + (uint64_t)variant * 1201u);
@@ -455,8 +450,8 @@ Pcm makeFarClang(int variant)
     return farAway(d, 1500.0f, 2.6f, 0.7f, 0.22f);
 }
 
-// Water hammer in the Red Halls' pipes: a run of knocks, each quieter and
-// quicker than the last, the iron ringing a little after each.
+// Knock: 3-5 knocks (3 + variant), each spacing 0.84x and gain 0.72x the
+// last; a 95-125 Hz thump plus a 600-740 Hz ring.
 Pcm makeFarKnock(int variant)
 {
     Rng r(0x7A3E1ULL + (uint64_t)variant * 733u);
@@ -485,8 +480,7 @@ Pcm makeFarKnock(int variant)
     return farAway(d, 900.0f, 1.2f, 0.5f, 0.36f);
 }
 
-// A balloon giving up a long way off in the party: the crack, mostly as the
-// room returns it.
+// Pop: the makeBalloonPop burst, run through farAway with a high wet mix.
 Pcm makeFarPop(int variant)
 {
     Rng r(0xFA2B0ULL + (uint64_t)variant * 409u);

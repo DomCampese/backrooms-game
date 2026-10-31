@@ -3,14 +3,13 @@
 // (light colour and output, fog, gloss) is platform data in shared/port/levels.h, which
 // extends this table rather than repeating it.
 
-// What a level's floor is underfoot, which the footsteps sound like: the
-// surface the mesher lays there (shared/port/levels.cpp's LEVEL_SURFACES).
-// Wood is the Manila Room's boards, wherever that room stands.
+// Floor material, which picks the footstep clip (Sim::stepSfx). Must match the
+// floor surface in shared/port/levels.cpp's LEVEL_SURFACES. Wood is used only
+// inside the Manila Room.
 enum class Footing : unsigned char { Carpet, Concrete, Tile, Wood };
 
-// What the rest of the level is heard doing, now and then, somewhere out of
-// sight: a fire door shutting down the halls, steel dropped in the warehouse,
-// the pipes knocking, a balloon going. The Poolrooms keep their quiet.
+// Which distant one-shot a level plays (Sim::updateDistant): a door closing,
+// a metal clang, pipe knocking, a balloon pop, or none.
 enum class Distant : unsigned char { None, Door, Clang, Knock, Pop };
 
 struct LevelRules {

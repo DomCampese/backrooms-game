@@ -288,18 +288,15 @@ off the Mac. In order:
    `unreal/Saved/backrooms_best` holds it. F3 in a run draws the fps,
    position, chunk and hunter line in the top left.
 
-10. **Footsteps** (29 October 2026). Walk on each level: carpet on Level 0,
-    a hard slap on Level 1's concrete (`LEVEL=1 make unreal-play`), a bright
-    ringing click on the Poolrooms' dry tile (`LEVEL=2`), a knock on the
-    Manila Room's boards. The mixer plays them with no Unreal change, so if
-    they sound right in the Web build they should here.
+10. **Footsteps** (29 October 2026). Walk on Level 0 (carpet), Level 1
+    (`LEVEL=1 make unreal-play`, concrete), Level 2 (tile) and in the Manila
+    Room (wood). No Unreal code changed; the mixer loads the new clips, so
+    they should match the Web build.
 
-11. **Distant sounds** (30 October 2026). Stand still on Level 0 for a minute
-    or two: a door shuts somewhere far off, from one side, muffled, with the
-    halls ringing after it. `LEVEL=1` a steel clang, `LEVEL=3` the pipes
-    knocking, `LEVEL=4` a far balloon; the Poolrooms (`LEVEL=2`) stay quiet.
-    Again no Unreal code: the sim plays them and the mixer loads every clip
-    up to `SFX_COUNT`.
+11. **Distant sounds** (30 October 2026). Wait on Level 0 for up to 70 s:
+    a muffled door sound plays, panned. `LEVEL=1`: clang, `LEVEL=3`: pipe
+    knocks, `LEVEL=4`: balloon pop, `LEVEL=2`: none. No Unreal code changed;
+    the mixer loads every clip up to `SFX_COUNT`.
 
 A session on the Mac itself (`claude remote-control` in the repository) could
 build, run the tests and read the log directly; from the cloud each Unreal

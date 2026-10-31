@@ -22,13 +22,12 @@ build's code only drawing and playing it, a shader change in the GLSL and the
 HLSL together. What the Mac build still lacks is docs/unreal-handoff.md,
 "Parity".
 
-# Footsteps follow the floor (October 2026)
+# Footstep clip per floor material (October 2026)
 
-The first feature built for both builds at once. The player's footfalls and
-landings sound like the floor underfoot: Level 0's and LEVEL FUN's carpet (the
-old `Sfx::Step`, unchanged to the byte), Level 1's and the Red Halls' slab
-(`StepConcrete`), the Poolrooms' tile (`StepTile`), and the Manila Room's
-boards (`StepWood`) wherever that room stands. What will bite:
+Player footsteps and landings use a clip per floor material: carpet on Levels
+0 and 4 (`Sfx::Step`, unchanged), concrete on Levels 1 and 3
+(`StepConcrete`), tile on Level 2 (`StepTile`), wood inside the Manila Room
+(`StepWood`). What will bite:
 
 - **The floor is a rule, `LevelRules::footing`** (core/level_rules.h), so the
   sim can read it; `Sim::stepSfx()` picks the clip. It has to agree with the
@@ -37,11 +36,9 @@ boards (`StepWood`) wherever that room stands. What will bite:
 - **New `Sfx` go at the end of the enum** and `SFX_COUNT` follows the last.
   Both builds load every clip up to it (`GameAudio::load`, `SoundMixer::load`),
   so the Mac plays the new steps with no Unreal code at all.
-- **The hard steps are quieter than they want to be.** Straight out of the
-  synth they measured 10-12 dB louder than the carpet (A-weighted), which
-  jumps out of the mix: `makeHardStep`'s gains put them about 5 dB over it.
-  The carpet thud sits where the ear is least sensitive, so compare
-  A-weighted, not RMS.
+- **Compare loudness A-weighted, not RMS.** Without gain the hard-floor clips
+  measured 10-12 dB(A) over carpet; `makeHardStep`'s gains put them about
+  5 dB over. Carpet's energy is mostly below 200 Hz, so RMS overstates it.
 - **The trace hashes the sound** (`audioHash` in each digest), so a change to
   which clip plays is a change to the golden: walk-l0-l2.trace was
   re-recorded for this, and main's replay of the new one fails at frame 150,
@@ -52,37 +49,34 @@ boards (`StepWood`) wherever that room stands. What will bite:
   replaying perfectly: check `grep -o 'level=[0-9]' | sort | uniq -c` on a new
   recording before keeping it. `KEY_HOLD=2` took it through all three levels.
 
-# Distant sounds (October 2026)
+# Distant one-shots (October 2026)
 
-Every level but the Poolrooms is heard from somewhere else, now and then: a
-fire door on Level 0 (`Sfx::FarDoor`), steel dropped on Level 1 (`FarClang`),
-the Red Halls' pipes (`FarKnock`), a balloon in LEVEL FUN (`FarPop`). Like the
-footsteps, both builds play them with no platform code. What will bite:
+Levels 0, 1, 3 and 4 play a muffled one-shot at intervals from a random
+bearing: `Sfx::FarDoor`, `FarClang`, `FarKnock`, `FarPop`. Level 2 has none.
+Both builds play them with no platform code. What will bite:
 
 - **Which sound a level makes is `LevelRules::distant`** (core/level_rules.h);
   `Sim::updateDistant` (place.cpp) decides when, which variant, the bearing,
-  pitch and volume. Every 35-85 s, a 20-70 s lead after arriving, shortened
-  to 45% as sanity goes; held back on the title and death cards and in the
-  Manila Room.
+  pitch and volume: first 20-70 s after entering, then every 35-85 s, the gap
+  scaled down to 45% at zero sanity. Skipped on the title and death cards and
+  in the Manila Room.
 - **It draws from `distantRng`, never `grng`.** grng decides blackouts and
   spawns, so a sound drawn from it would move them, and every capture and
   trace with them. `distantRng` is seeded per level and visit in
   `applyLevel`, and draws its five numbers whether or not the sound is then
-  held back, so where you stood never changes what plays next. The
-  regression checks both.
-- **The distance is in the clip, not the mix.** Neither raylib nor the mixer
-  filters a one-shot, so each clip is made far away (`farAway` in
-  port/sounds.cpp: two poles of low-pass for the walls, a 30 Hz DC block,
-  then a Schroeder reverb for the building). Its peak is set per kind so the
-  loudest 100 ms sit, A-weighted, level with a carpet footfall (the door) up
-  to 6 dB over it (the clang), before the play's volume of 0.32-0.54. The
-  DC block is not optional: without it a slam's half cycle left an offset
-  of 3% of full scale through the low-pass.
+  skipped, so skipping one does not change the next. The regression checks
+  both.
+- **The filtering is baked into the clip.** Neither raylib nor the mixer
+  filters a one-shot, so `farAway` (port/sounds.cpp) applies a two-pole
+  low-pass, a 30 Hz DC block and a Schroeder reverb when the clip is made.
+  Each kind's peak level puts its loudest 100 ms at 0-6 dB(A) over a carpet
+  footstep, before the play volume of 0.32-0.54. Without the DC block the
+  door clip had a 3% offset.
 - **A `pitch` local in the sim shadows `Sim::pitch`,** which the Unreal
   module's `-Wshadow -Werror` refuses (`tools/unreal-check.sh` caught it, the
   sandbox build did not). The playback rate is `rate`.
-- walk-l0-l2.trace was re-recorded: main's replay of the new one fails at
-  frame 110 on `audioHash` alone, the first door.
+- walk-l0-l2.trace was re-recorded. The previous code's replay of the new
+  one first differs at frame 89, on `audio` and `audioHash` only.
 
 # Unreal draws the Web build's world (October 2026)
 

@@ -88,8 +88,8 @@ struct Sim {
     static constexpr float FLAREFADE = 1.5f;    // s of guttering at the end of a burn
     static constexpr float FLAREFALL = 0.05f;   // how fast a fire's presence falls off with distance
     static constexpr double FLARE_REGEN = 75;   // s to scavenge a fresh flare
-    // The level's distant sounds: the first DISTANT_LEAD to LEAD + SPAN s after
-    // arriving, then every DISTANT_GAP to GAP + SPAN, sooner as sanity goes.
+    // Distant one-shots: first at LEAD..LEAD+SPAN s after entering a level,
+    // then every GAP..GAP+SPAN s, scaled by 0.45 + 0.55 * sanity.
     static constexpr double DISTANT_LEAD = 20, DISTANT_GAP = 35, DISTANT_SPAN = 50;
     static constexpr int   MAXAMMO = 6;
     static constexpr float MUZZLE_FLASH = 0.09f;   // s the muzzle flash lights the room
@@ -226,8 +226,8 @@ struct Sim {
     float blackoutCur = 1.0f, fear = 0.0f;
     float whisperT = 0;
     double nextWhisper = 0;
-    // The next distant sound, and its own stream, so that hearing one moves
-    // nothing else: grng decides blackouts and spawns.
+    // Separate RNG for distant sounds, so they do not shift grng (blackouts,
+    // spawns).
     double nextDistant = 0;
     Rng distantRng{1};
     float boostT = 0;                // s of almond-water speed left
@@ -298,10 +298,10 @@ struct Sim {
     void updateFlashlight(const InputFrame &in, float dt);
     void updateLook(const InputFrame &in);
     void updateMovement(const InputFrame &in, float dt, double now);
-    // The player's footfall for the floor underfoot: the level's footing
-    // (LevelRules::footing), or the boards inside the Manila Room.
+    // Footstep clip: LevelRules::footing for the level, or wood inside the
+    // Manila Room.
     Sfx stepSfx() const;
-    // The level, heard from somewhere else in it (LevelRules::distant).
+    // Plays LevelRules::distant's one-shot when nextDistant is due.
     void updateDistant(double now);
     void updateDevKeys(const DevKeys &dev, double now);
     void updateWeapons(const InputFrame &in, float dt, double now);

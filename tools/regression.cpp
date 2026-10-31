@@ -569,10 +569,9 @@ int main() {
         w.data=pcm.data(); ExportWave(w,"drinking.wav");
     }
     {
-        // Footsteps follow the floor: each level's footing, and the Manila
-        // Room's boards wherever it stands. The hard floors start and end
-        // silent (no click at either end of a clip), stay under clipping,
-        // and sit above the carpet in pitch, tile highest.
+        // stepSfx maps each level's footing, and the Manila Room to wood. The
+        // hard-floor clips start and end on zero, peak below clipping, and
+        // order by zero crossings: carpet < wood < concrete < tile.
         const int lv0=sim.level; const bool man0=sim.inManila;
         const Sfx want[NLEVELS]={ Sfx::Step, Sfx::StepConcrete, Sfx::StepTile, Sfx::StepConcrete, Sfx::Step };
         for (int lv=0;lv<NLEVELS;++lv) { sim.level=lv; sim.inManila=false; CHECK(sim.stepSfx()==want[lv]); }
@@ -597,9 +596,8 @@ int main() {
         }
     }
     {
-        // The level heard from elsewhere: one clip per level but the
-        // Poolrooms', played when due from a bearing on its own stream, never
-        // over a card or into the Manila Room, and never touching grng.
+        // updateDistant: the right clip per level, none on Level 2, flags and
+        // ranges as set, grng untouched.
         const int lv0=sim.level; const bool man0=sim.inManila, menu0=sim.inMenu; const float death0=sim.deathT;
         const Sfx want[NLEVELS]={ Sfx::FarDoor, Sfx::FarClang, Sfx::Click, Sfx::FarKnock, Sfx::FarPop };
         const double now=5000;
@@ -619,8 +617,8 @@ int main() {
             // Not due yet: nothing.
             sim.audio.clear(); sim.updateDistant(now+1); CHECK(sim.audio.empty());
         }
-        // Held back over the title card, the death card and in the Manila
-        // Room, with the same draws, so the next one is the same either way.
+        // Skipped on the title card, the death card and in the Manila Room,
+        // with the same number of draws as a play.
         for (int hold=0;hold<3;++hold) {
             sim.level=0; sim.inMenu=hold==0; sim.deathT=hold==1?1.0f:0.0f; sim.inManila=hold==2;
             sim.nextDistant=now; sim.audio.clear();
