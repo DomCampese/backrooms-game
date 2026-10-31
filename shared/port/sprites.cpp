@@ -46,14 +46,14 @@ bool hunterSprite(const Sim &sim, ActorSprite &out) {
     // A walk rises and falls once per step, lowest as a foot lands: |sin| of
     // the phase the legs run on.
     float bob = 0.032f * fabsf(sinf(gph * TAU));
-    // His head comes round with ent.gaze, the timer that tips a stalk into a
-    // chase at 1.6 s, so the turn is the warning. In any other state he is
-    // already looking at you.
+    // The head turns with ent.gaze, the timer that turns a stalk into a chase
+    // at 1.6 s, so the turn is the warning. In any other state he faces the
+    // camera.
     float look = (e.st == EState::Stalk) ? clampf((float)e.gaze / 1.45f, 0, 1) : 1.0f;
     out.row = look < 0.34f ? ENT_ROW_AWAY : (look < 0.72f ? ENT_ROW_HALF : ENT_ROW_FACE);
-    // He tips into where he is going: only the velocity across your view can
-    // show on a billboard. Below a walking pace he stays upright, so he does
-    // not twitch between rows while shuffling.
+    // Lean into the direction of travel; only sideways velocity relative to the
+    // view can show on a billboard. Below walking pace he stays upright, so he
+    // does not flick between rows.
     float side = e.vx * sim.r2x + e.vz * sim.r2z;
     if (e.st == EState::Chase && fabsf(side) > 1.4f)
         out.row = (side < 0) ? ENT_ROW_LEAN_L : ENT_ROW_LEAN_R;

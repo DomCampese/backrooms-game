@@ -24,34 +24,33 @@ struct LevelCfg : LevelRules {
 };
 extern const LevelCfg LEVELS[NLEVELS];
 // World-space variation the shader lays over the tiled surfaces (uMacro, uBoard
-// in shaders.cpp). SURF_MACRO is how far the tone wanders, +/- as a fraction:
-// a texture repeats every 2-3 m and its grime repeats with it, and a real floor
-// does not. CEIL_BOARD is the pitch of a suspended ceiling's boards, metres,
+// in shaders.cpp). SURF_MACRO is the tone variation, +/- as a fraction, which
+// hides that each texture repeats every 2-3 m. CEIL_BOARD is the pitch of a suspended ceiling's boards, metres,
 // for per-board tone and water stains (0 = not a board ceiling). It must be the
 // pitch surfaces.cpp draws the grid at, or the stains straddle the T-bars.
 extern const float SURF_MACRO[NLEVELS];
 extern const float CEIL_BOARD[NLEVELS];
 
 // CPU-side estimate of the shader's room lighting, for tinting billboards.
-// entX/entZ/entDark reproduce the hunter's pool of dead light (0 = no effect).
+// entX/entZ/entDark reproduce the dimming around the hunter (0 = none).
 float lightAtCPU(float x, float y, float z, float blackout,
                  float ls, float ly, float dead, float mul, float ambLum,
                  float entX = 0, float entZ = 0, float entDark = 0, float vary = 0);
 
-// How wet Level 0's carpet is at this point on the floor, 0..1 — the CPU twin
-// of the shader's uWet patches, for the footsteps.
+// How wet Level 0's carpet is at this point, 0..1: the CPU copy of the
+// shader's uWet patches.
 float carpetWetCPU(float x, float z, float from = 0.60f);
 
 // The Manila Room's panel mask (x0,z0,x1,z1) and chandelier (x,y,z,output),
-// for lightAtCPU — the same values Game hands the shader as uRoomMask/uLamp.
+// for lightAtCPU: the same values Game gives the shader as uRoomMask/uLamp.
 void setLightExtrasCPU(const float mask[4], const float lamp[4]);
 
-// Storeys, for lightAtCPU: the pitch, the storey you are on, and the same
+// Storeys, for lightAtCPU: the pitch, the current storey, and the same
 // occupancy snapshot the shader marches (four bytes a cell: this storey, the
 // one below, the one above). A sprite on a flight is lit by the tubes of the
 // floor it is nearest, a panel over an opening is not there to light it, and a
-// sprite in a double-height hall gets the floor above's tubes as well — exactly
-// as the shader does it, or sprites and rooms stop agreeing (see AGENTS.md).
+// sprite in a double-height hall also gets the floor above's tubes, as in the
+// shader, or sprites and rooms are lit differently (AGENTS.md).
 struct StoreyLightCPU {
     float storeyH = 0.0f;
     int storey = 0;

@@ -423,7 +423,7 @@ static void addProp(const PropPlacement &site, int level, MB &pr, MB &ce, MB &ao
             return Vec3{ pcx - x * ca - lz * sa, ey + y, pcz - x * sa + lz * ca };
         };
         const Vec3 fn = { sa, 0, -ca };                     // the front's normal
-        // No two visible faces share a plane and nothing is layered a hair over
+        // No two visible faces share a plane and nothing is layered a few mm over
         // anything else, or a mobile GPU's depth buffer flickers the box fronts
         // through the paint and cans. Boxes leave out every face something else covers;
         // the paint is the door's front, and the display is cut into the door.
@@ -1182,7 +1182,7 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
     const float AOW = 0.55f;   // reach across the floor / ceiling
     const float AOH = 0.48f;   // creep up / down the wall face
     const float AOC = 0.30f;   // ceiling creases start partway down the gradient (softer)
-    // ---- the Red Rooms bleed (Level 0): walls and floors tint toward crimson
+    // ---- the Red Rooms tint (Level 0): walls and floors shade toward red
     // within 11 m of a cursed exit. Exits in this chunk and its eight neighbours.
     struct RedSrc { float x, z; };
     RedSrc reds[16]; int nred = 0;
@@ -1210,7 +1210,7 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
     // so the relief does too.
     auto redTint = [&](float x, float z) {
         float t = redAt(x, z);
-        // rust at the edge, dim crimson at the heart
+        // rust colour at the edge, dark red in the middle
         float t2 = t * t;
         return Rgba{ (unsigned char)(255 - 30 * t - 60 * t2), (unsigned char)(255 - 150 * t - 72 * t2),
                       (unsigned char)(255 - 110 * t - 90 * t2), 255 };

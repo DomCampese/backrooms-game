@@ -4,7 +4,8 @@
 
 namespace {
 
-// The spins the raylib renderer gives cans and crates, so they are not clones.
+// The spins the raylib renderer gives cans and crates, so they are not all
+// aligned.
 // These are raylib angles: MatrixRotateY turns +x toward -z, the other way from
 // a SceneItem's yaw, so the scene stores them negated.
 float canYaw(int a, int b) { return (float)(ih(a, b, 0x0CA9u) & 1023) / 1023.0f * TAU; }
@@ -130,8 +131,7 @@ std::vector<SceneItem> simScene(Sim &sim) {
             it.amount = c.life;
             out.push_back(it);
         }
-    // Chalk stays on the floor it was drawn on; a storey away it is where it
-    // lies, further not at all.
+    // Chalk is drawn only on its own storey and the ones either side.
     for (const ChalkMark &m : sim.chalk[sim.level]) {
         int ds = m.storey - sim.world.storey;
         if (ds < -1 || ds > 1) continue;
@@ -163,7 +163,7 @@ std::vector<SceneItem> simScene(Sim &sim) {
         SceneItem it;
         it.kind = SceneKind::Hunter;
         it.pos = { sim.ent.x, sim.ent.dispY, sim.ent.z };
-        // Facing where it is going, or else at you.
+        // Facing its direction of travel, or else the player.
         bool moving = sim.ent.vx * sim.ent.vx + sim.ent.vz * sim.ent.vz > 0.01f;
         it.yaw = moving ? yawOf(sim.ent.vx, sim.ent.vz) : yawOf(sim.px - sim.ent.x, sim.pz - sim.ent.z);
         it.variant = (uint8_t)sim.ent.st;

@@ -31,10 +31,9 @@ struct Hud {
     std::vector<HudDraw> out;
     int sw, sh;
 
-    // Every HUD size was authored for the 850-pixel-high window the game opens
-    // in; this scales one to the window in hand. Fractions of the screen
-    // (sh / 2, sw / 3) are resolution-independent already and must not go
-    // through it.
+    // Every HUD size was tuned for an 850 px high window; this scales it to the
+    // current window height. Fractions of the screen (sh / 2, sw / 3) are
+    // already resolution-independent and must not be scaled.
     int hud(float px) const {
         int v = (int)(px * sh / 850.0f + 0.5f);
         return v < 1 ? 1 : v;
@@ -52,19 +51,19 @@ struct Hud {
     }
     void rect(int x, int y, int w, int h, Rgba c) { box(HudDraw::Rect, x, y, w, h, c); }
 
-    // One dark offset behind every string, scaled with the text and carrying
-    // its alpha, so a line fading in does not leave its shadow behind. Without
-    // it the inventory is illegible over the Poolrooms' white tile.
+    // A dark offset copy behind every string, scaled with the text and using its
+    // alpha, so a fading line fades its shadow too. Without it the inventory is
+    // unreadable over the Poolrooms' white tile.
     void text(const std::string &t, int x, int y, int px, Rgba c) {
         int o = hud(1);
         raw(t, x + o, y + o, px, fade(BLACK_RGBA, c.a / 255.0f * 0.7f));
         raw(t, x, y, px, c);
     }
 
-    // A centred line is a full-width row, and a phone held upright is short of
-    // width: shrink a line that does not fit 92% of the screen rather than clip
-    // it. Measuring is near linear in size, so one proportional step lands
-    // within a pixel or two; the loop only rounds down.
+    // Shrink a centred line that does not fit in 92% of the screen width rather
+    // than clip it (a portrait phone is narrow). Text width is close to linear
+    // in size, so one proportional step is within a pixel or two; the loop only
+    // rounds down.
     int fitSize(const std::string &t, int px, int maxW) const {
         if (px < 1) px = 1;
         if (maxW <= 0) return px;
@@ -94,8 +93,8 @@ struct Hud {
 void Hud::deathCard(float timeF) {
     float a = clampf(sim.deathT > Sim::DEATH_CARD - 0.6f ? (Sim::DEATH_CARD - sim.deathT) / 0.6f : sim.deathT / 1.0f, 0, 1);
     if (in.replaying) {
-        // The tape plays first (the platform draws it); the words come up over
-        // its last frame.
+        // The tape plays first (the platform draws it), then the text fades in
+        // over its last frame.
         a = fminf(clampf(sim.deathT, 0, 1), in.cardAlpha);
         rect(0, 0, sw, sh, fade({ 10, 3, 3, 255 }, 0.66f * a));
         if (sim.deathT < 1.0f) rect(0, 0, sw, sh, fade(BLACK_RGBA, 1.0f - sim.deathT));
@@ -116,11 +115,11 @@ void Hud::deathCard(float timeF) {
 }
 
 void Hud::titleCard(float timeF) {
-    // Darken the top and bottom so the type reads over any hall.
+    // Darken the top and bottom so the text is readable over any background.
     box(HudDraw::GradientV, 0, 0, sw, sh / 2, fade(BLACK_RGBA, 0.62f), fade(BLACK_RGBA, 0.12f));
     box(HudDraw::GradientV, 0, sh / 2, sw, sh / 2, fade(BLACK_RGBA, 0.12f), fade(BLACK_RGBA, 0.72f));
     const std::string t1 = "T H E   B A C K R O O M S";
-    // A faint flicker on the title, like a tired fluorescent.
+    // A slight flicker on the title.
     float fl = 0.86f + 0.14f * sinf(timeF * 27.0f) * sinf(timeF * 41.3f + 0.7f);
     int ts = fitSize(t1, hud(62), fitW());
     int tw = measure(t1.c_str(), ts);
@@ -128,8 +127,7 @@ void Hud::titleCard(float timeF) {
     raw(t1, sw / 2 - tw / 2, sh / 3, ts, fade({ 228, 214, 158, 255 }, fl));
     textC("and everything under it", sw / 2, sh / 3 + ts + hud(16), hud(20), { 150, 142, 108, 220 });
     float pl = 0.45f + 0.55f * (0.5f + 0.5f * sinf(timeF * 3.0f));
-    // A phone has no key to press, and telling it to press one reads as the
-    // game being broken.
+    // On touch, the prompt names a tap, not a key.
     textC(in.touch ? "tap anywhere to descend" : "press any key to descend", sw / 2, sh * 2 / 3, hud(24),
           fade({ 210, 198, 150, 255 }, pl));
     const Records &b = sim.best;
@@ -156,7 +154,7 @@ void Hud::titleCard(float timeF) {
 void Hud::play(double now, double elapsed, bool &everFlashed) {
     const bool filming = in.filming;
     if (!filming && sim.drinkT <= 0 && (sim.weapon == WEAPON_REVOLVER || (sim.weapon == WEAPON_FLARE && sim.flares > 0))) {
-        // The dot fades as the sights come up: aimed, the blade is the sight.
+        // The crosshair dot fades as the sights come up.
         HudDraw d{ HudDraw::Circle };
         d.x = sw / 2; d.y = sh / 2; d.r = (float)hud(1.5f); d.col = fade({ 230, 220, 190, 110 }, 1 - sim.aimBlend);
         out.push_back(d);
@@ -197,7 +195,7 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         textC(fmt("bank %d doubloons · fight what hunts you for them · then take a door out", Sim::ESCAPE_COST),
               sw / 2, sh / 3 + hud(128), hud(16), fade({ 120, 200, 140, 255 }, ta * 0.75f));
     }
-    if (sim.winT > 0) {   // bought the way out and found a true door
+    if (sim.winT > 0) {   // escaped
         float a = clampf(sim.winT > 7.2f ? (8.0f - sim.winT) / 0.8f : sim.winT / 7.2f, 0, 1);
         rect(0, 0, sw, sh, fade({ 6, 12, 8, 255 }, a * 0.93f));
         textC("YOU ESCAPED THE BACKROOMS", sw / 2, sh / 3, hud(54), fade({ 120, 235, 145, 255 }, a));
@@ -209,7 +207,7 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         textC("...but the backrooms are patient. a new descent begins.", sw / 2, sh - hud(78), hud(16),
               fade({ 120, 150, 125, 255 }, a * 0.8f));
     }
-    if (sim.fellT > 0) {   // the carpet gave way
+    if (sim.fellT > 0) {   // fell through a rotten patch
         float a = clampf(sim.fellT / 4.0f, 0, 1);
         rect(0, 0, sw, sh, fade(BLACK_RGBA, a * 0.5f * clampf((sim.fellT - 3.4f) / 0.6f, 0, 1)));
         textC("THE FLOOR GIVES WAY", sw / 2, sh / 2 - hud(30), hud(46), fade({ 200, 180, 120, 255 }, a));
@@ -232,23 +230,23 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         textC(fmt("...but nothing stays down, down here   ·   %d put down", sim.killCount), sw / 2, sh / 2 - hud(44),
               hud(18), fade({ 150, 122, 100, 255 }, a * 0.9f));
     }
-    if (sim.closeCallT > 0) {   // it stood right beside you, and never knew
+    if (sim.closeCallT > 0) {   // the hunter passed close by while the player was hidden
         float a = clampf(sim.closeCallT > 2.3f ? (3.0f - sim.closeCallT) / 0.7f : sim.closeCallT / 1.4f, 0, 1);
         textC("IT STOOD RIGHT THERE", sw / 2, sh / 2 - hud(130), hud(30), fade({ 200, 70, 60, 255 }, a));
         textC("...and never saw you", sw / 2, sh / 2 - hud(98), hud(15), fade({ 160, 130, 120, 220 }, a * 0.9f));
     }
-    if (sim.deckNoteT > 0 && sim.winT <= 0 && sim.deathT <= 0) {   // the deck just did something
+    if (sim.deckNoteT > 0 && sim.winT <= 0 && sim.deathT <= 0) {   // a tape deck message
         float a = clampf(sim.deckNoteT > 2.0f ? (2.6f - sim.deckNoteT) / 0.6f : sim.deckNoteT / 1.2f, 0, 1);
         textC(sim.deckNote, sw / 2, sh - hud(150), hud(16), fade({ 196, 168, 214, 230 }, a * 0.9f));
     }
-    if (sim.tapeFoundT > 0) {   // a cassette recovered: someone else's fragment of the descent
+    if (sim.tapeFoundT > 0) {   // a tape was found
         float a = clampf(sim.tapeFoundT > 2.6f ? (3.2f - sim.tapeFoundT) / 0.6f : sim.tapeFoundT / 1.6f, 0, 1);
         textC("TAPE RECOVERED", sw / 2, sh - hud(150), hud(22), fade({ 190, 178, 150, 255 }, a));
         textC(sim.tapeLine, sw / 2, sh - hud(122), hud(15), fade({ 150, 140, 118, 230 }, a * 0.9f));
     }
     if (in.captureHint) textC("click to capture mouse", sw / 2, sh / 2 + hud(80), hud(20), { 200, 190, 150, 200 });
     if (!filming) textR(fmt("%d", in.fps), sw - hud(14), hud(12), hud(16), { 190, 180, 140, 150 });
-    // The flashlight's reminder until it is first used, then a state line.
+    // The flashlight hint until it is first used, then its state.
     if (sim.flashOn) everFlashed = true;
     if (!everFlashed && elapsed > 9.0 && !filming)
         // Not an em dash: raylib's default font stops at Latin-1, and anything
@@ -256,10 +254,10 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         textR("F · flashlight", sw - hud(16), sh - hud(28), hud(16), { 190, 180, 140, 160 });
     else if (sim.flashOn && !filming)
         textR("[ flashlight ]", sw - hud(16), sh - hud(26), hud(14), { 235, 225, 180, 120 });
-    if (!filming) {   // sanity: always up, because it is always going down
+    if (!filming) {   // the sanity meter, always shown
         const int w = hud(90), x = sw - w - hud(16), y = sh - hud(60), th = hud(5);
         rect(x - hud(1), y - hud(1), w + hud(2), th + hud(2), { 0, 0, 0, 120 });
-        // Steady cream, souring toward red as it empties; the last stretch pulses.
+        // Cream, shading to red as it empties; it pulses near the end.
         Rgba bar = sim.sanity > 0.5f  ? Rgba{ 168, 196, 176, 165 }
                  : sim.sanity > 0.25f ? Rgba{ 214, 190, 120, 180 }
                                       : Rgba{ 214, 96, 84, 200 };
@@ -267,13 +265,13 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         rect(x, y, (int)(w * sim.sanity), th, bar);
         textR("sanity", x - hud(6), y - hud(4), hud(12), { 150, 142, 122, 120 });
     }
-    if (sim.manilaCardT > 0 && sim.winT <= 0 && sim.deathT <= 0) {   // found it
+    if (sim.manilaCardT > 0 && sim.winT <= 0 && sim.deathT <= 0) {   // entered the Manila Room
         float a = clampf(sim.manilaCardT > 4.2f ? (5.0f - sim.manilaCardT) / 0.8f : sim.manilaCardT / 1.6f, 0, 1);
         textC("THE MANILA ROOM", sw / 2, sh / 2 - hud(150), hud(34), fade({ 226, 206, 158, 255 }, a));
         textC("...the hum is quieter here.  someone left notes on the table  [E]", sw / 2, sh / 2 - hud(112), hud(16),
               fade({ 190, 172, 132, 255 }, a * 0.9f));
     }
-    if (sim.noteT > 0 && sim.winT <= 0 && sim.deathT <= 0) {   // a note from the table, held up to read
+    if (sim.noteT > 0 && sim.winT <= 0 && sim.deathT <= 0) {   // a Manila Room note
         float a = clampf(sim.noteT > 8.6f ? (9.0f - sim.noteT) / 0.4f : sim.noteT / 0.8f, 0, 1);
         int pw = std::min(sw - hud(40), hud(720)), ph = hud(170);
         int x0 = sw / 2 - pw / 2, y0 = sh / 2 - ph / 2 + hud(40);
@@ -288,11 +286,11 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
                 fade(ln == 3 ? Rgba{ 110, 96, 80, 255 } : Rgba{ 58, 50, 44, 255 }, a));
         }
     }
-    if (sim.sanityWarnT > 0 && sim.winT <= 0 && sim.deathT <= 0) {   // it just slipped a notch
+    if (sim.sanityWarnT > 0 && sim.winT <= 0 && sim.deathT <= 0) {   // a sanity warning
         float a = clampf(sim.sanityWarnT / 1.2f, 0, 1) * clampf((4.0f - sim.sanityWarnT) / 0.4f, 0, 1);
         textC(sim.sanityLine, sw / 2, sh / 2 + hud(96), hud(19), fade({ 206, 176, 176, 255 }, a * 0.9f));
     }
-    if (!filming && (sim.flashOn || sim.battery < 0.99f)) {   // the charge, once it has been used or spent at all
+    if (!filming && (sim.flashOn || sim.battery < 0.99f)) {   // the battery meter, once the flashlight has been used
         const int w = hud(90), x = sw - w - hud(16), y = sh - hud(44), th = hud(5);   // a row below the sanity meter
         rect(x - hud(1), y - hud(1), w + hud(2), th + hud(2), { 0, 0, 0, 120 });
         Rgba bar = sim.battery < 0.15f ? Rgba{ 220, 90, 70, 190 } : Rgba{ 200, 190, 150, 150 };
@@ -308,7 +306,7 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         if (sim.keys > 0) text(fmt("keys  ×%d", sim.keys), hud(16), sh - hud(160), hud(16), { 214, 186, 110, 190 });
         // These four lines are placed in unscaled pixels, as the Web build
         // always placed them.
-        if (sim.coins > 0 || sim.wayOpen())   // doubloons double as the ticket out (ESCAPE_COST to leave)
+        if (sim.coins > 0 || sim.wayOpen())   // doubloons pay for the exit (ESCAPE_COST)
             raw(fmt("doubloons  ×%d / %d", sim.coins, Sim::ESCAPE_COST), 16, sh - 116, 16,
                 sim.wayOpen() ? Rgba{ 120, 230, 140, 210 } : Rgba{ 214, 178, 92, 170 });
         raw(fmt("3  almond water  ×%d", sim.almond), 16, sh - 94, 16,
@@ -329,15 +327,14 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
             hud(16), sh - hud(28), hud(16),
             sim.weapon == WEAPON_DECK ? (sim.deck.playing ? Rgba{ 205, 150, 235, 220 } : selc) : dimc);
     }
-    if (sim.wayOpen() && sim.winT <= 0 && sim.deathT <= 0 && sim.escapeT <= 0) {   // the way is open: find a door
+    if (sim.wayOpen() && sim.winT <= 0 && sim.deathT <= 0 && sim.escapeT <= 0) {   // enough doubloons: find an exit
         const char *t = sim.level == 0 ? "the walls know you now  ·  find one that isn't cursed"
                                        : "the doors know you now  ·  find one that isn't cursed";
         float pl = 0.55f + 0.45f * sinf((float)now * 2.5f);
         textC(t, sw / 2, hud(70), hud(20), fade({ 120, 235, 145, 255 }, pl));
     }
-    // No health bar: the only two states worth showing are whole and one hit
-    // from dead. A hit flashes the edges red, and they stay tinged while you
-    // are wounded; when the red is gone you can take a hit again.
+    // No health bar. A hit flashes the screen edges red, and they stay red while
+    // the player is wounded. When the red is gone, a hit is survivable again.
     if ((sim.hurtT > 0 || sim.health < 0.999f) && sim.deathT <= 0) {
         float a = fmaxf(sim.hurtT / Sim::HURT_GRACE * 0.55f, (1.0f - sim.health) * 0.45f);
         Rgba r0 = fade({ 120, 0, 0, 255 }, a), r1 = fade({ 120, 0, 0, 255 }, 0);
@@ -353,16 +350,16 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         rect(x, y, (int)(w * sim.stamina), th, sim.sprintExhausted ? Rgba{ 190, 100, 66, 180 } : Rgba{ 200, 180, 120, 160 });
         if (sim.sprintExhausted) text("catch your breath", x + hud(48), y + hud(11), hud(12), { 195, 156, 119, 180 });
     }
-    // Which of the three cover states you are in. It used to say "hold still"
-    // whether or not stillness did anything.
+    // The hiding hint, one per state. It used to say "hold still" even when
+    // there was no cover.
     const char *coverLine = nullptr;
     Rgba coverCol = { 140, 210, 165, 160 };
-    if (sim.hidden && sim.hideBreakT > 0) {   // moving, and about to lose it
+    if (sim.hidden && sim.hideBreakT > 0) {   // hidden, but moving too fast
         coverLine = "[ hidden · you're giving it away ]";
         coverCol = { 228, 196, 128, 200 };
     } else if (sim.hidden) {
         coverLine = "[ hidden · hold still ]";
-    } else if (sim.nearCover) {   // cover is right there; you are too quick for it
+    } else if (sim.nearCover) {   // next to cover, but moving too fast to hide
         coverLine = "[ cover · stop to hide ]";
         coverCol = { 190, 180, 150, 140 };
     } else if (sim.squeezing) {
@@ -372,7 +369,7 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         coverCol = { 180, 170, 140, 120 };
     }
     if (coverLine && !filming) textC(coverLine, sw / 2, sh - hud(62), hud(14), coverCol);
-    if (sim.level == 3 && sim.valveT > 0) {   // just closed one
+    if (sim.level == 3 && sim.valveT > 0) {   // a valve was just closed
         float a = clampf(sim.valveT / 1.6f, 0, 1);
         if (sim.pipesShut) {
             textC("THE PIPES GO QUIET", sw / 2, sh / 2 - hud(110), hud(34), fade({ 120, 230, 145, 255 }, a));
@@ -383,7 +380,7 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
                   sh / 2 - hud(100), hud(26), fade({ 210, 180, 120, 255 }, a));
         }
     }
-    if (sim.level == 3 && !sim.valvesTurned.empty() && !sim.pipesShut)   // the standing tally
+    if (sim.level == 3 && !sim.valvesTurned.empty() && !sim.pipesShut)   // valves closed so far
         text(fmt("valves  %d / %d", (int)sim.valvesTurned.size(), Sim::VALVES_NEEDED), hud(16), sh - hud(138), hud(16),
              { 198, 150, 96, 175 });
     if (sim.paused) {
@@ -416,8 +413,8 @@ std::vector<HudDraw> hudDraws(const Sim &sim, const HudInput &in, bool &everFlas
         h.textC(in.touch ? "hold JUMP  stay up   ·   let go  dive"
                          : "hold SPACE  stay up   ·   let go  dive   ·   SHIFT  swim faster",
                 h.sw / 2, h.sh - h.hud(42), h.hud(16), { 174, 221, 214, 230 });
-    if (sim.inMenu && sim.deathT > 0) h.deathCard(timeF);   // the run just ended; the card holds the title screen
-    else if (sim.inMenu) h.titleCard(timeF);              // over the drifting world
+    if (sim.inMenu && sim.deathT > 0) h.deathCard(timeF);   // the death card, over the title screen
+    else if (sim.inMenu) h.titleCard(timeF);              // over the drifting title camera
     else h.play(in.now, elapsed, everFlashed);
     return std::move(h.out);
 }

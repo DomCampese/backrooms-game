@@ -16,10 +16,9 @@ struct Ambience {
     float hum = 1, growl = 0, hiss = 0, whisper = 0;
     float wHum = 1, wDrone = 0;
     float panel = 0, space = 0.25f;
-    // One running phase per oscillator, indexed by osc(). The index is an
-    // OWNERSHIP claim, not a scratch slot: two signals sharing one advance it at
-    // both their frequencies, so each gets the other's detune folded in and both
-    // come out subtly wrong rather than obviously broken. Current owners:
+    // One running phase per oscillator, indexed by osc(). Each index belongs to
+    // one signal: two signals sharing one advance it at both frequencies, and
+    // both come out wrong. Current owners:
     //   0-4   fluorescent hum      5-7   growl        8-10  L1 drone
     //   11-12 (free; was poolroom water, now a recording) 13-14 whispers     15    (free; LEVEL FUN music is a recording)
     //   16-17 hum beat frequency  18-19 blackout ring
@@ -36,21 +35,14 @@ struct Ambience {
         if (ph[i] > TURN) ph[i] -= TURN;
         return sinf((float)ph[i]);
     }
-    // ---- AUD-04: a Schroeder reverb on the ambience bus.
+    // ---- AUD-04: a Schroeder reverb on the ambience bus, so a corridor and a
+    // large hall sound different. Four parallel combs into two series
+    // allpasses; the comb feedback follows `space`.
     //
-    // The game's whole subject is architecture and it was one flat stereo
-    // stream, so a cramped corridor and a 30 m warehouse hall were acoustically
-    // identical and the ears never confirmed what the eyes were being told.
-    // Four parallel combs into two series allpasses is the cheapest thing that
-    // sells a room, and the comb feedback rides `space`, so the decay is the
-    // building's rather than a constant.
-    //
-    // Lengths are the classic mutually-prime Schroeder set. They MUST stay
-    // mutually prime: pick two with a common factor and their echo trains line
-    // up into a pitched ring rather than a diffuse tail, which sounds like a
-    // broken oscillator and not like a room. The two allpass chains differ
-    // between left and right, which is the whole of the stereo width — the
-    // stream was previously the same sample in both channels.
+    // The lengths are the standard mutually prime Schroeder set and must stay
+    // mutually prime: two with a common factor line up into a pitched ring
+    // instead of a diffuse tail. The left and right allpass chains differ,
+    // which is what makes the output stereo.
     static constexpr int RV_L0 = 1557, RV_L1 = 1617, RV_L2 = 1491, RV_L3 = 1422;
     static constexpr int RV_A0 = 225, RV_A1 = 556, RV_A2 = 341, RV_A3 = 441;
     float cb0[RV_L0] = {}, cb1[RV_L1] = {}, cb2[RV_L2] = {}, cb3[RV_L3] = {};

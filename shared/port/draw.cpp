@@ -13,10 +13,9 @@ namespace {
 // raylib's PI, which its shapes turn by.
 constexpr float PI_F = 3.14159265358979323846f;
 
-// How hard one flare is burning right now: a fast flare-up as the cap comes
-// off, a fade over the last second and a half, and the flicker on top. Both
-// the point light and the halo spheres read it, so a flare that is nearly out
-// dims in the room and in its own glow together.
+// One flare's current intensity: a fast ramp at ignition, a fade over the last
+// 1.5 s, and flicker. The point light and the halo spheres both read it, so
+// they dim together.
 float flareGlow(const FlareProj &f, float flick) {
     return clampf((Sim::FLAREBURN - f.burn) * 6.0f, 0, 1) * clampf(f.burn / Sim::FLAREFADE, 0, 1) * flick;
 }
@@ -115,13 +114,12 @@ void spriteDraw(std::vector<SceneDraw> &out, ShapeTex t, const ActorSprite &sp, 
     put(out, billboard(t, src[0], src[1], src[2], src[3], sp.centre, sp.w, sp.h, col));
 }
 
-// One tape player: the body, the two reels turning in the bay, and the record
-// lamp if the tape is running. The lamp breathes: a steady dot of red is easy
-// to miss on a dark floor.
+// One tape player: the body, the two turning reels, and the record lamp while
+// the tape runs. The lamp pulses, because a steady red dot is easy to miss.
 void deckDraws(const Sim &sim, const Xform &xf, bool lamp, float now, std::vector<SceneDraw> &out) {
     put(out, ObjMesh::Deck, xf);
     for (int i = 0; i < 2; i++) {
-        // both hubs turn the same way: the tape only travels in one direction
+        // both hubs turn the same way
         Xform r = then(rotY(sim.deck.reel), translate(i ? 0.024f : -0.024f, 0.0505f, 0.0f));
         put(out, ObjMesh::Reel, then(r, xf));
     }
@@ -155,33 +153,33 @@ float objGloss(ObjMesh m) { return m == ObjMesh::Flare ? FLARE_GLOSS : -1.0f; }
 FrameLight frameLight(Sim &sim, float now, float ir) {
     FrameLight l{};
     l.time = now;
-    l.blackout = sim.blackoutCur * (sim.whisperT > 0 ? 0.86f : 1.0f);   // lights sag while it whispers
+    l.blackout = sim.blackoutCur * (sim.whisperT > 0 ? 0.86f : 1.0f);   // lights dim during a whisper
     l.flash = sim.flashCur;
-    if (sim.flashOn && sim.battery < 0.15f) {   // the battery's dying: a warning flicker before it goes dark
+    if (sim.flashOn && sim.battery < 0.15f) {   // low battery: flicker
         float lowFlick = 0.55f + 0.45f * sinf(now * 19.0f) * sinf(now * 31.0f + 1.7f);
         l.flash *= clampf(sim.battery / 0.15f, 0.15f, 1.0f) * (0.7f + 0.3f * lowFlick);
     }
     l.flashDir = sim.fwd;
     l.ir = ir;
     l.flick = 0.91f + 0.09f * sinf(now * 31.0f) * sinf(now * 47.3f + 1.3f);
-    // One flare point light: the fire with the most presence at your feet, so
-    // a guttering flare underfoot does not hold the light off a fresh one up
-    // the hall (Sim::dominantFlare).
+    // One flare point light: the flare with the most presence at the player
+    // (Sim::dominantFlare), so a nearly burnt-out flare does not keep the light
+    // from a fresh one.
     const FlareProj *lead = sim.dominantFlare(sim.px, sim.pz);
     l.flareInt = lead ? flareGlow(*lead, l.flick) : 0.0f;
     l.flarePos = lead ? Vec3{ lead->x, lead->y + 0.06f, lead->z } : Vec3{ sim.px, sim.eyeY, sim.pz };
-    if (!lead && sim.muzzleT > 0) {   // the muzzle flash borrows the flare's light
+    if (!lead && sim.muzzleT > 0) {   // the muzzle flash uses the flare light
         l.flareInt = sim.muzzleT / Sim::MUZZLE_FLASH * 1.3f;
         l.flarePos = { sim.px + sim.f2x * 0.6f, sim.eyeY - 0.05f, sim.pz + sim.f2z * 0.6f };
     }
-    // the hunter's pool of dead light travels with it, and it is solid
+    // the hunter dims lights around him and casts a shadow
     l.entPos = { sim.ent.x, sim.ent.dispY + 1.0f, sim.ent.z };
     l.entDark = (sim.ent.st == EState::Hidden) ? 0.0f : sim.entDarkCur;
     l.entBlock = (sim.ent.st == EState::Hidden || sim.ent.st == EState::Die) ? 0.0f : 1.0f;
     // The nearest enclosed stairwell's landing light, in this storey's frame:
-    // the one rising from here, or the one arriving here whose landing is a
-    // storey down. The tray grid has no fitting over an opening, so without
-    // this a stair shaft is lit only by what falls down it from 7 m up.
+    // the one rising from here, or the one arriving here, whose landing is a
+    // storey down. The ceiling grid has no fitting over an opening, so without
+    // this a stair shaft is dark.
     const int pcx = fdiv(cellOf(sim.px), CCELLS), pcz = fdiv(cellOf(sim.pz), CCELLS);
     Vec3 wellLamp = { 0, 0, 0 };
     float wellD2 = 1e30f;
@@ -190,9 +188,9 @@ FrameLight frameLight(Sim &sim, float now, float ir) {
         float d2 = (lp.x - sim.px) * (lp.x - sim.px) + (lp.y - sim.eyeY) * (lp.y - sim.eyeY) + (lp.z - sim.pz) * (lp.z - sim.pz);
         if (d2 < wellD2) { wellD2 = d2; wellLamp = lp; }
     }
-    // The Manila Room, when one is near: its tubes out, its chandelier on. An
-    // inverted rectangle masks nothing. The chandelier ignores the blackouts
-    // and wavers like an old filament rather than stuttering like a tube.
+    // The Manila Room, when one is near: its tubes off, its chandelier on. An
+    // inverted rectangle masks nothing. The chandelier ignores blackouts and
+    // flickers smoothly rather than stuttering like a tube.
     const float noMask[4] = { 1e6f, 1e6f, -1e6f, -1e6f };
     for (int i = 0; i < 4; i++) { l.roomMask[i] = noMask[i]; l.lamp[i] = 0; }
     l.lampCol = { 1.0f, 0.70f, 0.42f };
@@ -206,8 +204,7 @@ FrameLight frameLight(Sim &sim, float now, float ir) {
         l.lamp[0] = sim.manilaX; l.lamp[1] = sim.world.ceilY(cellOf(sim.manilaX), cellOf(sim.manilaZ)) - 0.80f;
         l.lamp[2] = sim.manilaZ; l.lamp[3] = 1.0f * waver;
     } else if (wellD2 < 22.0f * 22.0f) {
-        // A tube like any other: it goes out in a blackout and stutters with
-        // the rest, rather than holding on the way the chandelier does.
+        // Like any tube: it goes out in a blackout and stutters.
         l.lamp[0] = wellLamp.x; l.lamp[1] = wellLamp.y; l.lamp[2] = wellLamp.z;
         l.lamp[3] = 0.95f * sim.blackoutCur * l.flick;
         l.lampCol = { 0.95f, 0.93f, 0.80f };
@@ -221,15 +218,15 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
     const int pci = cellOf(sim.px), pck = cellOf(sim.pz);
     const float flick = light.flick, flareInt = light.flareInt;
     const Vec3 flarePos = light.flarePos;
-    // Stairwell landing lights: the tube on each batten near you, as bright as
-    // the tubes are tonight, drawn here because a chunk mesh cannot go out.
+    // Stairwell landing lights: the tube on each nearby batten, at the current
+    // tube brightness. Drawn here, not in the chunk mesh, so it can go out.
     for (const LandingLight &well : sim.world.landingLights(pcx, pcz)) {
         unsigned char g8 = cl8(60 + 195 * sim.blackoutCur * flick);
         put(out, cube(well.tube, well.alongX ? 0.96f : 0.035f, 0.035f, well.alongX ? 0.035f : 0.96f, { g8, g8, cl8(g8 * 0.92f), 255 }));
     }
-    // Small things draw unlit, so the room light at each one is estimated on
-    // the CPU (plus the flare or muzzle glow): no balloons shining through a
-    // blackout.
+    // Small objects draw unlit, so the room light at each is estimated on the
+    // CPU (plus the flare or muzzle light); otherwise balloons would stay lit
+    // in a blackout.
     const LevelCfg &lc = LEVELS[sim.level];
     float ambLumP = (lc.amb.x + lc.amb.y + lc.amb.z) / 3.0f;
     float edSend = (sim.ent.st == EState::Hidden) ? 0.0f : sim.entDarkCur;
@@ -249,10 +246,10 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fx * fx + fy * fy + fz * fz)), 0.0f, 1.0f);
         }
         lum = clampf(lum + irLum(x, y, z), 0.0f, 1.0f);
-        return 0.18f + 0.82f * lum;   // a hint of form survives the dark
+        return 0.18f + 0.82f * lum;   // minimum brightness
     };
-    // What stands in the world, placed by the same rules the sim tests
-    // (simScene); only the look, the bob and the sway are decided here.
+    // Loose objects, placed by the same rules the sim uses (simScene); only the
+    // look, the bob and the sway are decided here.
     for (const SceneItem &it : simScene(sim)) {
         const int a = it.gi, b = it.gk;
         const float x = it.pos.x, gy = it.pos.y, z = it.pos.z;
@@ -263,7 +260,7 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             put(out, ObjMesh::Crate, xf);
             if (it.kind == SceneKind::Crate)
                 put(out, ObjMesh::CrateLid, then(translate(0, 0.564f, 0), xf));
-            else   // prised off and leaned against the side
+            else   // lid off, leaning against the side
                 put(out, ObjMesh::CrateLid, then(then(rotX(1.35f), translate(0, 0.02f, 0.42f)), xf));
             break;
         }
@@ -296,13 +293,13 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             float spin = now * 0.8f + a;
             Rgba brass = lit({ 214, 172, 86, 255 }, propLum(x, gy + 0.15f, z));
             float y = gy + 0.055f + bob;
-            // bow, shank, bit: small, so it reads by its glint and its turn
+            // bow, shank and bit
             put(out, cylinderEx({ x, y, z }, { x, y + 0.012f, z }, 0.035f, 0.035f, 10, brass));
             put(out, cube({ x + cosf(spin) * 0.045f, y, z + sinf(spin) * 0.045f }, 0.09f, 0.012f, 0.012f, brass));
             put(out, cube({ x + cosf(spin) * 0.082f, y + 0.014f, z + sinf(spin) * 0.082f }, 0.022f, 0.028f, 0.012f, brass));
             break;
         }
-        case SceneKind::Deck:   // wherever you set it down, facing the way you threw it
+        case SceneKind::Deck:   // where it was set down, facing the throw direction
             deckDraws(sim, then(rotY(-it.yaw), translate(x, gy, z)), it.variant != 0, now, out);
             break;
         case SceneKind::Coin: {   // gy is the floor they fell on, in this storey's frame
@@ -312,7 +309,7 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             break;
         }
         case SceneKind::Balloon:
-            if (it.index == 0) {   // nosing against the ceiling, string hanging down
+            if (it.index == 0) {   // against the ceiling, string hanging down
                 float by = gy + sinf(now * 0.8f + a * 1.3f + b * 2.1f) * 0.05f;
                 float pl = propLum(x, by, z) * 0.85f;
                 put(out, sphere({ x, by, z }, 0.17f, lit(PARTY_RGBA[it.variant], pl)));
@@ -326,7 +323,7 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
                                     0.004f, 0.004f, 4, lit({ 200, 195, 185, 150 }, pl)));
             }
             break;
-        case SceneKind::Confetti: {   // bursts still tumbling to the carpet
+        case SceneKind::Confetti: {   // falling confetti
             float fade = clampf(it.amount * 1.6f, 0, 1);
             Rgba base = PARTY_RGBA[it.variant];
             put(out, cube({ x, gy, z }, 0.05f, 0.05f, 0.05f,
@@ -334,9 +331,8 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             break;
         }
         case SceneKind::Chalk: {
-            // The stranger's chalk has been down longer than yours: duller,
-            // yellower, further gone. Same arrow, so it reads as a mark first
-            // and as somebody else's a moment later.
+            // The pre-placed marks are drawn duller and yellower than the
+            // player's, with the same arrow shape.
             const Vec3 cm = it.pos;
             Rgba cc = it.variant ? lit({ 228, 228, 218, 210 }, propLum(cm.x, cm.y + 0.1f, cm.z))
                                  : lit({ 186, 180, 156, 150 }, propLum(cm.x, cm.y + 0.1f, cm.z));
@@ -353,7 +349,7 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             break;
         }
     }
-    if (sim.wayOpen()) {   // enough doubloons: real exits burn green, the way out
+    if (sim.wayOpen()) {   // enough doubloons: uncursed exits glow green
         float pulse = 0.7f + 0.3f * sinf(now * 3.0f);
         for (int dx = -6; dx <= 6; dx++) for (int dz = -6; dz <= 6; dz++) {
             int i = pci + dx, k = pck + dz;
@@ -361,7 +357,7 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             if (sim.world.wallNVal(i, k) == WALL_EXIT) { doorX = i * CELL + 1.0f; doorZ = k * CELL; }
             else if (sim.world.wallWVal(i, k) == WALL_EXIT) { doorX = i * CELL; doorZ = k * CELL + 1.0f; }
             else continue;
-            if (sim.world.cursedExit(i, k)) continue;   // cursed doors stay a trap, never green
+            if (sim.world.cursedExit(i, k)) continue;   // cursed exits never glow green
             Vec3 gp = { doorX, 1.15f, doorZ };
             put(out, sphere(gp, 0.34f, { 150, 255, 170, (unsigned char)(150 * pulse) }));   // bright core
             put(out, sphere(gp, 0.62f, { 90, 255, 120, (unsigned char)(95 * pulse) }));
@@ -385,7 +381,7 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
                                 lit({ 122, 96, 70, 255 }, pl)));
         }
     }
-    for (int i = 0; i < Sim::MAXDOGS; i++) {   // the pack, low and wide against the red
+    for (int i = 0; i < Sim::MAXDOGS; i++) {   // the dogs
         ActorSprite sp;
         if (!dogSprite(sim, i, sp)) continue;
         float ddx = sp.litAt.x - sim.px, ddz = sp.litAt.z - sim.pz;
@@ -409,10 +405,10 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
         spriteDraw(out, ShapeTex::Dog, sp, sp.frame0, { l8, l8, l8, cl8(al * (1.0f - sp.blend)) });
         spriteDraw(out, ShapeTex::Dog, sp, sp.frame1, { l8, l8, l8, cl8(al * sp.blend) });
     }
-    for (const FlareProj &f : sim.litFlares) {   // each flare: hot core, orange halo, stub of a body
+    for (const FlareProj &f : sim.litFlares) {   // each flare: core, orange halo, and the stick
         if (!f.active) continue;
-        // its own glow, not the point light's: that one belongs to whichever
-        // flare leads, and would size every other halo wrongly
+        // its own intensity, not the point light's, which belongs to the
+        // dominant flare only
         float glow = flareGlow(f, flick);
         Vec3 fp = { f.x, f.y + 0.05f, f.z };
         put(out, cylinder({ f.x, f.y - 0.03f, f.z }, 0.018f, 0.022f, 0.09f, 8, { 130, 30, 22, 255 }));
@@ -425,14 +421,14 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
         float ambLum = (c.amb.x + c.amb.y + c.amb.z) / 3.0f;
         float lum = lightAtCPU(sp.litAt.x, sp.litAt.y, sp.litAt.z, sim.blackoutCur,
                                c.ls, c.wallH - LIGHT_DROP, c.dead, c.lightMul, ambLum,
-                               sim.ent.x, sim.ent.z, sim.entDarkCur, c.vary);   // it stands in its own pool of dead light
-        if (sim.flashCur > 0.05f) {   // the torch picks it out of the dark
+                               sim.ent.x, sim.ent.z, sim.entDarkCur, c.vary);   // the light at his position, dimmed by entDarkCur
+        if (sim.flashCur > 0.05f) {   // lit by the flashlight
             float vx2 = sim.ent.x - sim.px, vz2 = sim.ent.z - sim.pz;
             float d2 = vx2 * vx2 + vz2 * vz2 + 1e-4f, dl = sqrtf(d2);
             float cone = powf(fmaxf((vx2 * sim.fwd.x + vz2 * sim.fwd.z) / dl, 0.0f), 26.0f);
             lum = clampf(lum + sim.flashCur * cone * 7.5f / (1.0f + 0.10f * d2), 0.0f, 1.0f);
         }
-        if (flareInt > 0.01f) {   // flare glow (or muzzle flash) reaches it too
+        if (flareInt > 0.01f) {   // lit by the flare or muzzle flash
             float fvx = sim.ent.x - flarePos.x, fvz = sim.ent.z - flarePos.z;
             lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fvx * fvx + fvz * fvz)), 0.0f, 1.0f);
         }
@@ -444,7 +440,7 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
                    : sp.sheet == SpriteSheet::Clark ? ShapeTex::Clark : ShapeTex::Smiler;
         spriteDraw(out, t, sp, sp.frame0, { lum8, lum8, lum8, cl8(al * (1.0f - sp.blend)) });
         spriteDraw(out, t, sp, sp.frame1, { lum8, lum8, lum8, cl8(al * sp.blend) });
-        if (sp.glow) {   // the Smiler's eyes and grin carry their own light
+        if (sp.glow) {   // the Smiler's eyes and grin are drawn unlit
             unsigned char ga = cl8(255 * clampf(fogf * 2.2f, 0, 1) * sp.fade);
             spriteDraw(out, ShapeTex::SmilerGlow, sp, sp.frame0, { 255, 255, 255, cl8(ga * (1.0f - sp.blend)) });
             spriteDraw(out, ShapeTex::SmilerGlow, sp, sp.frame1, { 255, 255, 255, cl8(ga * sp.blend) });
@@ -456,11 +452,11 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
         put(out, sphere(b.pos, 0.012f, { 255, 237, 187, 255 }));
     }
     if (sim.level == 1) {
-        // Level 1's "low-hanging fog with no discernable source": soft, wide,
-        // faint banks lying on the slab, drifting on a draught nobody can find.
-        // One per floor cell on a hashed jitter, lit by the room at its own
-        // spot. No depth writes, or each bank would cut a hole in the one
-        // behind it; faded out right under you.
+        // Level 1's ground mist (the wiki's "low-hanging fog"): wide, faint
+        // billboards on the floor, drifting slowly. One per floor cell with a
+        // hashed offset, lit by the room light at its position. No depth
+        // writes, or each bank would cut a hole in the one behind it; faded out
+        // near the player.
         int mci = cellOf(sim.px), mck = cellOf(sim.pz);
         for (int dx = -11; dx <= 11; dx++) for (int dz = -11; dz <= 11; dz++) {
             int a = mci + dx, b = mck + dz;
@@ -498,7 +494,7 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
 
 void heldDraws(const Sim &sim, const SimView &view, float now, std::vector<SceneDraw> &out) {
     switch (heldItem(sim)) {
-    case Held::Can: put(out, ObjMesh::Can, xformOf(heldCan(sim, view))); break;   // both hands are busy: the deck goes away
+    case Held::Can: put(out, ObjMesh::Can, xformOf(heldCan(sim, view))); break;   // drinking hides the deck
     case Held::Deck: deckDraws(sim, xformOf(heldDeck(sim, view)), sim.deck.playing, now, out); break;
     case Held::Flare: put(out, ObjMesh::Flare, xformOf(heldWeapon(sim, view))); break;
     default: break;

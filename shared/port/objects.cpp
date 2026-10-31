@@ -18,8 +18,8 @@ MB canMesh() {
     const float rv[4] = { SV,          SV * 0.96f, SV * 0.07f, 0.0f };
     for (int i = 0; i < N; i++) {
         float a0 = i * TAU / N, a1 = (i + 1) * TAU / N;
-        // u runs backwards round the barrel, or the wordmark reads mirrored on the
-        // face turned toward you
+        // u runs backwards round the barrel, or the wordmark is mirrored on the
+        // side facing the camera
         float u0 = 1.0f - i / (float)N, u1 = 1.0f - (i + 1) / (float)N;
         float c0 = cosf(a0), s0 = sinf(a0), c1 = cosf(a1), s1 = sinf(a1);
         for (int k = 0; k < 3; k++) {

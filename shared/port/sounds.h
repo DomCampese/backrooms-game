@@ -30,7 +30,7 @@ std::string clipRecording(Sfx sfx, int variant);
 // The synthesized clip; empty for a recording.
 Pcm clipPcm(Sfx sfx, int variant);
 
-// The tape voice: a worn cassette, built to loop (the seam is crossfaded).
+// The tape voice, made to loop (the seam is crossfaded).
 Pcm tapeVoicePcm();
 constexpr float TAPE_VOICE_VOLUME = 0.9f;
 // Three soft swallows; the regression checks it for clicks.
@@ -43,12 +43,12 @@ struct PanGains { float left, right; };
 PanGains panGains(float bearing);
 constexpr float CENTRE_GAIN = 0.6875f;   // panGains(0), each side
 
-// The looped recordings (the water while your head is under, LEVEL FUN's music)
+// The looped recordings (underwater, LEVEL FUN's music)
 // eased toward what the LoopCue asks for. `hum` is the ambience's blackout duck,
 // which the music follows.
 struct LoopLevels {
     float underwater = 0, party = 0;
-    float partyPitch = 1;   // a stretched tape's wander
+    float partyPitch = 1;   // slow pitch wander
     float t = 0;
     void step(const LoopCue &cue, float dt, float hum);
 };
