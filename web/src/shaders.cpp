@@ -751,8 +751,25 @@ uniform float uTime; uniform float uFear; uniform float uWater;
 uniform float uMigraine;   // Level 0's hum headache, 0..1 (Sim::migraine)
 out vec4 finalColor;
 float hh(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)))*43758.5453); }
+const mat3 TO_YIQ = mat3(0.299, 0.596, 0.211, 0.587, -0.274, -0.523, 0.114, -0.322, 0.312);
+const mat3 TO_RGB = mat3(1.0, 1.0, 1.0, 0.956, -0.272, -1.106, 0.621, -0.647, 1.703);
 void main(){
     vec2 uv = fragTexCoord;
+    // The eye sees as the camcorder records, more lightly: TAPE_FS's line
+    // wobble, smeared colour, lifted blacks, scanlines and dropouts at about
+    // half strength, always on. Fear pushes it toward the tape. q is the
+    // screen before the water or the migraine moves the picture.
+    vec2 q = fragTexCoord;
+    vec2 res = vec2(textureSize(texture0, 0));
+    float down = 1.0 - q.y;                       // 0 at the top of the picture
+    float line = floor(down * 240.0);
+    // A faint tracking band rolling down the picture.
+    float band = fract(down*0.7 - uTime*(0.05 + 0.10*uFear));
+    float roll = smoothstep(0.0, 0.04, band) * (1.0 - smoothstep(0.04, 0.12, band));
+    // Head switching: the bottom lines of the picture are skewed a little.
+    float hs = 1.0 - smoothstep(0.0, 0.012, q.y);
+    uv.x += (hh(vec2(line, floor(uTime*30.0))) - 0.5) * (0.0005 + 0.0025*uFear + 0.002*roll)
+          + hs * (0.004 + 0.010*hh(vec2(line, floor(uTime*60.0))));
     if (uWater > 0.0) {
         uv += uWater*0.0018*vec2(sin(uv.y*24.0+uTime*1.3),sin(uv.x*21.0-uTime));
         uv = clamp(uv,vec2(0.002),vec2(0.998));
@@ -771,6 +788,15 @@ void main(){
     c.r = texture(texture0, uv + dir*ca).r;
     c.g = texture(texture0, uv).g;
     c.b = texture(texture0, uv - dir*ca).b;
+    // Luma softened a little, chroma smeared to the right, as on tape but
+    // over half the width.
+    float dx = 1.0 / 640.0;
+    float Y = dot(0.15*texture(texture0, uv - vec2(dx, 0.0)).rgb + 0.70*c
+                + 0.15*texture(texture0, uv + vec2(dx, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
+    vec2 iq = vec2(0.0);
+    for (int i = 0; i < 4; i++) iq += (TO_YIQ * texture(texture0, uv + vec2(dx*(1.5 + 2.2*float(i)), 0.0)).rgb).yz;
+    iq = mix((TO_YIQ * c).yz, iq*0.25, 0.75) * 0.94;
+    c = max(TO_RGB * vec3(Y, iq), 0.0);
     // Threshold each sample before filtering: averaging the room first erased
     // isolated lights while making whole bright walls glow. Twelve fixed taps,
     // down from twenty, keep the glow restrained and the image readable.
@@ -789,13 +815,22 @@ void main(){
     c = mix(c, s, 0.16);
     float lum0 = dot(c, vec3(0.299,0.587,0.114));
     c = mix(vec3(lum0), c, 1.08);
-    float g = hh(uv*vec2(1287.0,721.0) + vec2(fract(uTime*13.71)*61.0, fract(uTime*7.31)*83.0)) - 0.5;
-    c += g * (0.012 + 0.055*uFear);                   // film grain
+    // Tape noise in two-pixel blocks, heavier in the tracking band.
+    float n = hh(floor(q*res/2.0) + fract(uTime*vec2(13.17, 7.31))*311.0);
+    c += (n - 0.5) * (0.024 + 0.055*uFear + 0.05*roll);
     float d = length(dir);
     c *= 1.0 - smoothstep(0.34, 0.95, d)*(0.42 + 0.34*uFear + 0.30*throb); // vignette
     c *= 1.0 - 0.05*throb;                               // the frame dims on the pulse
     c *= 0.994 + 0.006*sin(uTime*377.0);             // mains-hum luma shimmer
     c = mix(c,c*vec3(0.48,0.86,0.80)+vec3(0.015,0.07,0.065),uWater*0.75);
+    // Blacks never quite black, whites never quite white.
+    c = 0.02 + c*0.96;
+    // Dropouts, rarer and fainter than the tape's.
+    float field = floor(uTime*24.0);
+    float drop = step(0.9994 - 0.004*uFear, hh(vec2(line, field + 7.0)));
+    float span = 1.0 - smoothstep(0.0, 0.02 + 0.06*hh(vec2(line, field + 9.0)), abs(q.x - hh(vec2(line, field + 3.0))));
+    c = mix(c, vec3(0.85), drop*span*0.45);
+    c *= 0.965 + 0.035*sin(down*res.y*3.14159*0.5);   // scanlines, one every other pixel row
     finalColor = vec4(c, 1.0);
 }
 )GLSL";

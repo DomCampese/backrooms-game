@@ -536,8 +536,12 @@ AGENTS.md has the module map file by file.
   sit *in* the room instead of on top of it, and it costs nothing per frame.
 - **Post** — threshold bloom that makes the fluorescents actually glow, a gentle
   filmic contrast + saturation lift, plus
-  film grain, vignette, chromatic aberration, and a mains-frequency luma
+  vignette, chromatic aberration, and a mains-frequency luma
   shimmer — the fear-driven ones scale as the fear does.
+- **Camcorder eye** — you always see the world as a lighter take on the
+  camcorder's tape: colour smeared to the right, slightly soft detail, tape
+  noise, faint scanlines, a slow tracking band, a skewed bottom edge and the
+  odd dropout. Fear pushes it toward the full tape. There is no toggle.
 - **Title screen** — a drifting camera pans across a fresh hall behind the card:
   *THE BACKROOMS*, a pulsing *press any key to descend*, your best run so far,
   and the controls. Any key or click drops you in from the top.

@@ -91,19 +91,20 @@ return float4(0.0, 0.0, 0.0, 1.0);
 POST_CODE = """
 FBRPost P;
 P.Time = Post.x; P.Fear = Post.y; P.Water = Post.z; P.Migraine = Post.w;
+P.Size = View.ViewSizeAndInvSize.xy;
 P.InvSize = View.ViewSizeAndInvSize.zw;
 float Throb;
 float2 Uv = BRPostUV(P, ViewportUV, Throb);
-float3 Taps[15];
+float3 Taps[21];
 [unroll]
-for (int I = 0; I < 15; I++)
+for (int I = 0; I < 21; I++)
 {
     float2 V = BRPostToViewport(P, BRPostTap(P, Uv, Throb, I));
     float Depth = SceneTextureLookup(ViewportUVToSceneTextureUV(V, 1), 1, false).r;
     float3 S = SceneTextureLookup(ViewportUVToSceneTextureUV(V, 14), 14, false).rgb / max(Exposure, 1e-6);
     Taps[I] = saturate(Depth > 1e7 ? Clear.rgb : S);
 }
-return float4(BRPostFinish(P, Uv, Throb, Taps), 1.0);
+return float4(BRPostFinish(P, ViewportUV, Uv, Throb, Taps), 1.0);
 """
 
 

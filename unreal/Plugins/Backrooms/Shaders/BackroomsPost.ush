@@ -12,6 +12,7 @@
 struct FBRPost
 {
 	float Time, Fear, Water, Migraine;
+	float2 Size;      // the scene, px
 	float2 InvSize;   // one texel of the scene, viewport UV
 };
 
@@ -25,9 +26,14 @@ float BRPostHash(float2 P)
 // and is not declared yet where this file is included):
 //
 //   float Throb; float2 Uv = BRPostUV(P, ViewportUV, Throb);
-//   ...the scene at BRPostTap(P, Uv, Throb, i), i = 0..14, as raylib's
+//   ...the scene at BRPostTap(P, Uv, Throb, i), i = 0..20, as raylib's
 //   clamped render target: BRPostToViewport turns a tap into Unreal's UV...
-//   return BRPostFinish(P, Uv, Throb, Taps);
+//   return BRPostFinish(P, ViewportUV, Uv, Throb, Taps);
+//
+// The eye sees as the camcorder records, more lightly (BackroomsTape.ush at
+// about half strength): line wobble, smeared colour, lifted blacks, scanlines
+// and dropouts. Q, the GLSL's screen coordinate, is the viewport UV with v up
+// the picture, before the water or the migraine moves it.
 
 // A GLSL texture coordinate (v up the picture) as Unreal's viewport UV,
 // clamped to the edges as raylib's render target is.
@@ -36,10 +42,33 @@ float2 BRPostToViewport(FBRPost P, float2 GlUV)
 	return clamp(float2(GlUV.x, 1.0 - GlUV.y), 0.5 * P.InvSize, 1.0 - 0.5 * P.InvSize);
 }
 
-// Where the GLSL samples, after the water's warp and the migraine's pinch.
+// The tape's line on the screen: its number of 240, and the faint tracking
+// band rolling down the picture.
+struct FBRPostLine
+{
+	float Down, Line, Roll;
+};
+
+FBRPostLine BRPostLine(FBRPost P, float2 Q)
+{
+	FBRPostLine L;
+	L.Down = 1.0 - Q.y;
+	L.Line = floor(L.Down * 240.0);
+	float Band = frac(L.Down * 0.7 - P.Time * (0.05 + 0.10 * P.Fear));
+	L.Roll = smoothstep(0.0, 0.04, Band) * (1.0 - smoothstep(0.04, 0.12, Band));
+	return L;
+}
+
+// Where the GLSL samples, after the line wobble, the water's warp and the
+// migraine's pinch.
 float2 BRPostUV(FBRPost P, float2 ViewportUV, out float Throb)
 {
 	float2 Uv = float2(ViewportUV.x, 1.0 - ViewportUV.y);
+	FBRPostLine L = BRPostLine(P, Uv);
+	// Head switching: the bottom lines of the picture are skewed a little.
+	float Hs = 1.0 - smoothstep(0.0, 0.012, Uv.y);
+	Uv.x += (BRPostHash(float2(L.Line, floor(P.Time * 30.0))) - 0.5) * (0.0005 + 0.0025 * P.Fear + 0.002 * L.Roll)
+	      + Hs * (0.004 + 0.010 * BRPostHash(float2(L.Line, floor(P.Time * 60.0))));
 	if (P.Water > 0.0)
 	{
 		Uv += P.Water * 0.0018 * float2(sin(Uv.y * 24.0 + P.Time * 1.3), sin(Uv.x * 21.0 - P.Time));
@@ -55,15 +84,21 @@ float2 BRPostUV(FBRPost P, float2 ViewportUV, out float Throb)
 	return Uv;
 }
 
-// Tap I of the fifteen the GLSL reads: 0 red, 1 green and 2 blue split by the
-// chromatic aberration, then the glow's twelve, three per direction.
+// Tap I of the twenty-one the GLSL reads: 0 red, 1 green and 2 blue split by
+// the chromatic aberration, then the glow's twelve, three per direction, then
+// the luma's two neighbours (15, 16) and the four chroma taps to the right
+// (17..20).
 float2 BRPostTap(FBRPost P, float2 Uv, float Throb, int I)
 {
 	float2 Dir = Uv - 0.5;
 	float Ca = 0.00015 + P.Fear * 0.0025 + Throb * 0.0035;
+	const float Dx = 1.0 / 640.0;
 	if (I == 0) return Uv + Dir * Ca;
 	if (I == 1) return Uv;
 	if (I == 2) return Uv - Dir * Ca;
+	if (I == 15) return Uv - float2(Dx, 0.0);
+	if (I == 16) return Uv + float2(Dx, 0.0);
+	if (I >= 17) return Uv + float2(Dx * (1.5 + 2.2 * float(I - 17)), 0.0);
 	const float2 Offsets[4] = { float2(1, 0), float2(-1, 0), float2(0, 1), float2(0, -1) };
 	const float Reach[3] = { 2.0, 6.0, 15.0 };
 	int K = I - 3;
@@ -71,11 +106,30 @@ float2 BRPostTap(FBRPost P, float2 Uv, float Throb, int I)
 }
 
 // Taps[i] is the scene at BRPostTap(i), clamped as an 8-bit target holds it.
-float3 BRPostFinish(FBRPost P, float2 Uv, float Throb, float3 Taps[15])
+float3 BRPostFinish(FBRPost P, float2 ViewportUV, float2 Uv, float Throb, float3 Taps[21])
 {
 	const float Weight[3] = { 0.50, 0.32, 0.18 };
+	const float3 Luma = float3(0.299, 0.587, 0.114);
+	// GLSL's TO_YIQ and TO_RGB as written there, with the vector on the left
+	// (see BRTapeFinish).
+	const float3x3 ToYiq = { 0.299, 0.596, 0.211, 0.587, -0.274, -0.523, 0.114, -0.322, 0.312 };
+	const float3x3 ToRgb = { 1.0, 1.0, 1.0, 0.956, -0.272, -1.106, 0.621, -0.647, 1.703 };
+	float2 Q = float2(ViewportUV.x, 1.0 - ViewportUV.y);
+	float2 Res = P.Size;
+	FBRPostLine L = BRPostLine(P, Q);
 	float2 Dir = Uv - 0.5;
 	float3 C = float3(Taps[0].r, Taps[1].g, Taps[2].b);
+	// Luma softened a little, chroma smeared to the right, as on tape but
+	// over half the width.
+	float Y = dot(0.15 * Taps[15] + 0.70 * C + 0.15 * Taps[16], Luma);
+	float2 Iq = float2(0.0, 0.0);
+	[unroll]
+	for (int J = 0; J < 4; J++)
+	{
+		Iq += mul(Taps[17 + J], ToYiq).yz;
+	}
+	Iq = lerp(mul(C, ToYiq).yz, Iq * 0.25, 0.75) * 0.94;
+	C = max(mul(float3(Y, Iq), ToRgb), 0.0);
 	float3 Bl = float3(0.0, 0.0, 0.0);
 	[unroll]
 	for (int I = 0; I < 12; I++)
@@ -85,15 +139,24 @@ float3 BRPostFinish(FBRPost P, float2 Uv, float Throb, float3 Taps[15])
 	C += Bl * float3(1.10, 1.03, 0.88) * 0.34;
 	float3 S = C * C * (3.0 - 2.0 * C);
 	C = lerp(C, S, 0.16);
-	float Lum0 = dot(C, float3(0.299, 0.587, 0.114));
+	float Lum0 = dot(C, Luma);
 	C = lerp(float3(Lum0, Lum0, Lum0), C, 1.08);
-	float G = BRPostHash(Uv * float2(1287.0, 721.0) + float2(frac(P.Time * 13.71) * 61.0, frac(P.Time * 7.31) * 83.0)) - 0.5;
-	C += G * (0.012 + 0.055 * P.Fear);
+	// Tape noise in two-pixel blocks, heavier in the tracking band.
+	float N = BRPostHash(floor(Q * Res / 2.0) + frac(P.Time * float2(13.17, 7.31)) * 311.0);
+	C += (N - 0.5) * (0.024 + 0.055 * P.Fear + 0.05 * L.Roll);
 	float D = length(Dir);
 	C *= 1.0 - smoothstep(0.34, 0.95, D) * (0.42 + 0.34 * P.Fear + 0.30 * Throb);
 	C *= 1.0 - 0.05 * Throb;
 	C *= 0.994 + 0.006 * sin(P.Time * 377.0);
 	C = lerp(C, C * float3(0.48, 0.86, 0.80) + float3(0.015, 0.07, 0.065), P.Water * 0.75);
+	// Blacks never quite black, whites never quite white.
+	C = 0.02 + C * 0.96;
+	// Dropouts, rarer and fainter than the tape's.
+	float Field = floor(P.Time * 24.0);
+	float Drop = step(0.9994 - 0.004 * P.Fear, BRPostHash(float2(L.Line, Field + 7.0)));
+	float Span = 1.0 - smoothstep(0.0, 0.02 + 0.06 * BRPostHash(float2(L.Line, Field + 9.0)), abs(Q.x - BRPostHash(float2(L.Line, Field + 3.0))));
+	C = lerp(C, float3(0.85, 0.85, 0.85), Drop * Span * 0.45);
+	C *= 0.965 + 0.035 * sin(L.Down * Res.y * 3.14159 * 0.5);   // scanlines, one every other pixel row
 	// An 8-bit window clamps what the GLSL writes.
 	return saturate(C);
 }
