@@ -48,6 +48,12 @@ inline constexpr LevelRules LEVEL_RULES[NLEVELS] = {
 // The level whose chunks World::generate fills with auditoriums.
 constexpr int MULTIPLEX = 5;
 
-// Where each level's exit door leads. The party leads to the multiplex, and the
-// Red Halls and the multiplex lead back to Level 0.
-inline constexpr int EXIT_NEXT[NLEVELS] = { 1, 2, 4, 0, 5, 0 };
+// Where each level's exit door leads: Level 0, the multiplex, Level 1, the
+// Poolrooms, LEVEL FUN, and back to Level 0. A cursed exit leads to the Red
+// Halls, which lead back to Level 0.
+inline constexpr int EXIT_NEXT[NLEVELS] = { MULTIPLEX, 2, 4, 0, 0, 1 };
+
+// How deep each level is, for the records' "deepest": the order the exits
+// reach them, with the Red Halls where their number put them before the
+// multiplex was added. The records file stores the level number, not this.
+inline constexpr int LEVEL_DEPTH[NLEVELS] = { 0, 2, 3, 4, 5, 1 };

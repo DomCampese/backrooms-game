@@ -44,8 +44,8 @@ messages to the user: short sentences, no jargon they would have to decode.
 
 # The multiplex (November 2026)
 
-Level 5 (`MULTIPLEX`, core/level_rules.h) is a cinema. LEVEL FUN's exits
-lead to it and its exits lead to Level 0. Three chunks in four are one
+Level 5 (`MULTIPLEX`, core/level_rules.h) is a cinema, and the second level
+you reach: Level 0's exits lead to it and its exits lead to Level 1. Three chunks in four are one
 auditorium filling the room patch; the rest, and the spawn chunk, are lobbies
 with a concession counter (`PROP_CONCESSION`), columns, benches and plants.
 The hunter is a Smiler. It is not from the Backrooms wiki, so CREDITS.md has
@@ -103,6 +103,10 @@ no row for it.
   skirting or anything else at a height: auditorium walls are 8 m tall and the
   texture repeats every 3 m. The mesher adds dark skirting.
 - `Distant::Boom` plays `Sfx::FarBoom`: a film's soundtrack through a wall.
+- **Its number is 5 but its place is second.** `EXIT_NEXT` sets the order,
+  and the records' "deepest" compares `LEVEL_DEPTH`, not the level number;
+  comparing numbers would rank the multiplex deepest of all. The records file
+  still stores the number. F3's N still steps by number.
 - tests/golden gained lines for the new level and lost none; walk-l0-l2.trace
   plays back unchanged.
 

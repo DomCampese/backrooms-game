@@ -640,7 +640,10 @@ int main() {
     // step a body can take; every cell of it that is not a seat is reachable from
     // its back aisle; and its props mesh stays inside 16-bit indices.
     {
-        CHECK(EXIT_NEXT[4]==MULTIPLEX && EXIT_NEXT[MULTIPLEX]==0);
+        // Second: Level 0's exits lead here and its exits to Level 1, and the
+        // records rank it just below Level 0.
+        CHECK(EXIT_NEXT[0]==MULTIPLEX && EXIT_NEXT[MULTIPLEX]==1 && EXIT_NEXT[4]==0);
+        CHECK(LEVEL_DEPTH[0]<LEVEL_DEPTH[MULTIPLEX] && LEVEL_DEPTH[MULTIPLEX]<LEVEL_DEPTH[1]);
         World w; w.seed=1337; w.level=MULTIPLEX; w.visit=0; w.wallH=LEVEL_RULES[MULTIPLEX].wallH; w.storeyH=0;
         int auds=0, lobbies=0;
         for (int cx=-3;cx<=3;++cx) for (int cz=-3;cz<=3;++cz) {
@@ -1238,7 +1241,7 @@ int main() {
         sim.pz=ck*CELL+(west ? 1.0f : side*.5f);
         int count=sim.escapeCount;
         sim.updateExits(100);
-        CHECK(sim.level==1 && sim.escapeCount==count+1 && sim.escapeT>0);
+        CHECK(sim.level==EXIT_NEXT[0] && sim.escapeCount==count+1 && sim.escapeT>0);
     }
     // Aligned tall courts preserve a closed cap, matching holes on every
     // intermediate storey, and a real floor at the bottom of a long fall.

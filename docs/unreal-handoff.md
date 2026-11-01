@@ -299,7 +299,8 @@ off the Mac. In order:
     knocks, `LEVEL=4`: balloon pop, `LEVEL=2`: none. No Unreal code changed;
     the mixer loads every clip up to `SFX_COUNT`.
 
-12. **The multiplex** (1 November 2026). `LEVEL=5 make unreal-play`. The
+12. **The multiplex** (1 November 2026), the second level: Level 0's exits
+    lead to it. `LEVEL=5 make unreal-play` goes straight there. The
     editor must import three new surfaces first (`cinemacarpet`,
     `cinemaceil`, `cinemawall`); `make unreal-play` rebuilds the materials
     when the surfaces change. Walk into an auditorium (one chunk east of
