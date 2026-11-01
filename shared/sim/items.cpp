@@ -85,12 +85,12 @@ bool Sim::tapeAt(int a, int b) {
     return ih(a, b, pickupSalt() ^ 0x7A9Eu) % 401 == 0;
 }
 
-// tools/mapdump.cpp mirrors this list; change both.
+// tools/mapdump.cpp counts and marks these.
 bool Sim::hideSpotAt(int a, int b) {
     switch (world.propAt(a, b)) {
     case PROP_BOXES: case PROP_CABINET: case PROP_COUCH: case PROP_ARMOIRE:
     case PROP_NIGHTSTAND: case PROP_BED: case PROP_PARTY_TABLE: case PROP_DESK:
-    case PROP_SHELVING:
+    case PROP_SHELVING: case PROP_SEATS: case PROP_CONCESSION:
         return true;
     default:
         return false;

@@ -564,7 +564,7 @@ int main() {
         // hard-floor clips start and end on zero, peak below clipping, and
         // order by zero crossings: carpet < wood < concrete < tile.
         const int lv0=sim.level; const bool man0=sim.inManila;
-        const Sfx want[NLEVELS]={ Sfx::Step, Sfx::StepConcrete, Sfx::StepTile, Sfx::StepConcrete, Sfx::Step };
+        const Sfx want[NLEVELS]={ Sfx::Step, Sfx::StepConcrete, Sfx::StepTile, Sfx::StepConcrete, Sfx::Step, Sfx::Step };
         for (int lv=0;lv<NLEVELS;++lv) { sim.level=lv; sim.inManila=false; CHECK(sim.stepSfx()==want[lv]); }
         sim.level=0; sim.inManila=true; CHECK(sim.stepSfx()==Sfx::StepWood);
         sim.level=lv0; sim.inManila=man0;
@@ -590,7 +590,7 @@ int main() {
         // updateDistant: the right clip per level, none on Level 2, flags and
         // ranges as set, grng untouched.
         const int lv0=sim.level; const bool man0=sim.inManila, menu0=sim.inMenu; const float death0=sim.deathT;
-        const Sfx want[NLEVELS]={ Sfx::FarDoor, Sfx::FarClang, Sfx::Click, Sfx::FarKnock, Sfx::FarPop };
+        const Sfx want[NLEVELS]={ Sfx::FarDoor, Sfx::FarClang, Sfx::Click, Sfx::FarKnock, Sfx::FarPop, Sfx::FarBoom };
         const double now=5000;
         for (int lv=0;lv<NLEVELS;++lv) {
             sim.level=lv; sim.inManila=false; sim.inMenu=false; sim.deathT=0;
@@ -622,7 +622,7 @@ int main() {
             sim.updateDistant(now);
             CHECK(sim.audio.size()==1 && sim.distantRng.s==held);
         }
-        for (Sfx k : { Sfx::FarDoor, Sfx::FarClang, Sfx::FarKnock, Sfx::FarPop }) {
+        for (Sfx k : { Sfx::FarDoor, Sfx::FarClang, Sfx::FarKnock, Sfx::FarPop, Sfx::FarBoom }) {
             CHECK(clipSpec(k).variants==3);
             for (int v=0;v<3;++v) {
                 Pcm pcm=clipPcm(k,v);
@@ -634,6 +634,112 @@ int main() {
         sim.level=lv0; sim.inManila=man0; sim.inMenu=menu0; sim.deathT=death0;
         sim.audio.clear();
     }
+
+    // ---- the multiplex. Every auditorium has its rows of seats facing the screen
+    // on the stepped floor audElev describes; every open edge in its chunk is a
+    // step a body can take; every cell of it that is not a seat is reachable from
+    // its back aisle; and its props mesh stays inside 16-bit indices.
+    {
+        // Second: Level 0's exits lead here and its exits to Level 1, and the
+        // records rank it just below Level 0.
+        CHECK(EXIT_NEXT[0]==MULTIPLEX && EXIT_NEXT[MULTIPLEX]==1 && EXIT_NEXT[4]==0);
+        CHECK(LEVEL_DEPTH[0]<LEVEL_DEPTH[MULTIPLEX] && LEVEL_DEPTH[MULTIPLEX]<LEVEL_DEPTH[1]);
+        World w; w.seed=1337; w.level=MULTIPLEX; w.visit=0; w.wallH=LEVEL_RULES[MULTIPLEX].wallH; w.storeyH=0;
+        int auds=0, lobbies=0;
+        for (int cx=-3;cx<=3;++cx) for (int cz=-3;cz<=3;++cz) {
+            ChunkData &d=w.data(cx,cz);
+            if (d.audDir<0) { lobbies++; continue; }
+            auds++;
+            const int dir=d.audDir, m=AUD_N-1;
+            int seats=0;
+            for (int u=0;u<AUD_N;++u) for (int v=0;v<AUD_N;++v) {
+                int x,z; audCell(dir,u,v,x,z);
+                CHECK(d.elev[x][z]==audElev(v));
+                if (d.prop[x][z]==PROP_SEATS) { seats++; CHECK((d.propRot[x][z]&3)==audFacing(dir)); }
+            }
+            CHECK(seats==(AUD_ROW1-AUD_ROW0+1)*(AUD_N-3));
+            for (int x=0;x<CCELLS;++x) for (int z=0;z<CCELLS;++z) {
+                if (z>0 && !blocksEdge(d.wallN[x][z])) CHECK(abs(d.elev[x][z]-d.elev[x][z-1])<=MAX_STEP_UNITS);
+                if (x>0 && !blocksEdge(d.wallW[x][z])) CHECK(abs(d.elev[x][z]-d.elev[x-1][z])<=MAX_STEP_UNITS);
+            }
+            // From the middle of the back aisle, within the chunk.
+            int bx,bz; audCell(dir,AUD_N/2,m,bx,bz);
+            const int gx0=cx*CCELLS, gz0=cz*CCELLS;
+            bool seen[CCELLS][CCELLS]={};
+            int qx[CCELLS*CCELLS],qz[CCELLS*CCELLS],head=0,tail=0;
+            qx[tail]=bx; qz[tail]=bz; tail++; seen[bx][bz]=true;
+            while (head<tail) {
+                int x=qx[head], z=qz[head]; head++;
+                const int D[4][2]={{1,0},{-1,0},{0,1},{0,-1}};
+                for (auto &dd : D) {
+                    int nx=x+dd[0], nz=z+dd[1];
+                    if (nx<0||nz<0||nx>=CCELLS||nz>=CCELLS||seen[nx][nz]) continue;
+                    if (!w.canStep(gx0+x,gz0+z,gx0+nx,gz0+nz)) continue;
+                    seen[nx][nz]=true; qx[tail]=nx; qz[tail]=nz; tail++;
+                }
+            }
+            for (int u=0;u<AUD_N;++u) for (int v=0;v<AUD_N;++v) {
+                int x,z; audCell(dir,u,v,x,z);
+                CHECK(seen[x][z]==(d.prop[x][z]==PROP_NONE));
+            }
+            int ox,oz; audCell(dir,AUD_N/2,m+1,ox,oz);
+            CHECK(seen[ox][oz]);   // and out through a back door to the corridor
+            Auditorium a; CHECK(w.auditorium(cx,cz,a));
+            float mx=(a.rect[0]+a.rect[2])*0.5f, mz=(a.rect[1]+a.rect[3])*0.5f;
+            CHECK((mx-a.screen.x)*a.normal.x+(mz-a.screen.z)*a.normal.z>10.0f);   // the screen faces the seats
+            CHECK(a.lamp.x>a.rect[0] && a.lamp.x<a.rect[2] && a.lamp.z>a.rect[1] && a.lamp.z<a.rect[3]);
+            ChunkGeometry geo; bakeChunkGeometry(w,cx,cz,geo);
+            for (int sl=0;sl<MESH_COUNT;++sl) CHECK(geo.parts[sl].v.size()/3<=65536);
+        }
+        CHECK(auds>0 && lobbies>0 && w.data(0,0).audDir<0);
+        // A seat row's collision box fills the back of its cell: a body walks the
+        // legroom along the row, and is pushed out of the seats.
+        {
+            ChunkData &d=w.data(1,0);
+            CHECK(d.audDir>=0);
+            int x,z; audCell(d.audDir,1,AUD_ROW0+3,x,z);
+            float gx=(CCELLS+x)*CELL, gz=z*CELL, fy=w.floorY(CCELLS+x,z);
+            const Vec3 N[4]={{0,0,1},{0,0,-1},{1,0,0},{-1,0,0}};   // toward the back of the room
+            Vec3 bk=N[d.audDir];
+            auto inCell=[&](float fromFront){
+                float cxm=gx+1.0f, czm=gz+1.0f;
+                return Vec2{ cxm+bk.x*(fromFront-1.0f), czm+bk.z*(fromFront-1.0f) };
+            };
+            Vec2 leg=inCell(0.45f); float lx=leg.x, lz=leg.y;
+            w.collideCircle(lx,lz,0.34f,fy);
+            CHECK(fabsf(lx-leg.x)<1e-4f && fabsf(lz-leg.y)<1e-4f);
+            Vec2 in=inCell(1.35f); float sx=in.x, sz=in.y;
+            w.collideCircle(sx,sz,0.34f,fy);
+            CHECK(fabsf(sx-in.x)+fabsf(sz-in.y)>0.2f);
+        }
+        // Crouching still beside a row hides the player; the props are hide spots.
+        {
+            sim.applyLevel(MULTIPLEX,GetTime());
+            ChunkData &d=sim.world.data(1,0);
+            int x,z; audCell(d.audDir,2,AUD_ROW0+4,x,z);
+            CHECK(sim.hideSpotAt(CCELLS+x,z));
+            sim.px=(CCELLS+x)*CELL+1.0f; sim.pz=z*CELL+1.0f; sim.crouchCur=1.0f; sim.hidden=false;
+            sim.updateHiding(0.0f,0.1f);
+            CHECK(sim.hidden);
+            sim.crouchCur=0; sim.updateHiding(0.0f,0.1f); CHECK(!sim.hidden);
+            // and the stage end of the room, as the player sees it from the front
+            // row, for the captures
+            int fx,fz; audCell(d.audDir,AUD_N/2,1,fx,fz);
+            Auditorium a; CHECK(sim.world.auditorium(1,0,a));
+            sim.px=(CCELLS+fx)*CELL+1.0f; sim.pz=fz*CELL+1.0f; sim.py=sim.world.floorY(CCELLS+fx,fz);
+            sim.eyeY=sim.py+1.62f; sim.yaw=atan2f(a.normal.z,a.normal.x); sim.pitch=0.12f;
+            g.syncLevelLook();
+            capture(g,"multiplex-seats.png");
+            sim.yaw+=3.14159265f; sim.pitch=0.05f;
+            sim.px=(CCELLS+fx)*CELL+1.0f+a.normal.x*14; sim.pz=fz*CELL+1.0f+a.normal.z*14;
+            int pi=cellOf(sim.px), pk=cellOf(sim.pz);
+            sim.py=sim.world.floorY(pi,pk); sim.eyeY=sim.py+1.62f;
+            capture(g,"multiplex-screen.png");
+            sim.applyLevel(0,GetTime());
+            g.syncLevelLook();
+        }
+    }
+    printf("PASS multiplex auditoriums, steps, reachability, seat collision and hiding\n");
 
     // ---- the catch, only from a lunge. The old proximity test caught the
     // player as soon as they came within 1.25 m, with no warning.
@@ -1188,7 +1294,7 @@ int main() {
         sim.pz=ck*CELL+(west ? 1.0f : side*.5f);
         int count=sim.escapeCount;
         sim.updateExits(100);
-        CHECK(sim.level==1 && sim.escapeCount==count+1 && sim.escapeT>0);
+        CHECK(sim.level==EXIT_NEXT[0] && sim.escapeCount==count+1 && sim.escapeT>0);
     }
     // Aligned tall courts preserve a closed cap, matching holes on every
     // intermediate storey, and a real floor at the bottom of a long fall.

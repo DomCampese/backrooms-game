@@ -152,7 +152,7 @@ void Sim::seedStrangerChalk() {
 void Sim::applyLevel(int lv, double now) {
     level = lv;
     levelEntries++;
-    if (lv > deepest) deepest = lv;
+    if (LEVEL_DEPTH[lv] > LEVEL_DEPTH[deepest]) deepest = lv;
     // Read before the increment: the first arrival is visit 0, so a fresh
     // descent at a given seed generates the same maze as before.
     world.visit = (unsigned)visits[lv];
@@ -241,7 +241,7 @@ void Sim::bankRecords() {
     if ((int)distWalked > best.metres) { best.metres = (int)distWalked; up = true; }
     if (winCount > best.wins) { best.wins = winCount; up = true; }
     if (tapes > best.tapes) { best.tapes = tapes; up = true; }
-    if (deepest > best.deepest) { best.deepest = deepest; up = true; }
+    if (LEVEL_DEPTH[deepest] > LEVEL_DEPTH[best.deepest]) { best.deepest = deepest; up = true; }
     if (up) recordsChanged = true;
 }
 

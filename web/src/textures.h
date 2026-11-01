@@ -41,6 +41,9 @@ Surface makeTileSurface(bool wall);
 Surface makePartyWallSurface();      // LEVEL FUN =): party-print vinyl, bunting, smileys
 Surface makePartyCarpetSurface();    // LEVEL FUN =): patterned banquet-hall carpet
 Surface makePartyCeilSurface();      // LEVEL FUN =): black acoustic board on black grid
+Surface makeCinemaCarpetSurface();   // the multiplex: dark carpet scattered with bright shapes
+Surface makeCinemaWallSurface();     // the multiplex: burgundy fabric over acoustic panels
+Surface makeCinemaCeilSurface();     // the multiplex: black acoustic board
 
 // Every world surface, by slot (SurfSlot and LEVEL_SURFACES are port/levels.h's).
 Surface makeSurface(SurfSlot slot);

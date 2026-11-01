@@ -1,5 +1,5 @@
 #!/bin/bash
-# The regression sweep: all five levels plus the menu, checking for shader
+# The regression sweep: all six levels plus the menu, checking for shader
 # errors and for frames that have gone dark. Run it before pushing anything
 # that touches rendering, the shader or world generation, then look at the
 # images: several real bugs rendered valid frames that were wrong.
@@ -19,16 +19,18 @@ FAIL=0
 
 # Mean luma bands, 0-255, measured on a working build at this fixed corridor
 # spot. They are wide on purpose: they catch a black or blown-out frame, not a
-# small lighting change. Tightening one means re-measuring all six when the
+# small lighting change. Tightening one means re-measuring all seven when the
 # lighting changes.
+#
+# The multiplex's spot is a lobby corner, around 20/255.
 #
 # Level 3 is meant to be nearly black: the Red Halls sit around 12/255 at this
 # spot. (It was 16 before the fog took its brightness from the local light.)
-band_lo() { case $1 in 0) echo 45;; 1) echo 20;; 2) echo 55;; 3) echo 5;; 4) echo 12;; menu) echo 20;; esac; }
-band_hi() { case $1 in 0) echo 150;; 1) echo 110;; 2) echo 190;; 3) echo 32;; 4) echo 95;; menu) echo 150;; esac; }
+band_lo() { case $1 in 0) echo 45;; 1) echo 20;; 2) echo 55;; 3) echo 5;; 4) echo 12;; 5) echo 6;; menu) echo 20;; esac; }
+band_hi() { case $1 in 0) echo 150;; 1) echo 110;; 2) echo 190;; 3) echo 32;; 4) echo 95;; 5) echo 60;; menu) echo 150;; esac; }
 
 shots=()
-for LV in 0 1 2 3 4; do
+for LV in 0 1 2 3 4 5; do
   echo "--- level $LV ---"
   if "$ROOT/tools/shot.sh" "rg_lv$LV.png" BACKROOMS_SEED=1337 BACKROOMS_LEVEL=$LV \
       BACKROOMS_POS="15,15,0.8" BACKROOMS_SHOTFRAME=$FRAME; then
