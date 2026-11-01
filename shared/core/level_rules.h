@@ -9,8 +9,9 @@
 enum class Footing : unsigned char { Carpet, Concrete, Tile, Wood };
 
 // Which distant one-shot a level plays (Sim::updateDistant): a door closing,
-// a metal clang, pipe knocking, a balloon pop, or none.
-enum class Distant : unsigned char { None, Door, Clang, Knock, Pop };
+// a metal clang, pipe knocking, a balloon pop, a film's low boom through a
+// wall, or none.
+enum class Distant : unsigned char { None, Door, Clang, Knock, Pop, Boom };
 
 struct LevelRules {
     float wallH;        // floor to ceiling, metres
@@ -28,7 +29,7 @@ struct LevelRules {
     Distant distant;
 };
 
-constexpr int NLEVELS = 5;
+constexpr int NLEVELS = 6;
 
 // ls must match the panel mesher, the shader's uLS and the CPU light mirror,
 // which all read it from here. Level 1 stays at 12 m: at 8 m nearly all nine
@@ -41,8 +42,12 @@ inline constexpr LevelRules LEVEL_RULES[NLEVELS] = {
     { 7.5f,  8.0f, 0.0f,  "THE POOLROOMS",            0.06f, 0.0f,  0.07f, Footing::Tile,     Distant::None },
     { 3.0f,  8.0f, 0.0f,  "THE RED HALLS",            0.45f, 0.0f,  0.07f, Footing::Concrete, Distant::Knock },
     { 3.0f,  8.0f, 0.0f,  "LEVEL FUN =)",             0.10f, 0.0f,  0.07f, Footing::Carpet,   Distant::Pop },
+    { 5.0f,  8.0f, 0.0f,  "THE MULTIPLEX",            0.25f, 0.30f, 0.10f, Footing::Carpet,   Distant::Boom },
 };
 
-// Where each level's exit door leads. The Red Halls and the party lead back to
-// Level 0.
-inline constexpr int EXIT_NEXT[NLEVELS] = { 1, 2, 4, 0, 0 };
+// The level whose chunks World::generate fills with auditoriums.
+constexpr int MULTIPLEX = 5;
+
+// Where each level's exit door leads. The party leads to the multiplex, and the
+// Red Halls and the multiplex lead back to Level 0.
+inline constexpr int EXIT_NEXT[NLEVELS] = { 1, 2, 4, 0, 5, 0 };

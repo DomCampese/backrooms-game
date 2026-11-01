@@ -299,6 +299,18 @@ off the Mac. In order:
     knocks, `LEVEL=4`: balloon pop, `LEVEL=2`: none. No Unreal code changed;
     the mixer loads every clip up to `SFX_COUNT`.
 
+12. **The multiplex** (1 November 2026). `LEVEL=5 make unreal-play`. The
+    editor must import three new surfaces first (`cinemacarpet`,
+    `cinemaceil`, `cinemawall`); `make unreal-play` rebuilds the materials
+    when the surfaces change. Walk into an auditorium (one chunk east of
+    spawn at seed 1337): stepped rows of red seats, amber lights in the aisle
+    steps, a screen whose colour changes every few seconds, its light on the
+    front rows, and a faint beam from the port in the back wall. No Unreal
+    code changed: the screen and beam come through `sceneDraws`, the light
+    through `frameLight`. A grey or missing screen points at the scene
+    actor's translucent shape material; a black room with a working screen,
+    at `uLamp`.
+
 A session on the Mac itself (`claude remote-control` in the repository) could
 build, run the tests and read the log directly; from the cloud each Unreal
 change has waited on a build and a pasted log.

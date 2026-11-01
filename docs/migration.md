@@ -62,7 +62,7 @@ tools/sandbox-build.sh contract    # or: make contract-check
 
 | file | holds |
 |---|---|
-| `chunks.txt` | 121 chunks, one line each: a hash of the whole chunk and one per `ChunkData` field. Levels 0-4, visits 0 and 1, seed 1337, the 3x3 chunks round the origin and chunk (40,-37); on Level 0 also both storeys of every vertical feature among them and of the first feature of each kind near the origin |
+| `chunks.txt` | 141 chunks, one line each: a hash of the whole chunk and one per `ChunkData` field. Levels 0-5, visits 0 and 1, seed 1337, the 3x3 chunks round the origin and chunk (40,-37); on Level 0 also both storeys of every vertical feature among them and of the first feature of each kind near the origin |
 | `chunks_full.txt` | 18 of those chunks field by field, one row per z: the origin chunk of every level and visit, and the Level 0 visit 1 feature chunks |
 | `queries.txt` | `gatherCellAABBs`, `collideCircle`, `groundAt` (through a hole into the storey below, on flights, on a vending machine), `stairY` up each flight kind, `lineOfSight`, `canStep`, `pathStep`, `findOpenSpot`, `ceilY`, `buildOccupancy` over a 48-cell window, `vendFootprint` for each turn and flag. Probes are doors, a locked door, rails, a pillar, holes and vending machines found in the generated world, and seeded samples, each printed with the coordinates of the call |
 | `mutations.txt` | `shiftEdge` and `unlockEdge` on chosen edges: the walls read back through `wallNVal`/`wallWVal`, the `staleChunks` entries appended, and a repeat that appends nothing |

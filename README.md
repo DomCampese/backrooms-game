@@ -209,16 +209,16 @@ reaches the sim, so traces and replays are unchanged.
 
 ## The levels
 
-Five procedurally-generated levels, each with its own palette, lighting,
+Six procedurally-generated levels, each with its own palette, lighting,
 soundscape, and things that live there. Exits lead deeper — usually.
 
 | | |
 |---|---|
 | ![Level 0](docs/levels/level_0.png) **LEVEL 0 · THRESHOLD** — empty rooms, mono-yellow chevron wallpaper, sodden carpet, a humming, uneven grid of tubes, stairs up to floors that look exactly like this one and railed openings down to more of them, and no way out but through a wall. Home of Pirate Clark. | ![Level 1](docs/levels/level_1.png) **LEVEL 1 · HABITABLE ZONE** — a concrete warehouse under dim, failing tube lights, fog lying on the slab, exposed rebar, supply crates that move in the blackouts, and doors marked with symbols. Where a Smiler waits in the dark. |
 | ![The Poolrooms](docs/levels/level_2.png) **THE POOLROOMS** — endless white tile and still water: colonnaded halls, flooded tunnels, staircases sinking into deep water, windows onto white light. No blackouts, no exit in a hurry. | ![The Red Halls](docs/levels/level_3.png) **THE RED HALLS** — oppressive dark-red brick, someone's abandoned bedroom furniture. |
-| ![Level Fun](docs/levels/level_4.png) **LEVEL FUN =)** — the party that never ended: deep red carpet, a ceiling gone black so the lights hang like a party hall's, bunting, balloons, party tables, and a resident who is very glad you came. | |
+| ![Level Fun](docs/levels/level_4.png) **LEVEL FUN =)** — the party that never ended: deep red carpet, a ceiling gone black so the lights hang like a party hall's, bunting, balloons, party tables, and a resident who is very glad you came. | ![The Multiplex](docs/levels/level_5.png) **THE MULTIPLEX**: a cinema that does not end. Lobbies have film posters and concession counters; dark auditoriums have stepped rows of red seats facing a screen that is still showing a film. The screen is the only light in the room. Crouch between the rows to hide. LEVEL FUN's exits lead here. |
 
-The wandering entity — **Pirate Clark** on Level 0, **a Smiler** on Level 1 and in the Red Halls, **the Partygoer =)**
+The wandering entity — **Pirate Clark** on Level 0, **a Smiler** on Level 1, in the Red Halls and in the multiplex, **the Partygoer =)**
 in LEVEL FUN — stalks out of the fog, and gives chase if you stare too long.
 
 <p align="center"><img src="docs/partygoer.png" width="300" alt="The Partygoer"></p>

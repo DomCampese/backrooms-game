@@ -20,6 +20,8 @@ texdump
 web/dist/
 .raylib-web/
 regression
+# tools/regression.cpp writes the drinking sound here to listen to
+/drinking.wav
 /contract
 /replay
 /greybox-view
