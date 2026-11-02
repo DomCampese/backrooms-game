@@ -42,9 +42,9 @@ easy to prove. A PR states what a player will notice and why it was chosen.
 Write all of it plainly (docs/readability.md, "Register"). That includes
 messages to the user: short sentences, no jargon they would have to decode.
 
-# The multiplex (November 2026)
+# The theater (November 2026)
 
-Level 5 (`MULTIPLEX`, core/level_rules.h) is a cinema, and the second level
+Level 5 (`THEATER`, core/level_rules.h) is a cinema, and the second level
 you reach: Level 0's exits lead to it and its exits lead to Level 1. Three chunks in four are one
 auditorium filling the room patch; the rest, and the spawn chunk, are lobbies
 with a concession counter (`PROP_CONCESSION`), columns, benches and plants.
@@ -52,14 +52,14 @@ The hunter is a Smiler. It is not from the Backrooms wiki, so CREDITS.md has
 no row for it.
 
 - **An auditorium is decided in core** (`World::generate`, the
-  `level == MULTIPLEX` block). `audCell(dir, u, v)` maps its cells: u across,
+  `level == THEATER` block). `audCell(dir, u, v)` maps its cells: u across,
   v back from the screen. `audElev(v)` is the floor: rows rise 3 dm each
   toward the back, so the back aisle is at 0 and the front 3 m down. A sunken
   cell keeps the room's ceiling, so the ceiling stays flat at 5 m. Seats are
   `PROP_SEATS`, turned by `audFacing(dir)` to face the screen, with aisles at
   u = 0, 6 and 12. `ChunkData::audDir` says which way an auditorium faces, or
   -1.
-- **The elevation relaxation pass skips the multiplex.** It reads the four
+- **The elevation relaxation pass skips the theater.** It reads the four
   neighbours whatever wall is between them, so it pulled the front rows up
   toward the corridor floor on the far side of the wall. The floors are within
   `MAX_STEP` by construction; the regression checks every open edge.
@@ -105,7 +105,7 @@ no row for it.
 - `Distant::Boom` plays `Sfx::FarBoom`: a film's soundtrack through a wall.
 - **Its number is 5 but its place is second.** `EXIT_NEXT` sets the order,
   and the records' "deepest" compares `LEVEL_DEPTH`, not the level number;
-  comparing numbers would rank the multiplex deepest of all. The records file
+  comparing numbers would rank the theater deepest of all. The records file
   still stores the number. F3's N still steps by number.
 - tests/golden gained lines for the new level and lost none; walk-l0-l2.trace
   plays back unchanged.
@@ -1215,7 +1215,7 @@ build's, in `web/src/`.
 | `game_audio.{h,cpp}` | every `Sound`/`Music` handle and the synth; plays the sim's `AudioEvent`s in order |
 | `render.cpp` | 3D scene, viewmodels, HUD, overlays, drawn from `sim` |
 | `core/world.{h,cpp}` | the infinite maze: chunk generation, storeys, collision, line of sight, pathfinding, occupancy grid. `WallKind` / `PropKind` name the codes stored per cell. No raylib |
-| `core/level_rules.h` | per-level rules: wall height, light pitch, storey pitch, name, which tubes work, exits, floor material, distant sound; `MULTIPLEX` |
+| `core/level_rules.h` | per-level rules: wall height, light pitch, storey pitch, name, which tubes work, exits, floor material, distant sound; `THEATER` |
 | `core/layout.{h,cpp}` | `ChunkLayout`: a chunk's props, fixtures, light fittings and openings, decided from the seed |
 | `core/floorplan.{h,cpp}` | `ChunkFloorplan`: a chunk's floors, walls, risers, ceilings, soffits, flights and arches |
 | `core/hash.{h,cpp}`, `core/vec.h`, `core/portable_math.{h,cpp}` | hashes, RNG, value noise; `Vec2`/`Vec3`, `TAU`, `clampf`; sin, cos, exp, atan2, hypot that round the same on every platform |

@@ -22,7 +22,7 @@ FAIL=0
 # small lighting change. Tightening one means re-measuring all seven when the
 # lighting changes.
 #
-# The multiplex's spot is a lobby corner, around 20/255.
+# The theater's spot is a lobby corner, around 20/255.
 #
 # Level 3 is meant to be nearly black: the Red Halls sit around 12/255 at this
 # spot. (It was 16 before the fog took its brightness from the local light.)

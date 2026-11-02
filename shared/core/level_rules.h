@@ -42,18 +42,18 @@ inline constexpr LevelRules LEVEL_RULES[NLEVELS] = {
     { 7.5f,  8.0f, 0.0f,  "THE POOLROOMS",            0.06f, 0.0f,  0.07f, Footing::Tile,     Distant::None },
     { 3.0f,  8.0f, 0.0f,  "THE RED HALLS",            0.45f, 0.0f,  0.07f, Footing::Concrete, Distant::Knock },
     { 3.0f,  8.0f, 0.0f,  "LEVEL FUN =)",             0.10f, 0.0f,  0.07f, Footing::Carpet,   Distant::Pop },
-    { 5.0f,  8.0f, 0.0f,  "THE MULTIPLEX",            0.25f, 0.30f, 0.10f, Footing::Carpet,   Distant::Boom },
+    { 5.0f,  8.0f, 0.0f,  "THE THEATER",              0.25f, 0.30f, 0.10f, Footing::Carpet,   Distant::Boom },
 };
 
 // The level whose chunks World::generate fills with auditoriums.
-constexpr int MULTIPLEX = 5;
+constexpr int THEATER = 5;
 
-// Where each level's exit door leads: Level 0, the multiplex, Level 1, the
+// Where each level's exit door leads: Level 0, the theater, Level 1, the
 // Poolrooms, LEVEL FUN, and back to Level 0. A cursed exit leads to the Red
 // Halls, which lead back to Level 0.
-inline constexpr int EXIT_NEXT[NLEVELS] = { MULTIPLEX, 2, 4, 0, 0, 1 };
+inline constexpr int EXIT_NEXT[NLEVELS] = { THEATER, 2, 4, 0, 0, 1 };
 
 // How deep each level is, for the records' "deepest": the order the exits
 // reach them, with the Red Halls where their number put them before the
-// multiplex was added. The records file stores the level number, not this.
+// theater was added. The records file stores the level number, not this.
 inline constexpr int LEVEL_DEPTH[NLEVELS] = { 0, 2, 3, 4, 5, 1 };

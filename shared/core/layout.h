@@ -65,8 +65,8 @@ enum class FixtureKind : uint8_t {
     Valve,          // a standpipe with a shut-off wheel (Level 3)
     Streamer,       // a crepe streamer sagging between two ceiling points (Level 4)
     ManilaRoom,     // the Manila Room's furnishings (Level 0)
-    Auditorium,     // an auditorium's fittings: screen frame, curtains, aisle lights, booth port, exit signs (the multiplex)
-    Poster,         // a backlit film poster on a corridor wall (the multiplex)
+    Auditorium,     // an auditorium's fittings: screen frame, curtains, aisle lights, booth port, exit signs (the theater)
+    Poster,         // a backlit film poster on a corridor wall (the theater)
 };
 
 // One fixture. What each field means depends on the kind:
