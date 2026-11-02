@@ -635,16 +635,16 @@ int main() {
         sim.audio.clear();
     }
 
-    // ---- the multiplex. Every auditorium has its rows of seats facing the screen
+    // ---- the theater. Every auditorium has its rows of seats facing the screen
     // on the stepped floor audElev describes; every open edge in its chunk is a
     // step a body can take; every cell of it that is not a seat is reachable from
     // its back aisle; and its props mesh stays inside 16-bit indices.
     {
         // Second: Level 0's exits lead here and its exits to Level 1, and the
         // records rank it just below Level 0.
-        CHECK(EXIT_NEXT[0]==MULTIPLEX && EXIT_NEXT[MULTIPLEX]==1 && EXIT_NEXT[4]==0);
-        CHECK(LEVEL_DEPTH[0]<LEVEL_DEPTH[MULTIPLEX] && LEVEL_DEPTH[MULTIPLEX]<LEVEL_DEPTH[1]);
-        World w; w.seed=1337; w.level=MULTIPLEX; w.visit=0; w.wallH=LEVEL_RULES[MULTIPLEX].wallH; w.storeyH=0;
+        CHECK(EXIT_NEXT[0]==THEATER && EXIT_NEXT[THEATER]==1 && EXIT_NEXT[4]==0);
+        CHECK(LEVEL_DEPTH[0]<LEVEL_DEPTH[THEATER] && LEVEL_DEPTH[THEATER]<LEVEL_DEPTH[1]);
+        World w; w.seed=1337; w.level=THEATER; w.visit=0; w.wallH=LEVEL_RULES[THEATER].wallH; w.storeyH=0;
         int auds=0, lobbies=0;
         for (int cx=-3;cx<=3;++cx) for (int cz=-3;cz<=3;++cz) {
             ChunkData &d=w.data(cx,cz);
@@ -714,7 +714,7 @@ int main() {
         }
         // Crouching still beside a row hides the player; the props are hide spots.
         {
-            sim.applyLevel(MULTIPLEX,GetTime());
+            sim.applyLevel(THEATER,GetTime());
             ChunkData &d=sim.world.data(1,0);
             int x,z; audCell(d.audDir,2,AUD_ROW0+4,x,z);
             CHECK(sim.hideSpotAt(CCELLS+x,z));
@@ -729,17 +729,17 @@ int main() {
             sim.px=(CCELLS+fx)*CELL+1.0f; sim.pz=fz*CELL+1.0f; sim.py=sim.world.floorY(CCELLS+fx,fz);
             sim.eyeY=sim.py+1.62f; sim.yaw=atan2f(a.normal.z,a.normal.x); sim.pitch=0.12f;
             g.syncLevelLook();
-            capture(g,"multiplex-seats.png");
+            capture(g,"theater-seats.png");
             sim.yaw+=3.14159265f; sim.pitch=0.05f;
             sim.px=(CCELLS+fx)*CELL+1.0f+a.normal.x*14; sim.pz=fz*CELL+1.0f+a.normal.z*14;
             int pi=cellOf(sim.px), pk=cellOf(sim.pz);
             sim.py=sim.world.floorY(pi,pk); sim.eyeY=sim.py+1.62f;
-            capture(g,"multiplex-screen.png");
+            capture(g,"theater-screen.png");
             sim.applyLevel(0,GetTime());
             g.syncLevelLook();
         }
     }
-    printf("PASS multiplex auditoriums, steps, reachability, seat collision and hiding\n");
+    printf("PASS theater auditoriums, steps, reachability, seat collision and hiding\n");
 
     // ---- doors. The use key shuts a doorway the player faces; a shut door
     // blocks bodies, the pack's router, sight and light; the hunter's router

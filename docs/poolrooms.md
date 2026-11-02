@@ -1,6 +1,6 @@
 # Poolrooms: Sublimity and swimming
 
-The visual reference is [Wikidot's Level 37, “Sublimity”](https://backrooms-wiki.wikidot.com/level-37), by egglord: pristine white ceramic, blue-green water, oversized bathing spaces and isolation. Reference images are credited there to AnarkyMusic under CC BY-SA 4.0; they were used for research, not bundled as game assets. The geometry, tile textures and water effects here remain procedural.
+The visual reference is [Wikidot's Level 37, “Sublimity”](https://backrooms-wiki.wikidot.com/level-37), by egglord: white ceramic tile, blue-green water and large bathing halls. Reference images are credited there to AnarkyMusic under CC BY-SA 4.0; they were used for research, not bundled as game assets. The geometry, tile textures and water effects here remain procedural.
 
 ## In-game views
 
@@ -18,12 +18,12 @@ The level is built from the lore's own vocabulary rather than one repeated room.
 
 - **baths**: wading shelves stepping down to 2.8-metre-deep floors, some with a column grove or a tiled island;
 - **flooded tunnels**: a braided maze of one-cell tiled corridors, either wading depth or fully submerged passages you swim;
-- **submerged staircases**: a stairwell of real 0.4-metre treads descending into deep water, the lore's hint that the level was not always flooded;
-- **window galleries**: dry halls with rows of windows that open onto nothing but white light, around a small deep pool;
+- **submerged staircases**: a stairwell of real 0.4-metre treads descending into deep water;
+- **window galleries**: dry halls with rows of windows of white light, around a small deep pool;
 - **stepping stones**: dry tiled platforms standing in deep water;
 - **private baths**: small tiled rooms, each with its own deep tub.
 
-A dry walkway runs round every chunk, so the pieces always connect, and openings are plain gaps in the tile rather than door frames. The arrival landing is dry. Poolrooms no longer spawn Clark or whispers, slowly restore sanity, and retain the existing no-blackout rule. The five-level progression is unchanged.
+A dry walkway runs round every chunk, so the pieces always connect, and openings are plain gaps in the tile rather than door frames. The arrival landing is dry. No hunter or whispers spawn here, sanity slowly recovers, and there are no blackouts.
 
 Deep water uses damped buoyancy and water drag. Hold SPACE/JUMP to rise and float at the surface; release it to sink, which is the dive. SHIFT swims faster. Surface swimmers climb onto shelves with eased camera motion; submerged swimmers are stopped by risers. There is no breath timer. Underwater tint and subtle distortion distinguish diving, and slow stroke sounds replace footsteps while afloat.
 

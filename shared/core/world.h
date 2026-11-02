@@ -78,8 +78,8 @@ enum PropKind : uint8_t {
     // 16: the Manila Room's table, chairs and cupboard. Anchored on room cell
     // (7,7) and built centred on that cell's far corner, the middle of the room.
     PROP_MANILA_TABLE,
-    PROP_SEATS,          // 17 a row of four cinema seats facing the screen (the multiplex)
-    PROP_CONCESSION,     // 18 a concession counter, run along x (the multiplex)
+    PROP_SEATS,          // 17 a row of four cinema seats facing the screen (the theater)
+    PROP_CONCESSION,     // 18 a concession counter, run along x (the theater)
 };
 
 constexpr int PROP_KINDS = PROP_CONCESSION + 1;
@@ -155,7 +155,7 @@ constexpr int MANILA_LO = 6, MANILA_HI = 9;
 // The room's centre is the min corner of chunk cell (MANILA_MID, MANILA_MID).
 constexpr int MANILA_MID = MANILA_LO + 2;
 
-// The multiplex (level MULTIPLEX). Most chunks fill the room patch with one
+// The theater (level THEATER). Most chunks fill the room patch with one
 // auditorium, AUD_N cells square: u runs across it, v back from the screen.
 // The seats are rows AUD_ROW0..AUD_ROW1, each AUD_RISE decimetres above the
 // row in front, so the back cross aisle (v = AUD_N - 1) is at floor 0 and the
@@ -305,7 +305,7 @@ struct ChunkData {
     uint8_t lockWest = 0;            // 0: its north edge, 1: its west edge
     int8_t keyI = -1, keyK = -1;     // where the key for it lies, chunk-local
     bool manila = false;             // this chunk holds the Manila Room (Level 0)
-    int8_t audDir = -1;              // the multiplex: this chunk's auditorium faces dir (audCell); -1 none
+    int8_t audDir = -1;              // the theater: this chunk's auditorium faces dir (audCell); -1 none
     // Storeys: each cell's VertFlag bits, which of `feats` it belongs to, and
     // which of its two edges (bit 0 north, bit 1 west) a feature owns. Later passes
     // that punch, move, lock or noclip doorways must skip protected edges, or the
@@ -382,7 +382,7 @@ struct World {
     int featuresFor(int cx, int cz, int s, VertFeat *out, int cap);
     bool pairFeature(int cx, int cz, int p, VertFeat &out);   // the one feature joining p and p + 1, if any
     bool manilaChunk(int cx, int cz, int s);                  // does storey s hold a Manila Room here
-    // The multiplex: chunk (cx, cz)'s auditorium, generating the chunk, or
+    // The theater: chunk (cx, cz)'s auditorium, generating the chunk, or
     // false for a lobby or another level.
     bool auditorium(int cx, int cz, Auditorium &a);
     // The auditoriums in the 3 x 3 chunks round (pcx, pcz) that are already
