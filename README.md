@@ -585,6 +585,18 @@ Details that reward paying attention:
 - **Camera feel** — the view leans into your strafes and the knees absorb a
   landing.
 
+## The Mannequin
+
+On Levels 0 and 1, the Mannequin can appear after two and a half minutes.
+Raise the camcorder with V and keep its body centred in the viewfinder to
+freeze it. Zoom narrows the area that holds it still. Lower the camera or
+turn away and it pursues you, changing pose between sightings.
+
+Flares within five metres hold it back. Bullets stagger it briefly but do
+not kill it. Break its line of sight and get more than 24 metres away for
+eight seconds to escape. The usual hunter stays out of this encounter.
+The Poolrooms and Manila Room remain safe.
+
 ## Controls
 
 | key | action |

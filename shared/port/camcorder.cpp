@@ -141,7 +141,7 @@ Pcm hissClip() {
 // How close the hunter or a dog is, 0..1, ignoring walls. The tape shows it as
 // interference before the player can see it.
 float threatOf(const Sim &sim) {
-    float th = 0;
+    float th = sim.mannequin.active ? smooth01(24.0f, 3.0f, hypotf(sim.mannequin.pos.x - sim.px, sim.mannequin.pos.z - sim.pz)) : 0;
     if (sim.ent.st == EState::Stalk || sim.ent.st == EState::Chase || sim.ent.st == EState::Flee)
         th = smooth01(30.0f, 4.0f, sim.entDist) * (sim.ent.st == EState::Chase ? 1.0f : 0.7f);
     for (const Dog &d : sim.dogs) {
@@ -259,6 +259,9 @@ void Camcorder::control(InputFrame &in, const Sim &sim, float dt, bool toggle) {
     zoom += (target - zoom) * fminf(1.0f, dt * 5.0f);
     if (fabsf(target - zoom) > 0.03f && fabsf(zoom - before) > 1e-4f && viewing())
         play(CamSound::Zoom);
+
+    in.observing = allowed && up && raise >= 0.85f;
+    in.observationCos = cosf(fovY(in.screenFov) * DEG2RAD_F * 0.5f);
 
     if (up && night) irCharge = fmaxf(0.0f, irCharge - dt / IR_DRAIN_S);
     else irCharge = fminf(1.0f, irCharge + dt / IR_RECHARGE_S);

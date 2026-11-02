@@ -78,6 +78,15 @@ struct SolidTracer {
 };
 
 struct Sim {
+    struct Mannequin {
+        bool active = false, pinned = false, warded = false;
+        Vec3 pos{};
+        int storey = 0, pose = 0;
+        float grace = 0, lost = 0, gait = 0, stagger = 0, yaw = 0;
+        double nextSpawn = 150;
+    } mannequin;
+    bool spawnMannequin(double now);
+    void updateMannequin(const InputFrame &in, float dt, double now);
     // ---- tuning
     static constexpr float PR = 0.34f;          // player radius
     static constexpr float SQUEEZE_R = 0.12f;   // player radius while squeezing

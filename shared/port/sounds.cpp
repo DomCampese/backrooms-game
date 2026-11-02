@@ -757,6 +757,7 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::Bark:           return makeDogBark(400 + variant * 31);
     case Sfx::BarkThrough:    return makeDogBark(400 + variant * 31, true);
     case Sfx::SplashIn: case Sfx::SplashOut: case Sfx::SwimStroke: return {};
+    case Sfx::MannequinStep:  return makeHardStep(739, Footing::Wood);
     case Sfx::Click:          return makeClick();
     case Sfx::Scare: case Sfx::Hit: case Sfx::Kill: return makeJumpscare();
     case Sfx::Win:            return makeWinChime();

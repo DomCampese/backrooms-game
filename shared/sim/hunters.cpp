@@ -11,6 +11,12 @@ bool Sim::packDeaf() const {
 }
 
 void Sim::updateEntity(float dt, double now, bool forceSpawn) {
+    if (mannequin.active) {
+        ent.st = EState::Hidden; ent.nextSpawn = now + 30;
+        entDarkCur = 0; entDist = 1e9f;
+        fear = fmaxf(fear, mannequin.pinned ? 0.35f : 0.75f);
+        return;
+    }
     // Nothing hunts on Level 2.
     if (level == 2) {
         ent.st = EState::Hidden; ent.nextSpawn = now + 60; entDist = 1e9f;

@@ -106,3 +106,9 @@ unreal-surfaces:
 unreal-materials:
 	tools/unreal.sh import
 .PHONY: unreal unreal-open unreal-play unreal-test unreal-surfaces unreal-materials
+
+mannequin-check: tools/mannequin-check.cpp $(SIM_SRCS) $(CORE_SRCS) $(wildcard shared/sim/*.h shared/core/*.h)
+	c++ $(CXX_FLAGS) tools/mannequin-check.cpp $(SIM_SRCS) $(CORE_SRCS) -o /tmp/backrooms-mannequin-check
+	/tmp/backrooms-mannequin-check
+
+.PHONY: mannequin-check
