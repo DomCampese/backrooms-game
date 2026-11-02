@@ -357,6 +357,11 @@ AGENTS.md has the module map file by file.
   after 10 s without seeing or hearing you he gives up. He hears what the pack
   hears: walking within 11 m, sprinting within 20 m, the tape player, a flare
   strike and a shot. Duck round a corner and stand still, and he walks past.
+- **Doors shut.** Face a doorway and press E (USE on touch) to shut or open
+  it. A shut door blocks the hunter's sight and the light, and the pack in
+  the Red Halls cannot open one. The hunter can: he stops at it, strikes it
+  every half second, and is through in 1.6 s. Shutting or opening a door is
+  heard 14 m away.
 - **It brings the dark** — the fluorescents die in a pool around the hunter and
   the shadow travels with it, so the corridor ahead goes black as it closes in
   and it stands in its own darkness. Your flashlight and your flares cut

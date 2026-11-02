@@ -112,6 +112,7 @@ bool openingOn(World &w, Opening &op, int cx, int cz, int i, int k, bool west) {
     switch (v) {
     case WALL_DOOR:   op.kind = OpeningKind::Doorway; break;
     case WALL_LOCKED: op.kind = OpeningKind::LockedDoor; break;
+    case WALL_SHUT:   op.kind = OpeningKind::ShutDoor; break;
     case WALL_WINDOW: op.kind = OpeningKind::Window; break;
     case WALL_RAIL:   op.kind = OpeningKind::Rail; break;
     case WALL_EXIT:   op.kind = w.cursedExit(gi, gk) ? OpeningKind::CursedExit : OpeningKind::Exit; break;

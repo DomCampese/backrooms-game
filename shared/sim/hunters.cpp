@@ -219,12 +219,13 @@ bool Sim::hunterChase(float dt, double now, float &fearT) {
         int oi, ok;
         float gx = tx - ent.x, gz = tz - ent.z;
         if (gx * gx + gz * gz > 2.5f * 2.5f && !world.lineOfSight(ent.x, ent.z, tx, tz) &&
-            world.pathStep(eci, eck, cellOf(tx), cellOf(tz), oi, ok) && !(oi == eci && ok == eck)) {
+            world.pathStep(eci, eck, cellOf(tx), cellOf(tz), oi, ok, true) && !(oi == eci && ok == eck)) {
             ent.wpx = oi * CELL + 1.0f; ent.wpz = ok * CELL + 1.0f;
         } else {
             ent.wpx = tx; ent.wpz = tz;
         }
     }
+    if (hunterForcesDoor(dt)) chaseSpd = 0;
     float sx = ent.wpx - ent.x, sz = ent.wpz - ent.z, sl = sqrtf(sx * sx + sz * sz) + 1e-4f;
     ent.x += sx / sl * chaseSpd * dt;
     ent.z += sz / sl * chaseSpd * dt;
@@ -295,6 +296,7 @@ float Sim::packNoise(float &x, float &z) const {
         x = deck.carried ? px : deck.x;
         z = deck.carried ? pz : deck.z;
     }
+    if (doorNoiseT > 0 && DOOR_NOISE > noise) { noise = DOOR_NOISE; x = px; z = pz; }   // a door shut or opened
     if (muzzleT > 0 || gunCd > SHOT_INTERVAL - 0.07f) { noise = 45.0f; x = px; z = pz; }   // a shot
     bool justStruck = false;   // a flare's strike, whichever flare
     for (const FlareProj &f : litFlares) if (f.active && f.burn > FLAREBURN - 0.6f) justStruck = true;
@@ -387,4 +389,38 @@ void Sim::hunterNotice(float x, float z) {
     ent.lastX = x;
     ent.lastZ = z;
     ent.lostT = 0;
+}
+
+// A shut door on an edge of his cell, within reach, with his waypoint on the
+// far side: he stops and strikes it every DOOR_KNOCK s, and after DOOR_FORCE s
+// it is open. Without this the router (which passes shut doors for him) walks
+// him into the leaf and collision holds him there.
+bool Sim::hunterForcesDoor(float dt) {
+    const int ci = cellOf(ent.x), ck = cellOf(ent.z);
+    struct Edge { int i, k; bool west; float line; bool alongX; };
+    const Edge edges[4] = { { ci, ck, false, ck * CELL, false }, { ci, ck + 1, false, (ck + 1) * CELL, false },
+                            { ci, ck, true, ci * CELL, true }, { ci + 1, ck, true, (ci + 1) * CELL, true } };
+    for (const Edge &e : edges) {
+        if ((e.west ? world.wallWVal(e.i, e.k) : world.wallNVal(e.i, e.k)) != WALL_SHUT) continue;
+        float me = e.alongX ? ent.x - e.line : ent.z - e.line;
+        float wp = e.alongX ? ent.wpx - e.line : ent.wpz - e.line;
+        if (fabsf(me) > 0.9f || (me < 0) == (wp < 0)) continue;   // too far, or not in his way
+        float before = ent.doorT;
+        ent.doorT += dt;
+        float dx = (e.west ? e.i * CELL : e.i * CELL + 1.0f) - px, dz = (e.west ? e.k * CELL + 1.0f : e.k * CELL) - pz;
+        float d = sqrtf(dx * dx + dz * dz) + 1e-4f;
+        float pan = clampf((dx / d) * r2x + (dz / d) * r2z, -1.0f, 1.0f);
+        if (floorf(ent.doorT / DOOR_KNOCK) > floorf(before / DOOR_KNOCK) || before == 0.0f)
+            play(Sfx::DoorBang, grng.ri(0, 2)).atPan(pan).atVolume(clampf(2.0f / (1.0f + 0.04f * d * d), 0.1f, 1.0f));
+        if (ent.doorT >= DOOR_FORCE) {
+            world.shutEdge(e.i, e.k, e.west, false);
+            shadowsStale = true;
+            ent.doorT = 0;
+            play(Sfx::DoorShut, 2).atPan(pan).atPitch(0.8f).atVolume(clampf(2.4f / (1.0f + 0.04f * d * d), 0.1f, 1.0f));
+            return false;
+        }
+        return true;
+    }
+    ent.doorT = 0;
+    return false;
 }

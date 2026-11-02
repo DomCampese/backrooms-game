@@ -116,6 +116,13 @@ struct Sim {
     static constexpr float SEARCH_SPEED = 2.6f;
     static constexpr float SEARCH_STEP_MIN = 3.0f, SEARCH_STEP_MAX = 7.0f;
     static constexpr float SEARCH_TIME = 10.0f;
+    // Doors. The use key shuts or opens a doorway within DOOR_REACH m of its
+    // middle that the player faces. Shutting or opening one is heard DOOR_NOISE m
+    // away for DOOR_NOISE_TIME s. The hunter forces a shut door in his way in
+    // DOOR_FORCE s, striking it every DOOR_KNOCK s; the pack cannot open one.
+    static constexpr float DOOR_REACH = 1.6f;
+    static constexpr float DOOR_NOISE = 14.0f, DOOR_NOISE_TIME = 0.5f;
+    static constexpr float DOOR_FORCE = 1.6f, DOOR_KNOCK = 0.45f;
     static constexpr float DEATH_CARD = 12.0f;  // s the death card stays up: the tape playback, then the text
     static constexpr float DEATH_CARD_HOLD = 1.6f;   // s of it no key can dismiss
     // Health. One hit is survivable and a second before healing is not: two
@@ -295,6 +302,11 @@ struct Sim {
     const char *tapeLine = "";       // the recovered tape's line
     const char *sanityLine = "";     // the last sanity (or migraine) warning
     const char *deckNote = "";       // one-line notes: the deck, keys, crates, a new floor
+    // The doorway the use key would shut or open, found each tick (findDoor),
+    // for the HUD's hint.
+    struct DoorReach { bool ok = false; int i = 0, k = 0; bool west = false, shut = false; };
+    DoorReach doorReach;
+    float doorNoiseT = 0;            // s left of the noise of a door shut or opened
 
     // ---- the tick. step() runs the updates below in this order; each may
     // rely on the ones before it (a shot lands before the hunter reacts).
@@ -401,6 +413,10 @@ struct Sim {
     float packNoise(float &x, float &z) const;   // how far the loudest noise carries, and where
     bool updateDog(int i, float dt, double now, float noise, float nsx, float nsz);   // true if it ended the run
     bool hunterChase(float dt, double now, float &fearT);   // true if it ended the run
+    bool findDoor(DoorReach &d);            // the doorway in reach and in front, if any
+    bool bodyInDoorway(int ci, int ck, bool west) const;   // anyone standing where its leaf swings
+    void useDoor();                               // shut or open doorReach
+    bool hunterForcesDoor(float dt);              // true while he stands at a shut door, striking it
     void hunterNotice(float x, float z);   // the hunter now knows the player is at (x, z)
 
     // ---- the run's shape

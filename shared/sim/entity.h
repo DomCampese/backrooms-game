@@ -30,6 +30,7 @@ struct Entity {
     // Where he last saw or heard the player, and s since then. In a chase
     // without contact he walks there and searches (Sim::hunterChase).
     float lastX = 0, lastZ = 0, lostT = 0;
+    float doorT = 0;   // s he has been forcing the shut door in front of him
     float dispY = 0;   // smoothed floor height, so he does not jump on stairs
     float lunge = 0;     // s left in a lunge (LUNGE_TIME); only a lunge can catch the player
     float lungeCd = 0;   // s before he can lunge again

@@ -74,7 +74,7 @@ const char *FIXTURE_NAME[] = {
     "auditorium", "poster",
 };
 static_assert(sizeof(FIXTURE_NAME) / sizeof(FIXTURE_NAME[0]) == (int)FixtureKind::Poster + 1, "a name for every FixtureKind");
-const char *OPENING_NAME[] = { "doorway", "locked door", "exit", "cursed exit", "window", "rail" };
+const char *OPENING_NAME[] = { "doorway", "locked door", "exit", "cursed exit", "window", "rail", "shut door" };
 
 // Which way a normal points, as +x, -z, down.
 const char *facing(Vec3 n) {

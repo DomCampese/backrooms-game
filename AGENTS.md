@@ -110,6 +110,37 @@ no row for it.
 - tests/golden gained lines for the new level and lost none; walk-l0-l2.trace
   plays back unchanged.
 
+# Doors (November 2026)
+
+The use key shuts or opens a doorway (`Sim::findDoor`, `useDoor`,
+shared/sim/items.cpp). A shut door is `WALL_SHUT`, which no chunk stores: the
+`World::shutDoors` overlay turns a `WALL_DOOR` into it in `wallNVal` and
+`wallWVal`, like `unlockedDoors` and `shifted`.
+
+- **`WALL_SHUT` blocks bodies, light and sight** (`blocksEdge`,
+  `blocksLight`, and the full-height box `gatherCellAABBs` gives any blocking
+  edge). The layout calls it `OpeningKind::ShutDoor`, and the mesher and the
+  greybox build it as a locked door.
+- **`World::shutEdge` rebakes both chunks that draw the edge**, and the sim
+  sets `shadowsStale`, as for an unlocked door. `unloadAll` clears the set, so
+  a new level starts with every door open.
+- **The hunter routes through shut doors and the pack does not.**
+  `canStep` and `pathStep` take `throughShut`, which only `hunterChase` passes.
+  At a shut door between him and his waypoint he stops, strikes it every
+  `DOOR_KNOCK` s (`Sfx::DoorBang`) and opens it after `DOOR_FORCE` s
+  (`Sim::hunterForcesDoor`). Without the stop, the router walked him into the
+  leaf and collision held him there.
+- **A doorway joined to its neighbour takes no leaf** (`World::doorJoined`):
+  the two share one opening with no jamb between them, and a leaf in one would
+  leave half the opening open.
+- **A door will not shut on a body** (`bodyInDoorway`): the player, the
+  hunter or a dog within its radius of the leaf's line.
+- **Shutting or opening is a noise** (`doorNoiseT`, `DOOR_NOISE` 14 m in
+  `packNoise`), so the hunter and the pack hear it.
+- **`Sim::crateAt` treats `WALL_SHUT` as a doorway**, or shutting a door
+  would move Level 1's crates.
+- The HUD shows "E · shut the door" or "open the door" while one is in reach.
+
 # Footstep clip per floor material (October 2026)
 
 Player footsteps and landings use a clip per floor material: carpet on
