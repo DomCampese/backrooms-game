@@ -21,6 +21,7 @@ enum class Sfx : uint8_t {
     FarClang,         // 3: Distant::Clang (Level 1)
     FarKnock,         // 3: Distant::Knock (Level 3)
     FarPop,           // 3: Distant::Pop (Level 4)
+    FarBoom,          // 3: Distant::Boom (the multiplex)
 };
 
 // What the ambience synth (audio.cpp) chases. The rules write each field where

@@ -332,18 +332,69 @@ void vendFootprint(uint8_t rotByte, float cx, float cz, float &px, float &pz,
     }
 }
 
+void seatBox(uint8_t rotByte, float x0, float z0, float &bx0, float &bz0, float &bx1, float &bz1) {
+    const float a = SEAT_FRONT, b = SEAT_BACK, s0 = 0.04f, s1 = CELL - 0.04f;
+    switch (rotByte & 3) {
+    case 0:  bx0 = x0 + s0;       bx1 = x0 + s1;       bz0 = z0 + a;        bz1 = z0 + b;        break;   // faces -z
+    case 2:  bx0 = x0 + s0;       bx1 = x0 + s1;       bz0 = z0 + CELL - b; bz1 = z0 + CELL - a; break;   // faces +z
+    case 3:  bx0 = x0 + a;        bx1 = x0 + b;        bz0 = z0 + s0;       bz1 = z0 + s1;       break;   // faces -x
+    default: bx0 = x0 + CELL - b; bx1 = x0 + CELL - a; bz0 = z0 + s0;       bz1 = z0 + s1;       break;   // faces +x
+    }
+}
+
+bool World::auditorium(int cx, int cz, Auditorium &a) {
+    if (level != MULTIPLEX) return false;
+    const ChunkData &d = data(cx, cz);
+    if (d.audDir < 0) return false;
+    const int dir = d.audDir;
+    const float half = AUD_N * CELL * 0.5f;
+    const float mx = cx * CHUNK + AUD_LO * CELL + half, mz = cz * CHUNK + AUD_LO * CELL + half;
+    const Vec3 N[4] = { { 0, 0, 1 }, { 0, 0, -1 }, { 1, 0, 0 }, { -1, 0, 0 } };
+    const Vec3 U[4] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, -1 }, { 0, 0, 1 } };
+    a.cx = cx; a.cz = cz; a.dir = dir;
+    a.normal = N[dir];
+    a.across = U[dir];
+    a.halfW = AUD_SCREEN_W * 0.5f;
+    a.y0 = audElev(0) * ELEV_UNIT + AUD_SCREEN_LIFT;
+    a.y1 = LEVEL_RULES[MULTIPLEX].wallH - AUD_SCREEN_TOP;
+    const float toScreen = half - WT - AUD_SCREEN_OFF;
+    a.screen = { mx - a.normal.x * toScreen, (a.y0 + a.y1) * 0.5f, mz - a.normal.z * toScreen };
+    // Close enough that its light reaches the curtains and the stage, which
+    // the shader lights only within about 9.5 m of it.
+    a.lamp = { a.screen.x + a.normal.x * 3.5f, 1.4f, a.screen.z + a.normal.z * 3.5f };
+    const float toBack = half - WT - 0.01f;
+    a.booth = { mx + a.normal.x * toBack, LEVEL_RULES[MULTIPLEX].wallH - 1.1f, mz + a.normal.z * toBack };
+    a.rect[0] = mx - half; a.rect[1] = mz - half; a.rect[2] = mx + half; a.rect[3] = mz + half;
+    a.seed = ih(cx, cz, sseed() ^ 0xF11Bu);
+    return true;
+}
+
+std::vector<Auditorium> World::auditoriums(int pcx, int pcz) {
+    std::vector<Auditorium> out;
+    if (level != MULTIPLEX) return out;
+    for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+        int cx = pcx + dx, cz = pcz + dz;
+        if (chunks.find(key(cx, cz)) == chunks.end()) continue;
+        Auditorium a;
+        if (auditorium(cx, cz, a)) out.push_back(a);
+    }
+    return out;
+}
+
 void World::generate(ChunkData &d, int cx, int cz) {
     memset(d.wallN, 0, sizeof(d.wallN));
     memset(d.wallW, 0, sizeof(d.wallW));
     memset(d.pillar, 0, sizeof(d.pillar));
     memset(d.pool, 0, sizeof(d.pool));
     memset(d.elev, 0, sizeof(d.elev));
+    d.audDir = -1;
     uint64_t k = key(cx, cz);
     Rng rng(hash64(k ^ ((uint64_t)sseed() + (uint64_t)level * 0x51ED270Bu
                         + (uint64_t)visit * 0x2545F4914F6CDD1DULL) * 0x9E3779B97F4A7C15ULL));
     // Open plazas: one chunk in sixteen. More dominate the enclosure average.
     // Hashed with the visit so a revisit moves them.
-    bool openChunk = (hash64(k ^ 0xA11CEULL ^ (uint64_t)sseed()
+    // The multiplex has none: its chunks are auditoriums and lobbies.
+    bool openChunk = level != MULTIPLEX && (hash64(k ^ 0xA11CEULL ^ (uint64_t)sseed()
                              ^ ((uint64_t)visit * 0xD1B54A32D192ED03ULL)) & 15) == 0;
     int nseg = level == 0 ? 12 + rng.ri(0, 5) : level == 1 ? 7 + rng.ri(0, 4)
              : level == 4 ? 9 + rng.ri(0, 4) : 5 + rng.ri(0, 3);
@@ -635,6 +686,69 @@ void World::generate(ChunkData &d, int cx, int cz) {
             }
         }
     }
+    if (level == MULTIPLEX) {
+        // The patch is one room: clear everything inside its outer wall.
+        for (int x = AUD_LO; x < AUD_LO + AUD_N; x++) for (int z = AUD_LO; z < AUD_LO + AUD_N; z++) {
+            d.pillar[x][z] = 0; d.prop[x][z] = PROP_NONE; d.propRot[x][z] = 0;
+            if (z > AUD_LO) d.wallN[x][z] = WALL_NONE;
+            if (x > AUD_LO) d.wallW[x][z] = WALL_NONE;
+        }
+        // The edge between two neighbouring cells.
+        auto edge = [&](int ax, int az, int bx, int bz) -> uint8_t & {
+            if (bz == az - 1) return d.wallN[ax][az];
+            if (bz == az + 1) return d.wallN[ax][bz];
+            if (bx == ax - 1) return d.wallW[ax][az];
+            return d.wallW[bx][az];
+        };
+        uint32_t ah = ih(cx, cz, sseed() ^ 0xC1E7u);
+        bool lobby = (cx == 0 && cz == 0) || ah % AUD_LOBBY_RATE == 0;
+        if (!lobby) {
+            // An auditorium. Its outer wall is solid with four doors onto the
+            // corridor, two in the back wall and one at each end of the back
+            // cross aisle. The storeys pass below protects it.
+            const int dir = (int)((ah >> 4) & 3), m = AUD_N - 1;
+            d.audDir = (int8_t)dir;
+            for (int t = 0; t < AUD_N; t++) {
+                int ax, az, bx, bz;
+                const int sides[4][4] = { { t, 0, t, -1 }, { t, m, t, m + 1 }, { 0, t, -1, t }, { m, t, m + 1, t } };
+                for (const auto &sd : sides) {
+                    audCell(dir, sd[0], sd[1], ax, az);
+                    audCell(dir, sd[2], sd[3], bx, bz);
+                    edge(ax, az, bx, bz) = WALL_SOLID;
+                }
+            }
+            const int doors[4][4] = { { 2, m, 2, m + 1 }, { m - 2, m, m - 2, m + 1 }, { 0, m, -1, m }, { m, m, m + 1, m } };
+            for (const auto &dr : doors) {
+                int ax, az, bx, bz;
+                audCell(dir, dr[0], dr[1], ax, az);
+                audCell(dir, dr[2], dr[3], bx, bz);
+                edge(ax, az, bx, bz) = WALL_DOOR;
+            }
+            for (int u = 0; u < AUD_N; u++) for (int v = 0; v < AUD_N; v++) {
+                int x, z;
+                audCell(dir, u, v, x, z);
+                d.elev[x][z] = (int8_t)audElev(v);
+                bool aisle = u == 0 || u == AUD_N / 2 || u == m;
+                if (!aisle && v >= AUD_ROW0 && v <= AUD_ROW1) {
+                    d.prop[x][z] = PROP_SEATS;
+                    d.propRot[x][z] = audFacing(dir);
+                }
+            }
+        } else {
+            // A lobby: a concession counter, a few columns, benches and plants
+            // in one hall, entered through the doors the patch's wall already has.
+            int cz0 = 3 + rng.ri(0, 1), cxa = 4 + rng.ri(0, 3);
+            for (int x = cxa; x < cxa + 4; x++) { d.prop[x][cz0] = PROP_CONCESSION; d.propRot[x][cz0] = 0; }
+            const int cols[4][2] = { { 4, 8 }, { 10, 8 }, { 4, 12 }, { 10, 12 } };
+            for (const auto &c : cols) if (rng.f01() < 0.7f) d.pillar[c[0]][c[1]] = 1;
+            for (int b = 0; b < 4; b++) {
+                int x = 2 + rng.ri(0, 10), z = 7 + rng.ri(0, 5);
+                if (d.pillar[x][z] || d.prop[x][z]) continue;
+                d.prop[x][z] = rng.f01() < 0.6f ? PROP_COUCH : PROP_PLANT;
+                d.propRot[x][z] = (uint8_t)rng.ri(0, 3);
+            }
+        }
+    }
     if (level == 0 || level == 1) {   // sunken lounges (L0) / loading docks (L1), never under walls
         for (int i = 1; i < CCELLS - 1; i++) for (int kk = 1; kk < CCELLS - 1; kk++) {
             if (d.pillar[i][kk]) continue;
@@ -672,6 +786,24 @@ void World::generate(ChunkData &d, int cx, int cz) {
         VertFeat fs[2];
         int nf = featuresFor(cx, cz, qs, fs, 2);
         for (int q = 0; q < nf; q++) stampFeature(d, fs[q], cx, cz);
+    }
+    // An auditorium's outer wall is protected too, so the passes below put no
+    // doorway, lock or exit in it: a door at the front of the room would open
+    // 3 m above its floor. Marked here, after prot is cleared above.
+    if (d.audDir >= 0) {
+        const int m = AUD_N - 1;
+        for (int t = 0; t < AUD_N; t++) {
+            const int sides[4][4] = { { t, 0, t, -1 }, { t, m, t, m + 1 }, { 0, t, -1, t }, { m, t, m + 1, t } };
+            for (const auto &sd : sides) {
+                int ax, az, bx, bz;
+                audCell(d.audDir, sd[0], sd[1], ax, az);
+                audCell(d.audDir, sd[2], sd[3], bx, bz);
+                if (bz == az - 1) d.prot[ax][az] |= 1;
+                else if (bz == az + 1) d.prot[ax][bz] |= 1;
+                else if (bx == ax - 1) d.prot[ax][az] |= 2;
+                else d.prot[bx][az] |= 2;
+            }
+        }
     }
     // ---- the Manila Room. Stamped before the connectivity flood so the flood
     // sees it, and again at the end so door thinning, the locked door and the exit
@@ -900,7 +1032,9 @@ void World::generate(ChunkData &d, int cx, int cz) {
     // Rarely, an exit carved into a wall run. Never in a protected wall: those
     // run through two storeys, and a noclip wall on one would be solid on the
     // next.
-    if (hash64(k ^ 0xE717ULL ^ (uint64_t)sseed()) % (exitTest ? 1 : 16) == 0) {
+    // The multiplex's auditorium walls are protected, so only its lobbies can
+    // take an exit: it tries four times as often.
+    if (hash64(k ^ 0xE717ULL ^ (uint64_t)sseed()) % (exitTest ? 1 : level == MULTIPLEX ? 4 : 16) == 0) {
         bool placed = false;
         for (int i = 1; i < CCELLS - 1 && !placed; i++)
             for (int kk = 1; kk < CCELLS && !placed; kk++)
@@ -974,7 +1108,10 @@ void World::generate(ChunkData &d, int cx, int cz) {
     // Runs last, after the spawn-room clear, which leaves faces of its own. Moves
     // only toward zero, so it terminates; the chunk's border ring is elev 0, so seams
     // are flat and no pass reads the neighbouring chunk.
-    for (int pass = 0; level != 2 && pass < 10; pass++) {
+    // The multiplex's floors are stepped by construction, and its auditorium
+    // floors sit 3 m below the corridor on the far side of a wall, which this
+    // pass would read as a pit.
+    for (int pass = 0; level != 2 && level != MULTIPLEX && pass < 10; pass++) {
         bool changed = false;
         for (int i = 1; i < CCELLS - 1; i++) for (int kk = 1; kk < CCELLS - 1; kk++) {
             int e = d.elev[i][kk];
@@ -1249,6 +1386,12 @@ int World::gatherCellAABBs(int ci, int ck, AABB *out, int cap, int cnt, bool inc
                 float t = 0.55f + r1 * 0.2f;
                 if (r2 > 0.35f) t += 0.5f;
                 out[cnt++] = { x0 + 0.35f, z0 + 0.35f, x0 + 1.65f, z0 + 1.65f, ey + t }; break;
+            }
+            case PROP_SEATS: {
+                float bx0, bz0, bx1, bz1;
+                seatBox(propRotAt(ci, ck), x0, z0, bx0, bz0, bx1, bz1);
+                out[cnt++] = { bx0, bz0, bx1, bz1, ey + SEAT_TOP };
+                break;
             }
             case PROP_VENDING: {   // wherever vendFootprint stood it
                 float vx, vz, bx0, bz0, bx1, bz1;

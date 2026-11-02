@@ -939,6 +939,99 @@ Surface makePartyCeilSurface() {
     return boardCeiling(512, 4, 2.0f, 22, 20, 25, 30, 29, 33, 120, 0xFA27u, 19.3f);
 }
 
+// ---------------------------------------------------------------- the multiplex
+//
+// Cinema carpet: a near-black ground scattered with bright shapes (rings,
+// triangles, squiggles and dots in teal, magenta, violet and gold), the kind
+// laid in multiplexes so that spilt popcorn and dirt do not show. Twelve cells
+// to the 2 m tile, one shape per cell, drawn from its own cell and the eight
+// round it so a shape can cross a cell edge; positions wrap, so it tiles.
+Surface makeCinemaCarpetSurface() {
+    const int N = 768, CELLS = 12, CP = N / CELLS;
+    Canvas c(N, N, 2.0f, 2.0f);
+    static const float INK[5][3] = { { 30, 170, 170 }, { 200, 40, 140 }, { 120, 70, 200 }, { 220, 170, 40 }, { 60, 110, 210 } };
+    for (int y = 0; y < N; y++) for (int x = 0; x < N; x++) {
+        int i = y * N + x;
+        float fx = (float)x, fy = (float)y;
+        float r = 18, g = 16, b = 26;
+        int cx0 = x / CP, cy0 = y / CP;
+        for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
+            int ci = (cx0 + dx + CELLS) % CELLS, cj = (cy0 + dy + CELLS) % CELLS;
+            uint32_t h = ih(ci, cj, 0xC1A0u);
+            float sx = (cx0 + dx) * CP + 12 + (h & 31) * (CP - 24) / 31.0f;
+            float sy = (cy0 + dy) * CP + 12 + ((h >> 5) & 31) * (CP - 24) / 31.0f;
+            float u = x + 0.5f - sx, v = y + 0.5f - sy;
+            float ang = ((h >> 10) & 63) / 63.0f * TAU, ca = cosf(ang), sa = sinf(ang);
+            float lu = u * ca + v * sa, lv = -u * sa + v * ca;
+            float cov = 0;
+            switch ((h >> 16) % 4) {
+            case 0: cov = sstep(3.2f, 2.0f, fabsf(sqrtf(u * u + v * v) - 13.0f)); break;              // a ring
+            case 1: {                                                                                  // a triangle outline
+                float d = std::max(std::max(lv, 0.866f * lu - 0.5f * lv), -0.866f * lu - 0.5f * lv);
+                cov = sstep(3.0f, 1.8f, fabsf(d - 9.0f));
+                break;
+            }
+            case 2: cov = sstep(3.0f, 1.8f, fabsf(lv - 6.0f * sinf(lu * 0.32f))) * sstep(26.0f, 22.0f, fabsf(lu)); break;   // a squiggle
+            default: cov = sstep(6.5f, 5.0f, sqrtf(u * u + v * v)); break;                               // a dot
+            }
+            if (cov <= 0) continue;
+            const float *k = INK[(h >> 20) % 5];
+            r = lerpf(r, k[0], cov); g = lerpf(g, k[1], cov); b = lerpf(b, k[2], cov);
+        }
+        // Loop pile, flattened along the aisles in soft patches.
+        float pile = 0.90f + 0.12f * lat(x, y, 0xC1A1u) + 0.12f * (c.nz(fx, fy, 5, 5, 0xC1A2u, 3) - 0.5f);
+        r *= pile; g *= pile; b *= pile;
+        c.set(i, r, g, b);
+        c.ht[i] = (lat(x, y, 0xC1A3u) - 0.5f) * 0.0006f + (c.nz(fx, fy, 50, 50, 0xC1A4u, 2) - 0.5f) * 0.0004f;
+        c.gl[i] = 0.25f;
+    }
+    c.matchLuma(40.0f);
+    return finishSurface(c, 1.0f);
+}
+
+// Cinema walls: burgundy fabric over acoustic panels, 1 m wide and 1.5 m tall,
+// with dark recessed seams between them and the cloth pillowed slightly over
+// each panel's edges. No skirting in the texture: auditorium walls are 8 m
+// tall, so anything at a height would repeat every 3 m. The mesher adds the
+// skirting.
+Surface makeCinemaWallSurface() {
+    const int N = 1024;
+    Canvas c(N, N, 3.0f, 3.0f);
+    const float PW = N / 3.0f, PH = N / 2.0f, SEAM = 0.012f / c.mx();
+    for (int y = 0; y < N; y++) for (int x = 0; x < N; x++) {
+        int i = y * N + x;
+        float fx = (float)x, fy = (float)y;
+        float lx = fmodf(x + 0.5f, PW), ly = fmodf(y + 0.5f, PH);
+        float ed = std::min(std::min(lx, PW - lx), std::min(ly, PH - ly));
+        int panel = (int)((x + 0.5f) / PW) + 3 * (int)((y + 0.5f) / PH);
+        float tone = 1.0f + (lat(panel, 0, 0xC1B0u) - 0.5f) * 0.06f;
+        float weave = 0.94f + 0.06f * sinf(x * 1.9f) * sinf(y * 1.9f) + 0.06f * (lat(x, y, 0xC1B1u) - 0.5f);
+        float dust = c.nz(fx, fy, 2.0f, 2.0f, 0xC1B2u, 3);
+        float v = tone * weave * (1.0f - 0.10f * dust);
+        float r = 96 * v, g = 26 * v, b = 34 * v, h;
+        if (ed < SEAM) {
+            r *= 0.35f; g *= 0.35f; b *= 0.35f;
+            h = -0.005f;
+        } else {
+            float e = sat((ed - SEAM) / 14.0f);
+            h = -0.004f * (1.0f - e) * (1.0f - e) + (weave - 1.0f) * 0.0004f;
+            float m = 0.80f + 0.20f * e;
+            r *= m; g *= m; b *= m;
+        }
+        c.set(i, r, g, b);
+        c.ht[i] = h;
+        c.gl[i] = 0.15f;
+    }
+    c.matchLuma(34.0f);
+    return finishSurface(c, 1.0f);
+}
+
+// The multiplex's ceiling: black acoustic board on a black grid, 0.5 m boards,
+// a little browner than LEVEL FUN's.
+Surface makeCinemaCeilSurface() {
+    return boardCeiling(512, 4, 2.0f, 20, 18, 18, 26, 24, 24, 120, 0xC1C0u, 17.0f);
+}
+
 Surface makeSurface(SurfSlot slot) {
     switch (slot) {
         case SURF_CARPET:    return makeCarpetSurface();
@@ -953,6 +1046,9 @@ Surface makeSurface(SurfSlot slot) {
         case SURF_BANQUET:   return makePartyCarpetSurface();
         case SURF_PARTYCEIL: return makePartyCeilSurface();
         case SURF_PARTYWALL: return makePartyWallSurface();
+        case SURF_CINEMACARPET: return makeCinemaCarpetSurface();
+        case SURF_CINEMACEIL:   return makeCinemaCeilSurface();
+        case SURF_CINEMAWALL:   return makeCinemaWallSurface();
         case SURF_COUNT:     break;
     }
     return {};

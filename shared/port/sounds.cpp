@@ -493,6 +493,40 @@ Pcm makeFarPop(int variant)
     return farAway(d, 1200.0f, 1.4f, 0.7f, 0.32f);
 }
 
+// Boom: a film's soundtrack through a wall. Variant 0 is one explosion (a
+// 38-50 Hz drop under rumble), 1 two of them, 2 a low chord swelling up and
+// cutting off.
+Pcm makeFarBoom(int variant)
+{
+    Rng r(0xB0011ULL + (uint64_t)variant * 653u);
+    std::vector<float> d((int)(2.2f * SAMPLE_RATE));
+    const float f0 = 38.0f + r.f01() * 12.0f;
+    const float hits[2] = { 0.05f, variant == 1 ? 0.55f + r.f01() * 0.2f : -1.0f };
+    float lp = 0, lp2 = 0;
+    for (int i = 0; i < (int)d.size(); i++) {
+        float t = (float)i / SAMPLE_RATE;
+        float x = r.f01() * 2.0f - 1.0f;
+        lp += 0.03f * (x - lp);
+        lp2 += 0.03f * (lp - lp2);
+        float s = 0;
+        if (variant == 2) {
+            // Root, fifth and octave, rising for 1.4 s and cut, as a scene ends.
+            float env = t < 1.4f ? t / 1.4f : expf(-(t - 1.4f) * 30.0f);
+            s = (sinf(TAU * 55.0f * t) + 0.6f * sinf(TAU * 82.4f * t) + 0.6f * sinf(TAU * 110.0f * t)) * env * env * 0.4f
+              + (lp2 * 6.0f + lp * 1.6f) * env;
+        } else {
+            for (float at : hits) {
+                float u = t - at;
+                if (at < 0.0f || u <= 0.0f) continue;
+                float env = (1.0f - expf(-u * 60.0f)) * expf(-u * 2.6f);
+                s += env * (sinf(TAU * f0 * u * (1.0f - 0.12f * fminf(u, 1.0f))) * 0.6f + lp2 * 12.0f + lp * 1.5f);
+            }
+        }
+        d[i] = s;
+    }
+    return farAway(d, 900.0f, 1.8f, 0.45f, 0.62f);
+}
+
 // Bark: a falling-pitch harmonic voice through a noise band, with a fast attack
 // and decay.
 Pcm makeDogBark(uint32_t seed, bool through = false) {
@@ -723,7 +757,8 @@ ClipSpec clipSpec(Sfx sfx) {
     case Sfx::StepConcrete: case Sfx::StepTile: case Sfx::StepWood: return { 4, 1.0f, 1.0f };
     case Sfx::SplashIn: case Sfx::SplashOut:
     case Sfx::Bark: case Sfx::BarkThrough:
-    case Sfx::FarDoor: case Sfx::FarClang: case Sfx::FarKnock: case Sfx::FarPop: return { 3, 1.0f, 1.0f };
+    case Sfx::FarDoor: case Sfx::FarClang: case Sfx::FarKnock: case Sfx::FarPop:
+    case Sfx::FarBoom: return { 3, 1.0f, 1.0f };
     case Sfx::Hit:       return { 1, 1.7f, 0.40f };
     case Sfx::Kill:      return { 1, 0.55f, 0.80f };
     case Sfx::Heartbeat: return { 1, 1.0f, 0.55f };
@@ -773,6 +808,7 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::FarClang:       return makeFarClang(variant);
     case Sfx::FarKnock:       return makeFarKnock(variant);
     case Sfx::FarPop:         return makeFarPop(variant);
+    case Sfx::FarBoom:        return makeFarBoom(variant);
     }
     return {};
 }

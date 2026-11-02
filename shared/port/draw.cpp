@@ -1,5 +1,6 @@
 #include "../core/fp_strict.h"
 #include "draw.h"
+#include "../core/hash.h"
 #include "../sim/sim_math.h"
 #include "levels.h"
 #include "palette.h"
@@ -26,6 +27,39 @@ float dist(Vec3 a, Vec3 b) {
 }
 
 Rgba lit(Rgba c, float f) { return { cl8(c.r * f), cl8(c.g * f), cl8(c.b * f), c.a }; }
+
+// What an auditorium's screen shows at time t: the colour of the current shot
+// (a few seconds each, hashed from the auditorium's seed) and how bright it is,
+// with the slight flicker of a projector. One shot in nine is black, as
+// between scenes. The screen and the light it throws both use this.
+struct FilmFrame { Vec3 col; float level; };
+FilmFrame filmFrame(uint32_t seed, float t) {
+    static const Vec3 SHOTS[6] = { { 0.55f, 0.66f, 0.95f }, { 1.0f, 0.78f, 0.52f }, { 0.86f, 0.88f, 0.90f },
+                                   { 0.60f, 0.86f, 0.66f }, { 0.95f, 0.42f, 0.36f }, { 0.78f, 0.74f, 0.96f } };
+    const float SHOT = 3.4f;
+    float phase = (seed & 1023) / 1023.0f * SHOT;
+    int shot = (int)floorf((t + phase) / SHOT);
+    uint32_t h = ih(shot, (int)(seed >> 10), seed ^ 0xF117u);
+    FilmFrame f;
+    f.col = SHOTS[h % 6];
+    f.level = (h >> 3) % 9 == 0 ? 0.04f : 0.45f + ((h >> 6) & 255) / 255.0f * 0.55f;
+    f.level *= 0.96f + 0.04f * sinf(t * TAU * 24.0f) * sinf(t * 7.1f + (float)(seed & 63));
+    return f;
+}
+
+// The auditorium whose tubes are masked and whose screen lights the room: the
+// one the player stands in, else the one whose floor is nearest.
+const Auditorium *nearestAuditorium(const std::vector<Auditorium> &auds, float px, float pz) {
+    const Auditorium *best = nullptr;
+    float bestD = 1e30f;
+    for (const Auditorium &a : auds) {
+        float dx = fmaxf(fmaxf(a.rect[0] - px, px - a.rect[2]), 0.0f);
+        float dz = fmaxf(fmaxf(a.rect[1] - pz, pz - a.rect[3]), 0.0f);
+        float d = dx * dx + dz * dz;
+        if (d < bestD) { bestD = d; best = &a; }
+    }
+    return best;
+}
 
 // raylib's MatrixRotateY, MatrixRotateX and MatrixTranslate, and its
 // MatrixMultiply(a, b): a first, then b.
@@ -208,6 +242,20 @@ FrameLight frameLight(Sim &sim, float now) {
         l.lamp[3] = 0.95f * sim.blackoutCur * l.flick;
         l.lampCol = { 0.95f, 0.93f, 0.80f };
     }
+    // The multiplex: the nearest auditorium's tubes are masked, and its screen
+    // lights the front of the room in the colour of the film. The shader has one
+    // mask, so only that auditorium is dark; the others are seen only through
+    // their doors. A blackout cuts the projector too.
+    if (sim.level == MULTIPLEX) {
+        std::vector<Auditorium> auds = sim.world.auditoriums(pcx, pcz);
+        if (const Auditorium *a = nearestAuditorium(auds, sim.px, sim.pz)) {
+            for (int i = 0; i < 4; i++) l.roomMask[i] = a->rect[i];
+            FilmFrame film = filmFrame(a->seed, now);
+            l.lamp[0] = a->lamp.x; l.lamp[1] = a->lamp.y; l.lamp[2] = a->lamp.z;
+            l.lamp[3] = 2.6f * film.level * sim.blackoutCur;
+            l.lampCol = film.col;
+        }
+    }
     setLightExtrasCPU(l.roomMask, l.lamp);
     return l;
 }
@@ -222,6 +270,20 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
     for (const LandingLight &well : sim.world.landingLights(pcx, pcz)) {
         unsigned char g8 = cl8(60 + 195 * sim.blackoutCur * flick);
         put(out, cube(well.tube, well.alongX ? 0.96f : 0.035f, 0.035f, well.alongX ? 0.035f : 0.96f, { g8, g8, cl8(g8 * 0.92f), 255 }));
+    }
+    // The multiplex's screens, showing a film, and the projector's beam through
+    // the haze from the port in the back wall: translucent, writing no depth.
+    for (const Auditorium &a : sim.world.auditoriums(pcx, pcz)) {
+        FilmFrame film = filmFrame(a.seed, now);
+        float lv = film.level * sim.blackoutCur;
+        Rgba sc = { cl8(255 * film.col.x * lv), cl8(255 * film.col.y * lv), cl8(255 * film.col.z * lv), 255 };
+        Vec3 c = add(a.screen, scale(a.normal, 0.01f));
+        float w = a.halfW * 2.0f, h = a.y1 - a.y0;
+        put(out, cube(c, a.across.x != 0.0f ? w : 0.02f, h, a.across.z != 0.0f ? w : 0.02f, sc));
+        Shape beam = cylinderEx(a.booth, add(a.screen, scale(a.normal, 0.3f)), 0.12f, h * 0.48f, 16,
+                                { sc.r, sc.g, sc.b, cl8(11 * lv) });
+        beam.depthWrite = false;
+        if (lv > 0.02f) put(out, beam);
     }
     // Small objects draw unlit, so the room light at each is estimated on the
     // CPU (plus the flare or muzzle light); otherwise balloons would stay lit
