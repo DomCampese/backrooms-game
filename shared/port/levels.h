@@ -64,7 +64,7 @@ void setStoreyLightCPU(const StoreyLightCPU &s);
 // its floor tile), so a slot is generated once.
 enum SurfSlot { SURF_CARPET, SURF_BOARDS, SURF_PAPER, SURF_SLAB, SURF_SOFFIT, SURF_CONCWALL,
                 SURF_POOLFLOOR, SURF_POOLWALL, SURF_BRICK, SURF_BANQUET, SURF_PARTYCEIL,
-                SURF_PARTYWALL, SURF_COUNT };
+                SURF_PARTYWALL, SURF_CINEMACARPET, SURF_CINEMACEIL, SURF_CINEMAWALL, SURF_COUNT };
 // texdump's file names, and the Unreal import's.
 extern const char *const SURF_NAMES[SURF_COUNT];
 // What each level puts on its floors, ceilings and walls.

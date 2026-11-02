@@ -1,5 +1,6 @@
 #include "../core/fp_strict.h"
 #include "draw.h"
+#include "../core/hash.h"
 #include "../sim/sim_math.h"
 #include "levels.h"
 #include "palette.h"
@@ -26,6 +27,39 @@ float dist(Vec3 a, Vec3 b) {
 }
 
 Rgba lit(Rgba c, float f) { return { cl8(c.r * f), cl8(c.g * f), cl8(c.b * f), c.a }; }
+
+// What an auditorium's screen shows at time t: the colour of the current shot
+// (a few seconds each, hashed from the auditorium's seed) and how bright it is,
+// with the slight flicker of a projector. One shot in nine is black, as
+// between scenes. The screen and the light it throws both use this.
+struct FilmFrame { Vec3 col; float level; };
+FilmFrame filmFrame(uint32_t seed, float t) {
+    static const Vec3 SHOTS[6] = { { 0.55f, 0.66f, 0.95f }, { 1.0f, 0.78f, 0.52f }, { 0.86f, 0.88f, 0.90f },
+                                   { 0.60f, 0.86f, 0.66f }, { 0.95f, 0.42f, 0.36f }, { 0.78f, 0.74f, 0.96f } };
+    const float SHOT = 3.4f;
+    float phase = (seed & 1023) / 1023.0f * SHOT;
+    int shot = (int)floorf((t + phase) / SHOT);
+    uint32_t h = ih(shot, (int)(seed >> 10), seed ^ 0xF117u);
+    FilmFrame f;
+    f.col = SHOTS[h % 6];
+    f.level = (h >> 3) % 9 == 0 ? 0.04f : 0.45f + ((h >> 6) & 255) / 255.0f * 0.55f;
+    f.level *= 0.96f + 0.04f * sinf(t * TAU * 24.0f) * sinf(t * 7.1f + (float)(seed & 63));
+    return f;
+}
+
+// The auditorium whose tubes are masked and whose screen lights the room: the
+// one the player stands in, else the one whose floor is nearest.
+const Auditorium *nearestAuditorium(const std::vector<Auditorium> &auds, float px, float pz) {
+    const Auditorium *best = nullptr;
+    float bestD = 1e30f;
+    for (const Auditorium &a : auds) {
+        float dx = fmaxf(fmaxf(a.rect[0] - px, px - a.rect[2]), 0.0f);
+        float dz = fmaxf(fmaxf(a.rect[1] - pz, pz - a.rect[3]), 0.0f);
+        float d = dx * dx + dz * dz;
+        if (d < bestD) { bestD = d; best = &a; }
+    }
+    return best;
+}
 
 // raylib's MatrixRotateY, MatrixRotateX and MatrixTranslate, and its
 // MatrixMultiply(a, b): a first, then b.
@@ -150,7 +184,7 @@ ObjMat objMat(ObjMesh m) {
 
 float objGloss(ObjMesh m) { return m == ObjMesh::Flare ? FLARE_GLOSS : -1.0f; }
 
-FrameLight frameLight(Sim &sim, float now, float ir) {
+FrameLight frameLight(Sim &sim, float now) {
     FrameLight l{};
     l.time = now;
     l.blackout = sim.blackoutCur * (sim.whisperT > 0 ? 0.86f : 1.0f);   // lights dim during a whisper
@@ -160,7 +194,6 @@ FrameLight frameLight(Sim &sim, float now, float ir) {
         l.flash *= clampf(sim.battery / 0.15f, 0.15f, 1.0f) * (0.7f + 0.3f * lowFlick);
     }
     l.flashDir = sim.fwd;
-    l.ir = ir;
     l.flick = 0.91f + 0.09f * sinf(now * 31.0f) * sinf(now * 47.3f + 1.3f);
     // One flare point light: the flare with the most presence at the player
     // (Sim::dominantFlare), so a nearly burnt-out flare does not keep the light
@@ -209,6 +242,20 @@ FrameLight frameLight(Sim &sim, float now, float ir) {
         l.lamp[3] = 0.95f * sim.blackoutCur * l.flick;
         l.lampCol = { 0.95f, 0.93f, 0.80f };
     }
+    // The theater: the nearest auditorium's tubes are masked, and its screen
+    // lights the front of the room in the colour of the film. The shader has one
+    // mask, so only that auditorium is dark; the others are seen only through
+    // their doors. A blackout cuts the projector too.
+    if (sim.level == THEATER) {
+        std::vector<Auditorium> auds = sim.world.auditoriums(pcx, pcz);
+        if (const Auditorium *a = nearestAuditorium(auds, sim.px, sim.pz)) {
+            for (int i = 0; i < 4; i++) l.roomMask[i] = a->rect[i];
+            FilmFrame film = filmFrame(a->seed, now);
+            l.lamp[0] = a->lamp.x; l.lamp[1] = a->lamp.y; l.lamp[2] = a->lamp.z;
+            l.lamp[3] = 2.6f * film.level * sim.blackoutCur;
+            l.lampCol = film.col;
+        }
+    }
     setLightExtrasCPU(l.roomMask, l.lamp);
     return l;
 }
@@ -224,20 +271,26 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
         unsigned char g8 = cl8(60 + 195 * sim.blackoutCur * flick);
         put(out, cube(well.tube, well.alongX ? 0.96f : 0.035f, 0.035f, well.alongX ? 0.035f : 0.96f, { g8, g8, cl8(g8 * 0.92f), 255 }));
     }
+    // The theater's screens, showing a film, and the projector's beam through
+    // the haze from the port in the back wall: translucent, writing no depth.
+    for (const Auditorium &a : sim.world.auditoriums(pcx, pcz)) {
+        FilmFrame film = filmFrame(a.seed, now);
+        float lv = film.level * sim.blackoutCur;
+        Rgba sc = { cl8(255 * film.col.x * lv), cl8(255 * film.col.y * lv), cl8(255 * film.col.z * lv), 255 };
+        Vec3 c = add(a.screen, scale(a.normal, 0.01f));
+        float w = a.halfW * 2.0f, h = a.y1 - a.y0;
+        put(out, cube(c, a.across.x != 0.0f ? w : 0.02f, h, a.across.z != 0.0f ? w : 0.02f, sc));
+        Shape beam = cylinderEx(a.booth, add(a.screen, scale(a.normal, 0.3f)), 0.12f, h * 0.48f, 16,
+                                { sc.r, sc.g, sc.b, cl8(11 * lv) });
+        beam.depthWrite = false;
+        if (lv > 0.02f) put(out, beam);
+    }
     // Small objects draw unlit, so the room light at each is estimated on the
     // CPU (plus the flare or muzzle light); otherwise balloons would stay lit
     // in a blackout.
     const LevelCfg &lc = LEVELS[sim.level];
     float ambLumP = (lc.amb.x + lc.amb.y + lc.amb.z) / 3.0f;
     float edSend = (sim.ent.st == EState::Hidden) ? 0.0f : sim.entDarkCur;
-    // The camcorder's infrared lamp on what is drawn unlit, as the world shader has it.
-    auto irLum = [&](float x, float y, float z) {
-        if (light.ir <= 0.01f) return 0.0f;
-        float dx = x - sim.px, dy = y - sim.eyeY, dz = z - sim.pz;
-        float d2 = dx * dx + dy * dy + dz * dz, d = sqrtf(d2) + 1e-4f;
-        float ahead = fmaxf((dx * sim.fwd.x + dy * sim.fwd.y + dz * sim.fwd.z) / d, 0.0f);
-        return light.ir * (0.30f + 0.70f * ahead * ahead * ahead) * 6.0f / (1.0f + 0.14f * d2);
-    };
     auto propLum = [&](float x, float y, float z) {
         float lum = lightAtCPU(x, y, z, sim.blackoutCur, lc.ls, lc.wallH - LIGHT_DROP, lc.dead, lc.lightMul, ambLumP,
                                sim.ent.x, sim.ent.z, edSend, lc.vary);
@@ -245,7 +298,7 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             float fx = x - flarePos.x, fy = y - flarePos.y, fz = z - flarePos.z;
             lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fx * fx + fy * fy + fz * fz)), 0.0f, 1.0f);
         }
-        lum = clampf(lum + irLum(x, y, z), 0.0f, 1.0f);
+        lum = clampf(lum, 0.0f, 1.0f);
         return 0.18f + 0.82f * lum;   // minimum brightness
     };
     // Loose objects, placed by the same rules the sim uses (simScene); only the
@@ -424,7 +477,7 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             float fx = sp.litAt.x - flarePos.x, fz = sp.litAt.z - flarePos.z;
             lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fx * fx + fz * fz)), 0.0f, 1.0f);
         }
-        lum = clampf(lum + irLum(sp.litAt.x, sp.litAt.y, sp.litAt.z), 0.0f, 1.0f);
+        lum = clampf(lum, 0.0f, 1.0f);
         unsigned char l8 = cl8(40 + 215 * lum);
         unsigned char al = cl8(255 * clampf(expf(-dd * c.fogDen) * 1.6f, 0, 1) * sp.fade);
         spriteDraw(out, ShapeTex::Dog, sp, sp.frame0, { l8, l8, l8, cl8(al * (1.0f - sp.blend)) });
@@ -457,7 +510,7 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             float fvx = sim.ent.x - flarePos.x, fvz = sim.ent.z - flarePos.z;
             lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fvx * fvx + fvz * fvz)), 0.0f, 1.0f);
         }
-        lum = clampf(lum + irLum(sp.litAt.x, sp.litAt.y, sp.litAt.z), 0.0f, 1.0f);
+        lum = clampf(lum, 0.0f, 1.0f);
         float fogf = expf(-sim.entDist * c.fogDen);
         unsigned char lum8 = cl8(40 + 215 * lum);
         unsigned char al = cl8(255 * clampf(fogf * 1.6f, 0, 1) * sp.fade);

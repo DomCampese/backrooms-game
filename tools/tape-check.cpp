@@ -1,6 +1,6 @@
 // The camcorder's tape look three ways on one GPU: TAPE_FS as the Web build
 // compiles it; the Unreal port's BackroomsTape.ush; and M_BackroomsTape's
-// Custom node round it, which reads its pictures Unreal's way up. The HLSL is
+// Custom node round it, which reads its reel Unreal's way up. The HLSL is
 // compiled by DXC to SPIR-V and back to GLSL by spirv-cross
 // (tools/tape-check.sh does that and runs this). Each draws the same pictures
 // under the same uniforms into a target; the frames must match TAPE_FS's.
@@ -20,15 +20,13 @@ constexpr int CELL_W = 288, CELL_H = 170, COLS = 7, ROWS = 10;
 
 struct Case {
     const char *name;
-    bool reel;
     int slotA, slotB;
-    float time, mix, night, track, still, snow;
+    float time, mix, track, still, snow;
 };
 
 // A slot's rectangle on the reel as uv, v up the picture: Camcorder::cellUV
 // for a reel whose rows run up from the bottom of the texture.
-Vector4 cell(bool reel, int slot) {
-    if (!reel) return { 0, 0, 1, 1 };
+Vector4 cell(int slot) {
     const float rw = CELL_W * COLS, rh = CELL_H * ROWS;
     const float x = (float)(slot % COLS * CELL_W), y = (float)(slot / COLS * CELL_H);
     return { x / rw, y / rh, (x + CELL_W) / rw, (y + CELL_H) / rh };
@@ -41,9 +39,8 @@ struct Tape {
     bool material;
     std::vector<int> locs;
     Tape(Shader s, const std::string &prefix, bool isMaterial) : sh(s), material(isMaterial) {
-        const char *tape[] = { "uTime", "uRes", "uCellA", "uCellB", "uMix", "uNight", "uTrack", "uStill", "uSnow" };
-        const char *mat[] = { "View.ViewSizeAndInvSize", "Post", "Clear", "TapeA", "TapeB", "Tape", "TapeFrom",
-                              "Exposure" };
+        const char *tape[] = { "uTime", "uRes", "uCellA", "uCellB", "uMix", "uTrack", "uStill", "uSnow" };
+        const char *mat[] = { "View.ViewSizeAndInvSize", "Post", "TapeA", "TapeB", "Tape", "TapeFrom" };
         if (material) for (const char *n : mat) locs.push_back(GetShaderLocation(sh, (prefix + n).c_str()));
         else for (const char *n : tape) locs.push_back(GetShaderLocation(sh, (prefix + n).c_str()));
     }
@@ -52,22 +49,19 @@ struct Tape {
         return true;
     }
     void draw(const Case &c, Texture2D tex, RenderTexture2D target) const {
-        const Vector4 a = cell(c.reel, c.slotA), b = cell(c.reel, c.slotB);
+        const Vector4 a = cell(c.slotA), b = cell(c.slotB);
         if (material) {
             const Vector4 view = { (float)W, (float)H, 1.0f / W, 1.0f / H }, post = { c.time, 0, 0, 0 },
-                          clear = { 0, 0, 0, 0 }, look = { c.mix, c.night, c.track, c.still },
-                          from = { c.snow, c.reel ? 1.0f : 0.0f, 0, 0 };
-            const float exposure = 1.0f;
-            const Vector4 *v[] = { &view, &post, &clear, &a, &b, &look, &from };
-            for (int i = 0; i < 7; i++) SetShaderValue(sh, locs[i], v[i], SHADER_UNIFORM_VEC4);
-            SetShaderValue(sh, locs[7], &exposure, SHADER_UNIFORM_FLOAT);
+                          look = { c.mix, 0, c.track, c.still }, from = { c.snow, 1.0f, 0, 0 };
+            const Vector4 *v[] = { &view, &post, &a, &b, &look, &from };
+            for (int i = 0; i < 6; i++) SetShaderValue(sh, locs[i], v[i], SHADER_UNIFORM_VEC4);
         } else {
             const Vector2 r = { (float)W, (float)H };
-            const void *v[] = { &c.time, &r, &a, &b, &c.mix, &c.night, &c.track, &c.still, &c.snow };
+            const void *v[] = { &c.time, &r, &a, &b, &c.mix, &c.track, &c.still, &c.snow };
             const int type[] = { SHADER_UNIFORM_FLOAT, SHADER_UNIFORM_VEC2, SHADER_UNIFORM_VEC4, SHADER_UNIFORM_VEC4,
                                  SHADER_UNIFORM_FLOAT, SHADER_UNIFORM_FLOAT, SHADER_UNIFORM_FLOAT,
-                                 SHADER_UNIFORM_FLOAT, SHADER_UNIFORM_FLOAT };
-            for (int i = 0; i < 9; i++) SetShaderValue(sh, locs[i], v[i], type[i]);
+                                 SHADER_UNIFORM_FLOAT };
+            for (int i = 0; i < 8; i++) SetShaderValue(sh, locs[i], v[i], type[i]);
         }
         BeginTextureMode(target);
         ClearBackground(BLANK);
@@ -103,51 +97,41 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // The scene as raylib's render target holds it (point sampled), and a
-    // reel cut from the same picture (bilinear, as CamcorderReel::fit sets it).
+    // A reel cut from the picture (bilinear, as CamcorderReel::fit sets it),
+    // and the same reel the material's way up: Unreal's rows run down from v = 0.
     Image picture = LoadImage(argv[3]);
     if (!picture.data) {
         fprintf(stderr, "cannot read %s\n", argv[3]);
         return 2;
     }
     ImageFormat(&picture, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
-    Image sceneImg = ImageCopy(picture);
-    ImageResize(&sceneImg, W, H);
-    Texture2D scene = LoadTextureFromImage(sceneImg);
-    SetTextureWrap(scene, TEXTURE_WRAP_CLAMP);
-    Image reelImg = ImageCopy(picture);
-    ImageResize(&reelImg, CELL_W * COLS, CELL_H * ROWS);
-    Texture2D reel = LoadTextureFromImage(reelImg);
+    ImageResize(&picture, CELL_W * COLS, CELL_H * ROWS);
+    Texture2D reel = LoadTextureFromImage(picture);
     SetTextureFilter(reel, TEXTURE_FILTER_BILINEAR);
-    // The same two the material's way up: Unreal's rows run down from v = 0.
-    ImageFlipVertical(&sceneImg);
-    ImageFlipVertical(&reelImg);
-    Texture2D sceneUp = LoadTextureFromImage(sceneImg), reelUp = LoadTextureFromImage(reelImg);
-    SetTextureWrap(sceneUp, TEXTURE_WRAP_CLAMP);
+    ImageFlipVertical(&picture);
+    Texture2D reelUp = LoadTextureFromImage(picture);
     SetTextureFilter(reelUp, TEXTURE_FILTER_BILINEAR);
     RenderTexture2D outWeb = LoadRenderTexture(W, H), outPort = LoadRenderTexture(W, H);
 
-    // Every term: night shot, interference light and heavy (the tearing band
-    // needs track over 0.15), a paused frame, snow, the playback's cross-fade,
-    // and clocks from a fresh start to an hour in, where sin's argument is large.
+    // Every term: interference light and heavy (the tearing band needs track
+    // over 0.15), a paused frame, snow, the playback's cross-fade, and clocks
+    // from a fresh start to an hour in, where sin's argument is large.
     std::vector<Case> cases = {
-        { "live", false, 0, 0, 1.25f, 0, 0, 0, 0, 0 },
-        { "live night", false, 0, 0, 7.5f, 0, 1, 0, 0, 0 },
-        { "live track 0.4", false, 0, 0, 12.0f, 0, 0, 0.4f, 0, 0 },
-        { "live torn", false, 0, 0, 33.3f, 0, 0, 1.0f, 0, 0 },
-        { "live night torn", false, 0, 0, 61.0f, 0, 1, 0.8f, 0, 0 },
-        { "reel mix", true, 23, 24, 140.2f, 0.37f, 0, 0.1f, 0, 0 },
-        { "reel night", true, 63, 0, 300.0f, 0.9f, 1, 0.2f, 0, 0 },
-        { "reel still", true, 41, 41, 512.75f, 0, 0, 0.3f, 1, 0 },
-        { "reel snow", true, 5, 6, 1000.0f, 0.5f, 0, 0.6f, 0, 0.6f },
-        { "reel all snow", true, 5, 6, 3600.5f, 0.5f, 0, 1.0f, 1, 1.0f },
+        { "clean", 0, 0, 1.25f, 0, 0, 0, 0 },
+        { "track 0.4", 3, 3, 12.0f, 0, 0.4f, 0, 0 },
+        { "torn", 9, 9, 33.3f, 0, 1.0f, 0, 0 },
+        { "mix", 23, 24, 140.2f, 0.37f, 0.1f, 0, 0 },
+        { "late", 63, 0, 300.0f, 0.9f, 0.2f, 0, 0 },
+        { "still", 41, 41, 512.75f, 0, 0.3f, 1, 0 },
+        { "snow", 5, 6, 1000.0f, 0.5f, 0.6f, 0, 0.6f },
+        { "all snow", 5, 6, 3600.5f, 0.5f, 1.0f, 1, 1.0f },
     };
     SetRandomSeed(1337);
     for (int i = 0; i < 40; i++) {   // and random states
-        Case c = { "random", (i & 1) != 0, GetRandomValue(0, 69), GetRandomValue(0, 69),
-                   GetRandomValue(0, 400000) / 100.0f, GetRandomValue(0, 100) / 100.0f,
-                   GetRandomValue(0, 1) ? GetRandomValue(0, 100) / 100.0f : 0.0f, GetRandomValue(0, 100) / 100.0f,
-                   GetRandomValue(0, 3) == 0 ? 1.0f : 0.0f, GetRandomValue(0, 4) == 0 ? GetRandomValue(0, 100) / 100.0f : 0.0f };
+        Case c = { "random", GetRandomValue(0, 69), GetRandomValue(0, 69), GetRandomValue(0, 400000) / 100.0f,
+                   GetRandomValue(0, 100) / 100.0f, GetRandomValue(0, 100) / 100.0f,
+                   GetRandomValue(0, 3) == 0 ? 1.0f : 0.0f,
+                   GetRandomValue(0, 4) == 0 ? GetRandomValue(0, 100) / 100.0f : 0.0f };
         cases.push_back(c);
     }
 
@@ -157,8 +141,8 @@ int main(int argc, char **argv) {
         long long total = 0, differ = 0;
         int worst = 0, failed = 0;
         for (const Case &c : cases) {
-            web.draw(c, c.reel ? reel : scene, outWeb);
-            port->draw(c, port->material ? (c.reel ? reelUp : sceneUp) : (c.reel ? reel : scene), outPort);
+            web.draw(c, reel, outWeb);
+            port->draw(c, port->material ? reelUp : reel, outPort);
             Image a = LoadImageFromTexture(outWeb.texture), b = LoadImageFromTexture(outPort.texture);
             const unsigned char *pa = (const unsigned char *)a.data, *pb = (const unsigned char *)b.data;
             long long n = (long long)W * H, px = 0;

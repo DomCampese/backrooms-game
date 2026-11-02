@@ -26,7 +26,7 @@ bool Sim::spawnMannequin(double now) {
             mannequin = {};
             mannequin.active = true; mannequin.pos = pos; mannequin.storey = world.storey;
             mannequin.grace = 3; mannequin.yaw = portableAtan2(pz-pos.z,px-pos.x);
-            deckNoteT = 2.6f; deckNote = "THE MANNEQUIN. keep it in the camcorder. flares hold it back.";
+            deckNoteT = 2.6f; deckNote = "THE MANNEQUIN. keep it in view. flares hold it back.";
             return true;
         }
         if (c.depth >= 12) continue;

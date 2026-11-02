@@ -4,10 +4,10 @@
 #include "sim.h"
 #include <cmath>
 
-// Full to empty in about 9 / 7.5 / 6.5 / 5 / 4 minutes, standing in the light
+// Full to empty in about 9 / 7.5 / 6.5 / 5 / 4 / 5.3 minutes, standing in the light
 // with nothing hunting.
 float Sim::sanityDrain(int lv) {
-    static const float R[NLEVELS] = { 1.0f / 540, 1.0f / 450, 1.0f / 390, 1.0f / 300, 1.0f / 240 };
+    static const float R[NLEVELS] = { 1.0f / 540, 1.0f / 450, 1.0f / 390, 1.0f / 300, 1.0f / 240, 1.0f / 320 };
     return R[(lv < 0 || lv >= NLEVELS) ? 0 : lv];
 }
 
@@ -279,7 +279,7 @@ void Sim::updateDistant(double now) {
     // above happen either way, so the sequence does not depend on them.
     if (inMenu || deathT > 0 || inManila) return;
     const Sfx sfx = kind == Distant::Door ? Sfx::FarDoor : kind == Distant::Clang ? Sfx::FarClang
-                  : kind == Distant::Knock ? Sfx::FarKnock : Sfx::FarPop;
+                  : kind == Distant::Knock ? Sfx::FarKnock : kind == Distant::Pop ? Sfx::FarPop : Sfx::FarBoom;
     play(sfx, variant)
         .atPan(clampf(portableCos(bearing) * r2x + portableSin(bearing) * r2z, -1.0f, 1.0f))
         .atPitch(rate)

@@ -139,8 +139,8 @@ bool UBackroomsRender::Load()
 	OccBytes.SetNumZeroed(OCC_CELLS * OCC_CELLS * 4 * 2);
 
 	UTexture2D* Neutral = Texture(TEXT("neutral"));
-	// The camcorder's tape draws with it; without it the viewfinder shows the
-	// post pass, and the world still draws. A project the editor opened before
+	// The death card's tape plays with it; without it the card shows the post
+	// pass, and the world still draws. A project the editor opened before
 	// the tape existed has every other material and not this one, and the game
 	// (-game) cannot build it: insisting on it left the whole world black.
 	if (TapeBase)
@@ -149,7 +149,7 @@ bool UBackroomsRender::Load()
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Backrooms: %s has no M_BackroomsTape yet, so the camcorder shows the plain scene. Run make unreal-open and let the editor build it"),
+		UE_LOG(LogTemp, Warning, TEXT("Backrooms: %s has no M_BackroomsTape yet, so the death card shows no tape. Run make unreal-open and let the editor build it"),
 			WorldDir);
 	}
 	ChunkMaterials.SetNum(MatCount * 2);
@@ -338,7 +338,7 @@ void UBackroomsRender::Frame(UWorld* Where, const FrameLight& L, const Vec3& Vie
 	P->SetVectorParameterValue(TEXT("FogCol"), V(C.fogCol));
 	P->SetVectorParameterValue(TEXT("LightCol"), V(C.lightCol));
 	P->SetVectorParameterValue(TEXT("LampCol"), V(L.lampCol));
-	P->SetVectorParameterValue(TEXT("Air"), FLinearColor(C.fogDen, L.ir, SURF_MACRO[Level], CEIL_BOARD[Level]));
+	P->SetVectorParameterValue(TEXT("Air"), FLinearColor(C.fogDen, 0.0f, SURF_MACRO[Level], CEIL_BOARD[Level]));
 	P->SetVectorParameterValue(TEXT("Tubes"), FLinearColor(C.ls, C.wallH - LIGHT_DROP, C.dead, C.lightMul));
 	P->SetVectorParameterValue(TEXT("Surface"), FLinearColor(C.gloss, C.vary, C.faulty, C.wet));
 	P->SetVectorParameterValue(TEXT("Grid"),
@@ -458,8 +458,8 @@ void UBackroomsRender::ShowPost(UWorld* Where, const CamPicture* Tape, UTexture*
 		{
 			P->SetVectorParameterValue(TEXT("TapeA"), FLinearColor(Tape->a.u0, Tape->a.v0, Tape->a.u1, Tape->a.v1));
 			P->SetVectorParameterValue(TEXT("TapeB"), FLinearColor(Tape->b.u0, Tape->b.v0, Tape->b.u1, Tape->b.v1));
-			P->SetVectorParameterValue(TEXT("Tape"), FLinearColor(Tape->mix, Tape->night, Tape->track, Tape->still));
-			P->SetVectorParameterValue(TEXT("TapeFrom"), FLinearColor(Tape->snow, Tape->fromReel ? 1.0f : 0.0f, 0.0f, 0.0f));
+			P->SetVectorParameterValue(TEXT("Tape"), FLinearColor(Tape->mix, 0.0f, Tape->track, Tape->still));
+			P->SetVectorParameterValue(TEXT("TapeFrom"), FLinearColor(Tape->snow, 1.0f, 0.0f, 0.0f));
 		}
 		if (Reel)
 		{

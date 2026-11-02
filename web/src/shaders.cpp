@@ -62,7 +62,6 @@ uniform vec3 uLampCol;           // ...and its colour: filament warm, or fluores
 uniform float uMacro;            // world-space tone wander on tiled surfaces (SURF_MACRO)
 uniform float uBoard;            // suspended-ceiling board pitch, metres; 0 = none (CEIL_BOARD)
 uniform float uObjRefl;          // 1 while the held revolver draws: reflect the room off metal
-uniform float uIR;               // the camcorder's infrared lamp, 0..1 (Camcorder::irLamp)
 uniform sampler2D texture1; // packed material slopes / gloss mask
 float gGloss;
 uniform sampler2D texture2;      // occupancy grid (material normal-map slot)
@@ -462,15 +461,6 @@ vec3 roomLight(vec3 P, vec3 N){
         light += fcol * ndl;
         if (gGloss > 0.10) light += fcol * (sheen(N, V, Lf, shin) * gGloss * 0.55);
     }
-    // The camcorder's infrared lamp: a wide, short throw from the lens. It is
-    // at the eye, so whatever the eye can see it reaches, and nothing is marched.
-    if (uIR > 0.01){
-        vec3 iv = P - uViewPos;
-        float id2 = dot(iv, iv);
-        vec3 inn = iv * inversesqrt(max(id2, 1e-6));
-        float spread = 0.30 + 0.70*pow(max(dot(inn, uFlashDir), 0.0), 3.0);
-        light += vec3(uIR * spread * 6.0/(1.0 + 0.14*id2)) * clamp(dot(N, -inn)*0.7 + 0.3, 0.0, 1.0);
-    }
     // The Manila Room's chandelier: six warm bulbs, near enough one point.
     // Walled in by lightVis like the torch and the flare, so its warmth stays
     // in the room and spills only out of the four doorways.
@@ -835,10 +825,8 @@ void main(){
 }
 )GLSL";
 
-// The camcorder's picture, live in the viewfinder or played back off the reel.
-// Coordinates come from the fragment, not the quad, so one shader serves the
-// scene target (uCellA = the whole texture) and a frame on the reel; the
-// next frame is cross-faded in by uMix, which is how 15 frames a second play
+// The camcorder's tape played back off the reel on the death card.
+// Coordinates come from the fragment, not the quad; the next frame is cross-faded in by uMix, which is how 15 frames a second play
 // back without stepping.
 const char *TAPE_FS = GLSL_VERSION_HEADER R"GLSL(
 in vec2 fragTexCoord; in vec4 fragColor;
@@ -847,7 +835,6 @@ uniform float uTime;
 uniform vec2 uRes;               // framebuffer, px
 uniform vec4 uCellA, uCellB;     // frames as uv: min.xy, max.zw, v up the picture
 uniform float uMix;
-uniform float uNight;            // night shot: infrared, gained up, green
 uniform float uTrack;            // interference: 0 clean .. 1 torn
 uniform float uStill;            // a paused frame, which the heads cannot hold still
 uniform float uSnow;             // no picture: only noise
@@ -888,15 +875,8 @@ void main(){
     vec3 c = TO_RGB * vec3(Y, iq);
     // A tape's blacks are never black, and its whites are never quite white.
     c = 0.035 + c*0.94;
-    if (uNight > 0.0){
-        // Infrared sees a surface's brightness more than its colour, so dark
-        // red brick comes up nearly as well as pale wallpaper.
-        float l = mix(dot(c, vec3(0.299, 0.587, 0.114)), max(c.r, max(c.g, c.b)), 0.7);
-        l = 1.0 - exp(-l*3.0);                   // the gain the camera rides in the dark
-        c = mix(c, vec3(0.30, 1.0, 0.40)*l + vec3(0.015, 0.045, 0.02), uNight);
-    }
     float n = hh(floor(gl_FragCoord.xy/2.0) + fract(t*vec2(13.17, 7.31))*311.0);
-    c += (n - 0.5) * (0.045 + 0.035*uNight + 0.16*uTrack + 0.10*tear);
+    c += (n - 0.5) * (0.045 + 0.16*uTrack + 0.10*tear);
     // Dropouts: a scrap of a line where the oxide is gone, flaring white.
     float field = floor(t*24.0);
     float drop = step(0.9982 - 0.010*uTrack, hh(vec2(line, field + 7.0)));
@@ -905,7 +885,7 @@ void main(){
     c = mix(c, vec3(0.15 + 0.75*n), uSnow);
     c *= 0.93 + 0.07*sin(down*uRes.y*3.14159*0.5);   // scanlines, one every other pixel row
     vec2 d = q - 0.5;
-    c *= 1.0 - smoothstep(0.30, 0.85, length(d*vec2(1.0, 0.8))) * (0.45 + 0.30*uNight);
+    c *= 1.0 - smoothstep(0.30, 0.85, length(d*vec2(1.0, 0.8))) * 0.45;
     finalColor = vec4(clamp(c, 0.0, 1.0), 1.0);
 }
 )GLSL";

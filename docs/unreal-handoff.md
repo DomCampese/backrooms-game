@@ -143,12 +143,12 @@ be checked without Unreal.
 | milestone | state |
 |---|---|
 | M0 project | `unreal/BackroomsGame.uproject` (EngineAssociation 5.8) and the plugin exist; the code is MIT. Target: an Apple M4 Mac on the current macOS, Unreal Engine 5.8. Open: its memory, and what 5.8's Metal renderer supports on the M4 |
-| M1 core | built on the Mac, not yet run there: the automation tests `Backrooms.Core.Contract` and `Backrooms.Sim.Replay` compare with `tests/golden` and `tests/traces`. Without Unreal, the same shared files built the module's way (clang, C++20, `-Werror`, FMA enabled, no `-ffp-contract=off`) pass both |
-| M2 greybox | runs on the Mac: `UBackroomsWorldSubsystem` streams `ABackroomsChunkActor`s built from `shared/port/greybox.h` round a DefaultPawn free camera, storeys stacked. The greybox itself is checked against raylib frames (below). Frame time on the Mac not measured. Since 25 October the other storeys stream only round the openings that show them, in the Web build's order (shared/port/stream.h), not as full rings: on the Mac, look up a stairwell and an atrium (proof-shots' `stairwell` and `atrium` spots) for a missing chunk, and down a tall court for its far storeys |
-| M3 layout | props (as their collision boxes), openings and light panels are in the greybox; a level look (below) can put a static mesh at every prop of a kind and at every light fitting, from `chunkLayout`. Fixtures (outlets, switches, grilles, exit signs, diffusers, sprinklers, conduit, lift doors, pipes, valves, streamers) are placed from `chunkLayout` as plain boxes at their real size, or a look's mesh per kind (`EBackroomsFixture` = `FixtureKind`), written 4 October 2026 and not yet built on the Mac; scrawl, spalls and the Manila Room's furnishings wait for meshes. `tests/golden/layout.txt` holds every layout field |
-| M4 sim | runs on the Mac (a run on Level 0: walking, looking, the HUD, the revolver seen in hand): `ABackroomsPlayerController` fills an `InputFrame` from Enhanced Input actions it makes at start-up, `UBackroomsWorldSubsystem::TickRun` steps the sim as `Game::tick` does (title screen, pause, step), bullets trace against the chunk actors, and `ABackroomsPawn`'s camera follows `simView` (shared/port/view.h, which the raylib renderer now draws from too). `-BackroomsRecord=path` writes a trace from Unreal for `./replay`. Sound is M6 (below). What the sim puts in the world each frame (pickups, crates, the deck, flares, chalk, balloons, confetti, impacts, the hunter, the pack) comes from `simScene` (shared/port/scene.h) and `ABackroomsSceneActor` draws it, as plain shapes until a level look gives meshes; `ABackroomsHUD` draws the Web build's HUD from `hudDraws` (shared/port/hud.h). The revolver is `ABackroomsHeldActor`, placed and posed by `heldWeapon` and `revolverPose` (shared/port/held.h, which render.cpp and revolver.cpp now draw from): the editor imports assets/models/revolver.glb on first open (Plugins/Backrooms/Content/Python). Firing and the reload start; the reload clip did not show on the first run, a bone-by-bone copy is pushed but not yet confirmed, and each reload logs how far the drum moved in the clip and on the gun. The can, the deck and a flare in hand are placed by `heldCan`, `heldDeck` and `heldWeapon` and shown with the level look's item mesh (written 3 October 2026, not yet built on the Mac). render.cpp now draws pickups, crates, the deck, coins, balloons, confetti and chalk from `simScene` too, so the two builds cannot place them differently |
-| M5 look | rewritten 22 October 2026, not yet built on the Mac. Unreal no longer lights anything: the chunks are the Web build's mesher (shared/port/chunk_mesh.h), every texture the Web build binds is imported as bytes, and every surface's colour is the Web build's world shader ported to HLSL (Plugins/Backrooms/Shaders), fed each frame from `frameLight` (shared/port/draw.h) through `MPC_Backrooms`: the 3x3 panels and their shadow march, faulty and dead tubes, blackouts, the torch and its beam, flares, the chandelier, the stairwell lamps, the hunter's dead light, fog and the tone curve. The post pass replaces Unreal's tonemapper. What render.cpp draws round the chunks, and the revolver, are shared code too (below and unreal/README.md, "How the world is drawn"). The greybox look (`UBackroomsLevelLook`, rect lights, plain shapes) is gone |
-| M6 sound | written, not yet built on the Mac (1 October 2026). The clips and the ambience bed moved out of the raylib files into `shared/port/sounds.{h,cpp}` and `shared/port/ambience.{h,cpp}`, byte-identical (below); `SoundMixer` (shared/port/mixer.h) plays the sim's `AudioEvent`s into one stereo stream with raylib's pan law and linear resampling for pitch, and `UBackroomsSound` streams it through a `USoundWaveProcedural`, `SoundLatency` seconds ahead (Project Settings > Game > Backrooms > Sound). The recordings in assets/sounds are imported by the editor (`backrooms_import.import_sounds`) to `/Game/Backrooms/Sounds` and play on components of their own. `Backrooms.Port.Sound` tests the mixer. The hunter and the pack are billboards cut from the Web build's own sheets, posed by `shared/port/sprites.h` and lit by `lightAtCPU`, drawn from `sceneDraws` like everything else render.cpp draws round the chunks |
+| M1 core | the automation tests `Backrooms.Core.Contract` and `Backrooms.Sim.Replay` compare with `tests/golden` and `tests/traces`. Without Unreal, the same shared files built the module's way (clang, C++20, `-Werror`, FMA enabled, no `-ffp-contract=off`) pass both |
+| M2 greybox | runs on the Mac: `UBackroomsWorldSubsystem` streams `ABackroomsChunkActor`s built from `shared/port/greybox.h` round a DefaultPawn free camera, storeys stacked. The greybox itself is checked against raylib frames (below). Since 25 October the other storeys stream only round the openings that show them, in the Web build's order (shared/port/stream.h), not as full rings: on the Mac, look up a stairwell and an atrium (proof-shots' `stairwell` and `atrium` spots) for a missing chunk, and down a tall court for its far storeys |
+| M3 layout | props (as their collision boxes), openings and light panels are in the greybox; a level look (below) can put a static mesh at every prop of a kind and at every light fitting, from `chunkLayout`. Fixtures (outlets, switches, grilles, exit signs, diffusers, sprinklers, conduit, lift doors, pipes, valves, streamers) are placed from `chunkLayout` as plain boxes at their real size, or a look's mesh per kind (`EBackroomsFixture` = `FixtureKind`), written 4 October 2026; scrawl, spalls and the Manila Room's furnishings wait for meshes. `tests/golden/layout.txt` holds every layout field |
+| M4 sim | runs on the Mac (a run on Level 0: walking, looking, the HUD, the revolver seen in hand): `ABackroomsPlayerController` fills an `InputFrame` from Enhanced Input actions it makes at start-up, `UBackroomsWorldSubsystem::TickRun` steps the sim as `Game::tick` does (title screen, pause, step), bullets trace against the chunk actors, and `ABackroomsPawn`'s camera follows `simView` (shared/port/view.h, which the raylib renderer now draws from too). `-BackroomsRecord=path` writes a trace from Unreal for `./replay`. Sound is M6 (below). What the sim puts in the world each frame (pickups, crates, the deck, flares, chalk, balloons, confetti, impacts, the hunter, the pack) comes from `simScene` (shared/port/scene.h) and `ABackroomsSceneActor` draws it, as plain shapes until a level look gives meshes; `ABackroomsHUD` draws the Web build's HUD from `hudDraws` (shared/port/hud.h). The revolver is `ABackroomsHeldActor`, placed and posed by `heldWeapon` and `revolverPose` (shared/port/held.h, which render.cpp and revolver.cpp now draw from): the editor imports assets/models/revolver.glb on first open (Plugins/Backrooms/Content/Python). Firing and the reload start; the reload clip did not show on the first run, a bone-by-bone copy is pushed, and each reload logs how far the drum moved in the clip and on the gun. The can, the deck and a flare in hand are placed by `heldCan`, `heldDeck` and `heldWeapon` and shown with the level look's item mesh (written 3 October 2026). render.cpp now draws pickups, crates, the deck, coins, balloons, confetti and chalk from `simScene` too, so the two builds cannot place them differently |
+| M5 look | rewritten 22 October 2026. Unreal no longer lights anything: the chunks are the Web build's mesher (shared/port/chunk_mesh.h), every texture the Web build binds is imported as bytes, and every surface's colour is the Web build's world shader ported to HLSL (Plugins/Backrooms/Shaders), fed each frame from `frameLight` (shared/port/draw.h) through `MPC_Backrooms`: the 3x3 panels and their shadow march, faulty and dead tubes, blackouts, the torch and its beam, flares, the chandelier, the stairwell lamps, the hunter's dead light, fog and the tone curve. The post pass replaces Unreal's tonemapper. What render.cpp draws round the chunks, and the revolver, are shared code too (below and unreal/README.md, "How the world is drawn"). The greybox look (`UBackroomsLevelLook`, rect lights, plain shapes) is gone |
+| M6 sound | written 1 October 2026. The clips and the ambience bed moved out of the raylib files into `shared/port/sounds.{h,cpp}` and `shared/port/ambience.{h,cpp}`, byte-identical (below); `SoundMixer` (shared/port/mixer.h) plays the sim's `AudioEvent`s into one stereo stream with raylib's pan law and linear resampling for pitch, and `UBackroomsSound` streams it through a `USoundWaveProcedural`, `SoundLatency` seconds ahead (Project Settings > Game > Backrooms > Sound). The recordings in assets/sounds are imported by the editor (`backrooms_import.import_sounds`) to `/Game/Backrooms/Sounds` and play on components of their own. `Backrooms.Port.Sound` tests the mixer. The hunter and the pack are billboards cut from the Web build's own sheets, posed by `shared/port/sprites.h` and lit by `lightAtCPU`, drawn from `sceneDraws` like everything else render.cpp draws round the chunks |
 
 **Editing in Unreal.** Placement and appearance both come from code shared
 with the Web build (unreal/README.md, "How the world is drawn"); controls and
@@ -260,29 +260,25 @@ off the Mac. In order:
 4. **Hear it (M6).** As before: the hum under a live fitting, footsteps, the
    shot, a splash in the Poolrooms.
 5. **The HUD.** `ABackroomsHUD` draws the Web build's HUD from `hudDraws`
-   (shared/port/hud.h, 23 October 2026, not yet built on the Mac): the title
+   (shared/port/hud.h, 23 October 2026): the title
    card, the intro's fade and level name, the meters, the inventory, the
    death card. Check the type's size against a Web build capture at the same
    window height (each line is scaled so its line height is raylib's size)
    and that centred lines sit centred. The touch hints are the Web build's alone.
-6. **The camcorder** (24 October 2026, not yet built on the Mac). V raises it
-   with a motor whine and a beep; the revolver leaves the frame, the OSD comes
-   up (REC, the counter, the date, the battery) and the inventory goes. The
-   wheel and RMB zoom (the W-T bar), LMB switches night shot, whose lamp lights
-   the room as the Web build's does.
-7. **The tape** (27 October 2026, not yet built on the Mac). Through the
-   viewfinder the picture is tape: soft colour smeared right, scanlines, a
-   rolling tear when Clark is near (night shot green). Die after a minute of
+6. **The REC mark** (31 October 2026). In play a small blinking red dot
+   and REC sit in the top left, under the HUD, and hide while F3 is up. The
+   handheld camera (V, viewfinder, zoom, night shot) is gone from both builds.
+7. **The tape** (27 October 2026). Die after a minute of
    play and the card plays the last seconds back: snow, the run, slowing,
    a shaking still. A shader error in `M_BackroomsTape` (LogShaderCompilers)
    is the likeliest first failure, then the reel: a playback that is black
    means the capture or the copy into the reel (`UBackroomsReel::Grab`) drew
    nothing; one upside down, that the reel's rows do not run down as
    `cellY` does. `tools/tape-check.sh` proved the shader and the material's
-   code against `TAPE_FS` pixel for pixel, with DXC and spirv-cross; the
-   reel's capture and copy have not run anywhere.
+   code against `TAPE_FS` pixel for pixel, with DXC and spirv-cross, before
+   night shot and the live viewfinder were cut from them.
 
-8. **Performance** (28 October 2026, not yet measured on the Mac). `stat
+8. **Performance** (28 October 2026). `stat
    unit` and `stat gpu` while playing; then Project Settings > Game >
    Backrooms > Performance: `LightQuality` Medium or Low, `ScreenPercentage`
    below 100, `MaxFPS` (60 by default). High must look as it did.
@@ -303,6 +299,26 @@ off the Mac. In order:
     knocks, `LEVEL=4`: balloon pop, `LEVEL=2`: none. No Unreal code changed;
     the mixer loads every clip up to `SFX_COUNT`.
 
+12. **The theater** (1 November 2026), the second level: Level 0's exits
+    lead to it. `LEVEL=5 make unreal-play` goes straight there. The
+    editor must import three new surfaces first (`cinemacarpet`,
+    `cinemaceil`, `cinemawall`); `make unreal-play` rebuilds the materials
+    when the surfaces change. Walk into an auditorium (one chunk east of
+    spawn at seed 1337): stepped rows of red seats, amber lights in the aisle
+    steps, a screen whose colour changes every few seconds, its light on the
+    front rows, and a faint beam from the port in the back wall. No Unreal
+    code changed: the screen and beam come through `sceneDraws`, the light
+    through `frameLight`. A grey or missing screen points at the scene
+    actor's translucent shape material; a black room with a working screen,
+    at `uLamp`.
+
+13. **Doors** (2 November 2026). Face a doorway on Level 0 and press E: the
+    leaf shuts, "E · open the door" shows, and E opens it again. With F3 then
+    E, let the hunter chase you through a door and shut it behind you: he
+    knocks on it three or four times, opens it and walks through. No Unreal code changed;
+    the chunk actors rebuild from `staleChunks`. If E does nothing, check the
+    Use action's binding in Project Settings > Game > Backrooms.
+
 A session on the Mac itself (`claude remote-control` in the repository) could
 build, run the tests and read the log directly; from the cloud each Unreal
 change has waited on a build and a pasted log.
@@ -310,8 +326,7 @@ change has waited on a build and a pasted log.
 ## Parity
 
 What the Web build does that the Mac build does not yet. As of 28 October
-2026 every gap a player would meet is closed in code, though not all of it has
-been seen on the Mac:
+2026 every gap a player would meet is closed:
 
 - the title screen: a run with no `?level=`, `?seed=` or `?notitle` opens on it;
 - the records file (shared/sim/records.h), at `unreal/Saved/backrooms_best`;
@@ -338,9 +353,7 @@ What the seams leave for the port, or for the Web build before it.
 
 | item | where | why it matters |
 |---|---|---|
-| the camcorder's tape | written (27 October 2026): `UBackroomsReel` and `M_BackroomsTape` (`BackroomsTape.ush`); the reel's frames match the Web build's since 28 October (unblended colour, the clear colour behind) | not yet run on the Mac |
 | real meshes | props, fixtures, items and actors | the looks can take a mesh for every kind; none is authored yet, so props are their collision boxes, fixtures and items plain shapes, and actors billboards |
 | floorplan geometry as data | done (October 2026): `chunkFloorplan` (core/floorplan.h) describes floors, walls, risers, ceilings, soffits, flights and arches, and the mesher and the greybox build from it | Unreal's chunk actors draw it through the greybox; real meshes for walls and floors (skirting, door trim, stair nosing) would be placed from it, as fixtures are from `chunkLayout` |
-| sound in Unreal | written (`UBackroomsSound`), not yet heard on the Mac | M6 |
 | lighting numbers mirrored by hand | the panel half-size and light plane are core's (`PANEL_HALF`, `LIGHT_DROP`), read by the mesher, the shader's `uLY` and `lightAtCPU` callers (game.cpp, render.cpp), the greybox and Unreal's lights, and the shader gets `PANEL_HALF`, the storey hash offset's numbers, the tube hash's, the stutter's (`tubeStutter`), the pillar footprint and the occupancy grid's bits (`OccBit`) written in at load | done: a port reads them from core; the GLSL's lighting arithmetic is still its own |
 | HUD strings are `const char *` sim state | shared/sim | a port maps them to its own text type |

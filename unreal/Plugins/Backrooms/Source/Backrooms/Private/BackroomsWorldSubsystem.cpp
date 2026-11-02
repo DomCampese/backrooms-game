@@ -172,7 +172,7 @@ FTransform UBackroomsWorldSubsystem::StartFreeCamera(int32 Level, uint32 Seed, u
 	return FTransform(BackroomsCoords::ToUnrealRotator(OpeningYaw, 0.0f), BackroomsCoords::ToUnreal(Eye));
 }
 
-void UBackroomsWorldSubsystem::TickRun(const InputFrame& In, bool bPauseToggled, bool bCamToggle, float Dt)
+void UBackroomsWorldSubsystem::TickRun(const InputFrame& In, bool bPauseToggled, float Dt)
 {
 	if (!Game || !bRun)
 	{
@@ -206,12 +206,8 @@ void UBackroomsWorldSubsystem::TickRun(const InputFrame& In, bool bPauseToggled,
 		FinishFrame(true);
 		return;
 	}
-	// The camera takes its buttons out before the trace: what is recorded is
-	// what the sim was given.
-	InputFrame Frame = In;
-	Cam->control(Frame, *Game, Dt, bCamToggle);
-	if (Trace) Trace->step(Frame, Dt, T, Game->clockSeed);
-	Game->step(Frame, Dt, T);
+	if (Trace) Trace->step(In, Dt, T, Game->clockSeed);
+	Game->step(In, Dt, T);
 	if (Trace) Trace->digest(*Game);
 	Cam->logSounds(Game->audio);
 	if (Game->inMenu && Game->deathT > 0) Cam->beginReplay();
@@ -258,7 +254,7 @@ FVector UBackroomsWorldSubsystem::StoreyOrigin() const
 FTransform UBackroomsWorldSubsystem::ViewTransform(float& OutFovY) const
 {
 	const SimView View = simView(*Game);
-	OutFovY = Cam ? Cam->fovY(View.fovY) : View.fovY;
+	OutFovY = View.fovY;
 	const FMatrix Axes = FRotationMatrix::MakeFromXZ(BackroomsCoords::ToUnrealDirection(View.forward),
 		BackroomsCoords::ToUnrealDirection(View.up));
 	return FTransform(Axes.Rotator(), BackroomsCoords::ToUnreal(View.eye) + StoreyOrigin());
@@ -571,25 +567,19 @@ void UBackroomsWorldSubsystem::ShowFrame(const Vec3& Eye)
 		Render->ShowPost(GetWorld());
 		return;
 	}
-	const FrameLight Light = frameLight(S, T, Cam->irLamp());
+	const FrameLight Light = frameLight(S, T);
 	const float Water = S.level == 2 && Maze.poolAt(cellOf(S.px), cellOf(S.pz))
 		? FMath::Clamp((WATER_Y - S.eyeY) * 8.0f, 0.0f, 1.0f) : 0.0f;
 	Render->Frame(GetWorld(), Light, Eye, S.fear, Water, S.migraine);
 	FitReel();
-	// Through the camcorder the tape's look replaces the eye's, and on the
-	// death card the tape plays (render.cpp's renderUI).
-	const bool bFilming = Cam->viewing() && !S.inMenu;
+	// On the death card the tape plays (render.cpp's renderUI).
 	const bool bReplaying = S.inMenu && S.deathT > 0 && Cam->replaying();
 	CamPicture Picture{};
-	if (bFilming)
-	{
-		Picture = Cam->viewfinderPicture();
-	}
-	else if (bReplaying)
+	if (bReplaying)
 	{
 		Picture = Cam->replayPicture();
 	}
-	Render->ShowPost(GetWorld(), bFilming || bReplaying ? &Picture : nullptr, Reel ? Reel->Texture() : nullptr);
+	Render->ShowPost(GetWorld(), bReplaying ? &Picture : nullptr, Reel ? Reel->Texture() : nullptr);
 	HideUnseenChunks();
 
 	FActorSpawnParameters Params;
@@ -610,10 +600,8 @@ void UBackroomsWorldSubsystem::ShowFrame(const Vec3& Eye)
 	sceneDraws(S, Light, T, Draws);
 	const size_t FirstHeld = Draws.size();
 	const SimView View = simView(S);
-	// Looking through the camcorder, whatever is in the other hand is out of frame.
-	const bool bInHand = !Cam->viewing();
-	if (bInHand) heldDraws(S, View, T, Draws);
-	Hand->Show(S, bInHand, *Render, StoreyOrigin(), Draws);
+	heldDraws(S, View, T, Draws);
+	Hand->Show(S, *Render, StoreyOrigin(), Draws);
 	Scene->Show(Draws, FirstHeld, View, *Render, StoreyOrigin());
 
 	// The frame onto tape, as the Web build grabs its render target after

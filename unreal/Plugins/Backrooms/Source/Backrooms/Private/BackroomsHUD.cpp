@@ -59,28 +59,15 @@ void ABackroomsHUD::DrawHUD()
 	const double Now = Backrooms->SimClock();
 	const Camcorder& Cam = *Backrooms->GetCamcorder();
 	const std::tm Clock = WallClock();
-	// Through the camcorder its OSD replaces the inventory and meters, as the
-	// tape look replaces the eye's (UBackroomsRender::ShowPost).
-	const bool bFilming = Cam.viewing() && !Game->inMenu;
-	if (bFilming)
-	{
-		DrawList(Cam.viewfinderOsd(W, H, (float)Now, (float)(Now - Game->runStart), &Clock, Measure), Font, LineH);
-	}
-	if (!Game->inMenu && Cam.raise > 0.0f && Cam.raise < 1.0f)   // the eye meeting the finder
-	{
-		const float Dark = 1.0f - FMath::Abs(2.0f * Cam.raise - 1.0f);
-		DrawRect(FLinearColor(FColor(0, 0, 0, (uint8)(255.0f * FMath::Clamp(Dark, 0.0f, 1.0f)))), 0, 0, W, H);
-	}
 	if (Game->inMenu && Game->deathT > 0 && Cam.replaying())
 	{
-		DrawList(Cam.replayOsd(W, H, (float)Now, &Clock, Measure), Font, LineH);
+		DrawList(Cam.replayOsd(W, H, &Clock, Measure), Font, LineH);
 	}
 
 	HudInput In;
 	In.width = W;
 	In.height = H;
 	In.now = Now;
-	In.filming = bFilming;
 	In.replaying = Cam.replaying();
 	In.cardAlpha = Cam.cardAlpha();
 	In.touch = false;
@@ -89,6 +76,13 @@ void ABackroomsHUD::DrawHUD()
 	In.fps = Dt > 0.0f ? (int)(1.0f / Dt + 0.5f) : 0;
 	const ABackroomsPlayerController* Player = Cast<ABackroomsPlayerController>(GetOwningPlayerController());
 	In.debug = Player && Player->IsDebugHudOn();
+
+	// The tape is running: a small REC mark, under the HUD and its fades. F3
+	// writes in the same corner.
+	if (!Game->inMenu && !Game->paused && !In.debug)
+	{
+		DrawList(Cam.recMark(W, H, (float)Now), Font, LineH);
+	}
 
 	DrawList(hudDraws(*Game, In, bEverFlashed, Measure), Font, LineH);
 }

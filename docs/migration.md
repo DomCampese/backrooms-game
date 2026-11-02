@@ -62,7 +62,7 @@ tools/sandbox-build.sh contract    # or: make contract-check
 
 | file | holds |
 |---|---|
-| `chunks.txt` | 121 chunks, one line each: a hash of the whole chunk and one per `ChunkData` field. Levels 0-4, visits 0 and 1, seed 1337, the 3x3 chunks round the origin and chunk (40,-37); on Level 0 also both storeys of every vertical feature among them and of the first feature of each kind near the origin |
+| `chunks.txt` | 141 chunks, one line each: a hash of the whole chunk and one per `ChunkData` field. Levels 0-5, visits 0 and 1, seed 1337, the 3x3 chunks round the origin and chunk (40,-37); on Level 0 also both storeys of every vertical feature among them and of the first feature of each kind near the origin |
 | `chunks_full.txt` | 18 of those chunks field by field, one row per z: the origin chunk of every level and visit, and the Level 0 visit 1 feature chunks |
 | `queries.txt` | `gatherCellAABBs`, `collideCircle`, `groundAt` (through a hole into the storey below, on flights, on a vending machine), `stairY` up each flight kind, `lineOfSight`, `canStep`, `pathStep`, `findOpenSpot`, `ceilY`, `buildOccupancy` over a 48-cell window, `vendFootprint` for each turn and flag. Probes are doors, a locked door, rails, a pillar, holes and vending machines found in the generated world, and seeded samples, each printed with the coordinates of the call |
 | `mutations.txt` | `shiftEdge` and `unlockEdge` on chosen edges: the walls read back through `wallNVal`/`wallWVal`, the `staleChunks` entries appended, and a repeat that appends nothing |
@@ -197,7 +197,7 @@ The platform side of the seam:
 | `shared/port/stream.{h,cpp}` | `streamChunks`: which chunks a view streams, nearest first, on its storey and through the openings to others; `Game::streamChunks` and Unreal's `StreamAround` walk it |
 | `shared/port/mesh_builder.{h,cpp}`, `atlas.{h,cpp}`, `palette.h` | `MB`, `addPropBox`, `addSolidBox`, `PLAIN_UV`; `FIXTURES`, `vendUV`, tile sizes; `cl8`, `PARTY_RGBA` |
 | `shared/port/hud.{h,cpp}` | `hudDraws`: the HUD render.cpp draws over the world, as draws in window pixels, measured by the caller's font |
-| `shared/port/camcorder.{h,cpp}` | `Camcorder`: the camera's controls, the tape's frames and sounds, the playback's clock, its clips and OSD; the platform keeps the reel and draws `CamPicture` through its tape look |
+| `shared/port/camcorder.{h,cpp}` | `Camcorder`: the tape's frames and sounds, the playback's clock, its clips, the REC mark and the playback's OSD; the platform keeps the reel and draws `CamPicture` through its tape look |
 | `web/src/world_mesh.{h,cpp}`, `mesh_upload.h` | `bakeChunk` (uploads the mesher's parts), `ChunkMeshCache` |
 | `shared/port/visible.{h,cpp}` | `visibleChunks`: which streamed chunks a view sees, nearest first, other storeys only through the openings in view; render.cpp draws the list and Unreal hides the rest |
 | `web/src/object_meshes.{h,cpp}` | can, deck, reels, lamp, flare, crate and lid |

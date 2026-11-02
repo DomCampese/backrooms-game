@@ -28,7 +28,6 @@ struct FrameLight {
     float roomMask[4];     // uRoomMask: the Manila Room's dark panels (x0, z0, x1, z1)
     float lamp[4];         // uLamp: the chandelier or a stairwell's landing tube (xyz, output)
     Vec3 lampCol;          // uLampCol
-    float ir;              // uIR: the camcorder's infrared lamp
 };
 
 // The world shader's shadow grid (World::buildOccupancy, texture2): OCC_CELLS
@@ -37,9 +36,8 @@ struct FrameLight {
 constexpr int OCC_CELLS = 64;
 constexpr int OCC_RECENTRE = 6;
 
-// `ir` is the camcorder's lamp (Camcorder::irLamp in the Web build; 0 where
-// there is none). Also hands the room mask and lamp to lightAtCPU.
-FrameLight frameLight(Sim &sim, float now, float ir);
+// Also hands the room mask and lamp to lightAtCPU.
+FrameLight frameLight(Sim &sim, float now);
 
 // A model transform: p' = x * p.x + y * p.y + z * p.z + t.
 struct Xform {

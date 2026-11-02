@@ -33,18 +33,17 @@ void Game::renderScene(double now) {
     cam.position = toRl(view.eye);
     cam.target = Vector3Add(cam.position, toRl(view.forward));
     cam.up = toRl(view.up);
-    cam.fovy = camcorder.fovY(view.fovY);
+    cam.fovy = view.fovY;
     cam.projection = CAMERA_PERSPECTIVE;
 
     float timeF = (float)now;
     Vector3 viewPos = cam.position;
-    const FrameLight light = frameLight(sim, timeF, camcorder.irLamp());
+    const FrameLight light = frameLight(sim, timeF);
     SetShaderValue(worldShader, locTime, &light.time, SHADER_UNIFORM_FLOAT);
     SetShaderValue(worldShader, locBlackout, &light.blackout, SHADER_UNIFORM_FLOAT);
     SetShaderValue(worldShader, locViewPos, &viewPos, SHADER_UNIFORM_VEC3);
     SetShaderValue(worldShader, locFlash, &light.flash, SHADER_UNIFORM_FLOAT);
     SetShaderValue(worldShader, locFlashDir, &light.flashDir, SHADER_UNIFORM_VEC3);
-    SetShaderValue(worldShader, locIR, &light.ir, SHADER_UNIFORM_FLOAT);
     SetShaderValue(worldShader, locFlarePos, &light.flarePos, SHADER_UNIFORM_VEC3);
     SetShaderValue(worldShader, locFlareInt, &light.flareInt, SHADER_UNIFORM_FLOAT);
     SetShaderValue(worldShader, locEntPos, &light.entPos, SHADER_UNIFORM_VEC3);
@@ -112,8 +111,7 @@ void Game::renderScene(double now) {
     sceneBuf.clear();
     sceneDraws(sim, light, timeF, sceneBuf);
     for (const SceneDraw &d : sceneBuf) drawScene(d, cam);
-    // While the camcorder is up, the held item is not drawn.
-    const Held held = camcorder.viewing() ? Held::None : heldItem(sim);
+    const Held held = heldItem(sim);
     if (held != Held::None) {
         // Next to a wall the held item falls in the wall's shadow and goes black.
         // Turn the occlusion grid off for this draw (uOccN = 0 makes lightVis
@@ -235,7 +233,6 @@ void Game::renderUI(double now) {
     if (captureTime >= 0) now = captureTime;
     // ---- post + UI
     float timeF = (float)now;
-    double elapsed = now - sim.runStart;
     BeginDrawing();
     ClearBackground(BLACK);
     SetShaderValue(postShader, locPTime, &timeF, SHADER_UNIFORM_FLOAT);
@@ -244,32 +241,22 @@ void Game::renderUI(double now) {
     SetShaderValue(postShader,locPWater,&submerged,SHADER_UNIFORM_FLOAT);
     SetShaderValue(postShader, locPMigraine, &sim.migraine, SHADER_UNIFORM_FLOAT);
     int sw = GetScreenWidth(), sh = GetScreenHeight();
-    // Through the camcorder the tape's look replaces the eye's, and the
-    // inventory and meters give way to its OSD.
-    const bool filming = camcorder.viewing() && !sim.inMenu;
-    if (filming) {
-        camReel.present(camcorder.viewfinderPicture(), rt, timeF);
-        drawHud(camcorder.viewfinderOsd(sw, sh, timeF, (float)elapsed, wallClock(), MeasureText));
-    }
-    else {
-        BeginShaderMode(postShader);
-        DrawTextureRec(rt.texture, { 0, 0, (float)rt.texture.width, -(float)rt.texture.height }, { 0, 0 }, WHITE);
-        EndShaderMode();
-    }
-    if (!sim.inMenu && camcorder.raise > 0.0f && camcorder.raise < 1.0f)   // the eye meeting the finder
-        DrawRectangle(0, 0, sw, sh, Fade(BLACK, 1.0f - fabsf(2.0f * camcorder.raise - 1.0f)));
+    BeginShaderMode(postShader);
+    DrawTextureRec(rt.texture, { 0, 0, (float)rt.texture.width, -(float)rt.texture.height }, { 0, 0 }, WHITE);
+    EndShaderMode();
     if (cleanShot && !sim.inMenu) { EndDrawing(); return; }
 
     // The tape plays under the death card's words, so it goes down first.
     if (sim.inMenu && sim.deathT > 0 && camcorder.replaying()) {
-        camReel.present(camcorder.replayPicture(), rt, timeF);
-        drawHud(camcorder.replayOsd(sw, sh, timeF, wallClock(), MeasureText));
+        camReel.present(camcorder.replayPicture(), timeF);
+        drawHud(camcorder.replayOsd(sw, sh, wallClock(), MeasureText));
     }
+    // The tape is running: a small REC mark, under the HUD and its fades.
+    if (!sim.inMenu && !sim.paused && !debugHud) drawHud(camcorder.recMark(sw, sh, timeF));   // F3 writes there
     HudInput in;
     in.width = sw;
     in.height = sh;
     in.now = now;
-    in.filming = filming;
     in.replaying = camcorder.replaying();
     in.cardAlpha = camcorder.cardAlpha();
     in.touch = inTouchActive();

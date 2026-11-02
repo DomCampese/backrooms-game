@@ -13,14 +13,9 @@ void CamcorderReel::load() {
     locCellA = GetShaderLocation(shader, "uCellA");
     locCellB = GetShaderLocation(shader, "uCellB");
     locMix = GetShaderLocation(shader, "uMix");
-    locNight = GetShaderLocation(shader, "uNight");
     locTrack = GetShaderLocation(shader, "uTrack");
     locStill = GetShaderLocation(shader, "uStill");
     locSnow = GetShaderLocation(shader, "uSnow");
-    sndRaise = loadPcmSound(camcorderClip(CamSound::Raise));
-    sndLower = loadPcmSound(camcorderClip(CamSound::Lower));
-    sndSwitch = loadPcmSound(camcorderClip(CamSound::Switch));
-    sndZoom = loadPcmSound(camcorderClip(CamSound::Zoom));
     sndTransport = loadPcmSound(camcorderClip(CamSound::Transport));
     sndHiss = loadPcmSound(camcorderClip(CamSound::Hiss));
     SetSoundVolume(sndHiss, Camcorder::HISS_VOLUME);
@@ -57,10 +52,6 @@ void CamcorderReel::grab(const Camcorder &cam, int slot, const RenderTexture2D &
 void CamcorderReel::playNoises(Camcorder &cam, GameAudio &audio) {
     for (const CamNoise &n : cam.noises) {
         switch (n.sound) {
-        case CamSound::Raise: PlaySound(sndRaise); break;
-        case CamSound::Lower: PlaySound(sndLower); break;
-        case CamSound::Switch: PlaySound(sndSwitch); break;
-        case CamSound::Zoom: if (!IsSoundPlaying(sndZoom)) PlaySound(sndZoom); break;
         case CamSound::Transport: PlaySound(sndTransport); break;
         case CamSound::Hiss: if (!IsSoundPlaying(sndHiss)) PlaySound(sndHiss); break;
         case CamSound::HissStop: StopSound(sndHiss); break;
@@ -70,8 +61,8 @@ void CamcorderReel::playNoises(Camcorder &cam, GameAudio &audio) {
     cam.noises.clear();
 }
 
-void CamcorderReel::present(const CamPicture &pic, const RenderTexture2D &scene, float time) {
-    Texture2D tex = pic.fromReel ? reel.texture : scene.texture;
+void CamcorderReel::present(const CamPicture &pic, float time) {
+    const Texture2D &tex = reel.texture;
     Vector4 cellA = { pic.a.u0, pic.a.v0, pic.a.u1, pic.a.v1 };
     Vector4 cellB = { pic.b.u0, pic.b.v0, pic.b.u1, pic.b.v1 };
     Vector2 res = { (float)GetRenderWidth(), (float)GetRenderHeight() };
@@ -80,7 +71,6 @@ void CamcorderReel::present(const CamPicture &pic, const RenderTexture2D &scene,
     SetShaderValue(shader, locCellA, &cellA, SHADER_UNIFORM_VEC4);
     SetShaderValue(shader, locCellB, &cellB, SHADER_UNIFORM_VEC4);
     SetShaderValue(shader, locMix, &pic.mix, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(shader, locNight, &pic.night, SHADER_UNIFORM_FLOAT);
     SetShaderValue(shader, locTrack, &pic.track, SHADER_UNIFORM_FLOAT);
     SetShaderValue(shader, locStill, &pic.still, SHADER_UNIFORM_FLOAT);
     SetShaderValue(shader, locSnow, &pic.snow, SHADER_UNIFORM_FLOAT);

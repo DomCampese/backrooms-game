@@ -1,8 +1,8 @@
 // The Web build's tape look (TAPE_FS in web/src/shaders.cpp), in HLSL for the
 // Unreal port's camcorder material (M_BackroomsTape, built by
 // Content/Python/backrooms_world.py). It takes the post material's place while
-// the viewfinder is up or the tape plays back on the death card, and draws the
-// scene, or two neighbouring frames off the reel, as tape. Change one, change
+// the tape plays back on the death card, and draws two neighbouring frames off
+// the reel as tape. Change one, change
 // the other: tools/tape-check.sh renders both and compares them.
 #pragma once
 
@@ -14,7 +14,6 @@ struct FBRTape
 	float2 Res;           // the framebuffer, px
 	float4 CellA, CellB;  // frames as uv: min.xy, max.zw, v up the picture
 	float Mix;            // how far from frame a to frame b
-	float Night;          // night shot: infrared, gained up, green
 	float Track;          // interference: 0 clean .. 1 torn
 	float Still;          // a paused frame, which the heads cannot hold still
 	float Snow;           // no picture: only noise
@@ -36,8 +35,7 @@ struct FBRTapeLine
 };
 
 // The tape look in three steps, because the pictures are sampled in between
-// by the material's Custom node (the scene through SceneTextureLookup, the
-// reel through its texture parameter):
+// by the material's Custom node (the reel, through its texture parameter):
 //
 //   FBRTapeLine L = BRTapeLine(P, FragCoord);
 //   ...frame I of seven at BRTapeTap(L.Q, I): CellA's and CellB's texel at
@@ -112,16 +110,8 @@ float3 BRTapeFinish(FBRTape P, float2 FragCoord, FBRTapeLine L, float3 Frames[7]
 	float3 C = mul(float3(Y, Iq), ToRgb);
 	// A tape's blacks are never black, and its whites are never quite white.
 	C = 0.035 + C * 0.94;
-	if (P.Night > 0.0)
-	{
-		// Infrared sees a surface's brightness more than its colour, so dark
-		// red brick comes up nearly as well as pale wallpaper.
-		float Lm = lerp(dot(C, Luma), max(C.r, max(C.g, C.b)), 0.7);
-		Lm = 1.0 - exp(-Lm * 3.0);   // the gain the camera rides in the dark
-		C = lerp(C, float3(0.30, 1.0, 0.40) * Lm + float3(0.015, 0.045, 0.02), P.Night);
-	}
 	float N = BRTapeHash(floor(FragCoord / 2.0) + frac(T * float2(13.17, 7.31)) * 311.0);
-	C += (N - 0.5) * (0.045 + 0.035 * P.Night + 0.16 * P.Track + 0.10 * L.Tear);
+	C += (N - 0.5) * (0.045 + 0.16 * P.Track + 0.10 * L.Tear);
 	// Dropouts: a scrap of a line where the oxide is gone, flaring white.
 	float Field = floor(T * 24.0);
 	float Drop = step(0.9982 - 0.010 * P.Track, BRTapeHash(float2(L.Line, Field + 7.0)));
@@ -132,6 +122,6 @@ float3 BRTapeFinish(FBRTape P, float2 FragCoord, FBRTapeLine L, float3 Frames[7]
 	C = lerp(C, float3(Snow, Snow, Snow), P.Snow);
 	C *= 0.93 + 0.07 * sin(L.Down * P.Res.y * 3.14159 * 0.5);   // scanlines, one every other pixel row
 	float2 D = L.Q - 0.5;
-	C *= 1.0 - smoothstep(0.30, 0.85, length(D * float2(1.0, 0.8))) * (0.45 + 0.30 * P.Night);
+	C *= 1.0 - smoothstep(0.30, 0.85, length(D * float2(1.0, 0.8))) * 0.45;
 	return saturate(C);
 }
