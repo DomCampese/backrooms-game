@@ -125,8 +125,16 @@ Levels 0 and 4 (`Sfx::Step`, unchanged), concrete on Levels 1 and 3
   last. Both builds load every clip up to it (`GameAudio::load`,
   `SoundMixer::load`), so a new clip needs no Unreal code.
 - **Compare loudness A-weighted, not RMS.** Without gain the hard-floor clips
-  measured 10-12 dB(A) over carpet; `makeHardStep`'s gains put them about
-  5 dB over. Carpet's energy is mostly below 200 Hz, so RMS overstates it.
+  measured 10-12 dB(A) over carpet; each clip's level puts it about 5 dB over.
+  Carpet's energy is mostly below 200 Hz, so RMS overstates it.
+- **Concrete and tile are `makeShoeStep`; wood is `makeWoodStep`.** The first
+  hard-floor synth (November 2026 rewrite) used a 74 Hz sine for the concrete
+  body and a 3.6 kHz band-pass for tile, with nothing between 150 and 1500 Hz,
+  and gave tile two discrete echoes at 47 and 96 ms. Players heard a drum hit
+  and a doubled hiss. `makeShoeStep` is noise only: band-passes at
+  430/1350 Hz (concrete) or 820/2500 Hz (tile), a low-passed noise thud, the
+  toe 45-65 ms later, and `roomTail` (the reverb `farAway` uses) for the room.
+  Keep a footstep clip under about 0.5 s: a variant played again restarts it.
 - **The trace records which sounds play** (`audioHash` in each digest), so
   changing which clip plays changes the golden trace. walk-l0-l2.trace was
   re-recorded for this change.

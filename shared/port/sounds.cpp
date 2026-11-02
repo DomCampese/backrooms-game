@@ -79,10 +79,10 @@ Pcm makeFootstep(uint32_t seed, bool through = false)
     return d;
 }
 
-// Footstep on a hard floor: band-passed noise for the heel and toe, a decaying
-// sine for the body, a one-pole low-pass, then one or two low-passed echo taps.
-// Voice holds the per-floor parameters. Carpet uses makeFootstep instead.
-Pcm makeHardStep(uint32_t seed, Footing floor)
+// Footstep on the Manila Room's wood floor: band-passed noise for the heel and
+// toe, a decaying sine for the body, a one-pole low-pass, then one low-passed
+// echo tap. Carpet uses makeFootstep, concrete and tile makeShoeStep.
+Pcm makeWoodStep(uint32_t seed)
 {
     struct Voice {
         float click;      // heel band-pass centre, Hz
@@ -92,15 +92,10 @@ Pcm makeHardStep(uint32_t seed, Footing floor)
         float bodyDecay;
         float bodyGain;
         float echo1, echo1Gain, echo2, echo2Gain;   // echo tap delays (s) and gains
-        float gain;       // output gain; sets each floor about 5 dB(A) over carpet
+        float gain;       // output gain; about 5 dB(A) over carpet
         float top;        // one-pole low-pass cutoff, Hz
     };
-    const Voice v = floor == Footing::Tile ? Voice{ 3600.0f, 1.4f, 130.0f, 118.0f, 55.0f, 0.35f,
-                                                    0.047f, 0.30f, 0.096f, 0.16f, 0.40f, 6000.0f }
-                  : floor == Footing::Wood ? Voice{ 1300.0f, 1.1f, 70.0f, 165.0f, 26.0f, 0.95f,
-                                                    0.021f, 0.18f, 0.0f, 0.0f, 0.52f, 3000.0f }
-                                           : Voice{ 1900.0f, 0.9f, 95.0f, 74.0f, 38.0f, 0.75f,
-                                                    0.038f, 0.22f, 0.0f, 0.0f, 0.48f, 4500.0f };
+    const Voice v{ 1300.0f, 1.1f, 70.0f, 165.0f, 26.0f, 0.95f, 0.021f, 0.18f, 0.0f, 0.0f, 0.52f, 3000.0f };
     Rng r((uint64_t)seed * 2000u + 7u);
     const float toeDelay = 0.055f + r.f01() * 0.02f;
     const float detune = 0.92f + r.f01() * 0.16f;   // per-variant frequency scale
@@ -134,8 +129,8 @@ Pcm makeHardStep(uint32_t seed, Footing floor)
         float heelEnv = (1.0f - expf(-t * 2500.0f)) * expf(-t * v.clickDecay);
         float bodyEnv = (1.0f - expf(-t * 900.0f)) * expf(-t * v.bodyDecay);
         float sample = h * 3.2f * heelEnv + sinf(TAU * body * t) * v.bodyGain * bodyEnv;
-        // Wood adds a second body mode at 2.37x.
-        if (floor == Footing::Wood) sample += sinf(TAU * body * 2.37f * t) * 0.35f * expf(-t * 48.0f) * bodyEnv;
+        // A second body mode at 2.37x.
+        sample += sinf(TAU * body * 2.37f * t) * 0.35f * expf(-t * 48.0f) * bodyEnv;
         float tt = t - toeDelay;
         if (tt > 0.0f) {
             float toeEnv = (1.0f - expf(-tt * 2500.0f)) * expf(-tt * v.clickDecay * 1.4f);
@@ -331,27 +326,12 @@ Pcm makeValveTurn() {
     return d;
 }
 
-// Processing shared by the distant one-shots: two-pole low-pass at `cutoff`,
-// a 30 Hz DC block, then a Schroeder reverb (four damped combs, two
-// all-passes) with an RT60 of `tail` s, mixed `wet`. Normalised to a peak of
-// `level`; each kind's level puts its loudest 100 ms at 0-6 dB(A) over a
-// carpet footstep. Starts and ends on zero.
-Pcm farAway(const std::vector<float> &dry, float cutoff, float tail, float wet, float level)
+// Schroeder reverb with an RT60 of `tail` s: four combs with a one-pole
+// low-pass in the feedback path, then two all-passes. Returns the wet signal,
+// as long as `near`.
+std::vector<float> roomTail(const std::vector<float> &near, float tail)
 {
-    const int n = (int)dry.size() + (int)(tail * SAMPLE_RATE);
-    const float k = 1.0f - expf(-TAU * cutoff / SAMPLE_RATE);
-    std::vector<float> near(n, 0.0f);
-    // Without the DC block the low-passed door clip had a 3% offset.
-    const float hold = expf(-TAU * 30.0f / SAMPLE_RATE);
-    float a = 0, b = 0, prev = 0, dc = 0;
-    for (int i = 0; i < n; i++) {
-        a += k * ((i < (int)dry.size() ? dry[i] : 0.0f) - a);
-        b += k * (a - b);
-        dc = b - prev + hold * dc;
-        prev = b;
-        near[i] = dc;
-    }
-    // Combs with a one-pole low-pass in the feedback path, then two all-passes.
+    const int n = (int)near.size();
     const float combs[4] = { 0.0297f, 0.0371f, 0.0411f, 0.0437f };
     std::vector<float> room(n, 0.0f);
     for (float delay : combs) {
@@ -377,6 +357,29 @@ Pcm farAway(const std::vector<float> &dry, float cutoff, float tail, float wet, 
             if (++at == len) at = 0;
         }
     }
+    return room;
+}
+
+// Processing shared by the distant one-shots: two-pole low-pass at `cutoff`,
+// a 30 Hz DC block, then roomTail with an RT60 of `tail` s, mixed `wet`. Normalised to a peak of
+// `level`; each kind's level puts its loudest 100 ms at 0-6 dB(A) over a
+// carpet footstep. Starts and ends on zero.
+Pcm farAway(const std::vector<float> &dry, float cutoff, float tail, float wet, float level)
+{
+    const int n = (int)dry.size() + (int)(tail * SAMPLE_RATE);
+    const float k = 1.0f - expf(-TAU * cutoff / SAMPLE_RATE);
+    std::vector<float> near(n, 0.0f);
+    // Without the DC block the low-passed door clip had a 3% offset.
+    const float hold = expf(-TAU * 30.0f / SAMPLE_RATE);
+    float a = 0, b = 0, prev = 0, dc = 0;
+    for (int i = 0; i < n; i++) {
+        a += k * ((i < (int)dry.size() ? dry[i] : 0.0f) - a);
+        b += k * (a - b);
+        dc = b - prev + hold * dc;
+        prev = b;
+        near[i] = dc;
+    }
+    const std::vector<float> room = roomTail(near, tail);
     std::vector<float> mix(n);
     float peak = 1e-6f;
     for (int i = 0; i < n; i++) {
@@ -389,6 +392,76 @@ Pcm farAway(const std::vector<float> &dry, float cutoff, float tail, float wet, 
         float edge = clampf1(fminf((float)i, (float)(n - 1 - i)) / (0.004f * SAMPLE_RATE));
         float fade = clampf1((float)(n - 1 - i) / (0.25f * SAMPLE_RATE));   // 250 ms fade-out
         pcm[i] = (short)(clampf1(mix[i] * g * edge * fade) * 30000.0f);
+    }
+    return pcm;
+}
+
+// Shoe on concrete or tile. One noise source feeds a low and a high RBJ
+// band-pass (the heel's knock), a two-pole low-pass (the thud under it) and,
+// 45-65 ms later, the toe through the same band-passes. roomTail adds the
+// room. No tonal component: a sine body read as a drum hit.
+Pcm makeShoeStep(uint32_t seed, Footing floor)
+{
+    struct Voice {
+        float lo, hi, q;      // knock band-pass centres (Hz) and Q
+        float hiGain;
+        float decay;          // knock decay, 1/s
+        float thudCut, thudDecay, thudGain;
+        float toeGain;
+        float tail, wet;      // roomTail RT60 (s) and mix
+        float length;         // clip length, s; a variant replayed restarts its clip
+        float level;          // peak; about 5 dB(A) over carpet
+    };
+    const Voice v = floor == Footing::Tile ? Voice{ 820.0f, 2500.0f, 1.2f, 0.75f, 105.0f, 210.0f, 60.0f, 0.30f,
+                                                    0.55f, 1.0f, 0.10f, 0.50f, 0.84f }
+                                           : Voice{ 430.0f, 1350.0f, 0.8f, 0.60f, 75.0f, 150.0f, 45.0f, 0.45f,
+                                                    0.45f, 0.7f, 0.07f, 0.42f, 0.86f };
+    Rng r((uint64_t)seed * 2000u + 11u);
+    const float toeDelay = 0.045f + r.f01() * 0.02f;
+    const float detune = 0.9f + r.f01() * 0.2f;   // per-variant frequency scale
+    const int n = (int)(v.length * SAMPLE_RATE);
+
+    struct Band {
+        float b0, a1, a2, x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+        Band(float f, float q) {
+            float w = TAU * f / SAMPLE_RATE, alpha = sinf(w) / (2.0f * q), a0 = 1.0f + alpha;
+            b0 = alpha / a0;
+            a1 = -2.0f * cosf(w) / a0;
+            a2 = (1.0f - alpha) / a0;
+        }
+        float operator()(float x) {   // b1 = 0, b2 = -b0
+            float y = b0 * x - b0 * x2 - a1 * y1 - a2 * y2;
+            x2 = x1; x1 = x; y2 = y1; y1 = y;
+            return y;
+        }
+    };
+    Band lo(v.lo * detune, v.q), hi(v.hi * detune, v.q);
+    const float k = 1.0f - expf(-TAU * v.thudCut * detune / SAMPLE_RATE);
+    float thudA = 0, thudB = 0;
+    std::vector<float> near(n);
+    for (int i = 0; i < n; i++) {
+        float t = (float)i / SAMPLE_RATE, tt = t - toeDelay;
+        float x = r.f01() * 2.0f - 1.0f;
+        float knock = lo(x) + hi(x) * v.hiGain;
+        thudA += k * (x - thudA);
+        thudB += k * (thudA - thudB);
+        float heelEnv = (1.0f - expf(-t * 4000.0f)) * expf(-t * v.decay);
+        float thudEnv = (1.0f - expf(-t * 1500.0f)) * expf(-t * v.thudDecay);
+        float toeEnv = tt > 0.0f ? (1.0f - expf(-tt * 4000.0f)) * expf(-tt * v.decay * 1.3f) : 0.0f;
+        near[i] = knock * (heelEnv + toeEnv * v.toeGain) + thudB * 8.0f * v.thudGain * thudEnv;
+    }
+    const std::vector<float> room = roomTail(near, v.tail);
+    std::vector<float> mix(n);
+    float peak = 1e-6f;
+    for (int i = 0; i < n; i++) {
+        mix[i] = near[i] * (1.0f - v.wet) + room[i] * v.wet * 2.2f;
+        peak = fmaxf(peak, fabsf(mix[i]));
+    }
+    Pcm pcm(n);
+    const float g = v.level / peak;
+    for (int i = 0; i < n; i++) {
+        float fade = clampf1((float)(n - 1 - i) / (0.12f * SAMPLE_RATE));   // 120 ms fade-out
+        pcm[i] = (short)(clampf1(mix[i] * g * fade) * 30000.0f);
     }
     return pcm;
 }
@@ -786,9 +859,9 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::Step:           return makeFootstep(100 + variant * 17);
     case Sfx::EntStep:        return makeFootstep(300 + variant * 23);
     case Sfx::EntStepThrough: return makeFootstep(300 + variant * 23, true);
-    case Sfx::StepConcrete:   return makeHardStep(500 + variant * 19, Footing::Concrete);
-    case Sfx::StepTile:       return makeHardStep(600 + variant * 29, Footing::Tile);
-    case Sfx::StepWood:       return makeHardStep(700 + variant * 13, Footing::Wood);
+    case Sfx::StepConcrete:   return makeShoeStep(500 + variant * 19, Footing::Concrete);
+    case Sfx::StepTile:       return makeShoeStep(600 + variant * 29, Footing::Tile);
+    case Sfx::StepWood:       return makeWoodStep(700 + variant * 13);
     case Sfx::Bark:           return makeDogBark(400 + variant * 31);
     case Sfx::BarkThrough:    return makeDogBark(400 + variant * 31, true);
     case Sfx::SplashIn: case Sfx::SplashOut: case Sfx::SwimStroke: return {};
