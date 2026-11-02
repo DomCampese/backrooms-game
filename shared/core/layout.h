@@ -65,6 +65,8 @@ enum class FixtureKind : uint8_t {
     Valve,          // a standpipe with a shut-off wheel (Level 3)
     Streamer,       // a crepe streamer sagging between two ceiling points (Level 4)
     ManilaRoom,     // the Manila Room's furnishings (Level 0)
+    Auditorium,     // an auditorium's fittings: screen frame, curtains, aisle lights, booth port, exit signs (the multiplex)
+    Poster,         // a backlit film poster on a corridor wall (the multiplex)
 };
 
 // One fixture. What each field means depends on the kind:
@@ -81,6 +83,8 @@ enum class FixtureKind : uint8_t {
 // | Valve                 | foot, at the cell centre              | top, ceiling   |                    | |
 // | Streamer              | one end, under the ceiling            | the other end  | h: its lowest y    | variant: party colour |
 // | ManilaRoom            | room centre; y is its ceiling         |                |                    | seed |
+// | Auditorium            | screen centre, on its face            |                |                    | variant: dir (World::auditorium has the rest) |
+// | Poster                | centre, on the face                   |                | half extents       | seed: its colours and layout |
 //
 // `normal` points out of the face a fixture is on. A face is the wall's
 // surface, WT off its centreline; decals stand off it by the renderer's own
@@ -99,6 +103,7 @@ enum class FittingGap : uint8_t {
     None,
     UnderOpening,   // its tray would overhang an opening to the storey above (occupancy bit 3)
     ManilaRoom,     // inside the Manila Room, which the chandelier lights (uRoomMask)
+    Auditorium,     // over an auditorium, which its screen lights (uRoomMask)
 };
 
 // A light fitting on the level's grid (LevelRules::ls). The static state comes
@@ -117,7 +122,8 @@ struct LightFitting {
     float stutterSeed;       // fract(hash * TUBE_STUTTER_SPREAD): when a faulty tube stutters (tubeStutter)
 };
 
-enum class OpeningKind : uint8_t { Doorway, LockedDoor, Exit, CursedExit, Window, Rail };
+// ShutDoor: a doorway the player has shut, built as a locked door is.
+enum class OpeningKind : uint8_t { Doorway, LockedDoor, Exit, CursedExit, Window, Rail, ShutDoor };
 
 // An edge that is neither open floor nor plain wall. Along-edge values are
 // world x for a north edge and world z for a west one.

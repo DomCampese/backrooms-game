@@ -22,7 +22,7 @@ void Sim::updateEntity(float dt, double now, bool forceSpawn) {
     if (forceSpawn && ent.st == EState::Hidden) {
         Vec2 spot = world.findOpenSpot(px + fwd.x * 8, pz + fwd.z * 8);
         ent.x = spot.x; ent.z = spot.y;
-        ent.st = EState::Stalk; ent.gaze = -100; ent.life = 0; ent.unseen = 0; ent.hp = 3; ent.stagger = 0;
+        ent.st = EState::Stalk; ent.gaze = -100; ent.life = 0; ent.hp = 3; ent.stagger = 0;
     }
     float fearT = 0.06f;
     ent.stagger = fmaxf(0.0f, ent.stagger - dt);
@@ -53,10 +53,13 @@ void Sim::updateEntity(float dt, double now, bool forceSpawn) {
             ent.life += dt;
             fearT = entVisible ? 0.45f : 0.15f;
             if (entVisible) ent.gaze += dt;
-            if (ent.gaze > 1.6f || (entVisible && entDist < 8) || (entDist < 3.0f && !hidden)) { ent.st = EState::Chase; ent.repathT = 0; }
+            if (ent.gaze > 1.6f || (entVisible && entDist < 8) || (entDist < 3.0f && !hidden)) {
+                ent.st = EState::Chase; ent.repathT = 0;
+                hunterNotice(px, pz);
+            }
             else if (ent.life > 24 && !entVisible) ent.st = EState::Hidden, ent.nextSpawn = now + 18 + grng.f01() * 35;
         }
-        if (ent.st == EState::Chase && hunterChase(dt, now, entVisible, fearT)) return;
+        if (ent.st == EState::Chase && hunterChase(dt, now, fearT)) return;
         if (ent.st == EState::Flee) {   // runs from the nearest flare, or from the player once none are lit
             fearT = 0.18f;
             ent.life += dt;
@@ -161,7 +164,7 @@ void Sim::spawnHunter() {
         sx = spot.x; sz = spot.y;
     }
     ent.x = sx; ent.z = sz;
-    ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.hp = 3; ent.stagger = 0;
+    ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.hp = 3; ent.stagger = 0;
     ent.gait = 0;   // standing still when first seen
     ent.dispY = world.groundAt(ent.x, ent.z, py + 1.0f);
 }
@@ -169,40 +172,68 @@ void Sim::spawnHunter() {
 // He catches the player only during a lunge, which starts inside LUNGE_REACH,
 // has a warning, and lasts LUNGE_TIME. Sprinting away escapes it; walking
 // does not.
-bool Sim::hunterChase(float dt, double now, bool entVisible, float &fearT) {
+bool Sim::hunterChase(float dt, double now, float &fearT) {
     fearT = entDist < 8 ? 1.0f : 0.8f;
+    // He sees the player with line of sight inside HUNTER_SIGHT, unless they
+    // are hidden or crouched more than 7 m away. He hears the same noises the
+    // pack does (packNoise). Either tells him where the player is.
+    bool sees = entDist < HUNTER_SIGHT && !hidden && !(crouchCur > 0.7f && entDist > 7) &&
+                world.lineOfSight(ent.x, ent.z, px, pz);
+    float noiseX, noiseZ;
+    float noise = packNoise(noiseX, noiseZ);
+    float hx = noiseX - ent.x, hz = noiseZ - ent.z;
+    if (sees) hunterNotice(px, pz);
+    else if (hx * hx + hz * hz < noise * noise) hunterNotice(noiseX, noiseZ);
+    else ent.lostT += dt;
     ent.lunge = fmaxf(0, ent.lunge - dt);
     ent.lungeCd = fmaxf(0, ent.lungeCd - dt);
     // Ignore a catch across a large height difference on stairs.
     bool level2 = fabsf(ent.dispY - py) < 1.4f;
-    if (entDist < LUNGE_REACH && level2 && ent.lunge <= 0 && ent.lungeCd <= 0 && !hidden) {
+    if (sees && entDist < LUNGE_REACH && level2 && ent.lunge <= 0 && ent.lungeCd <= 0) {
         ent.lunge = LUNGE_TIME;
         ent.lungeCd = LUNGE_TIME + 1.2f;   // pause between lunges
         play(Sfx::Scare).atPitch(0.62f).atVolume(0.85f);
         fearT = 1.0f;
     }
     float chaseSpd = 3.3f + 1.0f * clampf(1 - entDist / 25.0f, 0, 1) + (ent.lunge > 0 ? 3.2f : 0.0f);
+    if (!sees && ent.lunge <= 0) chaseSpd = SEARCH_SPEED;
     if (ent.stagger > 0) chaseSpd *= 0.35f;
-    // Straight at the player when he can see them; otherwise along the cell router.
+    if (!sees) fearT = 0.5f;
+    // Straight at the target when there is line of sight to it; otherwise
+    // along the cell router. The target is the player while he sees them, and
+    // otherwise the last place he saw or heard them, then spots around it.
+    float tx = sees ? px : ent.lastX, tz = sees ? pz : ent.lastZ;
+    float ldx = ent.lastX - ent.x, ldz = ent.lastZ - ent.z;
+    if (!sees && ldx * ldx + ldz * ldz < 1.0f) {
+        float a = grng.f01() * TAU, d = SEARCH_STEP_MIN + grng.f01() * (SEARCH_STEP_MAX - SEARCH_STEP_MIN);
+        Vec2 spot = world.findOpenSpot(ent.lastX + portableCos(a) * d, ent.lastZ + portableSin(a) * d);
+        ent.lastX = spot.x; ent.lastZ = spot.y;
+        tx = spot.x; tz = spot.y;
+        ent.repathT = 0;
+    }
     ent.repathT -= dt;
     float wdx = ent.wpx - ent.x, wdz = ent.wpz - ent.z;
     if (ent.repathT <= 0 || wdx * wdx + wdz * wdz < 0.20f) {
         ent.repathT = 0.25;
         int eci = cellOf(ent.x), eck = cellOf(ent.z);
         int oi, ok;
-        if (entDist > 2.5f && !world.lineOfSight(ent.x, ent.z, px, pz) &&
-            world.pathStep(eci, eck, cellOf(px), cellOf(pz), oi, ok) && !(oi == eci && ok == eck)) {
+        float gx = tx - ent.x, gz = tz - ent.z;
+        if (gx * gx + gz * gz > 2.5f * 2.5f && !world.lineOfSight(ent.x, ent.z, tx, tz) &&
+            world.pathStep(eci, eck, cellOf(tx), cellOf(tz), oi, ok, true) && !(oi == eci && ok == eck)) {
             ent.wpx = oi * CELL + 1.0f; ent.wpz = ok * CELL + 1.0f;
         } else {
-            ent.wpx = px; ent.wpz = pz;
+            ent.wpx = tx; ent.wpz = tz;
         }
     }
+    if (hunterForcesDoor(dt)) chaseSpd = 0;
     float sx = ent.wpx - ent.x, sz = ent.wpz - ent.z, sl = sqrtf(sx * sx + sz * sz) + 1e-4f;
     ent.x += sx / sl * chaseSpd * dt;
     ent.z += sz / sl * chaseSpd * dt;
     world.collideCircle(ent.x, ent.z, 0.38f, ent.dispY);
-    ent.unseen = entVisible ? 0 : ent.unseen + dt * (hidden ? 2.4f : (crouchCur > 0.7f ? 1.7f : 1.0f));
-    if (ent.unseen > 6 && (entDist > 14 || hidden)) ent.st = EState::Hidden, ent.nextSpawn = now + 25 + grng.f01() * 40;
+    if (ent.lostT > SEARCH_TIME) {
+        ent.st = EState::Hidden;
+        ent.nextSpawn = now + 25 + grng.f01() * 40;
+    }
     if (hidden && entDist < 2.2f && closeCallT <= 0) {   // close by, but he has not seen the hidden player
         closeCallT = 3.0f;
         play(Sfx::Heartbeat);
@@ -265,6 +296,7 @@ float Sim::packNoise(float &x, float &z) const {
         x = deck.carried ? px : deck.x;
         z = deck.carried ? pz : deck.z;
     }
+    if (doorNoiseT > 0 && DOOR_NOISE > noise) { noise = DOOR_NOISE; x = px; z = pz; }   // a door shut or opened
     if (muzzleT > 0 || gunCd > SHOT_INTERVAL - 0.07f) { noise = 45.0f; x = px; z = pz; }   // a shot
     bool justStruck = false;   // a flare's strike, whichever flare
     for (const FlareProj &f : litFlares) if (f.active && f.burn > FLAREBURN - 0.6f) justStruck = true;
@@ -350,5 +382,45 @@ bool Sim::updateDog(int i, float dt, double now, float noise, float nsx, float n
     }
     float gy = world.groundAt(d.x, d.z, d.dispY + MAX_STEP);
     d.dispY += (gy - d.dispY) * fminf(1, 10 * dt);
+    return false;
+}
+
+void Sim::hunterNotice(float x, float z) {
+    ent.lastX = x;
+    ent.lastZ = z;
+    ent.lostT = 0;
+}
+
+// A shut door on an edge of his cell, within reach, with his waypoint on the
+// far side: he stops and strikes it every DOOR_KNOCK s, and after DOOR_FORCE s
+// it is open. Without this the router (which passes shut doors for him) walks
+// him into the leaf and collision holds him there.
+bool Sim::hunterForcesDoor(float dt) {
+    const int ci = cellOf(ent.x), ck = cellOf(ent.z);
+    struct Edge { int i, k; bool west; float line; bool alongX; };
+    const Edge edges[4] = { { ci, ck, false, ck * CELL, false }, { ci, ck + 1, false, (ck + 1) * CELL, false },
+                            { ci, ck, true, ci * CELL, true }, { ci + 1, ck, true, (ci + 1) * CELL, true } };
+    for (const Edge &e : edges) {
+        if ((e.west ? world.wallWVal(e.i, e.k) : world.wallNVal(e.i, e.k)) != WALL_SHUT) continue;
+        float me = e.alongX ? ent.x - e.line : ent.z - e.line;
+        float wp = e.alongX ? ent.wpx - e.line : ent.wpz - e.line;
+        if (fabsf(me) > 0.9f || (me < 0) == (wp < 0)) continue;   // too far, or not in his way
+        float before = ent.doorT;
+        ent.doorT += dt;
+        float dx = (e.west ? e.i * CELL : e.i * CELL + 1.0f) - px, dz = (e.west ? e.k * CELL + 1.0f : e.k * CELL) - pz;
+        float d = sqrtf(dx * dx + dz * dz) + 1e-4f;
+        float pan = clampf((dx / d) * r2x + (dz / d) * r2z, -1.0f, 1.0f);
+        if (floorf(ent.doorT / DOOR_KNOCK) > floorf(before / DOOR_KNOCK) || before == 0.0f)
+            play(Sfx::DoorBang, grng.ri(0, 2)).atPan(pan).atVolume(clampf(2.0f / (1.0f + 0.04f * d * d), 0.1f, 1.0f));
+        if (ent.doorT >= DOOR_FORCE) {
+            world.shutEdge(e.i, e.k, e.west, false);
+            shadowsStale = true;
+            ent.doorT = 0;
+            play(Sfx::DoorShut, 2).atPan(pan).atPitch(0.8f).atVolume(clampf(2.4f / (1.0f + 0.04f * d * d), 0.1f, 1.0f));
+            return false;
+        }
+        return true;
+    }
+    ent.doorT = 0;
     return false;
 }

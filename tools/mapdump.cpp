@@ -65,12 +65,16 @@ char cellGlyph(World &w, int a, int b) {
 const char *PROP_NAME[] = {
     "none", "boxes", "cabinet", "table", "fallen tile", "couch", "armoire", "lamp", "nightstand",
     "bed", "vending", "party table", "desk", "shelving", "cooler", "plant", "manila table",
+    "seats", "concession",
 };
+static_assert(sizeof(PROP_NAME) / sizeof(PROP_NAME[0]) == PROP_KINDS, "a name for every PropKind");
 const char *FIXTURE_NAME[] = {
     "outlet", "broken outlet", "switch", "grille", "exit sign", "diffuser", "sprinkler", "conduit",
     "scrawl", "lift door", "spall", "pillar spall", "pipe", "valve", "streamer", "manila room",
+    "auditorium", "poster",
 };
-const char *OPENING_NAME[] = { "doorway", "locked door", "exit", "cursed exit", "window", "rail" };
+static_assert(sizeof(FIXTURE_NAME) / sizeof(FIXTURE_NAME[0]) == (int)FixtureKind::Poster + 1, "a name for every FixtureKind");
+const char *OPENING_NAME[] = { "doorway", "locked door", "exit", "cursed exit", "window", "rail", "shut door" };
 
 // Which way a normal points, as +x, -z, down.
 const char *facing(Vec3 n) {
@@ -134,6 +138,7 @@ void printLayout(World &w, int cx, int cz) {
                f.ceilingY);
         if (f.gap == FittingGap::UnderOpening) printf("  none: under an opening");
         else if (f.gap == FittingGap::ManilaRoom) printf("  none: Manila Room");
+        else if (f.gap == FittingGap::Auditorium) printf("  none: auditorium");
         else printf("  %s  output %.2f%s%s", f.dead ? "dead" : "lit ", f.output, f.faulty ? "  faulty" : "",
                     f.turned ? "  turned" : "");
         printf("\n");

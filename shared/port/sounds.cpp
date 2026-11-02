@@ -493,6 +493,114 @@ Pcm makeFarPop(int variant)
     return farAway(d, 1200.0f, 1.4f, 0.7f, 0.32f);
 }
 
+// Boom: a film's soundtrack through a wall. Variant 0 is one explosion (a
+// 38-50 Hz drop under rumble), 1 two of them, 2 a low chord swelling up and
+// cutting off.
+Pcm makeFarBoom(int variant)
+{
+    Rng r(0xB0011ULL + (uint64_t)variant * 653u);
+    std::vector<float> d((int)(2.2f * SAMPLE_RATE));
+    const float f0 = 38.0f + r.f01() * 12.0f;
+    const float hits[2] = { 0.05f, variant == 1 ? 0.55f + r.f01() * 0.2f : -1.0f };
+    float lp = 0, lp2 = 0;
+    for (int i = 0; i < (int)d.size(); i++) {
+        float t = (float)i / SAMPLE_RATE;
+        float x = r.f01() * 2.0f - 1.0f;
+        lp += 0.03f * (x - lp);
+        lp2 += 0.03f * (lp - lp2);
+        float s = 0;
+        if (variant == 2) {
+            // Root, fifth and octave, rising for 1.4 s and cut, as a scene ends.
+            float env = t < 1.4f ? t / 1.4f : expf(-(t - 1.4f) * 30.0f);
+            s = (sinf(TAU * 55.0f * t) + 0.6f * sinf(TAU * 82.4f * t) + 0.6f * sinf(TAU * 110.0f * t)) * env * env * 0.4f
+              + (lp2 * 6.0f + lp * 1.6f) * env;
+        } else {
+            for (float at : hits) {
+                float u = t - at;
+                if (at < 0.0f || u <= 0.0f) continue;
+                float env = (1.0f - expf(-u * 60.0f)) * expf(-u * 2.6f);
+                s += env * (sinf(TAU * f0 * u * (1.0f - 0.12f * fminf(u, 1.0f))) * 0.6f + lp2 * 12.0f + lp * 1.5f);
+            }
+        }
+        d[i] = s;
+    }
+    return farAway(d, 900.0f, 1.8f, 0.45f, 0.62f);
+}
+
+// A float buffer to 16-bit PCM at peak `level`, with 4 ms ramps at both ends
+// so it starts and ends on zero.
+Pcm toPcm(const std::vector<float> &d, float level) {
+    float peak = 1e-6f;
+    for (float v : d) peak = fmaxf(peak, fabsf(v));
+    const int n = (int)d.size();
+    Pcm pcm(n);
+    for (int i = 0; i < n; i++) {
+        float edge = clampf1(fminf((float)i, (float)(n - 1 - i)) / (0.004f * SAMPLE_RATE));
+        pcm[i] = (short)(clampf1(d[i] / peak * level * edge) * 30000.0f);
+    }
+    return pcm;
+}
+
+// A door. Variant 0, shut: a latch click (noise and a 2.1 kHz ring, 12 ms)
+// then the leaf meeting the frame, a 95 Hz thud and a 210 Hz panel mode over
+// 0.18 s. Variant 1, opened: the latch, then 0.35 s of hinge creak, noise
+// through a 230-300 Hz resonance swept up. Variant 2, forced open: a harder
+// thud at 80 Hz with 0.25 s of broadband splintering.
+Pcm makeDoorShut(int variant)
+{
+    Rng r(0xD0035ULL + (uint64_t)variant * 811u);
+    std::vector<float> d((int)((variant == 1 ? 0.55f : 0.45f) * SAMPLE_RATE));
+    float bp1 = 0, bp2 = 0, lp = 0;
+    const float hitAt = variant == 1 ? 0.0f : 0.03f;
+    for (int i = 0; i < (int)d.size(); i++) {
+        float t = (float)i / SAMPLE_RATE;
+        float x = r.f01() * 2.0f - 1.0f;
+        lp += 0.08f * (x - lp);
+        float latch = (x * 0.5f + sinf(TAU * 2100.0f * t) * 0.6f) * expf(-t * 400.0f) * 0.5f;
+        float s = latch;
+        if (variant == 1) {
+            float u = t - 0.04f;
+            if (u > 0.0f) {
+                // Two-pole resonator on noise, its centre swept 230 -> 300 Hz.
+                float f = 230.0f + 70.0f * fminf(u / 0.35f, 1.0f), q = 0.985f;
+                float w = TAU * f / SAMPLE_RATE;
+                float y = x * 0.08f + 2.0f * q * cosf(w) * bp1 - q * q * bp2;
+                bp2 = bp1; bp1 = y;
+                s += y * expf(-fmaxf(0.0f, u - 0.3f) * 25.0f);
+            }
+        } else {
+            float u = t - hitAt;
+            if (u > 0.0f) {
+                float f0 = variant == 2 ? 80.0f : 95.0f;
+                float env = (1.0f - expf(-u * 900.0f)) * expf(-u * (variant == 2 ? 14.0f : 22.0f));
+                s += env * (sinf(TAU * f0 * u) * 1.2f + sinf(TAU * 210.0f * u) * 0.35f + lp * 2.5f);
+                if (variant == 2) s += x * 0.9f * expf(-u * 9.0f) * (0.5f + 0.5f * sinf(TAU * 37.0f * u));
+            }
+        }
+        d[i] = s;
+    }
+    return toPcm(d, variant == 2 ? 0.80f : 0.62f);
+}
+
+// A body striking a shut door from the far side: a 70-90 Hz thud, the panel's
+// 180 Hz mode and the frame's rattle, 0.32 s. Each variant has its own pitch.
+Pcm makeDoorBang(int variant)
+{
+    Rng r(0xBA26ULL + (uint64_t)variant * 557u);
+    std::vector<float> d((int)(0.32f * SAMPLE_RATE));
+    const float f0 = 70.0f + variant * 9.0f + r.f01() * 4.0f;
+    float lp = 0;
+    for (int i = 0; i < (int)d.size(); i++) {
+        float t = (float)i / SAMPLE_RATE;
+        float x = r.f01() * 2.0f - 1.0f;
+        lp += 0.10f * (x - lp);
+        float env = (1.0f - expf(-t * 700.0f)) * expf(-t * 16.0f);
+        float rattle = x * 0.25f * expf(-t * 30.0f) * (0.5f + 0.5f * sinf(TAU * 23.0f * t));
+        d[i] = env * (sinf(TAU * f0 * t) * 1.3f + sinf(TAU * 180.0f * t) * 0.4f + lp * 2.0f) + rattle;
+    }
+    return toPcm(d, 0.75f);
+}
+
 // Bark: a falling-pitch harmonic voice through a noise band, with a fast attack
 // and decay.
 Pcm makeDogBark(uint32_t seed, bool through = false) {
@@ -723,7 +831,8 @@ ClipSpec clipSpec(Sfx sfx) {
     case Sfx::StepConcrete: case Sfx::StepTile: case Sfx::StepWood: return { 4, 1.0f, 1.0f };
     case Sfx::SplashIn: case Sfx::SplashOut:
     case Sfx::Bark: case Sfx::BarkThrough:
-    case Sfx::FarDoor: case Sfx::FarClang: case Sfx::FarKnock: case Sfx::FarPop: return { 3, 1.0f, 1.0f };
+    case Sfx::FarDoor: case Sfx::FarClang: case Sfx::FarKnock: case Sfx::FarPop:
+    case Sfx::FarBoom: case Sfx::DoorShut: case Sfx::DoorBang: return { 3, 1.0f, 1.0f };
     case Sfx::Hit:       return { 1, 1.7f, 0.40f };
     case Sfx::Kill:      return { 1, 0.55f, 0.80f };
     case Sfx::Heartbeat: return { 1, 1.0f, 0.55f };
@@ -773,6 +882,9 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::FarClang:       return makeFarClang(variant);
     case Sfx::FarKnock:       return makeFarKnock(variant);
     case Sfx::FarPop:         return makeFarPop(variant);
+    case Sfx::FarBoom:        return makeFarBoom(variant);
+    case Sfx::DoorShut:       return makeDoorShut(variant);
+    case Sfx::DoorBang:       return makeDoorBang(variant);
     }
     return {};
 }

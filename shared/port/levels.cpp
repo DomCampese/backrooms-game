@@ -18,14 +18,18 @@ const LevelCfg LEVELS[NLEVELS] = {
     { LEVEL_RULES[2], 1.25f, 0.026f, 0.55f, {1.00f,0.98f,0.89f}, {0.16f,0.18f,0.18f},    {0.16f,0.23f,0.22f} },
     { LEVEL_RULES[3], 0.80f, 0.095f, 0.10f, {1.00f,0.22f,0.15f}, {0.052f,0.014f,0.011f}, {0.055f,0.010f,0.008f} },
     { LEVEL_RULES[4], 1.05f, 0.055f, 0.06f, {1.00f,0.82f,0.76f}, {0.050f,0.040f,0.036f}, {0.150f,0.100f,0.085f} },
+    // The multiplex: warm lobby light, dark auditoriums lit by their screens, and
+    // enough haze for a projector's beam.
+    { LEVEL_RULES[5], 0.95f, 0.034f, 0.06f, {1.00f,0.86f,0.68f}, {0.058f,0.048f,0.048f}, {0.060f,0.040f,0.040f} },
 };
 // The Poolrooms are kept nearly uniform on purpose: new tile in a still hall.
-const float SURF_MACRO[NLEVELS] = { 0.05f, 0.08f, 0.015f, 0.07f, 0.06f };
-const float CEIL_BOARD[NLEVELS] = { 2.0f / 3.0f, 0.0f, 0.0f, 0.0f, 0.5f };
+const float SURF_MACRO[NLEVELS] = { 0.05f, 0.08f, 0.015f, 0.07f, 0.06f, 0.05f };
+const float CEIL_BOARD[NLEVELS] = { 2.0f / 3.0f, 0.0f, 0.0f, 0.0f, 0.5f, 0.5f };
 
 const char *const SURF_NAMES[SURF_COUNT] = {
     "carpet", "ceiling", "wallpaper", "concfloor", "concceil", "concwall",
     "poolfloor", "poolwall", "brick", "partycarpet", "partyceil", "partywall",
+    "cinemacarpet", "cinemaceil", "cinemawall",
 };
 
 const LevelSurfaces LEVEL_SURFACES[NLEVELS] = {
@@ -34,6 +38,7 @@ const LevelSurfaces LEVEL_SURFACES[NLEVELS] = {
     { SURF_POOLFLOOR, SURF_POOLFLOOR, SURF_POOLWALL },   // floor tile on the ceiling: both map 2 m
     { SURF_SLAB, SURF_SOFFIT, SURF_BRICK },              // Level 1's slab, in red light
     { SURF_BANQUET, SURF_PARTYCEIL, SURF_PARTYWALL },
+    { SURF_CINEMACARPET, SURF_CINEMACEIL, SURF_CINEMAWALL },
 };
 
 

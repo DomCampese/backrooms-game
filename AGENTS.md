@@ -42,6 +42,105 @@ easy to prove. A PR states what a player will notice and why it was chosen.
 Write all of it plainly (docs/readability.md, "Register"). That includes
 messages to the user: short sentences, no jargon they would have to decode.
 
+# The multiplex (November 2026)
+
+Level 5 (`MULTIPLEX`, core/level_rules.h) is a cinema, and the second level
+you reach: Level 0's exits lead to it and its exits lead to Level 1. Three chunks in four are one
+auditorium filling the room patch; the rest, and the spawn chunk, are lobbies
+with a concession counter (`PROP_CONCESSION`), columns, benches and plants.
+The hunter is a Smiler. It is not from the Backrooms wiki, so CREDITS.md has
+no row for it.
+
+- **An auditorium is decided in core** (`World::generate`, the
+  `level == MULTIPLEX` block). `audCell(dir, u, v)` maps its cells: u across,
+  v back from the screen. `audElev(v)` is the floor: rows rise 3 dm each
+  toward the back, so the back aisle is at 0 and the front 3 m down. A sunken
+  cell keeps the room's ceiling, so the ceiling stays flat at 5 m. Seats are
+  `PROP_SEATS`, turned by `audFacing(dir)` to face the screen, with aisles at
+  u = 0, 6 and 12. `ChunkData::audDir` says which way an auditorium faces, or
+  -1.
+- **The elevation relaxation pass skips the multiplex.** It reads the four
+  neighbours whatever wall is between them, so it pulled the front rows up
+  toward the corridor floor on the far side of the wall. The floors are within
+  `MAX_STEP` by construction; the regression checks every open edge.
+- **An auditorium's outer wall is protected (`ChunkData::prot`)**, so the
+  connectivity, door, lock and exit passes leave it alone. A door or exit at
+  the front of the room would open 3 m above its floor. The marking is after
+  the storeys pass, because that pass clears `prot`; marked before it, every
+  auditorium got doors and exits in its front wall and the regression's step
+  check failed. Exits only form in lobbies, so a lobby tries four times as
+  often (5 in mapdump's 129-cell sample, as on other levels).
+- **A seat row's collision box fills the back of its cell** (`seatBox`,
+  `SEAT_FRONT`..`SEAT_BACK`): a body walks the legroom along the row and is
+  stopped by the seats. Seat cells are props, so the pathfinder routes the
+  hunter down the aisles. `hideSpotAt` counts seats and counters, so crouching
+  still beside a row hides the player.
+- **Seats are plain boxes, no bevels.** The props builder's indices are 16
+  bits, and an auditorium holds a hundred rows (about 42,000 vertices of
+  props). A bevelled fabric box is 88 vertices against 20. The regression
+  checks every slot stays under 65,536.
+- **The screen and its beam are drawn by `sceneDraws`, not the chunk mesh**,
+  so they can show a film: `filmFrame` (port/draw.cpp) picks each 3.4 s
+  shot's colour and level from the auditorium's seed. The beam is a
+  translucent cone from the projection port, writing no depth.
+- **The screen lights its room through the shader's one spare light**
+  (`uLamp`, set in `frameLight`), 3.5 m in front of the screen, in the film's
+  colour. The same function sets `uRoomMask` to the auditorium's floor, so its
+  tubes are dark; the layout marks those fittings `FittingGap::Auditorium` and
+  the mesher draws none. There is one mask and one lamp, so only the
+  auditorium nearest the player (`nearestAuditorium`) is dark and lit by its
+  screen; another is seen only through its doors, lit by tubes that are not
+  drawn. A blue shot leaves the red curtains and seats nearly black; that is
+  the light's colour, not a bug.
+- **Each riser in the floor is drawn with a half-height step 0.35 m in front
+  of it** (`stepEdge` in chunk_mesh.cpp). The aisle lights went on the riser
+  first and the step hid them; they sit on the step's face.
+- **Posters are split into bands that do not overlap**, inside a frame that
+  stands proud of them, so no two faces share a depth (see the vending
+  machine).
+- The surfaces are `makeCinemaCarpetSurface`, `makeCinemaWallSurface` and
+  `makeCinemaCeilSurface` (web/src/surfaces.cpp). The wall texture has no
+  skirting or anything else at a height: auditorium walls are 8 m tall and the
+  texture repeats every 3 m. The mesher adds dark skirting.
+- `Distant::Boom` plays `Sfx::FarBoom`: a film's soundtrack through a wall.
+- **Its number is 5 but its place is second.** `EXIT_NEXT` sets the order,
+  and the records' "deepest" compares `LEVEL_DEPTH`, not the level number;
+  comparing numbers would rank the multiplex deepest of all. The records file
+  still stores the number. F3's N still steps by number.
+- tests/golden gained lines for the new level and lost none; walk-l0-l2.trace
+  plays back unchanged.
+
+# Doors (November 2026)
+
+The use key shuts or opens a doorway (`Sim::findDoor`, `useDoor`,
+shared/sim/items.cpp). A shut door is `WALL_SHUT`, which no chunk stores: the
+`World::shutDoors` overlay turns a `WALL_DOOR` into it in `wallNVal` and
+`wallWVal`, like `unlockedDoors` and `shifted`.
+
+- **`WALL_SHUT` blocks bodies, light and sight** (`blocksEdge`,
+  `blocksLight`, and the full-height box `gatherCellAABBs` gives any blocking
+  edge). The layout calls it `OpeningKind::ShutDoor`, and the mesher and the
+  greybox build it as a locked door.
+- **`World::shutEdge` rebakes both chunks that draw the edge**, and the sim
+  sets `shadowsStale`, as for an unlocked door. `unloadAll` clears the set, so
+  a new level starts with every door open.
+- **The hunter routes through shut doors and the pack does not.**
+  `canStep` and `pathStep` take `throughShut`, which only `hunterChase` passes.
+  At a shut door between him and his waypoint he stops, strikes it every
+  `DOOR_KNOCK` s (`Sfx::DoorBang`) and opens it after `DOOR_FORCE` s
+  (`Sim::hunterForcesDoor`). Without the stop, the router walked him into the
+  leaf and collision held him there.
+- **A doorway joined to its neighbour takes no leaf** (`World::doorJoined`):
+  the two share one opening with no jamb between them, and a leaf in one would
+  leave half the opening open.
+- **A door will not shut on a body** (`bodyInDoorway`): the player, the
+  hunter or a dog within its radius of the leaf's line.
+- **Shutting or opening is a noise** (`doorNoiseT`, `DOOR_NOISE` 14 m in
+  `packNoise`), so the hunter and the pack hear it.
+- **`Sim::crateAt` treats `WALL_SHUT` as a doorway**, or shutting a door
+  would move Level 1's crates.
+- The HUD shows "E · shut the door" or "open the door" while one is in reach.
+
 # Footstep clip per floor material (October 2026)
 
 Player footsteps and landings use a clip per floor material: carpet on
@@ -67,6 +166,28 @@ Levels 0 and 4 (`Sfx::Step`, unchanged), concrete on Levels 1 and 3
   frames and two recordings never left Level 0. Use `KEY_HOLD=2` on a slow
   machine, and check a new recording reached every level with
   `grep -o 'level=[0-9]' | sort | uniq -c`.
+
+# The hunter can lose the player (October 2026)
+
+In a chase the hunter used to path to the player's cell through any number of
+walls, and gave up only after a fixed time unseen. Now he chases what he
+knows (`Sim::hunterChase`, shared/sim/hunters.cpp).
+
+- **He sees the player** within `HUNTER_SIGHT` (30 m) with line of sight,
+  unless they are hidden or crouched more than 7 m away. **He hears them**
+  inside `packNoise`'s radius, the one the pack uses: 5 m standing, 11 m
+  walking, 20 m sprinting (x0.45 crouched), the tape player, a flare strike, a
+  shot. Either sets `Entity::lastX/lastZ` and zeroes `lostT`
+  (`Sim::hunterNotice`).
+- **Without contact** he walks at `SEARCH_SPEED` to the last-known spot, then
+  to open spots 3-7 m around it, and goes `Hidden` after `SEARCH_TIME` (10 s).
+  He cannot lunge without sight.
+- **Every way into a chase must call `hunterNotice`** (the stare, the shot
+  alert in weapons.cpp, F3's C). Without it he searches wherever the last
+  chase ended.
+- **The search draws from `grng`.** walk-l0-l2.trace has no chase, so it still
+  plays back the same; a recording with a chase out of sight would not.
+- No platform code changed, so both builds get it.
 
 # Distant one-shots (October 2026)
 
@@ -1147,7 +1268,7 @@ build's, in `web/src/`.
 | `game_audio.{h,cpp}` | every `Sound`/`Music` handle and the synth; plays the sim's `AudioEvent`s in order |
 | `render.cpp` | 3D scene, viewmodels, HUD, overlays, drawn from `sim` |
 | `core/world.{h,cpp}` | the infinite maze: chunk generation, storeys, collision, line of sight, pathfinding, occupancy grid. `WallKind` / `PropKind` name the codes stored per cell. No raylib |
-| `core/level_rules.h` | per-level rules: wall height, light pitch, storey pitch, name, which tubes work, exits, floor material, distant sound |
+| `core/level_rules.h` | per-level rules: wall height, light pitch, storey pitch, name, which tubes work, exits, floor material, distant sound; `MULTIPLEX` |
 | `core/layout.{h,cpp}` | `ChunkLayout`: a chunk's props, fixtures, light fittings and openings, decided from the seed |
 | `core/floorplan.{h,cpp}` | `ChunkFloorplan`: a chunk's floors, walls, risers, ceilings, soffits, flights and arches |
 | `core/hash.{h,cpp}`, `core/vec.h`, `core/portable_math.{h,cpp}` | hashes, RNG, value noise; `Vec2`/`Vec3`, `TAU`, `clampf`; sin, cos, exp, atan2, hypot that round the same on every platform |
@@ -1437,7 +1558,7 @@ light flicker, so the same command twice gives comparable images. Frames go to
 | `BACKROOMS_SHOTFRAME=n` | which frame to capture (default 600; about 150 for quick sweeps) |
 | `BACKROOMS_SEED=n` | fix the world seed |
 | `BACKROOMS_NOBLACKOUT=1` | never schedule a blackout (default on under `BACKROOMS_SHOT`; pass `0` to capture one) |
-| `BACKROOMS_LEVEL=n` | start on level n (0-4) |
+| `BACKROOMS_LEVEL=n` | start on level n (0-5) |
 | `BACKROOMS_POS="x,z,yaw[,pitch]"` | start position and heading in metres and radians; pitch (up +) photographs a floor or ceiling |
 | `BACKROOMS_EXITS=1` | exit doors everywhere |
 | `BACKROOMS_MENU=1` | stay on the title screen |
@@ -1468,7 +1589,7 @@ In game, F3 shows the debug HUD. While it is up:
 # Regression process
 
 Before pushing anything that touches rendering, the shader or world
-generation, run all five levels and the menu:
+generation, run all six levels and the menu:
 
 ```bash
 tools/sweep.sh

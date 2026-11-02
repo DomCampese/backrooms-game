@@ -42,6 +42,10 @@ enum WallKind : uint8_t {
     // the open side of a flight. Stops a body at any height, but not light or
     // sight.
     WALL_RAIL   = 6,
+    // A doorway whose leaf the player has shut. Never stored in a chunk: the
+    // shutDoors overlay turns a WALL_DOOR into this in wallNVal/wallWVal. Blocks
+    // bodies, light and sight like a locked door.
+    WALL_SHUT   = 7,
 };
 
 // A doorway's opening (and an exit's): from DOOR_LO to DOOR_HI along its edge,
@@ -74,9 +78,11 @@ enum PropKind : uint8_t {
     // 16: the Manila Room's table, chairs and cupboard. Anchored on room cell
     // (7,7) and built centred on that cell's far corner, the middle of the room.
     PROP_MANILA_TABLE,
+    PROP_SEATS,          // 17 a row of four cinema seats facing the screen (the multiplex)
+    PROP_CONCESSION,     // 18 a concession counter, run along x (the multiplex)
 };
 
-constexpr int PROP_KINDS = PROP_MANILA_TABLE + 1;
+constexpr int PROP_KINDS = PROP_CONCESSION + 1;
 
 // A prop's collision box, as offsets from its cell's min corner, and its top
 // above the floor it stands on. The mesher builds each piece to this top and
@@ -107,6 +113,8 @@ constexpr PropShape PROP_SHAPES[PROP_KINDS] = {
     { true, 0.78f, 0.78f, 1.22f, 1.22f, 0.94f, false },   // PROP_COOLER: the body, under the bottle
     { true, 0.80f, 0.80f, 1.20f, 1.20f, 0.32f, false },   // PROP_PLANT: the pot's rim
     {},                                                    // PROP_MANILA_TABLE: the room's furniture is not boxed
+    {},                                                    // PROP_SEATS: turned, so gatherCellAABBs boxes it (seatBox)
+    { true, 0.00f, 0.55f, 2.00f, 1.45f, 1.05f, true },    // PROP_CONCESSION: full length, so a run is one counter
 };
 // Where things lie on the Manila Room's table: its notes and its can, 2 mm
 // over the top (0.785) so they do not fight it for depth.
@@ -146,6 +154,65 @@ constexpr uint32_t MANILA_RATE = 20;
 constexpr int MANILA_LO = 6, MANILA_HI = 9;
 // The room's centre is the min corner of chunk cell (MANILA_MID, MANILA_MID).
 constexpr int MANILA_MID = MANILA_LO + 2;
+
+// The multiplex (level MULTIPLEX). Most chunks fill the room patch with one
+// auditorium, AUD_N cells square: u runs across it, v back from the screen.
+// The seats are rows AUD_ROW0..AUD_ROW1, each AUD_RISE decimetres above the
+// row in front, so the back cross aisle (v = AUD_N - 1) is at floor 0 and the
+// front of the room is sunk AUD_DEPTH below it. A sunken cell keeps the room's
+// ceiling, so the ceiling stays flat. v = 0 is a stage AUD_STAGE above the
+// front floor. Aisles run at u = 0, AUD_N / 2 and AUD_N - 1.
+constexpr int AUD_LO = HALL_LO;
+constexpr int AUD_N = CCELLS - HALL_LO - HALL_HI;
+constexpr int AUD_ROW0 = 2, AUD_ROW1 = AUD_N - 2;
+constexpr int AUD_RISE = 3;
+constexpr int AUD_DEPTH = AUD_RISE * (AUD_N - 1 - AUD_ROW0);
+constexpr int AUD_STAGE = 4;
+// One chunk in AUD_LOBBY_RATE is a lobby instead, and so is the spawn chunk.
+constexpr uint32_t AUD_LOBBY_RATE = 4;
+// The screen: AUD_SCREEN_W m across, from AUD_SCREEN_LIFT above the stage up to
+// AUD_SCREEN_TOP below the ceiling, standing AUD_SCREEN_OFF off the wall face.
+constexpr float AUD_SCREEN_W = 16.0f, AUD_SCREEN_LIFT = 0.6f, AUD_SCREEN_TOP = 0.4f;
+constexpr float AUD_SCREEN_OFF = 0.05f;
+// Chunk-local cell of auditorium cell (u, v), for an auditorium whose screen
+// is on its -z (dir 0), +z (1), -x (2) or +x (3) side. One step outside the
+// room in u or v gives the corridor cell beyond its wall.
+inline void audCell(int dir, int u, int v, int &x, int &z) {
+    const int m = AUD_N - 1;
+    switch (dir) {
+    case 0:  x = AUD_LO + u;     z = AUD_LO + v;     break;
+    case 1:  x = AUD_LO + m - u; z = AUD_LO + m - v; break;
+    case 2:  x = AUD_LO + v;     z = AUD_LO + m - u; break;
+    default: x = AUD_LO + m - v; z = AUD_LO + u;     break;
+    }
+}
+// Floor of auditorium row v, decimetres.
+inline int audElev(int v) {
+    if (v <= 0) return -AUD_DEPTH + AUD_STAGE;
+    if (v < AUD_ROW0) return -AUD_DEPTH;
+    return -AUD_RISE * (AUD_N - 1 - v);
+}
+// propRot of a seat row facing the screen: turn r faces -z, +x, +z, -x.
+inline uint8_t audFacing(int dir) { return (uint8_t)(dir == 0 ? 0 : dir == 1 ? 2 : dir == 2 ? 3 : 1); }
+// The collision box of a seat row in cell (x0, z0)'s min corner: the seats
+// fill the back of the cell (away from the screen), and the front is legroom
+// a body can walk along.
+void seatBox(uint8_t rotByte, float x0, float z0, float &bx0, float &bz0, float &bx1, float &bz1);
+constexpr float SEAT_TOP = 1.0f;             // the seat backs
+constexpr float SEAT_FRONT = 0.95f, SEAT_BACK = 1.90f;   // seat depth, metres from the cell's front edge
+
+// What a renderer needs of one auditorium: its screen and the light it throws.
+struct Auditorium {
+    int cx, cz, dir;
+    Vec3 screen;          // centre of the screen's face, world metres
+    Vec3 normal;          // out of the screen, toward the seats
+    Vec3 across;          // along the screen, u increasing
+    float halfW, y0, y1;  // half its width; its bottom and top
+    Vec3 lamp;            // where its light is centred (the shader's uLamp)
+    Vec3 booth;           // the projection port in the back wall
+    float rect[4];        // the room's floor, x0 z0 x1 z1: its tubes are masked
+    uint32_t seed;        // per auditorium: what it is showing
+};
 
 // ChunkData::elev is stored in decimetres so it fits in an int8_t.
 constexpr float ELEV_UNIT = 0.1f;
@@ -238,6 +305,7 @@ struct ChunkData {
     uint8_t lockWest = 0;            // 0: its north edge, 1: its west edge
     int8_t keyI = -1, keyK = -1;     // where the key for it lies, chunk-local
     bool manila = false;             // this chunk holds the Manila Room (Level 0)
+    int8_t audDir = -1;              // the multiplex: this chunk's auditorium faces dir (audCell); -1 none
     // Storeys: each cell's VertFlag bits, which of `feats` it belongs to, and
     // which of its two edges (bit 0 north, bit 1 west) a feature owns. Later passes
     // that punch, move, lock or noclip doorways must skip protected edges, or the
@@ -260,11 +328,12 @@ constexpr int MAX_NEARBY_AABBS = 48;
 // Can a body cross this edge? Collision, pathfinding, line of sight and the
 // mesher share this test. Light uses blocksLight.
 inline bool blocksEdge(uint8_t wall) {
-    return wall == WALL_SOLID || wall == WALL_WINDOW || wall == WALL_LOCKED || wall == WALL_RAIL;
+    return wall == WALL_SOLID || wall == WALL_WINDOW || wall == WALL_LOCKED || wall == WALL_RAIL ||
+           wall == WALL_SHUT;
 }
 // Does this edge stop light? Glass and doorways pass light; a locked door
 // does not.
-inline bool blocksLight(uint8_t wall) { return wall == WALL_SOLID || wall == WALL_LOCKED; }
+inline bool blocksLight(uint8_t wall) { return wall == WALL_SOLID || wall == WALL_LOCKED || wall == WALL_SHUT; }
 
 inline int fdiv(int a, int b) { return (a >= 0) ? a / b : -((-a + b - 1) / b); }
 inline int cellOf(float x) { return (int)floorf(x / CELL); }
@@ -313,6 +382,12 @@ struct World {
     int featuresFor(int cx, int cz, int s, VertFeat *out, int cap);
     bool pairFeature(int cx, int cz, int p, VertFeat &out);   // the one feature joining p and p + 1, if any
     bool manilaChunk(int cx, int cz, int s);                  // does storey s hold a Manila Room here
+    // The multiplex: chunk (cx, cz)'s auditorium, generating the chunk, or
+    // false for a lobby or another level.
+    bool auditorium(int cx, int cz, Auditorium &a);
+    // The auditoriums in the 3 x 3 chunks round (pcx, pcz) that are already
+    // generated, so a renderer never generates a chunk to light a frame.
+    std::vector<Auditorium> auditoriums(int pcx, int pcz);
     uint8_t vflagAt(int ci, int ck);                           // VertFlag bits of a cell on storey qs
     // The walking surface of a flight or landing at (x,z), in storey qs's frame,
     // or NAN off a stair. Stepped; `ramp` gives the nosing line.
@@ -360,10 +435,12 @@ struct World {
     void buildOccupancy(int originI, int originK, int n, unsigned char *out);
     // Can a body walk from cell (ci,ck) into the adjacent (ni,nk)? Furniture and
     // pillars fill their cell; only a doorway opens a walled edge.
-    bool canStep(int ci, int ck, int ni, int nk);
+    // throughShut: treat a shut door as open, for a body that can open one (the
+    // hunter). The pack cannot.
+    bool canStep(int ci, int ck, int ni, int nk, bool throughShut = false);
     // BFS from (si,sk) toward (ti,tk) within 16 cells; the first cell to move to.
     // False if there is no route (fall back to a beeline).
-    bool pathStep(int si, int sk, int ti, int tk, int &outI, int &outK);
+    bool pathStep(int si, int sk, int ti, int tk, int &outI, int &outK, bool throughShut = false);
     // Level 0 only: is this cell inside the Manila Room?
     bool manilaAt(int ci, int ck);
     // The centre (world metres) of a loaded Manila Room in this point's chunk or
@@ -388,6 +465,9 @@ struct World {
     std::unordered_set<uint64_t> shifted;
     // Doors the player has unlocked, in the same edge-key space.
     std::unordered_set<uint64_t> unlockedDoors;
+    // Doorways whose leaf is shut (WALL_SHUT), in the same edge-key space.
+    // Cleared with the level (unloadAll).
+    std::unordered_set<uint64_t> shutDoors;
     // Edges are per storey: the edge directly above is a different edge. Storey
     // 0 keys as a one-storey world did.
     uint64_t edgeKey(int ci, int ck, bool west) const {
@@ -395,6 +475,12 @@ struct World {
     }
     void shiftEdge(int ci, int ck, bool west);   // wall it off, and rebake the chunk that owns it
     void unlockEdge(int ci, int ck, bool west);  // open a locked door for good, and rebake
+    // Shut or open a doorway's leaf, and rebake both chunks that draw it.
+    void shutEdge(int ci, int ck, bool west, bool shut);
+    // Is the next edge along this one's wall line a doorway (open or shut)?
+    // Two such doorways share one opening with no jamb between them, so neither
+    // takes a leaf.
+    bool doorJoined(int ci, int ck, bool west);
     // Is there a key lying loose in this cell? One per chunk at most.
     bool keyAt(int ci, int ck);
     void rebuildChunk(int cx, int cz);           // report its geometry stale (staleChunks)

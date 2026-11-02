@@ -368,6 +368,10 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         coverCol = { 180, 170, 140, 120 };
     }
     if (coverLine) textC(coverLine, sw / 2, sh - hud(62), hud(14), coverCol);
+    if (sim.doorReach.ok) {   // the doorway the use key would shut or open
+        const char *verb = sim.doorReach.shut ? "open the door" : "shut the door";
+        textC(fmt("%s · %s", in.touch ? "USE" : "E", verb), sw / 2, sh / 2 + hud(46), hud(14), { 200, 190, 160, 150 });
+    }
     if (sim.level == 3 && sim.valveT > 0) {   // a valve was just closed
         float a = clampf(sim.valveT / 1.6f, 0, 1);
         if (sim.pipesShut) {

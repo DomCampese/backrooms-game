@@ -37,6 +37,7 @@ void Sim::updateTimers(float dt) {
     fellT = fmaxf(0, fellT - dt);
     winT = fmaxf(0, winT - dt);
     closeCallT = fmaxf(0, closeCallT - dt);
+    doorNoiseT = fmaxf(0, doorNoiseT - dt);
     tapeFoundT = fmaxf(0, tapeFoundT - dt);
     valveT = fmaxf(0, valveT - dt);
 }
@@ -152,7 +153,7 @@ void Sim::seedStrangerChalk() {
 void Sim::applyLevel(int lv, double now) {
     level = lv;
     levelEntries++;
-    if (lv > deepest) deepest = lv;
+    if (LEVEL_DEPTH[lv] > LEVEL_DEPTH[deepest]) deepest = lv;
     // Read before the increment: the first arrival is visit 0, so a fresh
     // descent at a given seed generates the same maze as before.
     world.visit = (unsigned)visits[lv];
@@ -241,7 +242,7 @@ void Sim::bankRecords() {
     if ((int)distWalked > best.metres) { best.metres = (int)distWalked; up = true; }
     if (winCount > best.wins) { best.wins = winCount; up = true; }
     if (tapes > best.tapes) { best.tapes = tapes; up = true; }
-    if (deepest > best.deepest) { best.deepest = deepest; up = true; }
+    if (LEVEL_DEPTH[deepest] > LEVEL_DEPTH[best.deepest]) { best.deepest = deepest; up = true; }
     if (up) recordsChanged = true;
 }
 
@@ -273,7 +274,7 @@ void Sim::updateDevKeys(const DevKeys &dev, double now) {
     if (dev.spawnAhead) {
         Vec2 spot = world.findOpenSpot(px + f2x * 12, pz + f2z * 12);
         ent.x = spot.x; ent.z = spot.y;
-        ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.hp = 3; ent.stagger = 0;
+        ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.hp = 3; ent.stagger = 0;
     }
     if (dev.chase) {
         if (ent.st == EState::Hidden) {
@@ -281,7 +282,8 @@ void Sim::updateDevKeys(const DevKeys &dev, double now) {
             ent.x = spot.x; ent.z = spot.y;
             ent.hp = 3;
         }
-        ent.st = EState::Chase; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.repathT = 0;
+        ent.st = EState::Chase; ent.gaze = 0; ent.life = 0; ent.repathT = 0;
+        hunterNotice(px, pz);
     }
     if (dev.banish) {
         ent.st = EState::Hidden; ent.nextSpawn = now + 20 + grng.f01() * 20;

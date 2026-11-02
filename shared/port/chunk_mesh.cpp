@@ -565,6 +565,42 @@ static void addProp(const PropPlacement &site, int level, MB &pr, MB &ce, MB &ao
         }
         break;
     }
+    case PROP_SEATS: {   // four seats facing local -z, filling the back of the cell (seatBox)
+        // Plain boxes, no bevels: an auditorium holds a hundred rows, and the props
+        // builder's indices are 16 bits.
+        const Rgba plush = { 158, 34, 40, 255 }, frame = { 46, 44, 42, 254 };
+        auto box = [&](float ox, float oz, float hx2, float hz2, float y0, float y1, bool fabric, Rgba tint) {
+            float u0 = fabric ? 0.51f : MU0, v0 = fabric ? 0.52f : MV0, u1 = fabric ? 0.99f : MU1, v1 = fabric ? 0.98f : MV1;
+            addPropBox(pr, pcx + ox * ca - oz * sa, pcz + ox * sa + oz * ca, rot, hx2, hz2, y0, y1,
+                       u0, v0, u1, v1, u0, v0, u1, v1, tint);
+        };
+        for (int seat = 0; seat < 4; seat++) {
+            float sx = -0.75f + seat * 0.5f;
+            if ((h >> (seat * 3)) % 7 == 0)   // tipped up, as an empty seat springs back
+                box(sx, 0.50f, 0.20f, 0.05f, ey + 0.42f, ey + 0.90f, true, plush);
+            else
+                box(sx, 0.22f, 0.20f, 0.23f, ey + 0.38f, ey + 0.50f, true, plush);
+            box(sx, 0.72f, 0.20f, 0.08f, ey + 0.45f, ey + SEAT_TOP - 0.05f, true, plush);
+            box(sx, 0.72f, 0.18f, 0.07f, ey + SEAT_TOP - 0.05f, ey + SEAT_TOP, true, Rgba{ 120, 24, 30, 255 });
+        }
+        for (int arm = 0; arm < 5; arm++)
+            box(-0.96f + arm * 0.48f, 0.36f, 0.03f, 0.32f, ey, ey + 0.66f, false, frame);
+        break;
+    }
+    case PROP_CONCESSION: {   // a counter section; neighbours along x join into one counter
+        const Rgba wood = { 92, 52, 34, 255 }, top2 = { 40, 36, 34, 254 };
+        part(0, 0, 1.0f, 0.44f, ey, ey + 0.95f, Surface::Wood, wood);
+        part(0, 0, 1.0f, 0.47f, ey + 0.95f, ey + top, Surface::Metal, top2);
+        // A lit strip along the customer side, and on some sections a popcorn
+        // machine. Vertex alpha 240 is the shader's backlit print.
+        part(0, -0.445f, 0.98f, 0.005f, ey + 0.58f, ey + 0.80f, Surface::Metal, Rgba{ 230, 70, 60, 240 });
+        if (h % 3 == 0) {
+            part(0.35f, 0.05f, 0.26f, 0.20f, ey + top, ey + top + 0.12f, Surface::Metal, Rgba{ 150, 30, 30, 254 });
+            part(0.35f, 0.05f, 0.25f, 0.19f, ey + top + 0.12f, ey + top + 0.66f, Surface::Metal, Rgba{ 255, 214, 110, 240 });
+            part(0.35f, 0.05f, 0.27f, 0.21f, ey + top + 0.66f, ey + top + 0.74f, Surface::Metal, Rgba{ 150, 30, 30, 254 });
+        }
+        break;
+    }
     case PROP_NONE:
     case PROP_MANILA_TABLE:   // addManilaRoom builds the room's furniture
         break;
@@ -1018,6 +1054,114 @@ static void addStreamer(MB &pr, const Fixture &s) {
 }
 
 // The builders a fixture can land in.
+// An auditorium's fittings round its screen, which sceneDraws draws so it can
+// show a film. The room's frame: s across from the u = 0 wall, t back from
+// the screen wall's centreline, both in metres; the cells are 2 m in each.
+static void addAuditorium(MB &pr, MB &fx, const Fixture &f) {
+    const int dir = f.variant;
+    const Vec3 n = f.normal;
+    const Vec3 A[4] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, -1 }, { 0, 0, 1 } };
+    const Vec3 a = A[dir & 3];
+    const float half = AUD_N * CELL * 0.5f, depth = AUD_N * CELL;
+    const Vec3 w0 = { f.pos.x - n.x * (WT + AUD_SCREEN_OFF) - a.x * half, 0,
+                      f.pos.z - n.z * (WT + AUD_SCREEN_OFF) - a.z * half };
+    auto at = [&](float s, float t) { return Vec3{ w0.x + a.x * s + n.x * t, 0, w0.z + a.z * s + n.z * t }; };
+    // A box from (s0, t0) to (s1, t1), y0 to y1; the axes are the world's.
+    auto box = [&](MB &mb, float s0, float t0, float s1, float t1, float y0, float y1, Rgba c) {
+        Vec3 p = at(s0, t0), q = at(s1, t1);
+        addSolidBox(mb, std::min(p.x, q.x), y0, std::min(p.z, q.z), std::max(p.x, q.x), y1, std::max(p.z, q.z), c);
+    };
+    const float face = WT, wallH = LEVEL_RULES[MULTIPLEX].wallH;
+    const float y0 = audElev(0) * ELEV_UNIT + AUD_SCREEN_LIFT, y1 = wallH - AUD_SCREEN_TOP;
+    const float s0 = half - AUD_SCREEN_W * 0.5f, s1 = half + AUD_SCREEN_W * 0.5f;
+    const float stage = audElev(0) * ELEV_UNIT, floorLo = audElev(1) * ELEV_UNIT;
+    // Black masking round the screen; it stands proud of the screen's plane, so
+    // the two never share a depth.
+    const Rgba mask = { 12, 12, 14, 254 };
+    const float m0 = face, m1 = face + AUD_SCREEN_OFF + 0.05f;
+    box(pr, s0 - 0.40f, m0, s0, m1, y0 - 0.20f, y1 + 0.20f, mask);
+    box(pr, s1, m0, s1 + 0.40f, m1, y0 - 0.20f, y1 + 0.20f, mask);
+    box(pr, s0, m0, s1, m1, y1, y1 + 0.20f, mask);
+    box(pr, s0, m0, s1, m1, y0 - 0.20f, y0, mask);
+    box(pr, s0 - 0.40f, m0, s1 + 0.40f, m1, stage, y0 - 0.20f, Rgba{ 20, 18, 18, 254 });
+    // Velvet curtains drawn back either side, in folds, and a valance along the top.
+    const Rgba velvet = { 104, 14, 22, 255 }, velvetDark = { 70, 8, 14, 255 };
+    for (int side = 0; side < 2; side++) {
+        float e = side ? s1 + 0.40f : s0 - 0.40f, dirS = side ? 1.0f : -1.0f;
+        for (int fold = 0; fold < 7; fold++) {
+            float fa = e + dirS * fold * 0.22f, fb = fa + dirS * 0.22f;
+            float out = 0.16f + 0.12f * (fold & 1) + 0.03f * fold;
+            box(pr, std::min(fa, fb), face, std::max(fa, fb), face + out, floorLo, wallH - 0.6f,
+                (fold & 1) ? velvet : velvetDark);
+        }
+    }
+    box(pr, 0.0f + face, face, depth - face, face + 0.55f, wallH - 0.6f, wallH, velvet);
+    // Amber lights in each aisle step, both edges of the aisle. The floor draws
+    // each riser with a half-height step 0.35 m in front of it (stepEdge), so
+    // they go on that step's face, or the step hides them.
+    const Rgba amber = { 255, 140, 44, 40 };
+    for (int u : { 0, AUD_N / 2, AUD_N - 1 })
+        for (int v = 1; v < AUD_N; v++) {
+            int lo = audElev(v - 1), hi = audElev(v);
+            if (hi <= lo) continue;
+            float t = v * CELL - 0.35f, yl = lo * ELEV_UNIT + 0.04f;
+            for (float sl : { u * CELL + 0.16f, u * CELL + CELL - 0.30f })
+                box(pr, sl, t - 0.012f, sl + 0.14f, t, yl, yl + 0.06f, amber);
+        }
+    // The projection port high in the back wall: a dim lit pane in a black frame.
+    const float tb = depth - face, yp = wallH - 1.1f;
+    box(pr, half - 0.45f, tb - 0.03f, half + 0.45f, tb, yp - 0.32f, yp + 0.32f, mask);
+    box(pr, half - 0.34f, tb - 0.035f, half + 0.34f, tb - 0.03f, yp - 0.22f, yp + 0.22f, Rgba{ 60, 62, 70, 40 });
+    // Exit signs over the four doors (World::generate puts them at u = 2 and
+    // u = AUD_N - 3 in the back wall, and at both ends of the back aisle).
+    auto sign = [&](float s, float t, Vec3 nn) {
+        Fixture e;
+        e.kind = FixtureKind::ExitSign;
+        e.pos = at(s, t);
+        e.pos.y = DOOR_HEAD + 0.36f;
+        e.normal = nn;
+        addWallFitting(fx, e);
+    };
+    const Vec3 back = { -n.x, 0, -n.z }, right = { -a.x, 0, -a.z };
+    sign(2 * CELL + CELL * 0.5f, tb, back);
+    sign((AUD_N - 3) * CELL + CELL * 0.5f, tb, back);
+    sign(face, (AUD_N - 1) * CELL + CELL * 0.5f, a);
+    sign(depth - face, (AUD_N - 1) * CELL + CELL * 0.5f, right);
+}
+
+// A film poster in a light box: a black frame round a backlit face (vertex alpha
+// 240). The face is split into bands that do not overlap, so no two faces fight
+// for depth.
+static void addPoster(MB &pr, const Fixture &p) {
+    const Vec3 n = p.normal;
+    const Vec3 a = n.z != 0.0f ? Vec3{ n.z, 0, 0 } : Vec3{ 0, 0, -n.x };   // along the face
+    auto box = [&](float u0, float v0, float u1, float v1, float d0, float d1, Rgba c) {
+        Vec3 p0 = { p.pos.x + a.x * u0 + n.x * d0, 0, p.pos.z + a.z * u0 + n.z * d0 };
+        Vec3 p1 = { p.pos.x + a.x * u1 + n.x * d1, 0, p.pos.z + a.z * u1 + n.z * d1 };
+        addSolidBox(pr, std::min(p0.x, p1.x), p.pos.y + v0, std::min(p0.z, p1.z),
+                    std::max(p0.x, p1.x), p.pos.y + v1, std::max(p0.z, p1.z), c);
+    };
+    const float w = p.w, h = p.h, b = 0.05f;
+    const Rgba frame = { 24, 22, 22, 254 };
+    box(-w - b, -h - b, w + b, -h, 0.0f, 0.045f, frame);
+    box(-w - b, h, w + b, h + b, 0.0f, 0.045f, frame);
+    box(-w - b, -h, -w, h, 0.0f, 0.045f, frame);
+    box(w, -h, w + b, h, 0.0f, 0.045f, frame);
+    static const Rgba GROUND[6] = { { 30, 50, 120, 240 }, { 140, 20, 24, 240 }, { 40, 110, 60, 240 },
+                                    { 200, 110, 30, 240 }, { 80, 30, 110, 240 }, { 26, 26, 30, 240 } };
+    const uint32_t s = p.seed;
+    Rgba g = GROUND[(s >> 4) % 6], fig = { (uint8_t)(g.r / 4), (uint8_t)(g.g / 4), (uint8_t)(g.b / 4), 240 };
+    Rgba title = { 236, 228, 210, 240 };
+    if ((s >> 7) & 1) fig = { (uint8_t)std::min(255, g.r + 90), (uint8_t)std::min(255, g.g + 90), (uint8_t)std::min(255, g.b + 90), 240 };
+    // Title band, picture (a figure with ground either side), credits.
+    const float d = 0.03f, fw = 0.10f + ((s >> 9) & 7) * 0.025f, fx0 = -fw + ((s >> 12) & 3) * 0.05f - 0.075f;
+    box(-w, h - 0.26f, w, h, 0.0f, d, title);
+    box(-w, -h + 0.22f, fx0, h - 0.26f, 0.0f, d, g);
+    box(fx0, -h + 0.22f, fx0 + 2 * fw, h - 0.26f, 0.0f, d, fig);
+    box(fx0 + 2 * fw, -h + 0.22f, w, h - 0.26f, 0.0f, d, g);
+    box(-w, -h, w, -h + 0.22f, 0.0f, d, Rgba{ (uint8_t)(g.r / 2), (uint8_t)(g.g / 2), (uint8_t)(g.b / 2), 240 });
+}
+
 struct FixtureMeshes { MB &pr, &fx, &scr, &ao; };
 
 // Build one fixture. bakeChunk calls this at the point in its cell walk where
@@ -1038,6 +1182,8 @@ static void addFixture(const FixtureMeshes &m, const Fixture &f) {
     case FixtureKind::Valve:       addValve(m.pr, f); break;
     case FixtureKind::Streamer:    addStreamer(m.pr, f); break;
     case FixtureKind::ManilaRoom:  addManilaRoom(m.pr, m.fx, m.ao, f.pos.x, f.pos.z, f.pos.y, f.seed); break;
+    case FixtureKind::Auditorium:  addAuditorium(m.pr, m.fx, f); break;
+    case FixtureKind::Poster:      addPoster(m.pr, f); break;
     }
 }
 
@@ -1460,7 +1606,7 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
             addSolidBox(pr, mW ? gx : a0, fy0, gz - 0.07f,
                         mE ? gx + CELL : a1, fy0 + 0.013f, gz + 0.07f, SILL_COL);
         }
-        else if (is(on, OpeningKind::LockedDoor)) {   // a door with the leaf still in it
+        else if (is(on, OpeningKind::LockedDoor) || is(on, OpeningKind::ShutDoor)) {   // a door with its leaf shut
             const float a0 = on->a0, a1 = on->a1, head = on->headY, fy0 = on->floorY;
             addBoxSides(wa, gx - WT, nb, gz - WT, a0, nt, gz + WT);
             addBoxSides(wa, a1, nb, gz - WT, gx + CELL + WT, nt, gz + WT);
@@ -1517,7 +1663,7 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
             addSolidBox(pr, gx - 0.07f, fy0, mN ? gz : a0,
                         gx + 0.07f, fy0 + 0.013f, mS ? gz + CELL : a1, SILL_COL);
         }
-        else if (is(ow, OpeningKind::LockedDoor)) {   // a door with the leaf still in it
+        else if (is(ow, OpeningKind::LockedDoor) || is(ow, OpeningKind::ShutDoor)) {   // a door with its leaf shut
             const float a0 = ow->a0, a1 = ow->a1, head = ow->headY, fy0 = ow->floorY;
             addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wt2, a0);
             addBoxSides(wa, gx - WT, wb, a1, gx + WT, wt2, gz + CELL + WT);
@@ -1532,10 +1678,10 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
                             xf + TRIM_T, fy0 + 1.07f, gz + 1.50f, LOCK_COL);
             }
         }
-        if (w.level == 0 || w.level == 4) {
-            // Level 0 and 4 skirting: thin timber within the collision clearance, no
-            // separate obstacle.
-            Rgba trim = w.level == 0 ? Rgba{91, 71, 39, 254} : Rgba{67, 41, 34, 254};
+        if (w.level == 0 || w.level == 4 || w.level == MULTIPLEX) {
+            // Skirting on Levels 0 and 4 and the multiplex: thin timber within the
+            // collision clearance, no separate obstacle.
+            Rgba trim = w.level == 0 ? Rgba{91, 71, 39, 254} : w.level == 4 ? Rgba{67, 41, 34, 254} : Rgba{28, 22, 20, 254};
             if (nv == WALL_SOLID) {
                 float tS = en.floorLo, tN = en.floorHi;
                 if (flS) addSolidBox(pr, gx, tS, gz-WT-0.025f, gx+CELL, tS + 0.13f, gz-WT, trim);

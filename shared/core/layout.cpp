@@ -16,15 +16,19 @@ struct LevelDecor {
     bool spalls;      // blown concrete on walls and columns
     bool pipes;       // service pipes under the ceiling along solid walls
     bool streamers;
+    bool posters;     // backlit film posters on walls facing a corridor
 };
 const LevelDecor DECOR[NLEVELS] = {
-    //  fittings scrawl lifts  spalls pipes  streamers
-    { true,  true,  false, false, false, false },   // Level 0
-    { true,  true,  true,  true,  true,  false },   // Level 1
-    { false, false, false, false, false, false },   // the Poolrooms
-    { true,  true,  false, false, true,  false },   // the Red Halls
-    { true,  true,  false, false, false, true  },   // LEVEL FUN
+    //  fittings scrawl lifts  spalls pipes  streamers posters
+    { true,  true,  false, false, false, false, false },   // Level 0
+    { true,  true,  true,  true,  true,  false, false },   // Level 1
+    { false, false, false, false, false, false, false },   // the Poolrooms
+    { true,  true,  false, false, true,  false, false },   // the Red Halls
+    { true,  true,  false, false, false, true,  false },   // LEVEL FUN
+    { true,  true,  false, false, false, false, true  },   // the multiplex
 };
+// One wall edge in POSTER_RATE facing a corridor carries a poster.
+constexpr uint32_t POSTER_RATE = 3;
 
 // Where a fixture sits below the ceiling or off the floor, metres.
 constexpr float CONDUIT_DROP = 0.155f;    // conduit underside below the wall top
@@ -108,6 +112,7 @@ bool openingOn(World &w, Opening &op, int cx, int cz, int i, int k, bool west) {
     switch (v) {
     case WALL_DOOR:   op.kind = OpeningKind::Doorway; break;
     case WALL_LOCKED: op.kind = OpeningKind::LockedDoor; break;
+    case WALL_SHUT:   op.kind = OpeningKind::ShutDoor; break;
     case WALL_WINDOW: op.kind = OpeningKind::Window; break;
     case WALL_RAIL:   op.kind = OpeningKind::Rail; break;
     case WALL_EXIT:   op.kind = w.cursedExit(gi, gk) ? OpeningKind::CursedExit : OpeningKind::Exit; break;
@@ -148,7 +153,7 @@ bool openingOn(World &w, Opening &op, int cx, int cz, int i, int k, bool west) {
 }
 
 // The fixtures of one cell, in the order the mesher emits them: lift doors,
-// wall spalls, wall fittings, the ceiling fitting, conduit, scrawl, a column
+// wall spalls, wall fittings, the ceiling fitting, conduit, scrawl, posters, a column
 // spall, pipes, a valve. North edge before west throughout.
 void cellFixtures(World &w, const ChunkData &d, const LevelDecor &decor, int cx, int cz, int i, int kk,
                   std::vector<Fixture> &out) {
@@ -281,6 +286,38 @@ void cellFixtures(World &w, const ChunkData &d, const LevelDecor &decor, int cx,
         if (hs % SCRAWL_RATE == 0 && ((hs & 8) ? flN : flW))
             scrawl(hs, wb, gz, (hs & 8) ? gx + WT : gx - WT, true);
     }
+    // Film posters in light boxes, on the corridor side of a wall: never inside
+    // an auditorium. Bit 3 picks the face, the rest the poster.
+    auto inAuditorium = [&](int ci, int ck) {
+        int ocx = fdiv(ci, CCELLS), ocz = fdiv(ck, CCELLS);
+        int li = ci - ocx * CCELLS, lk = ck - ocz * CCELLS;
+        return w.data(ocx, ocz).audDir >= 0 && li >= AUD_LO && li < AUD_LO + AUD_N &&
+               lk >= AUD_LO && lk < AUD_LO + AUD_N;
+    };
+    auto poster = [&](uint32_t hp, float along, float face, bool west, bool plus, int ci, int ck) {
+        Fixture f = fixture(FixtureKind::Poster, i, kk);
+        float y = w.floorY(ci, ck) + 1.55f;
+        f.pos = west ? Vec3{ face, y, along } : Vec3{ along, y, face };
+        f.normal = west ? Vec3{ plus ? 1.0f : -1.0f, 0, 0 } : Vec3{ 0, 0, plus ? 1.0f : -1.0f };
+        f.w = 0.42f;
+        f.h = 0.60f;
+        f.seed = hp;
+        out.push_back(f);
+    };
+    if (decor.posters && nv == WALL_SOLID) {
+        uint32_t hp = ih(gi0, gk0, seed ^ 0x9057u);
+        bool plus = (hp & 8) != 0;
+        int ci = gi0, ck = plus ? gk0 : gk0 - 1;
+        if (hp % POSTER_RATE == 0 && (plus ? flN : flS) && !inAuditorium(ci, ck))
+            poster(hp, gx + CELL * 0.5f, plus ? gz + WT : gz - WT, false, plus, ci, ck);
+    }
+    if (decor.posters && wv == WALL_SOLID) {
+        uint32_t hp = ih(gi0, gk0, seed ^ 0x9058u);
+        bool plus = (hp & 8) != 0;
+        int ci = plus ? gi0 : gi0 - 1, ck = gk0;
+        if (hp % POSTER_RATE == 0 && (plus ? flN : flW) && !inAuditorium(ci, ck))
+            poster(hp, gz + CELL * 0.5f, plus ? gx + WT : gx - WT, true, plus, ci, ck);
+    }
     // A column with its cover blown off, toward a corner, where it goes first.
     if (decor.spalls && d.pillar[i][kk]) {
         uint32_t sh = ih(gi0, gk0, seed ^ 0x5BA1u);
@@ -370,6 +407,10 @@ void fittings(World &w, const ChunkData &d, int cx, int cz, std::vector<LightFit
             if (d.manila) {
                 float mx = wx + MANILA_MID * CELL, mz = wz + MANILA_MID * CELL;
                 if (fabsf(lx - mx) < 4.0f && fabsf(lz - mz) < 4.0f) f.gap = FittingGap::ManilaRoom;
+            }
+            if (d.audDir >= 0) {
+                float a0 = AUD_LO * CELL, a1 = (AUD_LO + AUD_N) * CELL;
+                if (lx > wx + a0 && lx < wx + a1 && lz > wz + a0 && lz < wz + a1) f.gap = FittingGap::Auditorium;
             }
             if (f.gap == FittingGap::None && w.storeyH > 0.0f) {
                 int ci = (int)floorf(lx / CELL + 0.5f), ck = (int)floorf(lz / CELL + 0.5f);   // the corner it is centred on
@@ -468,6 +509,16 @@ ChunkLayout chunkLayout(World &w, int cx, int cz) {
         f.kind = FixtureKind::ManilaRoom;
         f.pos = { mx, w.ceilY(cellOf(mx), cellOf(mz)), mz };
         f.seed = ih(cx, cz, seed ^ 0x3A11u);
+        L.fixtures.push_back(f);
+    }
+    Auditorium aud;
+    if (w.auditorium(cx, cz, aud)) {
+        Fixture f;
+        f.kind = FixtureKind::Auditorium;
+        f.pos = aud.screen;
+        f.normal = aud.normal;
+        f.variant = (uint8_t)aud.dir;
+        f.seed = aud.seed;
         L.fixtures.push_back(f);
     }
     if (decor.streamers) streamers(w, cx, cz, L.fixtures);

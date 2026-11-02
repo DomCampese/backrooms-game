@@ -31,7 +31,7 @@ Deep water uses damped buoyancy and water drag. Hold SPACE/JUMP to rise and floa
 
 `make regression` checks stable floating at 30, 60 and 144 updates per second, diving, resurfacing, bottom bounds, leaving water, submerged risers, assisted climbs, full-height wall collision, entity suppression and sanity recovery. It also captures surface and underwater views, and finds and captures a window gallery, a submerged staircase and a flooded tunnel (`pool-windows.png`, `pool-stairs.png`, `pool-tunnel.png`), failing if any room type is missing or the level stops being mostly water.
 
-`tools/sweep.sh` checks all five levels and the menu for shader errors and exposure. Inspect its images plus a separate pool-hall capture and flashlight capture.
+`tools/sweep.sh` checks all six levels and the menu for shader errors and exposure. Inspect its images plus a separate pool-hall capture and flashlight capture.
 
 Generator sample: Level 2, seeds 1337, 7 and 99, visit 1, 129 × 129 cells each: 100% reachable, no disconnected pockets, no collision-buffer overflows (worst 12 of 48 boxes), about 64% of cells water.
 

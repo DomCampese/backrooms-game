@@ -156,6 +156,7 @@ void openingWall(Builder &b, const Opening &o) {
         b.edgeBox(GreySurface::Glass, o.west, o.line, LEAF_T, o.a0, o.a1, o.sillY, o.headY);
         break;
     case OpeningKind::LockedDoor:
+    case OpeningKind::ShutDoor:
         b.edgeBox(GreySurface::Door, o.west, o.line, LEAF_T, o.a0, o.a1, o.floorY, o.headY);
         break;
     case OpeningKind::Exit:

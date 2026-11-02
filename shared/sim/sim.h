@@ -93,9 +93,9 @@ struct Sim {
     static constexpr double DISTANT_LEAD = 20, DISTANT_GAP = 35, DISTANT_SPAN = 50;
     static constexpr int   MAXAMMO = 6;
     static constexpr float MUZZLE_FLASH = 0.09f;   // s the muzzle flash lights the room
-    // Hiding stops the hunter tracking you, blocks the catch and runs ent.unseen
-    // at 2.4x, so it requires standing still. Two thresholds, so hiding does
-    // not flicker on and off while the player slows down.
+    // Hiding stops the hunter seeing the player and blocks the catch, so it
+    // requires standing still. Two thresholds, so hiding does not flicker on and
+    // off while the player slows down.
     static constexpr float HIDE_ENTER = 0.4f;   // m/s to be under to start hiding
     static constexpr float HIDE_BREAK = 1.2f;   // m/s that ends hiding
     static constexpr float HIDE_GRACE = 0.35f;  // s above HIDE_BREAK before hiding ends
@@ -108,6 +108,21 @@ struct Sim {
     static constexpr float LUNGE_REACH = 2.5f;
     static constexpr float LUNGE_TIME = 0.6f;
     static constexpr float CATCH_REACH = 1.25f;
+    // A chasing hunter sees the player within HUNTER_SIGHT m with line of
+    // sight; otherwise he walks at SEARCH_SPEED m/s to where he last saw or
+    // heard them, then to spots SEARCH_STEP_MIN..MAX m around it, and gives up
+    // after SEARCH_TIME s without contact.
+    static constexpr float HUNTER_SIGHT = 30.0f;
+    static constexpr float SEARCH_SPEED = 2.6f;
+    static constexpr float SEARCH_STEP_MIN = 3.0f, SEARCH_STEP_MAX = 7.0f;
+    static constexpr float SEARCH_TIME = 10.0f;
+    // Doors. The use key shuts or opens a doorway within DOOR_REACH m of its
+    // middle that the player faces. Shutting or opening one is heard DOOR_NOISE m
+    // away for DOOR_NOISE_TIME s. The hunter forces a shut door in his way in
+    // DOOR_FORCE s, striking it every DOOR_KNOCK s; the pack cannot open one.
+    static constexpr float DOOR_REACH = 1.6f;
+    static constexpr float DOOR_NOISE = 14.0f, DOOR_NOISE_TIME = 0.5f;
+    static constexpr float DOOR_FORCE = 1.6f, DOOR_KNOCK = 0.45f;
     static constexpr float DEATH_CARD = 12.0f;  // s the death card stays up: the tape playback, then the text
     static constexpr float DEATH_CARD_HOLD = 1.6f;   // s of it no key can dismiss
     // Health. One hit is survivable and a second before healing is not: two
@@ -287,6 +302,11 @@ struct Sim {
     const char *tapeLine = "";       // the recovered tape's line
     const char *sanityLine = "";     // the last sanity (or migraine) warning
     const char *deckNote = "";       // one-line notes: the deck, keys, crates, a new floor
+    // The doorway the use key would shut or open, found each tick (findDoor),
+    // for the HUD's hint.
+    struct DoorReach { bool ok = false; int i = 0, k = 0; bool west = false, shut = false; };
+    DoorReach doorReach;
+    float doorNoiseT = 0;            // s left of the noise of a door shut or opened
 
     // ---- the tick. step() runs the updates below in this order; each may
     // rely on the ones before it (a shot lands before the hunter reacts).
@@ -392,7 +412,12 @@ struct Sim {
     void spawnHunter();
     float packNoise(float &x, float &z) const;   // how far the loudest noise carries, and where
     bool updateDog(int i, float dt, double now, float noise, float nsx, float nsz);   // true if it ended the run
-    bool hunterChase(float dt, double now, bool entVisible, float &fearT);   // true if it ended the run
+    bool hunterChase(float dt, double now, float &fearT);   // true if it ended the run
+    bool findDoor(DoorReach &d);            // the doorway in reach and in front, if any
+    bool bodyInDoorway(int ci, int ck, bool west) const;   // anyone standing where its leaf swings
+    void useDoor();                               // shut or open doorReach
+    bool hunterForcesDoor(float dt);              // true while he stands at a shut door, striking it
+    void hunterNotice(float x, float z);   // the hunter now knows the player is at (x, z)
 
     // ---- the run's shape
     void applyLevel(int lv, double now);
