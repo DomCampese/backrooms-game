@@ -273,7 +273,7 @@ void Sim::updateDevKeys(const DevKeys &dev, double now) {
     if (dev.spawnAhead) {
         Vec2 spot = world.findOpenSpot(px + f2x * 12, pz + f2z * 12);
         ent.x = spot.x; ent.z = spot.y;
-        ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.hp = 3; ent.stagger = 0;
+        ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.hp = 3; ent.stagger = 0;
     }
     if (dev.chase) {
         if (ent.st == EState::Hidden) {
@@ -281,7 +281,8 @@ void Sim::updateDevKeys(const DevKeys &dev, double now) {
             ent.x = spot.x; ent.z = spot.y;
             ent.hp = 3;
         }
-        ent.st = EState::Chase; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.repathT = 0;
+        ent.st = EState::Chase; ent.gaze = 0; ent.life = 0; ent.repathT = 0;
+        hunterNotice(px, pz);
     }
     if (dev.banish) {
         ent.st = EState::Hidden; ent.nextSpawn = now + 20 + grng.f01() * 20;

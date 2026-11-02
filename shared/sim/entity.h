@@ -26,7 +26,10 @@ struct Entity {
     EState st = EState::Hidden;
     float x = 0, z = 0;
     double nextSpawn = 12.0;
-    float gaze = 0, life = 0, unseen = 0;
+    float gaze = 0, life = 0;
+    // Where he last saw or heard the player, and s since then. In a chase
+    // without contact he walks there and searches (Sim::hunterChase).
+    float lastX = 0, lastZ = 0, lostT = 0;
     float dispY = 0;   // smoothed floor height, so he does not jump on stairs
     float lunge = 0;     // s left in a lunge (LUNGE_TIME); only a lunge can catch the player
     float lungeCd = 0;   // s before he can lunge again

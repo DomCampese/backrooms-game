@@ -351,10 +351,12 @@ AGENTS.md has the module map file by file.
   he has to back off and set up again. The catch used to be a silent proximity
   test, which is fine when being caught costs nothing and simply unfair when
   it costs the run.
-- **He hunts you around corners** — in a chase he beelines while he can see you,
-  but the moment a wall breaks his line of sight he routes around it: a breadth-
-  first search over the cell grid picks the next turn toward you, so he comes
-  through the doorway instead of grinding against the wall you ducked behind.
+- **He can lose you** — in a chase he runs straight at you while he can see
+  you. Once a wall is between you, he does not know where you are. He walks to
+  the last place he saw or heard you and searches the rooms around it, and
+  after 10 s without seeing or hearing you he gives up. He hears what the pack
+  hears: walking within 11 m, sprinting within 20 m, the tape player, a flare
+  strike and a shot. Duck round a corner and stand still, and he walks past.
 - **It brings the dark** — the fluorescents die in a pool around the hunter and
   the shadow travels with it, so the corridor ahead goes black as it closes in
   and it stands in its own darkness. Your flashlight and your flares cut

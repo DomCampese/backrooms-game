@@ -149,7 +149,8 @@ void Sim::bulletHitsHunter() {
         ent.stagger = 0.45f;
         if (ent.st != EState::Chase) {
             ent.st = EState::Chase;
-            ent.life = 0; ent.unseen = 0; ent.repathT = 0;
+            ent.life = 0; ent.repathT = 0;
+            hunterNotice(px, pz);
         }
     }
 }
