@@ -22,6 +22,8 @@ enum class Sfx : uint8_t {
     FarKnock,         // 3: Distant::Knock (Level 3)
     FarPop,           // 3: Distant::Pop (Level 4)
     FarBoom,          // 3: Distant::Boom (the multiplex)
+    DoorShut,         // 3: a door shut (0), opened (1), opened by the hunter (2)
+    DoorKnock,         // 3: the hunter knocking on a shut door
 };
 
 // What the ambience synth (audio.cpp) chases. The rules write each field where

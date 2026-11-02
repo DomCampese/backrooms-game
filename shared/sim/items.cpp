@@ -190,8 +190,65 @@ void Sim::updateInteraction(const InputFrame &in) {
         drinkLanded = false;
         play(Sfx::Gulp);
     }
+    findDoor(doorReach);
     if (in.use) useWhatIsNear();
     if (in.chalk) markChalk();
+}
+
+// The doorway whose middle is nearest within DOOR_REACH, among those the
+// player faces (or stands nearly in). A doorway joined to its neighbour has no
+// jamb between the two and takes no leaf.
+bool Sim::findDoor(DoorReach &d) {
+    d = DoorReach{};
+    if (inMenu || deathT > 0) return false;
+    int pci = cellOf(px), pck = cellOf(pz);
+    float nearest = DOOR_REACH * DOOR_REACH;
+    for (int dx = -1; dx <= 2; dx++) for (int dz = -1; dz <= 2; dz++) {
+        int a = pci + dx, b = pck + dz;
+        for (int west = 0; west < 2; west++) {
+            uint8_t v = west ? world.wallWVal(a, b) : world.wallNVal(a, b);
+            if (v != WALL_DOOR && v != WALL_SHUT) continue;
+            float ex = a * CELL + (west ? 0.0f : 1.0f), ez = b * CELL + (west ? 1.0f : 0.0f);
+            float ddx = ex - px, ddz = ez - pz, d2 = ddx * ddx + ddz * ddz;
+            if (d2 >= nearest) continue;
+            float dl = sqrtf(d2);
+            if (dl > 0.7f && (ddx * f2x + ddz * f2z) / dl < 0.35f) continue;   // behind or beside the player
+            if (world.doorJoined(a, b, west != 0)) continue;
+            nearest = d2;
+            d.ok = true; d.i = a; d.k = b; d.west = west != 0; d.shut = v == WALL_SHUT;
+        }
+    }
+    return d.ok;
+}
+
+// Anyone (the player, the hunter, a dog) within reach of where the leaf of
+// edge (ci, ck) closes.
+bool Sim::bodyInDoorway(int ci, int ck, bool west) const {
+    float line = west ? ci * CELL : ck * CELL, e0 = west ? ck * CELL : ci * CELL;
+    auto inIt = [&](float x, float z, float r) {
+        float across = west ? x - line : z - line, along = west ? z : x;
+        return fabsf(across) < r + 0.03f && along > e0 + DOOR_LO - r && along < e0 + DOOR_HI + r;
+    };
+    if (inIt(px, pz, 0.34f)) return true;
+    if (ent.st != EState::Hidden && inIt(ent.x, ent.z, 0.38f)) return true;
+    for (const Dog &dg : dogs) if (dg.st != DState::Gone && inIt(dg.x, dg.z, 0.30f)) return true;
+    return false;
+}
+
+void Sim::useDoor() {
+    const DoorReach &d = doorReach;
+    if (!d.ok) return;
+    if (!d.shut && bodyInDoorway(d.i, d.k, d.west)) {
+        deckNoteT = 1.6f; deckNote = "something is in the doorway.";
+        return;
+    }
+    world.shutEdge(d.i, d.k, d.west, !d.shut);
+    // The occupancy grid only rebuilds every six cells walked; without this a
+    // shut door would not cast its shadow.
+    shadowsStale = true;
+    doorNoiseT = DOOR_NOISE_TIME;
+    play(Sfx::DoorShut, d.shut ? 1 : 0).atPitch(d.shut ? 1.1f : 1.0f);
+    doorReach.shut = !d.shut;
 }
 
 void Sim::collectPickups() {
@@ -256,6 +313,7 @@ void Sim::collectPickups() {
 // door, or a deck that was set down. They never share a cell.
 void Sim::useWhatIsNear() {
     int pci = cellOf(px), pck = cellOf(pz);
+    useDoor();
     if (level == 1) {
         for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
             int a = pci + dx, b = pck + dz;
@@ -367,7 +425,7 @@ bool Sim::crateAt(int a, int b) {
     if (world.pillarAt(a, b) || world.propAt(a, b) || world.poolAt(a, b)) return false;
     if (pickupAt(a, b) != Pickup::None) return false;
     const uint8_t e[4] = { world.wallNVal(a, b), world.wallNVal(a, b + 1), world.wallWVal(a, b), world.wallWVal(a + 1, b) };
-    for (uint8_t w : e) if (w == WALL_DOOR || w == WALL_EXIT || w == WALL_LOCKED) return false;
+    for (uint8_t w : e) if (w == WALL_DOOR || w == WALL_EXIT || w == WALL_LOCKED || w == WALL_SHUT) return false;
     return !(abs(a) <= 3 && abs(b) <= 3);
 }
 

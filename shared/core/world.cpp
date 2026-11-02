@@ -1141,7 +1141,8 @@ uint8_t World::wallNVal(int ci, int ck) {
     int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
     uint8_t v = data(cx, cz).wallN[ci - cx * CCELLS][ck - cz * CCELLS];
     if (v == WALL_LOCKED && !unlockedDoors.empty() &&
-        unlockedDoors.count(edgeKey(ci, ck, false))) return WALL_DOOR;
+        unlockedDoors.count(edgeKey(ci, ck, false))) v = WALL_DOOR;
+    if (v == WALL_DOOR && !shutDoors.empty() && shutDoors.count(edgeKey(ci, ck, false))) return WALL_SHUT;
     return v;
 }
 uint8_t World::wallWVal(int ci, int ck) {
@@ -1149,7 +1150,8 @@ uint8_t World::wallWVal(int ci, int ck) {
     int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
     uint8_t v = data(cx, cz).wallW[ci - cx * CCELLS][ck - cz * CCELLS];
     if (v == WALL_LOCKED && !unlockedDoors.empty() &&
-        unlockedDoors.count(edgeKey(ci, ck, true))) return WALL_DOOR;
+        unlockedDoors.count(edgeKey(ci, ck, true))) v = WALL_DOOR;
+    if (v == WALL_DOOR && !shutDoors.empty() && shutDoors.count(edgeKey(ci, ck, true))) return WALL_SHUT;
     return v;
 }
 
@@ -1172,6 +1174,21 @@ void World::unlockEdge(int ci, int ck, bool west) {
     rebuildChunk(cx, cz);
     int nx = fdiv(west ? ci - 1 : ci, CCELLS), nz = fdiv(west ? ck : ck - 1, CCELLS);
     if (nx != cx || nz != cz) rebuildChunk(nx, nz);
+}
+
+void World::shutEdge(int ci, int ck, bool west, bool shut) {
+    uint64_t k = edgeKey(ci, ck, west);
+    if (shut ? !shutDoors.insert(k).second : shutDoors.erase(k) == 0) return;
+    int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
+    rebuildChunk(cx, cz);
+    int nx = fdiv(west ? ci - 1 : ci, CCELLS), nz = fdiv(west ? ck : ck - 1, CCELLS);
+    if (nx != cx || nz != cz) rebuildChunk(nx, nz);
+}
+
+bool World::doorJoined(int ci, int ck, bool west) {
+    auto door = [](uint8_t v) { return v == WALL_DOOR || v == WALL_SHUT; };
+    if (west) return door(wallWVal(ci, ck - 1)) || door(wallWVal(ci, ck + 1));
+    return door(wallNVal(ci - 1, ck)) || door(wallNVal(ci + 1, ck));
 }
 
 // Report a chunk's geometry stale so the renderer rebakes it from the current
@@ -1600,7 +1617,7 @@ void World::buildOccupancy(int originI, int originK, int n, unsigned char *out) 
         }
 }
 
-bool World::canStep(int ci, int ck, int ni, int nk) {
+bool World::canStep(int ci, int ck, int ni, int nk, bool throughShut) {
     if (pillarAt(ni, nk) || propAt(ni, nk) != PROP_NONE) return false;   // furniture and pillars are solid
     // A hole with no flight through it is a drop, not a route. Flights and their
     // holes are continuous in height along every open edge, so the riser rule below
@@ -1613,14 +1630,15 @@ bool World::canStep(int ci, int ck, int ni, int nk) {
     if (!vertical && !poolAt(ci, ck) && !poolAt(ni, nk) &&
         fabsf(floorY(ni, nk) - floorY(ci, ck)) > MAX_STEP) return false;
     // the shared edge: a wall or window blocks it, a doorway does not
-    if (nk == ck - 1)      { if (blocksEdge(wallNVal(ci, ck)))     return false; }
-    else if (nk == ck + 1) { if (blocksEdge(wallNVal(ci, ck + 1))) return false; }
-    else if (ni == ci - 1) { if (blocksEdge(wallWVal(ci, ck)))     return false; }
-    else if (ni == ci + 1) { if (blocksEdge(wallWVal(ci + 1, ck))) return false; }
+    auto blocks = [&](uint8_t v) { return blocksEdge(v) && !(throughShut && v == WALL_SHUT); };
+    if (nk == ck - 1)      { if (blocks(wallNVal(ci, ck)))     return false; }
+    else if (nk == ck + 1) { if (blocks(wallNVal(ci, ck + 1))) return false; }
+    else if (ni == ci - 1) { if (blocks(wallWVal(ci, ck)))     return false; }
+    else if (ni == ci + 1) { if (blocks(wallWVal(ci + 1, ck))) return false; }
     return true;
 }
 
-bool World::pathStep(int si, int sk, int ti, int tk, int &outI, int &outK) {
+bool World::pathStep(int si, int sk, int ti, int tk, int &outI, int &outK, bool throughShut) {
     const int R = 16, W = 2 * R + 1;
     auto idx = [&](int ci, int ck) -> int {
         int lx = ci - si + R, lz = ck - sk + R;
@@ -1638,7 +1656,7 @@ bool World::pathStep(int si, int sk, int ti, int tk, int &outI, int &outK) {
         if (ci == ti && ck == tk) { found = cur; break; }
         for (auto &d : dirs) {
             int ni = ci + d[0], nk = ck + d[1], nl = idx(ni, nk);
-            if (nl < 0 || prev[nl] != -2 || !canStep(ci, ck, ni, nk)) continue;
+            if (nl < 0 || prev[nl] != -2 || !canStep(ci, ck, ni, nk, throughShut)) continue;
             prev[nl] = cur; q.push_back(nl);
         }
     }
@@ -1690,7 +1708,8 @@ void World::unloadFar(int pcx, int pcz, int radius) {
 }
 
 void World::unloadAll() {
-    shifted.clear();   // a new level starts with no shifted walls
+    shifted.clear();   // a new level starts with no shifted walls and every door open
+    shutDoors.clear();
     for (auto &kv : chunks) staleChunks.push_back({ storey, keyX(kv.first), keyZ(kv.first) });
     chunks.clear();
     for (auto &lv : layers)

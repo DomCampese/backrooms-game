@@ -1606,7 +1606,7 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
             addSolidBox(pr, mW ? gx : a0, fy0, gz - 0.07f,
                         mE ? gx + CELL : a1, fy0 + 0.013f, gz + 0.07f, SILL_COL);
         }
-        else if (is(on, OpeningKind::LockedDoor)) {   // a door with the leaf still in it
+        else if (is(on, OpeningKind::LockedDoor) || is(on, OpeningKind::ShutDoor)) {   // a door with its leaf shut
             const float a0 = on->a0, a1 = on->a1, head = on->headY, fy0 = on->floorY;
             addBoxSides(wa, gx - WT, nb, gz - WT, a0, nt, gz + WT);
             addBoxSides(wa, a1, nb, gz - WT, gx + CELL + WT, nt, gz + WT);
@@ -1663,7 +1663,7 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
             addSolidBox(pr, gx - 0.07f, fy0, mN ? gz : a0,
                         gx + 0.07f, fy0 + 0.013f, mS ? gz + CELL : a1, SILL_COL);
         }
-        else if (is(ow, OpeningKind::LockedDoor)) {   // a door with the leaf still in it
+        else if (is(ow, OpeningKind::LockedDoor) || is(ow, OpeningKind::ShutDoor)) {   // a door with its leaf shut
             const float a0 = ow->a0, a1 = ow->a1, head = ow->headY, fy0 = ow->floorY;
             addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wt2, a0);
             addBoxSides(wa, gx - WT, wb, a1, gx + WT, wt2, gz + CELL + WT);

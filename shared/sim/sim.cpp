@@ -37,6 +37,7 @@ void Sim::updateTimers(float dt) {
     fellT = fmaxf(0, fellT - dt);
     winT = fmaxf(0, winT - dt);
     closeCallT = fmaxf(0, closeCallT - dt);
+    doorNoiseT = fmaxf(0, doorNoiseT - dt);
     tapeFoundT = fmaxf(0, tapeFoundT - dt);
     valveT = fmaxf(0, valveT - dt);
 }

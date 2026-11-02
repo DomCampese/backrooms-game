@@ -122,7 +122,8 @@ struct LightFitting {
     float stutterSeed;       // fract(hash * TUBE_STUTTER_SPREAD): when a faulty tube stutters (tubeStutter)
 };
 
-enum class OpeningKind : uint8_t { Doorway, LockedDoor, Exit, CursedExit, Window, Rail };
+// ShutDoor: a doorway the player has shut, built as a locked door is.
+enum class OpeningKind : uint8_t { Doorway, LockedDoor, Exit, CursedExit, Window, Rail, ShutDoor };
 
 // An edge that is neither open floor nor plain wall. Along-edge values are
 // world x for a north edge and world z for a west one.
