@@ -544,7 +544,7 @@ Pcm toPcm(const std::vector<float> &d, float level) {
 // A door. Variant 0, shut: a latch click (noise and a 2.1 kHz ring, 12 ms)
 // then the leaf meeting the frame, a 95 Hz thud and a 210 Hz panel mode over
 // 0.18 s. Variant 1, opened: the latch, then 0.35 s of hinge creak, noise
-// through a 230-300 Hz resonance swept up. Variant 2, forced open: a harder
+// through a 230-300 Hz resonance swept up. Variant 2, opened by the hunter: a harder
 // thud at 80 Hz with 0.25 s of broadband splintering.
 Pcm makeDoorShut(int variant)
 {
@@ -582,9 +582,9 @@ Pcm makeDoorShut(int variant)
     return toPcm(d, variant == 2 ? 0.80f : 0.62f);
 }
 
-// A body striking a shut door from the far side: a 70-90 Hz thud, the panel's
+// The hunter knocking on a shut door: a 70-90 Hz thud, the panel's
 // 180 Hz mode and the frame's rattle, 0.32 s. Each variant has its own pitch.
-Pcm makeDoorBang(int variant)
+Pcm makeDoorKnock(int variant)
 {
     Rng r(0xBA26ULL + (uint64_t)variant * 557u);
     std::vector<float> d((int)(0.32f * SAMPLE_RATE));
@@ -832,7 +832,7 @@ ClipSpec clipSpec(Sfx sfx) {
     case Sfx::SplashIn: case Sfx::SplashOut:
     case Sfx::Bark: case Sfx::BarkThrough:
     case Sfx::FarDoor: case Sfx::FarClang: case Sfx::FarKnock: case Sfx::FarPop:
-    case Sfx::FarBoom: case Sfx::DoorShut: case Sfx::DoorBang: return { 3, 1.0f, 1.0f };
+    case Sfx::FarBoom: case Sfx::DoorShut: case Sfx::DoorKnock: return { 3, 1.0f, 1.0f };
     case Sfx::Hit:       return { 1, 1.7f, 0.40f };
     case Sfx::Kill:      return { 1, 0.55f, 0.80f };
     case Sfx::Heartbeat: return { 1, 1.0f, 0.55f };
@@ -884,7 +884,7 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::FarPop:         return makeFarPop(variant);
     case Sfx::FarBoom:        return makeFarBoom(variant);
     case Sfx::DoorShut:       return makeDoorShut(variant);
-    case Sfx::DoorBang:       return makeDoorBang(variant);
+    case Sfx::DoorKnock:       return makeDoorKnock(variant);
     }
     return {};
 }

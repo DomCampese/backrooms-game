@@ -315,7 +315,7 @@ off the Mac. In order:
 13. **Doors** (2 November 2026). Face a doorway on Level 0 and press E: the
     leaf shuts, "E · open the door" shows, and E opens it again. With F3 then
     E, let the hunter chase you through a door and shut it behind you: he
-    strikes it three or four times and comes through. No Unreal code changed;
+    knocks on it three or four times, opens it and walks through. No Unreal code changed;
     the chunk actors rebuild from `staleChunks`. If E does nothing, check the
     Use action's binding in Project Settings > Game > Backrooms.
 

@@ -359,7 +359,7 @@ AGENTS.md has the module map file by file.
   strike and a shot. Duck round a corner and stand still, and he walks past.
 - **Doors shut.** Face a doorway and press E (USE on touch) to shut or open
   it. A shut door blocks the hunter's sight and the light, and the pack in
-  the Red Halls cannot open one. The hunter can: he stops at it, strikes it
+  the Red Halls cannot open one. The hunter can: he stops at it, knocks on it
   every half second, and is through in 1.6 s. Shutting or opening a door is
   heard 14 m away.
 - **It brings the dark** — the fluorescents die in a pool around the hunter and

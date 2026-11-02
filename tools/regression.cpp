@@ -743,7 +743,7 @@ int main() {
 
     // ---- doors. The use key shuts a doorway the player faces; a shut door
     // blocks bodies, the pack's router, sight and light; the hunter's router
-    // passes it, and he forces it open in DOOR_FORCE s.
+    // passes it, and he opens it after DOOR_OPEN_TIME s.
     {
         sim.applyLevel(0,GetTime()); sim.beginDescent(0);
         sim.inMenu=false; sim.deathT=0; sim.hidden=false; sim.health=1; sim.hurtT=0;
@@ -794,8 +794,8 @@ int main() {
         sim.pz=db*CELL+0.15f; sim.updateInteraction(use);
         CHECK(w.wallNVal(da,db)==WALL_DOOR);
         // The hunter, north of the shut door, chasing the player he heard to the
-        // south: he stops at the door, strikes it, and is through it after
-        // DOOR_FORCE s.
+        // south: he stops at the door, knocks on it, and opens it after
+        // DOOR_OPEN_TIME s.
         sim.pz=db*CELL+1.4f; sim.updateInteraction(use);
         CHECK(w.wallNVal(da,db)==WALL_SHUT);
         sim.doorNoiseT=0; sim.audio.clear();
@@ -803,16 +803,16 @@ int main() {
         sim.ent.lungeCd=5; sim.ent.repathT=0; sim.ent.doorT=0;
         sim.ent.x=da*CELL+1.0f; sim.ent.z=db*CELL-0.6f;
         sim.ent.lastX=sim.px; sim.ent.lastZ=sim.pz; sim.ent.lostT=0;
-        int frames=0, bangs=0;
+        int frames=0, knocks=0;
         for (; frames<200 && w.wallNVal(da,db)==WALL_SHUT; ++frames) {
             sim.audio.clear();
             sim.updateEntity(1.0f/30, 200.0+frames/30.0);
-            for (const AudioEvent &e : sim.audio) bangs+=e.kind==AudioEvent::PLAY && e.sfx==Sfx::DoorBang;
+            for (const AudioEvent &e : sim.audio) knocks+=e.kind==AudioEvent::PLAY && e.sfx==Sfx::DoorKnock;
             CHECK(sim.ent.z<db*CELL);   // he stays on his side until it opens
         }
         CHECK(w.wallNVal(da,db)==WALL_DOOR);
-        CHECK(frames>=(int)(Sim::DOOR_FORCE*30)-1 && frames<=(int)(Sim::DOOR_FORCE*30)+2);
-        CHECK(bangs>=3);
+        CHECK(frames>=(int)(Sim::DOOR_OPEN_TIME*30)-1 && frames<=(int)(Sim::DOOR_OPEN_TIME*30)+2);
+        CHECK(knocks>=3);
         // A new level starts with every door open.
         sim.updateInteraction(use);
         sim.ent.st=EState::Hidden;
@@ -820,7 +820,7 @@ int main() {
         sim.applyLevel(0,GetTime());
         CHECK(sim.world.shutDoors.empty());
     }
-    printf("PASS doors: shut and opened by the use key, block bodies, sight, light and the pack, forced by the hunter\n");
+    printf("PASS doors: shut and opened by the use key, block bodies, sight, light and the pack, opened by the hunter\n");
 
     // ---- the catch, only from a lunge. The old proximity test caught the
     // player as soon as they came within 1.25 m, with no warning.

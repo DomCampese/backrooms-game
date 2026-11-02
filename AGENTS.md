@@ -126,9 +126,9 @@ shared/sim/items.cpp). A shut door is `WALL_SHUT`, which no chunk stores: the
   a new level starts with every door open.
 - **The hunter routes through shut doors and the pack does not.**
   `canStep` and `pathStep` take `throughShut`, which only `hunterChase` passes.
-  At a shut door between him and his waypoint he stops, strikes it every
-  `DOOR_KNOCK` s (`Sfx::DoorBang`) and opens it after `DOOR_FORCE` s
-  (`Sim::hunterForcesDoor`). Without the stop, the router walked him into the
+  At a shut door between him and his waypoint he stops, knocks on it every
+  `DOOR_KNOCK` s (`Sfx::DoorKnock`) and opens it after `DOOR_OPEN_TIME` s
+  (`Sim::hunterOpensDoor`). Without the stop, the router walked him into the
   leaf and collision held him there.
 - **A doorway joined to its neighbour takes no leaf** (`World::doorJoined`):
   the two share one opening with no jamb between them, and a leaf in one would

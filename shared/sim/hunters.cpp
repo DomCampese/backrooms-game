@@ -225,7 +225,7 @@ bool Sim::hunterChase(float dt, double now, float &fearT) {
             ent.wpx = tx; ent.wpz = tz;
         }
     }
-    if (hunterForcesDoor(dt)) chaseSpd = 0;
+    if (hunterOpensDoor(dt)) chaseSpd = 0;
     float sx = ent.wpx - ent.x, sz = ent.wpz - ent.z, sl = sqrtf(sx * sx + sz * sz) + 1e-4f;
     ent.x += sx / sl * chaseSpd * dt;
     ent.z += sz / sl * chaseSpd * dt;
@@ -392,10 +392,10 @@ void Sim::hunterNotice(float x, float z) {
 }
 
 // A shut door on an edge of his cell, within reach, with his waypoint on the
-// far side: he stops and strikes it every DOOR_KNOCK s, and after DOOR_FORCE s
+// far side: he stops and knocks on it every DOOR_KNOCK s, and after DOOR_OPEN_TIME s
 // it is open. Without this the router (which passes shut doors for him) walks
 // him into the leaf and collision holds him there.
-bool Sim::hunterForcesDoor(float dt) {
+bool Sim::hunterOpensDoor(float dt) {
     const int ci = cellOf(ent.x), ck = cellOf(ent.z);
     struct Edge { int i, k; bool west; float line; bool alongX; };
     const Edge edges[4] = { { ci, ck, false, ck * CELL, false }, { ci, ck + 1, false, (ck + 1) * CELL, false },
@@ -411,8 +411,8 @@ bool Sim::hunterForcesDoor(float dt) {
         float d = sqrtf(dx * dx + dz * dz) + 1e-4f;
         float pan = clampf((dx / d) * r2x + (dz / d) * r2z, -1.0f, 1.0f);
         if (floorf(ent.doorT / DOOR_KNOCK) > floorf(before / DOOR_KNOCK) || before == 0.0f)
-            play(Sfx::DoorBang, grng.ri(0, 2)).atPan(pan).atVolume(clampf(2.0f / (1.0f + 0.04f * d * d), 0.1f, 1.0f));
-        if (ent.doorT >= DOOR_FORCE) {
+            play(Sfx::DoorKnock, grng.ri(0, 2)).atPan(pan).atVolume(clampf(2.0f / (1.0f + 0.04f * d * d), 0.1f, 1.0f));
+        if (ent.doorT >= DOOR_OPEN_TIME) {
             world.shutEdge(e.i, e.k, e.west, false);
             shadowsStale = true;
             ent.doorT = 0;
