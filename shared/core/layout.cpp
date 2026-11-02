@@ -25,7 +25,7 @@ const LevelDecor DECOR[NLEVELS] = {
     { false, false, false, false, false, false, false },   // the Poolrooms
     { true,  true,  false, false, true,  false, false },   // the Red Halls
     { true,  true,  false, false, false, true,  false },   // LEVEL FUN
-    { true,  true,  false, false, false, false, true  },   // the multiplex
+    { true,  true,  false, false, false, false, true  },   // the theater
 };
 // One wall edge in POSTER_RATE facing a corridor carries a poster.
 constexpr uint32_t POSTER_RATE = 3;

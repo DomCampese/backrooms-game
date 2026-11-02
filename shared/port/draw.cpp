@@ -242,11 +242,11 @@ FrameLight frameLight(Sim &sim, float now) {
         l.lamp[3] = 0.95f * sim.blackoutCur * l.flick;
         l.lampCol = { 0.95f, 0.93f, 0.80f };
     }
-    // The multiplex: the nearest auditorium's tubes are masked, and its screen
+    // The theater: the nearest auditorium's tubes are masked, and its screen
     // lights the front of the room in the colour of the film. The shader has one
     // mask, so only that auditorium is dark; the others are seen only through
     // their doors. A blackout cuts the projector too.
-    if (sim.level == MULTIPLEX) {
+    if (sim.level == THEATER) {
         std::vector<Auditorium> auds = sim.world.auditoriums(pcx, pcz);
         if (const Auditorium *a = nearestAuditorium(auds, sim.px, sim.pz)) {
             for (int i = 0; i < 4; i++) l.roomMask[i] = a->rect[i];
@@ -271,7 +271,7 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
         unsigned char g8 = cl8(60 + 195 * sim.blackoutCur * flick);
         put(out, cube(well.tube, well.alongX ? 0.96f : 0.035f, 0.035f, well.alongX ? 0.035f : 0.96f, { g8, g8, cl8(g8 * 0.92f), 255 }));
     }
-    // The multiplex's screens, showing a film, and the projector's beam through
+    // The theater's screens, showing a film, and the projector's beam through
     // the haze from the port in the back wall: translucent, writing no depth.
     for (const Auditorium &a : sim.world.auditoriums(pcx, pcz)) {
         FilmFrame film = filmFrame(a.seed, now);
