@@ -177,8 +177,13 @@ bool Sim::hunterChase(float dt, double now, float &fearT) {
     // He sees the player with line of sight inside HUNTER_SIGHT, unless they
     // are hidden or crouched more than 7 m away. He hears the same noises the
     // pack does (packNoise). Either tells him where the player is.
-    bool sees = entDist < HUNTER_SIGHT && !hidden && !(crouchCur > 0.7f && entDist > 7) &&
-                world.lineOfSight(ent.x, ent.z, px, pz);
+    bool los = world.lineOfSight(ent.x, ent.z, px, pz);
+    if (hidden && entDist < FIND_REACH && los) {   // he has walked up to the player's cover
+        hidden = false;
+        foundT = FOUND_TIME;
+        play(Sfx::Scare).atPitch(0.7f).atVolume(0.8f);
+    }
+    bool sees = entDist < HUNTER_SIGHT && !hidden && !(crouchCur > 0.7f && entDist > 7) && los;
     float noiseX, noiseZ;
     float noise = packNoise(noiseX, noiseZ);
     float hx = noiseX - ent.x, hz = noiseZ - ent.z;
@@ -205,11 +210,20 @@ bool Sim::hunterChase(float dt, double now, float &fearT) {
     float tx = sees ? px : ent.lastX, tz = sees ? pz : ent.lastZ;
     float ldx = ent.lastX - ent.x, ldz = ent.lastZ - ent.z;
     if (!sees && ldx * ldx + ldz * ldz < 1.0f) {
-        float a = grng.f01() * TAU, d = SEARCH_STEP_MIN + grng.f01() * (SEARCH_STEP_MAX - SEARCH_STEP_MIN);
-        Vec2 spot = world.findOpenSpot(ent.lastX + portableCos(a) * d, ent.lastZ + portableSin(a) * d);
-        ent.lastX = spot.x; ent.lastZ = spot.y;
-        tx = spot.x; tz = spot.y;
-        ent.repathT = 0;
+        if (ent.atCover) { ent.atCover = false; ent.checkT = CHECK_TIME; }   // arrived: stand and look
+        if (ent.checkT > 0) {
+            ent.checkT -= dt;
+            chaseSpd = 0;
+        } else {
+            Vec2 spot;
+            if (!nextCover(spot)) {
+                float a = grng.f01() * TAU, d = SEARCH_STEP_MIN + grng.f01() * (SEARCH_STEP_MAX - SEARCH_STEP_MIN);
+                spot = world.findOpenSpot(ent.searchX + portableCos(a) * d, ent.searchZ + portableSin(a) * d);
+            }
+            ent.lastX = spot.x; ent.lastZ = spot.y;
+            tx = spot.x; tz = spot.y;
+            ent.repathT = 0;
+        }
     }
     ent.repathT -= dt;
     float wdx = ent.wpx - ent.x, wdz = ent.wpz - ent.z;
@@ -389,6 +403,43 @@ void Sim::hunterNotice(float x, float z) {
     ent.lastX = x;
     ent.lastZ = z;
     ent.lostT = 0;
+    ent.searchX = x;
+    ent.searchZ = z;
+    ent.nChecked = 0;
+    ent.checkT = 0;
+    ent.atCover = false;
+}
+
+// The unchecked cover nearest him within SEARCH_COVER_R of the search centre,
+// and the open cell beside it he stands in to look, 0.4 m toward it. False when
+// all of it is checked.
+bool Sim::nextCover(Vec2 &spot) {
+    const int ci = cellOf(ent.searchX), ck = cellOf(ent.searchZ), r = (int)(SEARCH_COVER_R / CELL) + 1;
+    float nearest = 1e30f;
+    uint64_t bestKey = 0;
+    for (int a = ci - r; a <= ci + r; a++) for (int b = ck - r; b <= ck + r; b++) {
+        float cx = a * CELL + 1.0f, cz = b * CELL + 1.0f;
+        float dsx = cx - ent.searchX, dsz = cz - ent.searchZ;
+        if (dsx * dsx + dsz * dsz > SEARCH_COVER_R * SEARCH_COVER_R || !hideSpotAt(a, b)) continue;
+        uint64_t key = cellKey2(a, b);
+        bool seen = false;
+        for (int q = 0; q < ent.nChecked && q < 6; q++) seen |= ent.checked[q] == key;
+        if (seen) continue;
+        const int NB[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+        for (const auto &n : NB) {
+            int sa = a + n[0], sb = b + n[1];
+            if (world.pillarAt(sa, sb) || world.propAt(sa, sb) != PROP_NONE || world.poolAt(sa, sb)) continue;
+            float sx = sa * CELL + 1.0f - n[0] * 0.4f, sz = sb * CELL + 1.0f - n[1] * 0.4f;
+            float dx = sx - ent.x, dz = sz - ent.z, d = dx * dx + dz * dz;
+            if (d >= nearest) continue;
+            nearest = d; bestKey = key; spot = { sx, sz };
+        }
+    }
+    if (nearest >= 1e30f) return false;
+    ent.checked[ent.nChecked % 6] = bestKey;
+    ent.nChecked++;
+    ent.atCover = true;
+    return true;
 }
 
 // A shut door on an edge of his cell, within reach, with his waypoint on the

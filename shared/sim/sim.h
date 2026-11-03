@@ -116,6 +116,14 @@ struct Sim {
     static constexpr float SEARCH_SPEED = 2.6f;
     static constexpr float SEARCH_STEP_MIN = 3.0f, SEARCH_STEP_MAX = 7.0f;
     static constexpr float SEARCH_TIME = 10.0f;
+    // Searching, he first walks to the cover (hideSpotAt) within SEARCH_COVER_R m
+    // of where he last saw or heard the player, nearest first, and stands at
+    // each for CHECK_TIME s. A hidden player within FIND_REACH m of him, in
+    // line of sight, is found: hiding is lost for FOUND_TIME s.
+    static constexpr float SEARCH_COVER_R = 8.0f;
+    static constexpr float CHECK_TIME = 1.0f;
+    static constexpr float FIND_REACH = 1.4f;
+    static constexpr float FOUND_TIME = 2.0f;
     // Doors. The use key shuts or opens a doorway within DOOR_REACH m of its
     // middle that the player faces. Shutting or opening one is heard DOOR_NOISE m
     // away for DOOR_NOISE_TIME s. The hunter opens a shut door in his way after
@@ -212,6 +220,7 @@ struct Sim {
     bool hidden = false;             // crouched beside cover and still
     bool nearCover = false;
     float hideBreakT = 0;            // s moving too fast to hold the spot
+    float foundT = 0;                // s the hunter's find keeps the player from hiding again
 
     // ---- hands
     int weapon = WEAPON_REVOLVER;
@@ -416,6 +425,7 @@ struct Sim {
     bool findDoor(DoorReach &d);            // the doorway in reach and in front, if any
     bool bodyInDoorway(int ci, int ck, bool west) const;   // anyone standing where its leaf swings
     void useDoor();                               // shut or open doorReach
+    bool nextCover(Vec2 &spot);                    // the next cover to check while searching
     bool hunterOpensDoor(float dt);              // true while he stands at a shut door, knocking on it
     void hunterNotice(float x, float z);   // the hunter now knows the player is at (x, z)
 

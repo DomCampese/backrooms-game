@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 // The level's hunter (Clark, a Smiler or the Partygoer) and the Red Halls
 // dogs. The state machines are Sim::updateEntity and Sim::updateDog.
 
@@ -31,6 +32,14 @@ struct Entity {
     // without contact he walks there and searches (Sim::hunterChase).
     float lastX = 0, lastZ = 0, lostT = 0;
     float doorT = 0;   // s he has stood at the shut door in front of him
+    // His search: the centre (the last place he saw or heard the player), the
+    // cover he has already checked there (cell keys, oldest overwritten), and
+    // s left standing at the cover he is checking now.
+    float searchX = 0, searchZ = 0;
+    uint64_t checked[6] = {};
+    int nChecked = 0;
+    float checkT = 0;
+    bool atCover = false;
     float dispY = 0;   // smoothed floor height, so he does not jump on stairs
     float lunge = 0;     // s left in a lunge (LUNGE_TIME); only a lunge can catch the player
     float lungeCd = 0;   // s before he can lunge again
