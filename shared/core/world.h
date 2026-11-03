@@ -42,6 +42,10 @@ enum WallKind : uint8_t {
     // the open side of a flight. Stops a body at any height, but not light or
     // sight.
     WALL_RAIL   = 6,
+    // A doorway whose leaf the player has shut. Never stored in a chunk: the
+    // shutDoors overlay turns a WALL_DOOR into this in wallNVal/wallWVal. Blocks
+    // bodies, light and sight like a locked door.
+    WALL_SHUT   = 7,
 };
 
 // A doorway's opening (and an exit's): from DOOR_LO to DOOR_HI along its edge,
@@ -70,8 +74,8 @@ enum PropKind : uint8_t {
     // 12: the Manila Room's table, chairs and cupboard. Anchored on room cell
     // (7,7) and built centred on that cell's far corner, the middle of the room.
     PROP_MANILA_TABLE,
-    PROP_SEATS,          // 13 a row of four cinema seats facing the screen (the multiplex)
-    PROP_CONCESSION,     // 14 a concession counter, run along x (the multiplex)
+    PROP_SEATS,          // 13 a row of four cinema seats facing the screen (the theater)
+    PROP_CONCESSION,     // 14 a concession counter, run along x (the theater)
 };
 
 constexpr int PROP_KINDS = PROP_CONCESSION + 1;
@@ -143,7 +147,7 @@ constexpr int MANILA_LO = 6, MANILA_HI = 9;
 // The room's centre is the min corner of chunk cell (MANILA_MID, MANILA_MID).
 constexpr int MANILA_MID = MANILA_LO + 2;
 
-// The multiplex (level MULTIPLEX). Most chunks fill the room patch with one
+// The theater (level THEATER). Most chunks fill the room patch with one
 // auditorium, AUD_N cells square: u runs across it, v back from the screen.
 // The seats are rows AUD_ROW0..AUD_ROW1, each AUD_RISE decimetres above the
 // row in front, so the back cross aisle (v = AUD_N - 1) is at floor 0 and the
@@ -293,7 +297,7 @@ struct ChunkData {
     uint8_t lockWest = 0;            // 0: its north edge, 1: its west edge
     int8_t keyI = -1, keyK = -1;     // where the key for it lies, chunk-local
     bool manila = false;             // this chunk holds the Manila Room (Level 0)
-    int8_t audDir = -1;              // the multiplex: this chunk's auditorium faces dir (audCell); -1 none
+    int8_t audDir = -1;              // the theater: this chunk's auditorium faces dir (audCell); -1 none
     // Storeys: each cell's VertFlag bits, which of `feats` it belongs to, and
     // which of its two edges (bit 0 north, bit 1 west) a feature owns. Later passes
     // that punch, move, lock or noclip doorways must skip protected edges, or the
@@ -316,11 +320,12 @@ constexpr int MAX_NEARBY_AABBS = 48;
 // Can a body cross this edge? Collision, pathfinding, line of sight and the
 // mesher share this test. Light uses blocksLight.
 inline bool blocksEdge(uint8_t wall) {
-    return wall == WALL_SOLID || wall == WALL_WINDOW || wall == WALL_LOCKED || wall == WALL_RAIL;
+    return wall == WALL_SOLID || wall == WALL_WINDOW || wall == WALL_LOCKED || wall == WALL_RAIL ||
+           wall == WALL_SHUT;
 }
 // Does this edge stop light? Glass and doorways pass light; a locked door
 // does not.
-inline bool blocksLight(uint8_t wall) { return wall == WALL_SOLID || wall == WALL_LOCKED; }
+inline bool blocksLight(uint8_t wall) { return wall == WALL_SOLID || wall == WALL_LOCKED || wall == WALL_SHUT; }
 
 inline int fdiv(int a, int b) { return (a >= 0) ? a / b : -((-a + b - 1) / b); }
 inline int cellOf(float x) { return (int)floorf(x / CELL); }
@@ -330,7 +335,7 @@ struct ChunkRef { int storey, cx, cz; };
 
 struct World {
     unsigned seed = 1337;
-    int level = 0;           // 0 = Level 0, 1 = Level 1, 2 = Poolrooms, 3 = LEVEL FUN, 4 = the multiplex
+    int level = 0;           // 0 = Level 0, 1 = Level 1, 2 = Poolrooms, 3 = LEVEL FUN, 4 = the theater
     // Which visit to this level, this descent (0 on arrival). Mixed into the
     // chunk seed so a revisit is a different maze; at 0 the mix is a no-op, so a
     // fresh descent reproduces the same maze.
@@ -369,7 +374,7 @@ struct World {
     int featuresFor(int cx, int cz, int s, VertFeat *out, int cap);
     bool pairFeature(int cx, int cz, int p, VertFeat &out);   // the one feature joining p and p + 1, if any
     bool manilaChunk(int cx, int cz, int s);                  // does storey s hold a Manila Room here
-    // The multiplex: chunk (cx, cz)'s auditorium, generating the chunk, or
+    // The theater: chunk (cx, cz)'s auditorium, generating the chunk, or
     // false for a lobby or another level.
     bool auditorium(int cx, int cz, Auditorium &a);
     // The auditoriums in the 3 x 3 chunks round (pcx, pcz) that are already
@@ -422,10 +427,12 @@ struct World {
     void buildOccupancy(int originI, int originK, int n, unsigned char *out);
     // Can a body walk from cell (ci,ck) into the adjacent (ni,nk)? Furniture and
     // pillars fill their cell; only a doorway opens a walled edge.
-    bool canStep(int ci, int ck, int ni, int nk);
+    // throughShut: treat a shut door as open, for a body that can open one (the
+    // hunter). The pack cannot.
+    bool canStep(int ci, int ck, int ni, int nk, bool throughShut = false);
     // BFS from (si,sk) toward (ti,tk) within 16 cells; the first cell to move to.
     // False if there is no route (fall back to a beeline).
-    bool pathStep(int si, int sk, int ti, int tk, int &outI, int &outK);
+    bool pathStep(int si, int sk, int ti, int tk, int &outI, int &outK, bool throughShut = false);
     // Level 0 only: is this cell inside the Manila Room?
     bool manilaAt(int ci, int ck);
     // The centre (world metres) of a loaded Manila Room in this point's chunk or
@@ -445,6 +452,9 @@ struct World {
     std::unordered_set<uint64_t> shifted;
     // Doors the player has unlocked, in the same edge-key space.
     std::unordered_set<uint64_t> unlockedDoors;
+    // Doorways whose leaf is shut (WALL_SHUT), in the same edge-key space.
+    // Cleared with the level (unloadAll).
+    std::unordered_set<uint64_t> shutDoors;
     // Edges are per storey: the edge directly above is a different edge. Storey
     // 0 keys as a one-storey world did.
     uint64_t edgeKey(int ci, int ck, bool west) const {
@@ -452,6 +462,12 @@ struct World {
     }
     void shiftEdge(int ci, int ck, bool west);   // wall it off, and rebake the chunk that owns it
     void unlockEdge(int ci, int ck, bool west);  // open a locked door for good, and rebake
+    // Shut or open a doorway's leaf, and rebake both chunks that draw it.
+    void shutEdge(int ci, int ck, bool west, bool shut);
+    // Is the next edge along this one's wall line a doorway (open or shut)?
+    // Two such doorways share one opening with no jamb between them, so neither
+    // takes a leaf.
+    bool doorJoined(int ci, int ck, bool west);
     // Is there a key lying loose in this cell? One per chunk at most.
     bool keyAt(int ci, int ck);
     void rebuildChunk(int cx, int cz);           // report its geometry stale (staleChunks)

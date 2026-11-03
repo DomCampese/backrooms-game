@@ -299,7 +299,7 @@ off the Mac. In order:
     knocks, `LEVEL=4`: balloon pop, `LEVEL=2`: none. No Unreal code changed;
     the mixer loads every clip up to `SFX_COUNT`.
 
-12. **The multiplex** (1 November 2026), the second level: Level 0's exits
+12. **The theater** (1 November 2026), the second level: Level 0's exits
     lead to it. `LEVEL=5 make unreal-play` goes straight there. The
     editor must import three new surfaces first (`cinemacarpet`,
     `cinemaceil`, `cinemawall`); `make unreal-play` rebuilds the materials
@@ -311,6 +311,13 @@ off the Mac. In order:
     through `frameLight`. A grey or missing screen points at the scene
     actor's translucent shape material; a black room with a working screen,
     at `uLamp`.
+
+13. **Doors** (2 November 2026). Face a doorway on Level 0 and press E: the
+    leaf shuts, "E · open the door" shows, and E opens it again. With F3 then
+    E, let the hunter chase you through a door and shut it behind you: he
+    knocks on it three or four times, opens it and walks through. No Unreal code changed;
+    the chunk actors rebuild from `staleChunks`. If E does nothing, check the
+    Use action's binding in Project Settings > Game > Backrooms.
 
 A session on the Mac itself (`claude remote-control` in the repository) could
 build, run the tests and read the log directly; from the cloud each Unreal

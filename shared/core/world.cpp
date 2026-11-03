@@ -343,7 +343,7 @@ void seatBox(uint8_t rotByte, float x0, float z0, float &bx0, float &bz0, float 
 }
 
 bool World::auditorium(int cx, int cz, Auditorium &a) {
-    if (level != MULTIPLEX) return false;
+    if (level != THEATER) return false;
     const ChunkData &d = data(cx, cz);
     if (d.audDir < 0) return false;
     const int dir = d.audDir;
@@ -356,14 +356,14 @@ bool World::auditorium(int cx, int cz, Auditorium &a) {
     a.across = U[dir];
     a.halfW = AUD_SCREEN_W * 0.5f;
     a.y0 = audElev(0) * ELEV_UNIT + AUD_SCREEN_LIFT;
-    a.y1 = LEVEL_RULES[MULTIPLEX].wallH - AUD_SCREEN_TOP;
+    a.y1 = LEVEL_RULES[THEATER].wallH - AUD_SCREEN_TOP;
     const float toScreen = half - WT - AUD_SCREEN_OFF;
     a.screen = { mx - a.normal.x * toScreen, (a.y0 + a.y1) * 0.5f, mz - a.normal.z * toScreen };
     // Close enough that its light reaches the curtains and the stage, which
     // the shader lights only within about 9.5 m of it.
     a.lamp = { a.screen.x + a.normal.x * 3.5f, 1.4f, a.screen.z + a.normal.z * 3.5f };
     const float toBack = half - WT - 0.01f;
-    a.booth = { mx + a.normal.x * toBack, LEVEL_RULES[MULTIPLEX].wallH - 1.1f, mz + a.normal.z * toBack };
+    a.booth = { mx + a.normal.x * toBack, LEVEL_RULES[THEATER].wallH - 1.1f, mz + a.normal.z * toBack };
     a.rect[0] = mx - half; a.rect[1] = mz - half; a.rect[2] = mx + half; a.rect[3] = mz + half;
     a.seed = ih(cx, cz, sseed() ^ 0xF11Bu);
     return true;
@@ -371,7 +371,7 @@ bool World::auditorium(int cx, int cz, Auditorium &a) {
 
 std::vector<Auditorium> World::auditoriums(int pcx, int pcz) {
     std::vector<Auditorium> out;
-    if (level != MULTIPLEX) return out;
+    if (level != THEATER) return out;
     for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
         int cx = pcx + dx, cz = pcz + dz;
         if (chunks.find(key(cx, cz)) == chunks.end()) continue;
@@ -393,8 +393,8 @@ void World::generate(ChunkData &d, int cx, int cz) {
                         + (uint64_t)visit * 0x2545F4914F6CDD1DULL) * 0x9E3779B97F4A7C15ULL));
     // Open plazas: one chunk in sixteen. More dominate the enclosure average.
     // Hashed with the visit so a revisit moves them.
-    // The multiplex has none: its chunks are auditoriums and lobbies.
-    bool openChunk = level != MULTIPLEX && (hash64(k ^ 0xA11CEULL ^ (uint64_t)sseed()
+    // The theater has none: its chunks are auditoriums and lobbies.
+    bool openChunk = level != THEATER && (hash64(k ^ 0xA11CEULL ^ (uint64_t)sseed()
                              ^ ((uint64_t)visit * 0xD1B54A32D192ED03ULL)) & 15) == 0;
     int nseg = level == 0 ? 12 + rng.ri(0, 5) : level == 1 ? 7 + rng.ri(0, 4)
              : level == LEVEL_FUN ? 9 + rng.ri(0, 4) : 5 + rng.ri(0, 3);
@@ -682,7 +682,7 @@ void World::generate(ChunkData &d, int cx, int cz) {
             }
         }
     }
-    if (level == MULTIPLEX) {
+    if (level == THEATER) {
         // The patch is one room: clear everything inside its outer wall.
         for (int x = AUD_LO; x < AUD_LO + AUD_N; x++) for (int z = AUD_LO; z < AUD_LO + AUD_N; z++) {
             d.pillar[x][z] = 0; d.prop[x][z] = PROP_NONE; d.propRot[x][z] = 0;
@@ -1028,9 +1028,9 @@ void World::generate(ChunkData &d, int cx, int cz) {
     // Rarely, an exit carved into a wall run. Never in a protected wall: those
     // run through two storeys, and a noclip wall on one would be solid on the
     // next.
-    // The multiplex's auditorium walls are protected, so only its lobbies can
+    // The theater's auditorium walls are protected, so only its lobbies can
     // take an exit: it tries four times as often.
-    if (hash64(k ^ 0xE717ULL ^ (uint64_t)sseed()) % (exitTest ? 1 : level == MULTIPLEX ? 4 : 16) == 0) {
+    if (hash64(k ^ 0xE717ULL ^ (uint64_t)sseed()) % (exitTest ? 1 : level == THEATER ? 4 : 16) == 0) {
         bool placed = false;
         for (int i = 1; i < CCELLS - 1 && !placed; i++)
             for (int kk = 1; kk < CCELLS && !placed; kk++)
@@ -1104,10 +1104,10 @@ void World::generate(ChunkData &d, int cx, int cz) {
     // Runs last, after the spawn-room clear, which leaves faces of its own. Moves
     // only toward zero, so it terminates; the chunk's border ring is elev 0, so seams
     // are flat and no pass reads the neighbouring chunk.
-    // The multiplex's floors are stepped by construction, and its auditorium
+    // The theater's floors are stepped by construction, and its auditorium
     // floors sit 3 m below the corridor on the far side of a wall, which this
     // pass would read as a pit.
-    for (int pass = 0; level != 2 && level != MULTIPLEX && pass < 10; pass++) {
+    for (int pass = 0; level != 2 && level != THEATER && pass < 10; pass++) {
         bool changed = false;
         for (int i = 1; i < CCELLS - 1; i++) for (int kk = 1; kk < CCELLS - 1; kk++) {
             int e = d.elev[i][kk];
@@ -1137,7 +1137,8 @@ uint8_t World::wallNVal(int ci, int ck) {
     int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
     uint8_t v = data(cx, cz).wallN[ci - cx * CCELLS][ck - cz * CCELLS];
     if (v == WALL_LOCKED && !unlockedDoors.empty() &&
-        unlockedDoors.count(edgeKey(ci, ck, false))) return WALL_DOOR;
+        unlockedDoors.count(edgeKey(ci, ck, false))) v = WALL_DOOR;
+    if (v == WALL_DOOR && !shutDoors.empty() && shutDoors.count(edgeKey(ci, ck, false))) return WALL_SHUT;
     return v;
 }
 uint8_t World::wallWVal(int ci, int ck) {
@@ -1145,7 +1146,8 @@ uint8_t World::wallWVal(int ci, int ck) {
     int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
     uint8_t v = data(cx, cz).wallW[ci - cx * CCELLS][ck - cz * CCELLS];
     if (v == WALL_LOCKED && !unlockedDoors.empty() &&
-        unlockedDoors.count(edgeKey(ci, ck, true))) return WALL_DOOR;
+        unlockedDoors.count(edgeKey(ci, ck, true))) v = WALL_DOOR;
+    if (v == WALL_DOOR && !shutDoors.empty() && shutDoors.count(edgeKey(ci, ck, true))) return WALL_SHUT;
     return v;
 }
 
@@ -1168,6 +1170,21 @@ void World::unlockEdge(int ci, int ck, bool west) {
     rebuildChunk(cx, cz);
     int nx = fdiv(west ? ci - 1 : ci, CCELLS), nz = fdiv(west ? ck : ck - 1, CCELLS);
     if (nx != cx || nz != cz) rebuildChunk(nx, nz);
+}
+
+void World::shutEdge(int ci, int ck, bool west, bool shut) {
+    uint64_t k = edgeKey(ci, ck, west);
+    if (shut ? !shutDoors.insert(k).second : shutDoors.erase(k) == 0) return;
+    int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
+    rebuildChunk(cx, cz);
+    int nx = fdiv(west ? ci - 1 : ci, CCELLS), nz = fdiv(west ? ck : ck - 1, CCELLS);
+    if (nx != cx || nz != cz) rebuildChunk(nx, nz);
+}
+
+bool World::doorJoined(int ci, int ck, bool west) {
+    auto door = [](uint8_t v) { return v == WALL_DOOR || v == WALL_SHUT; };
+    if (west) return door(wallWVal(ci, ck - 1)) || door(wallWVal(ci, ck + 1));
+    return door(wallNVal(ci - 1, ck)) || door(wallNVal(ci + 1, ck));
 }
 
 // Report a chunk's geometry stale so the renderer rebakes it from the current
@@ -1583,7 +1600,7 @@ void World::buildOccupancy(int originI, int originK, int n, unsigned char *out) 
         }
 }
 
-bool World::canStep(int ci, int ck, int ni, int nk) {
+bool World::canStep(int ci, int ck, int ni, int nk, bool throughShut) {
     if (pillarAt(ni, nk) || propAt(ni, nk) != PROP_NONE) return false;   // furniture and pillars are solid
     // A hole with no flight through it is a drop, not a route. Flights and their
     // holes are continuous in height along every open edge, so the riser rule below
@@ -1596,14 +1613,15 @@ bool World::canStep(int ci, int ck, int ni, int nk) {
     if (!vertical && !poolAt(ci, ck) && !poolAt(ni, nk) &&
         fabsf(floorY(ni, nk) - floorY(ci, ck)) > MAX_STEP) return false;
     // the shared edge: a wall or window blocks it, a doorway does not
-    if (nk == ck - 1)      { if (blocksEdge(wallNVal(ci, ck)))     return false; }
-    else if (nk == ck + 1) { if (blocksEdge(wallNVal(ci, ck + 1))) return false; }
-    else if (ni == ci - 1) { if (blocksEdge(wallWVal(ci, ck)))     return false; }
-    else if (ni == ci + 1) { if (blocksEdge(wallWVal(ci + 1, ck))) return false; }
+    auto blocks = [&](uint8_t v) { return blocksEdge(v) && !(throughShut && v == WALL_SHUT); };
+    if (nk == ck - 1)      { if (blocks(wallNVal(ci, ck)))     return false; }
+    else if (nk == ck + 1) { if (blocks(wallNVal(ci, ck + 1))) return false; }
+    else if (ni == ci - 1) { if (blocks(wallWVal(ci, ck)))     return false; }
+    else if (ni == ci + 1) { if (blocks(wallWVal(ci + 1, ck))) return false; }
     return true;
 }
 
-bool World::pathStep(int si, int sk, int ti, int tk, int &outI, int &outK) {
+bool World::pathStep(int si, int sk, int ti, int tk, int &outI, int &outK, bool throughShut) {
     const int R = 16, W = 2 * R + 1;
     auto idx = [&](int ci, int ck) -> int {
         int lx = ci - si + R, lz = ck - sk + R;
@@ -1621,7 +1639,7 @@ bool World::pathStep(int si, int sk, int ti, int tk, int &outI, int &outK) {
         if (ci == ti && ck == tk) { found = cur; break; }
         for (auto &d : dirs) {
             int ni = ci + d[0], nk = ck + d[1], nl = idx(ni, nk);
-            if (nl < 0 || prev[nl] != -2 || !canStep(ci, ck, ni, nk)) continue;
+            if (nl < 0 || prev[nl] != -2 || !canStep(ci, ck, ni, nk, throughShut)) continue;
             prev[nl] = cur; q.push_back(nl);
         }
     }
@@ -1673,7 +1691,8 @@ void World::unloadFar(int pcx, int pcz, int radius) {
 }
 
 void World::unloadAll() {
-    shifted.clear();   // a new level starts with no shifted walls
+    shifted.clear();   // a new level starts with no shifted walls and every door open
+    shutDoors.clear();
     for (auto &kv : chunks) staleChunks.push_back({ storey, keyX(kv.first), keyZ(kv.first) });
     chunks.clear();
     for (auto &lv : layers)

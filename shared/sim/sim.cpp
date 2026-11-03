@@ -23,6 +23,10 @@ void Sim::step(const InputFrame &in, float dt, double now) {
     AudioEvent &loops = audioEvent(AudioEvent::LOOPS);
     loops.loops = loopCue();
     loops.dt = dt;
+    InputFrame observation = in;
+    observation.observing = in.playing;
+    observation.observationCos = portableCos(in.screenFov * 0.00872664626f);
+    updateMannequin(observation, dt, now);
     updateEntity(dt, now, in.forceSpawn);
     updateExits(now);
     updateTimers(dt);
@@ -36,6 +40,7 @@ void Sim::updateTimers(float dt) {
     fellT = fmaxf(0, fellT - dt);
     winT = fmaxf(0, winT - dt);
     closeCallT = fmaxf(0, closeCallT - dt);
+    doorNoiseT = fmaxf(0, doorNoiseT - dt);
     tapeFoundT = fmaxf(0, tapeFoundT - dt);
 }
 
@@ -80,6 +85,7 @@ void Sim::setPaused(bool on, double now) {
         nextDistant += held;
         runStart += held;
         ent.nextSpawn += held;
+        mannequin.nextSpawn += held;
         nextHeartbeat += held;
     }
     play(Sfx::Click).atPitch(paused ? 0.7f : 1.1f);
@@ -170,6 +176,8 @@ void Sim::applyLevel(int lv, double now) {
     ambience.droneLevel = lv == 1 ? 1.0f : 0.0f;
     nextBlackout = lv == 2 ? BLACKOUT_NEVER : blackoutIn(now, 30, 60);   // no blackouts in the Poolrooms
     blackoutEnd = -1;
+    mannequin = {};
+    mannequin.nextSpawn = now + 150;
     shadowsStale = true;
     distantRng = Rng(hash64((uint64_t)world.seed ^ ((uint64_t)lv << 40) ^ ((uint64_t)world.visit << 48) ^ 0xD157A47ULL));
     nextDistant = now + DISTANT_LEAD + distantRng.f01() * DISTANT_SPAN;
@@ -263,7 +271,7 @@ void Sim::updateDevKeys(const DevKeys &dev, double now) {
     if (dev.spawnAhead) {
         Vec2 spot = world.findOpenSpot(px + f2x * 12, pz + f2z * 12);
         ent.x = spot.x; ent.z = spot.y;
-        ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.hp = 3; ent.stagger = 0;
+        ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.hp = 3; ent.stagger = 0;
     }
     if (dev.chase) {
         if (ent.st == EState::Hidden) {
@@ -271,7 +279,8 @@ void Sim::updateDevKeys(const DevKeys &dev, double now) {
             ent.x = spot.x; ent.z = spot.y;
             ent.hp = 3;
         }
-        ent.st = EState::Chase; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.repathT = 0;
+        ent.st = EState::Chase; ent.gaze = 0; ent.life = 0; ent.repathT = 0;
+        hunterNotice(px, pz);
     }
     if (dev.banish) {
         ent.st = EState::Hidden; ent.nextSpawn = now + 20 + grng.f01() * 20;

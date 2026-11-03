@@ -40,17 +40,17 @@ inline constexpr LevelRules LEVEL_RULES[NLEVELS] = {
     { 4.2f, 12.0f, 0.0f,  "LEVEL 1 · HABITABLE ZONE", 0.30f, 0.35f, 0.20f, Footing::Concrete, Distant::Clang },
     { 7.5f,  8.0f, 0.0f,  "THE POOLROOMS",            0.06f, 0.0f,  0.07f, Footing::Tile,     Distant::None },
     { 3.0f,  8.0f, 0.0f,  "LEVEL FUN =)",             0.10f, 0.0f,  0.07f, Footing::Carpet,   Distant::Pop },
-    { 5.0f,  8.0f, 0.0f,  "THE MULTIPLEX",            0.25f, 0.30f, 0.10f, Footing::Carpet,   Distant::Boom },
+    { 5.0f,  8.0f, 0.0f,  "THE THEATER",              0.25f, 0.30f, 0.10f, Footing::Carpet,   Distant::Boom },
 };
 
 // The party level, with balloons, confetti and the Partygoer.
 constexpr int LEVEL_FUN = 3;
 // The level whose chunks World::generate fills with auditoriums.
-constexpr int MULTIPLEX = 4;
+constexpr int THEATER = 4;
 
-// Where each level's exit door leads: Level 0, the multiplex, Level 1, the
+// Where each level's exit door leads: Level 0, the theater, Level 1, the
 // Poolrooms, LEVEL FUN, and back to Level 0.
-inline constexpr int EXIT_NEXT[NLEVELS] = { MULTIPLEX, 2, LEVEL_FUN, 0, 1 };
+inline constexpr int EXIT_NEXT[NLEVELS] = { THEATER, 2, LEVEL_FUN, 0, 1 };
 
 // How deep each level is, for the records' "deepest": the order the exits
 // reach them. The records file stores the level number, not this.

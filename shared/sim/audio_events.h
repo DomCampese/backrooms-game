@@ -18,7 +18,10 @@ enum class Sfx : uint8_t {
     FarDoor,          // 3: Distant::Door (Level 0)
     FarClang,         // 3: Distant::Clang (Level 1)
     FarPop,           // 3: Distant::Pop (LEVEL FUN)
-    FarBoom,          // 3: Distant::Boom (the multiplex)
+    FarBoom,          // 3: Distant::Boom (the theater)
+    DoorShut,
+    DoorKnock,
+    MannequinStep,     // dedicated spatial footstep channel
     Hurt,             // the player taking a hit or a fall
 };
 

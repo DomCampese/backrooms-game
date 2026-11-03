@@ -269,7 +269,8 @@ void Sim::updateHiding(float speed, float dt) {
             if (ddx * ddx + ddz * ddz < 1.35f * 1.35f) nearCover = true;
         }
     }
-    if (!nearCover) { hidden = false; hideBreakT = 0; }
+    foundT = fmaxf(0.0f, foundT - dt);
+    if (!nearCover || foundT > 0) { hidden = false; hideBreakT = 0; }
     else if (!hidden) { if (speed < HIDE_ENTER) hidden = true; hideBreakT = 0; }
     else if (speed > HIDE_BREAK) {
         hideBreakT += dt;

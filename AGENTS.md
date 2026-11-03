@@ -42,9 +42,9 @@ easy to prove. A PR states what a player will notice and why it was chosen.
 Write all of it plainly (docs/readability.md, "Register"). That includes
 messages to the user: short sentences, no jargon they would have to decode.
 
-# The multiplex (November 2026)
+# The theater (November 2026)
 
-Level 4 (`MULTIPLEX`, core/level_rules.h) is a cinema, and the second level
+Level 4 (`THEATER`, core/level_rules.h) is a cinema, and the second level
 you reach: Level 0's exits lead to it and its exits lead to Level 1. Three chunks in four are one
 auditorium filling the room patch; the rest, and the spawn chunk, are lobbies
 with a concession counter (`PROP_CONCESSION`), columns, benches and plants.
@@ -52,14 +52,14 @@ The hunter is a Smiler. It is not from the Backrooms wiki, so CREDITS.md has
 no row for it.
 
 - **An auditorium is decided in core** (`World::generate`, the
-  `level == MULTIPLEX` block). `audCell(dir, u, v)` maps its cells: u across,
+  `level == THEATER` block). `audCell(dir, u, v)` maps its cells: u across,
   v back from the screen. `audElev(v)` is the floor: rows rise 3 dm each
   toward the back, so the back aisle is at 0 and the front 3 m down. A sunken
   cell keeps the room's ceiling, so the ceiling stays flat at 5 m. Seats are
   `PROP_SEATS`, turned by `audFacing(dir)` to face the screen, with aisles at
   u = 0, 6 and 12. `ChunkData::audDir` says which way an auditorium faces, or
   -1.
-- **The elevation relaxation pass skips the multiplex.** It reads the four
+- **The elevation relaxation pass skips the theater.** It reads the four
   neighbours whatever wall is between them, so it pulled the front rows up
   toward the corridor floor on the far side of the wall. The floors are within
   `MAX_STEP` by construction; the regression checks every open edge.
@@ -105,7 +105,7 @@ no row for it.
 - `Distant::Boom` plays `Sfx::FarBoom`: a film's soundtrack through a wall.
 - **Its number is 4 but its place is second.** `EXIT_NEXT` sets the order,
   and the records' "deepest" compares `LEVEL_DEPTH`, not the level number;
-  comparing numbers would rank the multiplex deepest of all. The records file
+  comparing numbers would rank the theater deepest of all. The records file
   still stores the number. F3's N still steps by number.
 - tests/golden gained lines for the new level and lost none; walk-l0-l2.trace
   plays back unchanged.
@@ -115,34 +115,64 @@ no row for it.
 The Red Halls (Level 3), the dog pack that hunted them, their valve puzzle,
 the cursed exits that led there and the bedroom furniture only they used are
 gone. The levels are now 0, 1, 2 (the Poolrooms), 3 (LEVEL FUN, `LEVEL_FUN`)
-and 4 (the multiplex, `MULTIPLEX`).
+and 4 (the theater, `THEATER`).
 
-- **Name LEVEL FUN and the multiplex by their constants**, not by number.
+- **Name LEVEL FUN and the theater by their constants**, not by number.
   Every `level == 4` meant LEVEL FUN before; a literal is how the next
   renumbering breaks something.
 - **Levels 0-2 generate exactly as before.** Level 0 still draws the window
   number it discards. The contract goldens for Levels 0-2 changed only where an
   enum lost a value (props, fixtures, openings).
-- **LEVEL FUN and the multiplex have new maps.** `World::generate` seeds its
+- **LEVEL FUN and the theater have new maps.** `World::generate` seeds its
   rng with the level number. With their old numbers the goldens matched line
   for line, so nothing else about them changed.
 - **The records file has a numbering field** (`RECORDS_NUMBERING`, after
   `longestRun`). A file without it uses the old numbers: 4 and 5 are read as
-  LEVEL FUN and the multiplex, and a Red Halls record as Level 0. Without the
+  LEVEL FUN and the theater, and a Red Halls record as Level 0. Without the
   mapping an old "deepest" of 5 indexes past `LEVELS`.
 - **The hurt sound is `Sfx::Hurt`** (`makeHurt`): a 110-50 Hz thud, a 700 Hz
   noise slap and a short breath, 0.32 s. It used to be the soft floor's groan
   pitched up, 1.3 s of low-passed noise that sounded like rushing water.
-- **A shot's targets are the hunter (0) and balloons (-2)**; -1 is level
-  geometry. `BulletImpact::body` is set for the hunter.
-- walk-l0-l2.trace was re-recorded. The old one replayed through the new sim
-  with every field equal except the dogs' and the audio hash, before the dogs'
-  `nextHowl` rng draw was removed.
+- **The hunter hears `Sim::loudestNoise`**, which was the pack's `packNoise`.
+- **A shot's targets are the hunter (0), the mannequin (1) and balloons
+  (-2)**; -1 is level geometry. `BulletImpact::body` is set for the hunter.
+- walk-l0-l2.trace was re-recorded.
+
+# Doors (November 2026)
+
+The use key shuts or opens a doorway (`Sim::findDoor`, `useDoor`,
+shared/sim/items.cpp). A shut door is `WALL_SHUT`, which no chunk stores: the
+`World::shutDoors` overlay turns a `WALL_DOOR` into it in `wallNVal` and
+`wallWVal`, like `unlockedDoors` and `shifted`.
+
+- **`WALL_SHUT` blocks bodies, light and sight** (`blocksEdge`,
+  `blocksLight`, and the full-height box `gatherCellAABBs` gives any blocking
+  edge). The layout calls it `OpeningKind::ShutDoor`, and the mesher and the
+  greybox build it as a locked door.
+- **`World::shutEdge` rebakes both chunks that draw the edge**, and the sim
+  sets `shadowsStale`, as for an unlocked door. `unloadAll` clears the set, so
+  a new level starts with every door open.
+- **The hunter routes through shut doors.**
+  `canStep` and `pathStep` take `throughShut`, which only `hunterChase` passes.
+  At a shut door between him and his waypoint he stops, knocks on it every
+  `DOOR_KNOCK` s (`Sfx::DoorKnock`) and opens it after `DOOR_OPEN_TIME` s
+  (`Sim::hunterOpensDoor`). Without the stop, the router walked him into the
+  leaf and collision held him there.
+- **A doorway joined to its neighbour takes no leaf** (`World::doorJoined`):
+  the two share one opening with no jamb between them, and a leaf in one would
+  leave half the opening open.
+- **A door will not shut on a body** (`bodyInDoorway`): the player or the
+  hunter within its radius of the leaf's line.
+- **Shutting or opening is a noise** (`doorNoiseT`, `DOOR_NOISE` 14 m in
+  `loudestNoise`), so the hunter hears it.
+- **`Sim::crateAt` treats `WALL_SHUT` as a doorway**, or shutting a door
+  would move Level 1's crates.
+- The HUD shows "E · shut the door" or "open the door" while one is in reach.
 
 # Footstep clip per floor material (October 2026)
 
 Player footsteps and landings use a clip per floor material: carpet on
-Level 0, LEVEL FUN and the multiplex (`Sfx::Step`, unchanged), concrete on
+Level 0, LEVEL FUN and the theater (`Sfx::Step`, unchanged), concrete on
 Level 1 (`StepConcrete`), tile on Level 2 (`StepTile`), wood inside the Manila Room
 (`StepWood`).
 
@@ -172,6 +202,51 @@ Level 1 (`StepConcrete`), tile on Level 2 (`StepTile`), wood inside the Manila R
   frames and two recordings never left Level 0. Use `KEY_HOLD=2` on a slow
   machine, and check a new recording reached every level with
   `grep -o 'level=[0-9]' | sort | uniq -c`.
+
+# The hunter can lose the player (October 2026)
+
+In a chase the hunter used to path to the player's cell through any number of
+walls, and gave up only after a fixed time unseen. Now he chases what he
+knows (`Sim::hunterChase`, shared/sim/hunters.cpp).
+
+- **He sees the player** within `HUNTER_SIGHT` (30 m) with line of sight,
+  unless they are hidden or crouched more than 7 m away. **He hears them**
+  inside `loudestNoise`'s radius: 5 m standing, 11 m
+  walking, 20 m sprinting (x0.45 crouched), the tape player, a flare strike, a
+  shot. Either sets `Entity::lastX/lastZ` and zeroes `lostT`
+  (`Sim::hunterNotice`).
+- **Without contact** he walks at `SEARCH_SPEED` to the last-known spot, then
+  to open spots 3-7 m around it, and goes `Hidden` after `SEARCH_TIME` (10 s).
+  He cannot lunge without sight.
+- **Every way into a chase must call `hunterNotice`** (the stare, the shot
+  alert in weapons.cpp, F3's C). Without it he searches wherever the last
+  chase ended.
+- **The search draws from `grng`.** walk-l0-l2.trace has no chase, so it still
+  plays back the same; a recording with a chase out of sight would not.
+- No platform code changed, so both builds get it.
+
+# The searching hunter checks cover (November 2026)
+
+When the hunter loses the player it walks to the last-known spot and then
+checks the cover near it (`Sim::nextCover`, shared/sim/hunters.cpp), before
+the random spots it used to try.
+
+- **Cover is a `hideSpotAt` cell within `SEARCH_COVER_R` (8 m) of the search
+  centre** (`Entity::searchX/searchZ`, set by `hunterNotice`). He stands in an
+  open neighbour 0.4 m toward it, waits `CHECK_TIME` (1 s), and takes the
+  nearest unchecked one next. `Entity::checked` holds the last six cells, so
+  he does not check one twice. `hunterNotice` clears it.
+- **He finds a hidden player within `FIND_REACH` (1.4 m) with line of sight.**
+  That clears `hidden`, plays `Sfx::Scare` low, and sets `foundT`
+  (`FOUND_TIME`, 2 s), during which `updateHiding` will not hide the player
+  again. Without it the player re-hid on the next frame and the find did
+  nothing.
+- **A local named `best` shadows `Sim::best`** (the records). The Unreal
+  module builds with `-Wshadow -Werror` and refuses it; the sandbox build
+  does not. It happened twice (`findDoor`, `nextCover`); `tools/unreal-check.sh`
+  catches it. Call such locals `nearest`.
+- No new `Sfx` and no platform code, so both builds get it. walk-l0-l2.trace
+  has no chase and plays back unchanged.
 
 # Distant one-shots (October 2026)
 
@@ -1241,7 +1316,7 @@ build's, in `web/src/`.
 | `game_audio.{h,cpp}` | every `Sound`/`Music` handle and the synth; plays the sim's `AudioEvent`s in order |
 | `render.cpp` | 3D scene, viewmodels, HUD, overlays, drawn from `sim` |
 | `core/world.{h,cpp}` | the infinite maze: chunk generation, storeys, collision, line of sight, pathfinding, occupancy grid. `WallKind` / `PropKind` name the codes stored per cell. No raylib |
-| `core/level_rules.h` | per-level rules: wall height, light pitch, storey pitch, name, which tubes work, exits, floor material, distant sound; `MULTIPLEX` |
+| `core/level_rules.h` | per-level rules: wall height, light pitch, storey pitch, name, which tubes work, exits, floor material, distant sound; `THEATER` |
 | `core/layout.{h,cpp}` | `ChunkLayout`: a chunk's props, fixtures, light fittings and openings, decided from the seed |
 | `core/floorplan.{h,cpp}` | `ChunkFloorplan`: a chunk's floors, walls, risers, ceilings, soffits, flights and arches |
 | `core/hash.{h,cpp}`, `core/vec.h`, `core/portable_math.{h,cpp}` | hashes, RNG, value noise; `Vec2`/`Vec3`, `TAU`, `clampf`; sin, cos, exp, atan2, hypot that round the same on every platform |
@@ -1253,7 +1328,7 @@ build's, in `web/src/`.
 | `port/chunk_mesh.{h,cpp}` | the chunk mesher (`bakeChunkGeometry`), `ChunkMesh` slots |
 | `port/mesh_builder.{h,cpp}`, `port/atlas.{h,cpp}`, `port/palette.h` | `MB`, `addPropBox`, `addSolidBox`, `PLAIN_UV`; the fixtures atlas layout and tile sizes; `cl8`, `PARTY_RGBA` |
 | `port/camcorder.{h,cpp}` | the camcorder's tape: interference, the frames and their playback, clips, the REC mark and the playback's OSD |
-| `sim/entity.h` | `Entity`: Clark on Level 0, a Smiler on Level 1 and the multiplex, the Partygoer on LEVEL FUN |
+| `sim/entity.h` | `Entity`: Clark on Level 0, a Smiler on Level 1 and the theater, the Partygoer on LEVEL FUN |
 | `world_mesh.{h,cpp}`, `mesh_upload.h` | `bakeChunk` (the mesher's output as raylib meshes), `ChunkMeshCache` |
 | `object_meshes.{h,cpp}` | can, tape deck, reels, flare, supply crate |
 | `vec_rl.h` | `toRl` / `fromRl` between core's math types and raylib's |
@@ -2306,7 +2381,7 @@ three rules:
   press must come within `W_TAP`. Touch uses the push past the ring.
 - **One entity, three looks.** `Sim::hunterName()` and `clarkLevel()` choose
   Pirate Clark on Level 0 (`makeClarkTex`), the Partygoer on LEVEL FUN and a
-  Smiler on Level 1 and the multiplex. Death cards, the "IS DOWN" banner and `deathBy` go
+  Smiler on Level 1 and the theater. Death cards, the "IS DOWN" banner and `deathBy` go
   through `hunterName()`; the tally reads "hunters put down" because it spans
   levels.
 - **The Smiler is two sheets on the entity grid.** `makeSmilerTex(false)` is
@@ -2379,3 +2454,14 @@ three rules:
   was not enough. `tools/web-render-check.mjs` with `BROWSER_CHANNEL=chrome`
   detects both by isolated pixel discontinuities; absolute gun brightness is
   not stable across lighting changes.
+
+# The Mannequin
+
+- Rules live in shared/sim/mannequin.cpp. Its body and HUD are shared by both
+  builds. Sim::step derives observation from the active player's view and
+  screen FOV. The continuously recording camera has no handheld toggle.
+- MannequinStep has its own sound channel. Reusing another footstep channel
+  would leave that clip with the Mannequin's spatial volume and pan.
+- Level entries clear the encounter. A storey change ends it on the next tick;
+  its position must not be shifted with objects on the player's new floor.
+- Run make mannequin-check for observation, movement, flares and reset checks.

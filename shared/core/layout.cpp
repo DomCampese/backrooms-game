@@ -24,7 +24,7 @@ const LevelDecor DECOR[NLEVELS] = {
     { true,  true,  true,  true,  true,  false, false },   // Level 1
     { false, false, false, false, false, false, false },   // the Poolrooms
     { true,  true,  false, false, false, true,  false },   // LEVEL FUN
-    { true,  true,  false, false, false, false, true  },   // the multiplex
+    { true,  true,  false, false, false, false, true  },   // the theater
 };
 // One wall edge in POSTER_RATE facing a corridor carries a poster.
 constexpr uint32_t POSTER_RATE = 3;
@@ -111,6 +111,7 @@ bool openingOn(World &w, Opening &op, int cx, int cz, int i, int k, bool west) {
     switch (v) {
     case WALL_DOOR:   op.kind = OpeningKind::Doorway; break;
     case WALL_LOCKED: op.kind = OpeningKind::LockedDoor; break;
+    case WALL_SHUT:   op.kind = OpeningKind::ShutDoor; break;
     case WALL_WINDOW: op.kind = OpeningKind::Window; break;
     case WALL_RAIL:   op.kind = OpeningKind::Rail; break;
     case WALL_EXIT:   op.kind = OpeningKind::Exit; break;

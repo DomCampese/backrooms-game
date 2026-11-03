@@ -4,10 +4,10 @@
 
 // The level numbering the file's `deepest` uses. Files without the field
 // predate the Red Halls' removal, when they were level 3 and LEVEL FUN and the
-// multiplex were 4 and 5; OLD_LEVEL maps those numbers to these. A record of
+// theater were 4 and 5; OLD_LEVEL maps those numbers to these. A record of
 // the Red Halls becomes Level 0, where the exits to them were.
 constexpr int RECORDS_NUMBERING = 2;
-constexpr int OLD_LEVEL[6] = { 0, 1, 2, 0, LEVEL_FUN, MULTIPLEX };
+constexpr int OLD_LEVEL[6] = { 0, 1, 2, 0, LEVEL_FUN, THEATER };
 
 Records loadRecords(const char *path) {
     Records b;

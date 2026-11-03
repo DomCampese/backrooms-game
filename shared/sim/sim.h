@@ -23,7 +23,8 @@ struct FlareProj {
     float x = 0, y = 0, z = 0, vx = 0, vy = 0, vz = 0, burn = 0;
 };
 
-// The tape player. Playing a tape restores sanity.
+// The tape player. Playing a tape restores sanity. A playing deck is a noise
+// the hunter hears (TAPE_NOISE), so one set down while playing draws him to it.
 struct TapeDeck {
     bool carried = true;      // carried, or lying where it was set down
     bool playing = false;
@@ -77,6 +78,15 @@ struct SolidTracer {
 };
 
 struct Sim {
+    struct Mannequin {
+        bool active = false, pinned = false, warded = false;
+        Vec3 pos{};
+        int storey = 0, pose = 0;
+        float grace = 0, lost = 0, gait = 0, stagger = 0, yaw = 0;
+        double nextSpawn = 150;
+    } mannequin;
+    bool spawnMannequin(double now);
+    void updateMannequin(const InputFrame &in, float dt, double now);
     // ---- tuning
     static constexpr float PR = 0.34f;          // player radius
     static constexpr float SQUEEZE_R = 0.12f;   // player radius while squeezing
@@ -92,13 +102,14 @@ struct Sim {
     static constexpr double DISTANT_LEAD = 20, DISTANT_GAP = 35, DISTANT_SPAN = 50;
     static constexpr int   MAXAMMO = 6;
     static constexpr float MUZZLE_FLASH = 0.09f;   // s the muzzle flash lights the room
-    // Hiding stops the hunter tracking you, blocks the catch and runs ent.unseen
-    // at 2.4x, so it requires standing still. Two thresholds, so hiding does
-    // not flicker on and off while the player slows down.
+    // Hiding stops the hunter seeing the player and blocks the catch, so it
+    // requires standing still. Two thresholds, so hiding does not flicker on and
+    // off while the player slows down.
     static constexpr float HIDE_ENTER = 0.4f;   // m/s to be under to start hiding
     static constexpr float HIDE_BREAK = 1.2f;   // m/s that ends hiding
     static constexpr float HIDE_GRACE = 0.35f;  // s above HIDE_BREAK before hiding ends
     static constexpr float TAPE_RUN = 26.0f;    // s: one side of a tape
+    static constexpr float TAPE_NOISE = 32.0f;  // m a playing deck carries to the hunter
     static constexpr int   ESCAPE_COST = 12;    // doubloons that buy the way out
     // The catch: the hunter starts a lunge from LUNGE_REACH, the lunge lasts
     // LUNGE_TIME with a warning, and only a lunge in progress can catch the
@@ -106,6 +117,29 @@ struct Sim {
     static constexpr float LUNGE_REACH = 2.5f;
     static constexpr float LUNGE_TIME = 0.6f;
     static constexpr float CATCH_REACH = 1.25f;
+    // A chasing hunter sees the player within HUNTER_SIGHT m with line of
+    // sight; otherwise he walks at SEARCH_SPEED m/s to where he last saw or
+    // heard them, then to spots SEARCH_STEP_MIN..MAX m around it, and gives up
+    // after SEARCH_TIME s without contact.
+    static constexpr float HUNTER_SIGHT = 30.0f;
+    static constexpr float SEARCH_SPEED = 2.6f;
+    static constexpr float SEARCH_STEP_MIN = 3.0f, SEARCH_STEP_MAX = 7.0f;
+    static constexpr float SEARCH_TIME = 10.0f;
+    // Searching, he first walks to the cover (hideSpotAt) within SEARCH_COVER_R m
+    // of where he last saw or heard the player, nearest first, and stands at
+    // each for CHECK_TIME s. A hidden player within FIND_REACH m of him, in
+    // line of sight, is found: hiding is lost for FOUND_TIME s.
+    static constexpr float SEARCH_COVER_R = 8.0f;
+    static constexpr float CHECK_TIME = 1.0f;
+    static constexpr float FIND_REACH = 1.4f;
+    static constexpr float FOUND_TIME = 2.0f;
+    // Doors. The use key shuts or opens a doorway within DOOR_REACH m of its
+    // middle that the player faces. Shutting or opening one is heard DOOR_NOISE m
+    // away for DOOR_NOISE_TIME s. The hunter opens a shut door in his way after
+    // DOOR_OPEN_TIME s, knocking on it every DOOR_KNOCK s; the pack cannot open one.
+    static constexpr float DOOR_REACH = 1.6f;
+    static constexpr float DOOR_NOISE = 14.0f, DOOR_NOISE_TIME = 0.5f;
+    static constexpr float DOOR_OPEN_TIME = 1.6f, DOOR_KNOCK = 0.45f;
     static constexpr float DEATH_CARD = 12.0f;  // s the death card stays up: the tape playback, then the text
     static constexpr float DEATH_CARD_HOLD = 1.6f;   // s of it no key can dismiss
     // Health. One hit is survivable and a second before healing is not: two
@@ -190,6 +224,7 @@ struct Sim {
     bool hidden = false;             // crouched beside cover and still
     bool nearCover = false;
     float hideBreakT = 0;            // s moving too fast to hold the spot
+    float foundT = 0;                // s the hunter's find keeps the player from hiding again
 
     // ---- hands
     int weapon = WEAPON_REVOLVER;
@@ -274,6 +309,11 @@ struct Sim {
     const char *tapeLine = "";       // the recovered tape's line
     const char *sanityLine = "";     // the last sanity (or migraine) warning
     const char *deckNote = "";       // one-line notes: the deck, keys, crates, a new floor
+    // The doorway the use key would shut or open, found each tick (findDoor),
+    // for the HUD's hint.
+    struct DoorReach { bool ok = false; int i = 0, k = 0; bool west = false, shut = false; };
+    DoorReach doorReach;
+    float doorNoiseT = 0;            // s left of the noise of a door shut or opened
 
     // ---- the tick. step() runs the updates below in this order; each may
     // rely on the ones before it (a shot lands before the hunter reacts).
@@ -374,7 +414,14 @@ struct Sim {
     const char *hunterName() const { return level == LEVEL_FUN ? "THE PARTYGOER" : level == 0 ? "PIRATE CLARK" : "A SMILER"; }
     bool wayOpen() const { return coins >= ESCAPE_COST; }
     void spawnHunter();
-    bool hunterChase(float dt, double now, bool entVisible, float &fearT);   // true if it ended the run
+    float loudestNoise(float &x, float &z) const;   // how far the loudest noise carries, and where
+    bool hunterChase(float dt, double now, float &fearT);   // true if it ended the run
+    bool findDoor(DoorReach &d);            // the doorway in reach and in front, if any
+    bool bodyInDoorway(int ci, int ck, bool west) const;   // anyone standing where its leaf swings
+    void useDoor();                               // shut or open doorReach
+    bool nextCover(Vec2 &spot);                    // the next cover to check while searching
+    bool hunterOpensDoor(float dt);              // true while he stands at a shut door, knocking on it
+    void hunterNotice(float x, float z);   // the hunter now knows the player is at (x, z)
 
     // ---- the run's shape
     void applyLevel(int lv, double now);

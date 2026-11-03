@@ -867,11 +867,11 @@ Surface makePartyCeilSurface() {
     return boardCeiling(512, 4, 2.0f, 22, 20, 25, 30, 29, 33, 120, 0xFA27u, 19.3f);
 }
 
-// ---------------------------------------------------------------- the multiplex
+// ---------------------------------------------------------------- the theater
 //
 // Cinema carpet: a near-black ground scattered with bright shapes (rings,
 // triangles, squiggles and dots in teal, magenta, violet and gold), the kind
-// laid in multiplexes so that spilt popcorn and dirt do not show. Twelve cells
+// laid in theaters so that spilt popcorn and dirt do not show. Twelve cells
 // to the 2 m tile, one shape per cell, drawn from its own cell and the eight
 // round it so a shape can cross a cell edge; positions wrap, so it tiles.
 Surface makeCinemaCarpetSurface() {
@@ -954,7 +954,7 @@ Surface makeCinemaWallSurface() {
     return finishSurface(c, 1.0f);
 }
 
-// The multiplex's ceiling: black acoustic board on a black grid, 0.5 m boards,
+// The theater's ceiling: black acoustic board on a black grid, 0.5 m boards,
 // a little browner than LEVEL FUN's.
 Surface makeCinemaCeilSurface() {
     return boardCeiling(512, 4, 2.0f, 20, 18, 18, 26, 24, 24, 120, 0xC1C0u, 17.0f);

@@ -22,7 +22,7 @@ FAIL=0
 # small lighting change. Tightening one means re-measuring all six when the
 # lighting changes.
 #
-# The multiplex's spot is a lobby corner, around 20/255.
+# The theater's spot is a lobby corner, around 20/255.
 band_lo() { case $1 in 0) echo 45;; 1) echo 20;; 2) echo 55;; 3) echo 12;; 4) echo 6;; menu) echo 20;; esac; }
 band_hi() { case $1 in 0) echo 150;; 1) echo 110;; 2) echo 190;; 3) echo 95;; 4) echo 60;; menu) echo 150;; esac; }
 

@@ -1034,7 +1034,7 @@ static void addAuditorium(MB &pr, MB &fx, const Fixture &f) {
         Vec3 p = at(s0, t0), q = at(s1, t1);
         addSolidBox(mb, std::min(p.x, q.x), y0, std::min(p.z, q.z), std::max(p.x, q.x), y1, std::max(p.z, q.z), c);
     };
-    const float face = WT, wallH = LEVEL_RULES[MULTIPLEX].wallH;
+    const float face = WT, wallH = LEVEL_RULES[THEATER].wallH;
     const float y0 = audElev(0) * ELEV_UNIT + AUD_SCREEN_LIFT, y1 = wallH - AUD_SCREEN_TOP;
     const float s0 = half - AUD_SCREEN_W * 0.5f, s1 = half + AUD_SCREEN_W * 0.5f;
     const float stage = audElev(0) * ELEV_UNIT, floorLo = audElev(1) * ELEV_UNIT;
@@ -1528,7 +1528,7 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
             addSolidBox(pr, mW ? gx : a0, fy0, gz - 0.07f,
                         mE ? gx + CELL : a1, fy0 + 0.013f, gz + 0.07f, SILL_COL);
         }
-        else if (is(on, OpeningKind::LockedDoor)) {   // a door with the leaf still in it
+        else if (is(on, OpeningKind::LockedDoor) || is(on, OpeningKind::ShutDoor)) {   // a door with its leaf shut
             const float a0 = on->a0, a1 = on->a1, head = on->headY, fy0 = on->floorY;
             addBoxSides(wa, gx - WT, nb, gz - WT, a0, nt, gz + WT);
             addBoxSides(wa, a1, nb, gz - WT, gx + CELL + WT, nt, gz + WT);
@@ -1585,7 +1585,7 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
             addSolidBox(pr, gx - 0.07f, fy0, mN ? gz : a0,
                         gx + 0.07f, fy0 + 0.013f, mS ? gz + CELL : a1, SILL_COL);
         }
-        else if (is(ow, OpeningKind::LockedDoor)) {   // a door with the leaf still in it
+        else if (is(ow, OpeningKind::LockedDoor) || is(ow, OpeningKind::ShutDoor)) {   // a door with its leaf shut
             const float a0 = ow->a0, a1 = ow->a1, head = ow->headY, fy0 = ow->floorY;
             addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wt2, a0);
             addBoxSides(wa, gx - WT, wb, a1, gx + WT, wt2, gz + CELL + WT);
@@ -1600,8 +1600,8 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
                             xf + TRIM_T, fy0 + 1.07f, gz + 1.50f, LOCK_COL);
             }
         }
-        if (w.level == 0 || w.level == LEVEL_FUN || w.level == MULTIPLEX) {
-            // Skirting on Levels 0 and 4 and the multiplex: thin timber within the
+        if (w.level == 0 || w.level == LEVEL_FUN || w.level == THEATER) {
+            // Skirting on Level 0, LEVEL FUN and the theater: thin timber within the
             // collision clearance, no separate obstacle.
             Rgba trim = w.level == 0 ? Rgba{91, 71, 39, 254} : w.level == LEVEL_FUN ? Rgba{67, 41, 34, 254} : Rgba{28, 22, 20, 254};
             if (nv == WALL_SOLID) {

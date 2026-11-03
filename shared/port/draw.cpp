@@ -238,11 +238,11 @@ FrameLight frameLight(Sim &sim, float now) {
         l.lamp[3] = 0.95f * sim.blackoutCur * l.flick;
         l.lampCol = { 0.95f, 0.93f, 0.80f };
     }
-    // The multiplex: the nearest auditorium's tubes are masked, and its screen
+    // The theater: the nearest auditorium's tubes are masked, and its screen
     // lights the front of the room in the colour of the film. The shader has one
     // mask, so only that auditorium is dark; the others are seen only through
     // their doors. A blackout cuts the projector too.
-    if (sim.level == MULTIPLEX) {
+    if (sim.level == THEATER) {
         std::vector<Auditorium> auds = sim.world.auditoriums(pcx, pcz);
         if (const Auditorium *a = nearestAuditorium(auds, sim.px, sim.pz)) {
             for (int i = 0; i < 4; i++) l.roomMask[i] = a->rect[i];
@@ -267,7 +267,7 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
         unsigned char g8 = cl8(60 + 195 * sim.blackoutCur * flick);
         put(out, cube(well.tube, well.alongX ? 0.96f : 0.035f, 0.035f, well.alongX ? 0.035f : 0.96f, { g8, g8, cl8(g8 * 0.92f), 255 }));
     }
-    // The multiplex's screens, showing a film, and the projector's beam through
+    // The theater's screens, showing a film, and the projector's beam through
     // the haze from the port in the back wall: translucent, writing no depth.
     for (const Auditorium &a : sim.world.auditoriums(pcx, pcz)) {
         FilmFrame film = filmFrame(a.seed, now);
@@ -396,6 +396,31 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
         }
         default:   // flares, impacts and the actors are drawn below, from the sim
             break;
+        }
+    }
+    if (sim.mannequin.active && sim.mannequin.storey == sim.world.storey) {
+        const auto &m = sim.mannequin;
+        Vec3 forward{cosf(m.yaw),0,sinf(m.yaw)}, side{-forward.z,0,forward.x};
+        auto at = [&](float x,float y,float z) { return add(m.pos,add(scale(side,x),add(Vec3{0,y,0},scale(forward,z)))); };
+        float brightness = propLum(m.pos.x,m.pos.y+1.4f,m.pos.z);
+        Rgba ivory = lit({205,194,166,255},brightness), joint = lit({65,58,48,255},brightness);
+        auto limb = [&](Vec3 a,Vec3 b,float radius) {
+            put(out,cylinderEx(a,b,radius,radius*0.8f,8,ivory));
+            put(out,sphere(a,radius*1.12f,joint));
+        };
+        limb(at(0,0.98f,0),at(0,1.55f,0),0.19f);
+        limb(at(0,1.58f,0),at(0,1.83f,0),0.07f);
+        Vec3 head = at(m.pose==1 ? 0.09f : -0.035f,1.99f,0.03f);
+        put(out,sphere(head,0.18f,ivory));
+        for (int sign : {-1,1}) {
+            float reach = m.pose==2 ? 0.42f : 0.05f;
+            Vec3 shoulder=at(sign*0.24f,1.56f,0), elbow=at(sign*0.37f,m.pose==1 ? 1.55f : 1.18f,reach);
+            Vec3 wrist=at(sign*0.30f,m.pose==1 ? 1.91f : 0.81f,reach+0.08f);
+            limb(shoulder,elbow,0.07f); limb(elbow,wrist,0.055f);
+            put(out,sphere(wrist,0.07f,ivory));
+            Vec3 hip=at(sign*0.13f,0.98f,0), knee=at(sign*0.16f,0.52f,sign*0.12f), foot=at(sign*0.17f,0.08f,sign*0.1f);
+            limb(hip,knee,0.095f); limb(knee,foot,0.065f);
+            put(out,cylinderEx(foot,add(foot,scale(forward,0.22f)),0.07f,0.08f,8,ivory));
         }
     }
     if (sim.wayOpen()) {   // enough doubloons: exits glow green

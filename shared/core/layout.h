@@ -64,8 +64,8 @@ enum class FixtureKind : uint8_t {
     Pipe,           // a service pipe under the ceiling, one cell long (Level 1)
     Streamer,       // a crepe streamer sagging between two ceiling points (LEVEL FUN)
     ManilaRoom,     // the Manila Room's furnishings (Level 0)
-    Auditorium,     // an auditorium's fittings: screen frame, curtains, aisle lights, booth port, exit signs (the multiplex)
-    Poster,         // a backlit film poster on a corridor wall (the multiplex)
+    Auditorium,     // an auditorium's fittings: screen frame, curtains, aisle lights, booth port, exit signs (the theater)
+    Poster,         // a backlit film poster on a corridor wall (the theater)
 };
 
 // One fixture. What each field means depends on the kind:
@@ -120,7 +120,8 @@ struct LightFitting {
     float stutterSeed;       // fract(hash * TUBE_STUTTER_SPREAD): when a faulty tube stutters (tubeStutter)
 };
 
-enum class OpeningKind : uint8_t { Doorway, LockedDoor, Exit, Window, Rail };
+// ShutDoor: a doorway the player has shut, built as a locked door is.
+enum class OpeningKind : uint8_t { Doorway, LockedDoor, Exit, Window, Rail, ShutDoor };
 
 // An edge that is neither open floor nor plain wall. Along-edge values are
 // world x for a north edge and world z for a west one.

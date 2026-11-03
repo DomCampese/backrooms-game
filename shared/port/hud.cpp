@@ -234,6 +234,15 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         textC("IT STOOD RIGHT THERE", sw / 2, sh / 2 - hud(130), hud(30), fade({ 200, 70, 60, 255 }, a));
         textC("...and never saw you", sw / 2, sh / 2 - hud(98), hud(15), fade({ 160, 130, 120, 220 }, a * 0.9f));
     }
+    if (sim.mannequin.active) {
+        const char *state = sim.mannequin.warded ? "THE MANNEQUIN · HELD BACK BY THE FLARE"
+                          : sim.mannequin.pinned ? "THE MANNEQUIN · PINNED IN FRAME"
+                          : "THE MANNEQUIN · KEEP IT IN VIEW";
+        textC(state,sw/2,hud(95),hud(18),{225,206,164,255});
+        textC(in.touch ? "Keep it centred · FLARE to make room · break sight and get away"
+                       : "Keep it centred · Q for a flare · break sight and get away",
+              sw/2,hud(122),hud(15),{185,179,157,255});
+    }
     if (sim.deckNoteT > 0 && sim.winT <= 0 && sim.deathT <= 0) {   // a tape deck message
         float a = clampf(sim.deckNoteT > 2.0f ? (2.6f - sim.deckNoteT) / 0.6f : sim.deckNoteT / 1.2f, 0, 1);
         textC(sim.deckNote, sw / 2, sh - hud(150), hud(16), fade({ 196, 168, 214, 230 }, a * 0.9f));
@@ -368,6 +377,10 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         coverCol = { 180, 170, 140, 120 };
     }
     if (coverLine) textC(coverLine, sw / 2, sh - hud(62), hud(14), coverCol);
+    if (sim.doorReach.ok) {   // the doorway the use key would shut or open
+        const char *verb = sim.doorReach.shut ? "open the door" : "shut the door";
+        textC(fmt("%s · %s", in.touch ? "USE" : "E", verb), sw / 2, sh / 2 + hud(46), hud(14), { 200, 190, 160, 150 });
+    }
     if (sim.paused) {
         rect(0, 0, sw, sh, fade(BLACK_RGBA, 0.55f));
         textC("P A U S E D", sw / 2, sh / 2 - hud(42), hud(46), { 225, 212, 160, 235 });
