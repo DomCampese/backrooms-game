@@ -10,7 +10,7 @@ struct Sim;
 class UBackroomsRender;
 class UProceduralMeshComponent;
 
-// The revolver in hand, drawn as the Web build draws it: the repository's
+// The revolver in hand, or one not yet found, drawn as the Web build draws it: the repository's
 // assets/models/revolver.glb, read at run time, posed and skinned by
 // shared/port/revolver.h (raylib 5.5's arithmetic, so the reload, the shots and
 // the drum's turn are the Web build's frame for frame), placed by heldWeapon
@@ -24,9 +24,11 @@ class BACKROOMS_API ABackroomsHeldActor : public AActor
 public:
 	ABackroomsHeldActor();
 
-	// Origin places the sim's storey frame in the world. Adds the muzzle flash
-	// and smoke to Draws when the revolver is shown.
-	void Show(const Sim& Game, const UBackroomsRender& Render, const FVector& Origin, std::vector<SceneDraw>& Draws);
+	// Origin places the sim's storey frame in the world; Now is sceneDraws'
+	// clock. Shows the revolver in hand, or else one lying unfound
+	// (looseRevolver). Adds the muzzle flash and smoke to Draws when in hand.
+	void Show(Sim& Game, const UBackroomsRender& Render, const FVector& Origin, float Now,
+		std::vector<SceneDraw>& Draws);
 
 private:
 	bool Load();

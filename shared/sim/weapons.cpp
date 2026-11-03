@@ -19,13 +19,16 @@ bool Sim::canReload() const {
 }
 
 void Sim::updateWeapons(const InputFrame &in, float dt, double now) {
-    if (in.pickRevolver) weapon = WEAPON_REVOLVER;
+    if (in.pickHands) weapon = WEAPON_HANDS;
+    if (in.pickRevolver && hasRevolver) weapon = WEAPON_REVOLVER;
     if (in.pickFlare) weapon = WEAPON_FLARE;
     if (in.pickDeck) weapon = WEAPON_DECK;
     wheelCd = fmaxf(0, wheelCd - dt);
     // The wheel runs the loop both ways: +1 forward, -1 as +(N-1) to stay positive.
     if (wheelCd <= 0 && fabsf(in.wheel) > 0.5f) {
-        weapon = (weapon + (in.wheel > 0 ? 1 : WEAPON_COUNT - 1)) % WEAPON_COUNT;
+        int step = in.wheel > 0 ? 1 : WEAPON_COUNT - 1;
+        weapon = (weapon + step) % WEAPON_COUNT;
+        if (weapon == WEAPON_REVOLVER && !hasRevolver) weapon = (weapon + step) % WEAPON_COUNT;
         wheelCd = 0.25f;
     }
     updateAim(in.playing && in.aim, dt);
@@ -78,7 +81,7 @@ void Sim::updateBullets(float dt) {
         Ray3 ray{bullet.pos, bullet.direction};
         float nearest = travel;
         bool hit = false;
-        int target = -1;             // -1 level geometry, 0 the hunter, 1 the mannequin, -2 a balloon
+        int target = -1;             // -1 level geometry, 0 the hunter, 1 the Mannequin, 2 the Usher, -2 a balloon
         Vec3 normal = negate(bullet.direction);
         if (tracer && tracer->nearestSolid(ray, nearest, normal)) hit = true;
         auto body = [&](float x, float z, float y, float h, float radius, int id) {
@@ -91,6 +94,8 @@ void Sim::updateBullets(float dt) {
             body(ent.x, ent.z, ent.dispY, 1.95f, 0.55f, 0);
         if (mannequin.active && mannequin.storey == world.storey)
             body(mannequin.pos.x, mannequin.pos.z, mannequin.pos.y, 2.2f, 0.35f, 1);
+        if (usher.st == UState::Patrol || usher.st == UState::Spot)
+            body(usher.x, usher.z, usher.dispY, 2.1f, 0.4f, 2);
         // Balloons up to the nearest solid hit, in steps shorter than their radius.
         if (level == LEVEL_FUN) for (float d = 0; d < nearest; d += 0.1f) {
             if (popBalloonAt(add(ray.position, scale(ray.direction, d)))) {
@@ -106,6 +111,7 @@ void Sim::updateBullets(float dt) {
         bulletImpacts.push_back({add(bullet.pos, scale(normal, 0.012f)), normal, 0.24f, target >= 0});
         if (target == 0) bulletHitsHunter();
         else if (target == 1) mannequin.stagger = 1.2f;
+        else if (target == 2) bulletHitsUsher();
     }
     bullets.erase(std::remove_if(bullets.begin(), bullets.end(),
         [](const Bullet &b) { return b.remaining <= 0 && b.fade <= 0; }), bullets.end());

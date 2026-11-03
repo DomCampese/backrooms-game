@@ -37,6 +37,10 @@ void pickups(Sim &sim, int ci, int ck, std::vector<SceneItem> &out) {
             case Pickup::Battery:  it.kind = SceneKind::Battery; break;
             case Pickup::Tape:     it.kind = SceneKind::Tape; break;
             case Pickup::Key:      it.kind = SceneKind::Key; break;
+            case Pickup::Revolver:
+                if (sim.hasRevolver) continue;
+                it.kind = SceneKind::Revolver;
+                break;
             case Pickup::None:     continue;
             }
             out.push_back(it);

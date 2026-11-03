@@ -159,7 +159,75 @@ void deckDraws(const Sim &sim, const Xform &xf, bool lamp, float now, std::vecto
     }
 }
 
+// A loose revolver hangs at chest height and turns, so it reads from across a
+// room as something placed, not dropped.
+constexpr float REVOLVER_HOVER = 0.95f;       // m above the floor, the model's middle
+constexpr float REVOLVER_SHOW_SCALE = 1.3f;   // larger than life, to read at a distance
+// The middle of the model's bind pose (revolver.glb's "gun" bounds), in its frame.
+constexpr Vec3 REVOLVER_MIDDLE = { 0.0f, -0.0127f, 0.0648f };
+
+float revolverBob(const SceneItem &it, float now) { return sinf(now * 1.7f + it.gi * 1.3f + it.gk) * 0.05f; }
+
+// The gold halo, a column of light and a pool on the floor under it, and
+// motes rising through it: drawn unlit, so the gun shows even in a blackout.
+void revolverGlowDraws(const SceneItem &it, float now, std::vector<SceneDraw> &out) {
+    const Vec3 base = it.pos;
+    const Vec3 mid = { base.x, base.y + REVOLVER_HOVER + revolverBob(it, now), base.z };
+    const float pulse = 0.8f + 0.2f * sinf(now * 2.6f + it.gi);
+    Shape halo = billboardWhole(ShapeTex::Particle, mid, 0.95f * pulse, { 255, 196, 80, cl8(120 * pulse) });
+    Shape core = billboardWhole(ShapeTex::Particle, mid, 0.42f, { 255, 236, 170, 150 });
+    halo.additive = core.additive = true;
+    halo.depthWrite = core.depthWrite = false;
+    put(out, halo);
+    put(out, core);
+    Shape column = cylinderEx({ base.x, base.y + 0.01f, base.z }, { base.x, base.y + 2.3f, base.z },
+                              0.36f, 0.05f, 16, { 255, 205, 110, cl8(20 * pulse) });
+    column.depthWrite = false;
+    put(out, column);
+    Shape pool = cylinder({ base.x, base.y + 0.006f, base.z }, 0.55f, 0.55f, 0.004f, 20, { 255, 200, 96, cl8(70 * pulse) });
+    pool.depthWrite = false;
+    put(out, pool);
+    for (int i = 0; i < 6; i++) {
+        float phase = fmodf(now * 0.35f + i / 6.0f, 1.0f);   // each rises from the floor and fades out above the gun
+        float ang = i * 1.047f + now * 0.6f, r = 0.22f + 0.08f * sinf(i * 2.3f);
+        Vec3 p = { base.x + cosf(ang) * r, base.y + 0.1f + phase * 1.9f, base.z + sinf(ang) * r };
+        Shape mote = billboardWhole(ShapeTex::Particle, p, 0.07f, { 255, 222, 140, cl8(200 * sinf(phase * PI_F)) });
+        mote.additive = true;
+        mote.depthWrite = false;
+        put(out, mote);
+    }
+}
+
 }   // namespace
+
+bool looseRevolver(Sim &sim, float now, Xform &xf) {
+    if (sim.hasRevolver) return false;
+    const int ci = cellOf(sim.px), ck = cellOf(sim.pz), reach = SCENE_PICKUP_CELLS;
+    float nearest = 1e30f;
+    SceneItem found{ SceneKind::Revolver };
+    for (int dx = -reach; dx <= reach; dx++)
+        for (int dz = -reach; dz <= reach; dz++) {
+            int a = ci + dx, b = ck + dz;
+            if (!sim.revolverAt(a, b) || sim.pickupAt(a, b) != Pickup::Revolver) continue;
+            if (sim.taken.count(sim.cellKey(a, b))) continue;
+            float d = (float)(dx * dx + dz * dz);
+            if (d >= nearest) continue;
+            nearest = d;
+            Vec2 spot = sim.pickupSpot(a, b);
+            found.pos = { spot.x, sim.world.floorY(a, b), spot.y };
+            found.gi = a, found.gk = b;
+        }
+    if (nearest > 1e29f) return false;
+    const float spin = now * 1.2f + found.gi;
+    const Vec3 forward = { cosf(spin), 0, sinf(spin) }, up = { 0, 1, 0 };
+    const Vec3 right = cross(forward, up);
+    xf.x = scale(right, REVOLVER_SHOW_SCALE);
+    xf.y = scale(up, REVOLVER_SHOW_SCALE);
+    xf.z = scale(forward, REVOLVER_SHOW_SCALE);
+    const Vec3 mid = { found.pos.x, found.pos.y + REVOLVER_HOVER + revolverBob(found, now), found.pos.z };
+    xf.t = sub(mid, apply3(xf, REVOLVER_MIDDLE));
+    return true;
+}
 
 Xform xformOf(const HeldFrame &f) {
     Xform m;
@@ -348,6 +416,9 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             put(out, cube({ x + cosf(spin) * 0.082f, y + 0.014f, z + sinf(spin) * 0.082f }, 0.022f, 0.028f, 0.012f, brass));
             break;
         }
+        case SceneKind::Revolver:   // the model itself is each build's (looseRevolver)
+            revolverGlowDraws(it, now, out);
+            break;
         case SceneKind::Deck:   // where it was set down, facing the throw direction
             deckDraws(sim, then(rotY(-it.yaw), translate(x, gy, z)), it.variant != 0, now, out);
             break;
@@ -478,6 +549,43 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             spriteDraw(out, ShapeTex::SmilerGlow, sp, sp.frame1, { 255, 255, 255, cl8(ga * sp.blend) });
         }
     }
+    if (ActorSprite sp; usherSprite(sim, sp)) {
+        const LevelCfg &c = LEVELS[sim.level];
+        float ambLum = (c.amb.x + c.amb.y + c.amb.z) / 3.0f;
+        float lum = lightAtCPU(sp.litAt.x, sp.litAt.y, sp.litAt.z, sim.blackoutCur,
+                               c.ls, c.wallH - LIGHT_DROP, c.dead, c.lightMul, ambLum, 0, 0, 0, c.vary);
+        float ux = sp.litAt.x - sim.px, uz = sp.litAt.z - sim.pz, ud = sqrtf(ux * ux + uz * uz) + 1e-4f;
+        if (sim.flashCur > 0.05f) {
+            float cone = powf(fmaxf((ux * sim.fwd.x + uz * sim.fwd.z) / ud, 0.0f), 26.0f);
+            lum = clampf(lum + sim.flashCur * cone * 7.5f / (1.0f + 0.10f * ud * ud), 0.0f, 1.0f);
+        }
+        if (flareInt > 0.01f) {
+            float fx = sp.litAt.x - flarePos.x, fz = sp.litAt.z - flarePos.z;
+            lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fx * fx + fz * fz)), 0.0f, 1.0f);
+        }
+        // Its own torch lights its front a little, so it shows in a dark auditorium.
+        lum = clampf(lum + (sp.row == ENT_ROW_FACE ? 0.22f : 0.08f), 0.0f, 1.0f);
+        const float fogf = expf(-ud * c.fogDen);
+        unsigned char l8 = cl8(40 + 215 * lum);
+        unsigned char al = cl8(255 * clampf(fogf * 1.6f, 0, 1) * sp.fade);
+        spriteDraw(out, ShapeTex::Usher, sp, sp.frame0, { l8, l8, l8, cl8(al * (1.0f - sp.blend)) });
+        spriteDraw(out, ShapeTex::Usher, sp, sp.frame1, { l8, l8, l8, cl8(al * sp.blend) });
+        Vec3 torch, dir;
+        if (usherTorch(sim, torch, dir)) {
+            // The lens, then the beam through the haze: a cone USHER_BEAM_M long
+            // and USHER_BEAM_HALF wide, as the sim sees with it. Brighter when
+            // it has found the player.
+            bool spot = sim.usher.st == UState::Spot;
+            const float len = Sim::USHER_BEAM_M * 0.75f;
+            Shape lens = billboardWhole(ShapeTex::Particle, torch, 0.20f, { 255, 238, 196, cl8(230 * fminf(1.0f, fogf * 2.0f)) });
+            lens.additive = true;
+            put(out, lens);
+            Shape beam = cylinderEx(torch, add(torch, scale(dir, len)), 0.05f, len * tanf(Sim::USHER_BEAM_HALF), 16,
+                                    { 255, 228, 176, cl8((spot ? 20 : 10) * fogf + 3) });
+            beam.depthWrite = false;
+            put(out, beam);
+        }
+    }
     for (const Sim::Bullet &b : sim.bullets) {
         Vec3 tail = sub(b.pos, scale(b.direction, fminf(1.2f, dist(b.pos, b.tail))));
         put(out, cylinderEx(tail, b.pos, 0.006f, 0.009f, 5, { 255, 211, 126, 220 }));
@@ -555,6 +663,7 @@ void shapeTexSize(ShapeTex t, int &w, int &h) {
     switch (t) {
     case ShapeTex::Particle: w = 32; h = 32; return;
     case ShapeTex::Clark: case ShapeTex::Smiler: case ShapeTex::SmilerGlow: case ShapeTex::Partygoer:
+    case ShapeTex::Usher:
         w = ENT_FRAME_W * ENT_FRAMES; h = ENT_FRAME_H * ENT_ROWS; return;
     default: w = h = 1; return;
     }

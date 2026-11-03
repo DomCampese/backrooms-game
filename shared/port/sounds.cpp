@@ -576,6 +576,60 @@ Pcm makeFarBoom(int variant)
     return farAway(d, 900.0f, 1.8f, 0.45f, 0.62f);
 }
 
+// Vend: the spiral motor (a 96 Hz buzz with three harmonics, pulsing at the
+// 2.5 Hz the spiral turns) for 0.85 s, the drop (a 70 Hz thud and a noise
+// burst) at 0.95 s, then 0.35 s of wrapper crinkle (sparse 2-5 kHz clicks).
+Pcm makeVend()
+{
+    Rng r(0x5AC1ULL);
+    Pcm d((int)(1.6f * SAMPLE_RATE));
+    float lp = 0, hp = 0, prev = 0;
+    for (int i = 0; i < (int)d.size(); i++) {
+        float t = (float)i / SAMPLE_RATE;
+        float x = r.f01() * 2.0f - 1.0f;
+        lp += 0.2f * (x - lp);
+        hp = 0.7f * (hp + x - prev); prev = x;
+        float s = 0;
+        if (t < 0.85f) {
+            float env = fminf(1.0f, t * 40.0f) * fminf(1.0f, (0.85f - t) * 40.0f);
+            float pulse = 0.7f + 0.3f * sinf(TAU * 2.5f * t);
+            float buzz = sinf(TAU * 96.0f * t) + 0.5f * sinf(TAU * 192.0f * t) + 0.3f * sinf(TAU * 288.0f * t)
+                       + 0.2f * sinf(TAU * 384.0f * t);
+            s += env * pulse * (buzz * 0.22f + lp * 0.12f);
+        }
+        float u = t - 0.95f;
+        if (u > 0) s += (1.0f - expf(-u * 900.0f)) * expf(-u * 28.0f) * (sinf(TAU * 70.0f * u) * 0.9f + lp * 0.8f);
+        float c = t - 1.08f;
+        if (c > 0 && c < 0.35f && r.f01() < 0.03f) s += hp * 0.9f * (1.0f - c / 0.35f);
+        d[i] = (short)(clampf1(tanhf(s * 1.4f)) * 28000);
+    }
+    return d;
+}
+
+// Whistle: a pea whistle, two blasts (0.22 s and 0.75 s). A 2.9 kHz tone whose
+// pitch and level the pea trills at 26 Hz, over breath noise.
+Pcm makeWhistle()
+{
+    Rng r(0x9EA1ULL);
+    Pcm d((int)(1.25f * SAMPLE_RATE));
+    const float blasts[2][2] = { { 0.0f, 0.22f }, { 0.36f, 1.11f } };
+    float phase = 0, hp = 0, prev = 0;
+    for (int i = 0; i < (int)d.size(); i++) {
+        float t = (float)i / SAMPLE_RATE;
+        float x = r.f01() * 2.0f - 1.0f;
+        hp = 0.85f * (hp + x - prev); prev = x;
+        float env = 0;
+        for (const auto &b : blasts)
+            if (t > b[0] && t < b[1]) env = fminf(1.0f, (t - b[0]) * 60.0f) * fminf(1.0f, (b[1] - t) * 30.0f);
+        float trill = sinf(TAU * 26.0f * t);
+        phase += TAU * (2900.0f + 140.0f * trill) / SAMPLE_RATE;
+        float tone = sinf(phase) + 0.15f * sinf(2.0f * phase);
+        float s = env * (tone * (0.72f + 0.28f * trill) * 0.7f + hp * 0.12f);
+        d[i] = (short)(clampf1(s) * 26000);
+    }
+    return d;
+}
+
 // A float buffer to 16-bit PCM at peak `level`, with 4 ms ramps at both ends
 // so it starts and ends on zero.
 Pcm toPcm(const std::vector<float> &d, float level) {
@@ -836,6 +890,7 @@ ClipSpec clipSpec(Sfx sfx) {
     case Sfx::Gulp:      return { 1, 1.0f, 0.60f };
     case Sfx::Groan:     return { 1, 1.0f, 0.85f };
     case Sfx::Hurt:      return { 1, 1.0f, 0.8f };
+    case Sfx::Vend:      return { 1, 1.0f, 0.75f };
     default:             return { 1, 1.0f, 1.0f };
     }
 }
@@ -877,6 +932,8 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::FarBoom:        return makeFarBoom(variant);
     case Sfx::DoorShut:       return makeDoorShut(variant);
     case Sfx::DoorKnock:       return makeDoorKnock(variant);
+    case Sfx::Vend:           return makeVend();
+    case Sfx::Whistle:        return makeWhistle();
     }
     return {};
 }

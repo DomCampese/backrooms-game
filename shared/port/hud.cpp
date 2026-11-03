@@ -146,7 +146,7 @@ void Hud::titleCard(float timeF) {
     std::string tc = in.touch
         ? fmt("STICK move    AIM taps the sights up and down    LAMP torch    ITEM cycle    bank %d doubloons to leave",
               Sim::ESCAPE_COST)
-        : fmt("WASD move    SHIFT run    C squeeze    F flashlight    1/2/4 item    bank %d doubloons to leave",
+        : fmt("WASD move    SHIFT run    C squeeze    F flashlight    1 empty hands    2/4/5 item    bank %d doubloons to leave",
               Sim::ESCAPE_COST);
     textC(tc, sw / 2, sh - hud(42), hud(15), { 128, 122, 96, 170 });
 }
@@ -252,6 +252,12 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         textC("TAPE RECOVERED", sw / 2, sh - hud(150), hud(22), fade({ 190, 178, 150, 255 }, a));
         textC(sim.tapeLine, sw / 2, sh - hud(122), hud(15), fade({ 150, 140, 118, 230 }, a * 0.9f));
     }
+    if (sim.revolverFoundT > 0) {   // the revolver was found, faded like the tape's banner
+        float t = sim.revolverFoundT, a = clampf(t > 2.6f ? (Sim::REVOLVER_FOUND - t) / 0.6f : t / 1.6f, 0, 1);
+        textC("A REVOLVER", sw / 2, sh - hud(150), hud(22), fade({ 236, 196, 98, 255 }, a));
+        textC(in.touch ? "six rounds, loaded.  ITEM to put it away" : "six rounds, loaded.  1 to put it away  ·  5 to draw it",
+              sw / 2, sh - hud(122), hud(15), fade({ 190, 164, 104, 230 }, a * 0.9f));
+    }
     if (in.captureHint) textC("click to capture mouse", sw / 2, sh / 2 + hud(80), hud(20), { 200, 190, 150, 200 });
     textR(fmt("%d", in.fps), sw - hud(14), hud(12), hud(16), { 190, 180, 140, 150 });
     // The flashlight hint until it is first used, then its state.
@@ -319,11 +325,12 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
                 sim.wayOpen() ? Rgba{ 120, 230, 140, 210 } : Rgba{ 214, 178, 92, 170 });
         raw(fmt("3  almond water  ×%d", sim.almond), 16, sh - 94, 16,
             sim.almond > 0 ? Rgba{ 150, 190, 235, 170 } : dimc);
-        raw(sim.reloadT > 0 ? std::string("1  revolver  [reloading]")
-                            : fmt("1  revolver  %d/%d%s  · %s", sim.ammo, Sim::MAXAMMO,
-                                  sim.ammo == 0 ? (in.touch ? "  · LOAD" : "  · R") : "",
-                                  in.touch ? "tap AIM" : "hold RMB aim"),
-            16, sh - 50, 16, sim.weapon == WEAPON_REVOLVER ? selc : dimc);
+        if (sim.hasRevolver)   // not listed until found
+            raw(sim.reloadT > 0 ? std::string("5  revolver  [reloading]")
+                                : fmt("5  revolver  %d/%d%s  · %s", sim.ammo, Sim::MAXAMMO,
+                                      sim.ammo == 0 ? (in.touch ? "  · LOAD" : "  · R") : "",
+                                      in.touch ? "tap AIM" : "hold RMB aim"),
+                16, sh - 50, 16, sim.weapon == WEAPON_REVOLVER ? selc : dimc);
         raw(fmt("2  flare  ×%d", sim.flares), 16, sh - 72, 16, sim.weapon == WEAPON_FLARE ? selc : dimc);
         raw(!sim.deck.carried
                 ? (sim.deck.playing ? "4  tape player  [running · left behind]"

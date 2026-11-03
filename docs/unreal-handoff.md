@@ -311,6 +311,14 @@ off the Mac. In order:
     through `frameLight`. A grey or missing screen points at the scene
     actor's translucent shape material; a black room with a working screen,
     at `uLamp`.
+13. **The theater's backstage, lobbies and Usher** (3 November 2026). The
+    editor must re-import the `fixtures` atlas (the snack machine's door) and
+    import the new `usher` sheet. Unreal code changed in two places:
+    `SheetNames` gained `usher` and `Shared/SimUsher.cpp` compiles
+    `shared/sim/usher.cpp`. In the theater, F3 then E puts the Usher 9 m
+    ahead: a burgundy figure with a torch beam. Standing in the beam for
+    under a second makes it whistle. A white or missing figure points at the
+    sheet import; no whistle points at `SFX_COUNT` in the mixer.
 
 13. **Doors** (2 November 2026). Face a doorway on Level 0 and press E: the
     leaf shuts, "E · open the door" shows, and E opens it again. With F3 then

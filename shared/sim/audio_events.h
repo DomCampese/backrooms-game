@@ -23,6 +23,8 @@ enum class Sfx : uint8_t {
     DoorKnock,
     MannequinStep,     // dedicated spatial footstep channel
     Hurt,             // the player taking a hit or a fall
+    Vend,             // a snack machine: its spiral motor, the drop and the wrapper
+    Whistle,          // the Usher's whistle: two blasts
 };
 
 // What the ambience synth (audio.cpp) chases. The rules write each field where

@@ -106,6 +106,15 @@ void Game::renderScene(double now) {
             DrawMesh(chunk.meshes[MESH_GLASS], mats[MAT_FLOOR], xf);
     }
     setDrawRel(0.0f);   // everything drawn after the chunks is on your storey
+    // A revolver not yet found, before its glow, which adds over it.
+    if (Xform loose; looseRevolver(sim, timeF, loose)) {
+        Matrix m{};
+        m.m0 = loose.x.x; m.m1 = loose.x.y; m.m2 = loose.x.z;
+        m.m4 = loose.y.x; m.m5 = loose.y.y; m.m6 = loose.y.z;
+        m.m8 = loose.z.x; m.m9 = loose.z.y; m.m10 = loose.z.z;
+        m.m12 = loose.t.x; m.m13 = loose.t.y; m.m14 = loose.t.z; m.m15 = 1;
+        drawRevolver(m, 0, 0, Sim::MAXAMMO);
+    }
     // The landing tubes, the sim's scene, the flares, the hunter and
     // the rest, as shared/port/draw.h decides them for both builds.
     sceneBuf.clear();
@@ -144,19 +153,23 @@ void Game::drawHeldWeapon(const Camera3D &cam) {
     Vector3 right{sim.r2x, 0, sim.r2z};
     Vector3 up = Vector3Normalize(Vector3CrossProduct(right, toRl(sim.fwd)));
     const Matrix m = heldMatrix(heldWeapon(sim, simView(sim)));
+    drawRevolver(m, sim.reloadT, sim.gunCd, sim.ammo);
+    sceneBuf.clear();
+    muzzleDraws(sim, fromRl(Vector3Transform(revolver.muzzlePosition, m)), fromRl(up), sceneBuf);
+    for (const SceneDraw &d : sceneBuf) drawScene(d, cam);
+}
+
+void Game::drawRevolver(const Matrix &m, float reloadT, float gunCd, int ammo) {
     SetShaderValue(worldShader, locGloss, &REVOLVER_GLOSS, SHADER_UNIFORM_FLOAT);
-    revolver.pose(sim.reloadT,sim.gunCd,sim.ammo);
+    revolver.pose(reloadT, gunCd, ammo);
     // The room reflection (uObjRefl in the world shader) is on only for the
     // revolver, the one object with metal in its detail map.
     float refl = 1.0f;
     SetShaderValue(worldShader, locObjRefl, &refl, SHADER_UNIFORM_FLOAT);
-    revolver.draw(mats[MAT_PROPS],m);
+    revolver.draw(mats[MAT_PROPS], m);
     refl = 0.0f;
     SetShaderValue(worldShader, locObjRefl, &refl, SHADER_UNIFORM_FLOAT);
     SetShaderValue(worldShader, locGloss, &LEVELS[sim.level].gloss, SHADER_UNIFORM_FLOAT);
-    sceneBuf.clear();
-    muzzleDraws(sim, fromRl(Vector3Transform(revolver.muzzlePosition, m)), fromRl(up), sceneBuf);
-    for (const SceneDraw &d : sceneBuf) drawScene(d, cam);
 }
 
 // One of port/draw.h's draws, with raylib: a mesh through the world shader,
@@ -192,7 +205,7 @@ void Game::drawScene(const SceneDraw &d, const Camera3D &cam) {
     case ShapeKind::CylinderEx: DrawCylinderEx(toRl(s.a), toRl(s.b), s.r0, s.r1, s.sides, c); break;
     case ShapeKind::Billboard: {
         const Texture2D *tex[(int)ShapeTex::Count] = { &texParticle, &texParticle, &texClark, &texEntity,
-                                                       &texEntityGlow, &texPartygoer };
+                                                       &texEntityGlow, &texPartygoer, &texUsher };
         if (s.additive) BeginBlendMode(BLEND_ADDITIVE);
         if (!s.depthWrite) { rlDrawRenderBatchActive(); rlDisableDepthMask(); }
         DrawBillboardRec(cam, *tex[(int)s.tex], { s.src[0], s.src[1], s.src[2], s.src[3] }, toRl(s.a),

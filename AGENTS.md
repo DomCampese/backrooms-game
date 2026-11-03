@@ -169,6 +169,61 @@ shared/sim/items.cpp). A shut door is `WALL_SHUT`, which no chunk stores: the
   would move Level 1's crates.
 - The HUD shows "E · shut the door" or "open the door" while one is in reach.
 
+# The theater: backstage, lobbies, snack machines and the Usher (November 2026)
+
+- **The screen hangs on a wall across the auditorium** between rows
+  `AUD_BACKSTAGE - 1` and `AUD_BACKSTAGE`, open at u = 0 and u = AUD_N - 1.
+  Rows 0..AUD_BACKSTAGE - 1 are backstage, at stage height (0.4 m above the
+  front floor, under `MAX_STEP`). Cartons and shelving stand against the back
+  wall (`stockBackstage`); the row against the screen wall stays clear, so the
+  walkway always joins both ends. The screen wall is protected like the outer
+  wall: a doorway in it would open through the screen. Seats went from ten
+  rows to nine.
+- **Backstage holds loot.** The middle of the walkway always holds a tape
+  (`Sim::stageTapeAt`, checked first in `pickupAt`, or a hashed doubloon could
+  take the cell); other floor cells hold a doubloon one in
+  `BACKSTAGE_COIN_RATE` (12). At 4 the backstages paid for the way out within
+  three auditoriums.
+- **A lobby is two halls** split by a wall on row `LOBBY_SPLIT` with two
+  doorways (`furnishLobby`). The front hall has the counter with a queue rope
+  (`PROP_ROPE`) a cell in front of it; vending machines stand against both
+  sides of the dividing wall and the back wall. The door passes may lock or
+  add doorways in the dividing wall like any other. The spawn chunk's lobby is
+  partly cleared by the spawn-room pass, so the regression checks the others.
+- **A snack machine is a vending machine** with a different door.
+  `World::snackAt` (two in three in the theater, none elsewhere) decides it,
+  and `PropPlacement::snack` carries it to the mesher, which samples
+  `SNACK_PX` instead of `VEND_PX` through `vendUV`. The door is painted at 210
+  px wide in the space under the price strips; `drawVendingFront` scales its
+  text by `TS` to match. A snack costs `SNACK_COST` (2) and is eaten at once:
+  full health, full stamina, `SNACK_SANITY`.
+- **The Usher** (`shared/sim/usher.cpp`) is the theater's second figure. It
+  never attacks. It patrols aisles and backstage walkways with a torch; if
+  the torch holds a player who is not hidden for `USHER_SPOT` it whistles
+  (`Sfx::Whistle`), which spawns the hunter if it is hidden and turns a
+  stalk into a chase. Then it holds the beam on the player for `USHER_HOLD`
+  and cannot whistle again for `USHER_REST`. A sprint, a shot or a lit
+  flashlight within `USHER_HEAR_M` that it can see turns it toward the
+  player. Crouching halves the beam's reach; hiding (crouched still by seats
+  or other cover) beats it. Two shots put it down for 90-150 s, and a shot
+  that does not drop it makes it whistle.
+- **The Usher has its own RNG** (`usherRng`, reseeded by `applyLevel`), so
+  it does not shift `grng` on the levels the golden trace records. Its
+  whistle calls `spawnHunter`, which draws from `grng`, but only in the
+  theater.
+- **It is drawn from `sceneDraws`** like the hunter: `usherSprite` picks the
+  head row from where the torch points (the face row when it points at the
+  camera), and `usherTorch` places the lens and the beam, a translucent cone
+  as long as three quarters of `USHER_BEAM_M` and as wide as
+  `USHER_BEAM_HALF`. The sheet is `makeUsherTex` (`usher` in texdump's
+  Unreal export and `SheetNames`). The torch lights nothing; the beam cone is
+  the only sign of it.
+- F3's E spawns the Usher 9 m ahead in the theater instead of the hunter.
+  `BACKROOMS_SPAWN=1` presses it on frame 100 for captures.
+- **The regression harness crashes at `Game::init` in a fresh sandbox**
+  (a null GL call after `InitWindow`), on main as well. The theater's new
+  checks were also run from a core-and-sim program with no window.
+
 # Footstep clip per floor material (October 2026)
 
 Player footsteps and landings use a clip per floor material: carpet on
@@ -1197,6 +1252,21 @@ the 2002 photograph (CREDITS.md).
 
 # Revolver
 
+- **A run starts empty-handed, and the revolver is found** (November 2026).
+  Key 1 is `WEAPON_HANDS` (no viewmodel, no crosshair); the revolver is key 5
+  and the wheel skips it until `Sim::hasRevolver`. `Sim::revolverAt` places
+  one in one empty floor cell in `REVOLVER_ODDS` (2003): about 0.1 per chunk
+  on Levels 0, 1 and the theater, counted with seed 1337 over 128 x 128
+  cells. It is the lowest-priority `Pickup`, so it never moves another item.
+- **A found revolver stays placed** in `pickupAt` once the player has one;
+  `collectPickups` and the scene skip it. Removing it from `pickupAt` would
+  change `crateAt`'s answer for that cell and move a Level 1 crate.
+- **The floating gun is each build's own model** at `looseRevolver`'s
+  transform (render.cpp's `drawRevolver`, `ABackroomsHeldActor::Show`); its
+  gold halo, light column, floor pool and motes are `sceneDraws`. Held and
+  loose never show together, so Unreal reuses the held actor's mesh.
+- G (F3's refill) also hands over the revolver. tools/record-trace.sh presses
+  G and 5 before it shoots; walk-l0-l2.trace was re-recorded for this.
 - Hold RMB to aim. F or L toggles the flashlight. Aiming never toggles or
   queues a reload.
 - A reload needs the sights fully lowered; a reload already running finishes
@@ -1310,7 +1380,7 @@ build's, in `web/src/`.
 | `main.cpp` | `init()`, the `while (!WindowShouldClose())` loop, `shutdown()` |
 | `sim/` | game state and rules (`Sim`), stepped once a tick by `Sim::step` |
 | `sim/sim.cpp` | tick order, levels, descents, death and escape |
-| `sim/player.cpp`, `weapons.cpp`, `items.cpp`, `hunters.cpp`, `place.cpp` | the player; held items; pickups, the deck and the use key; the hunter; blackouts, sanity, exits, the Manila Room |
+| `sim/player.cpp`, `weapons.cpp`, `items.cpp`, `hunters.cpp`, `usher.cpp`, `place.cpp` | the player; held items; pickups, the deck and the use key; the hunter; the theater's Usher; blackouts, sanity, exits, the Manila Room |
 | `sim/input_frame.h`, `audio_events.h` | what the platform tells the sim, and the sounds the sim requests |
 | `game.{h,cpp}` | the platform: window, assets, input into an `InputFrame`, chunk streaming, the occupancy grid; `Game::tick` |
 | `game_audio.{h,cpp}` | every `Sound`/`Music` handle and the synth; plays the sim's `AudioEvent`s in order |
@@ -1614,6 +1684,7 @@ light flicker, so the same command twice gives comparable images. Frames go to
 | `BACKROOMS_MANILA=1` | put a Manila Room in the chunk east of spawn (centre x 48, z 16) |
 | `BACKROOMS_STOREY=n` | start on storey n (Level 0) |
 | `BACKROOMS_RECORD=path` | record the sim's inputs, for `./replay` (shared/sim/trace.h) |
+| `BACKROOMS_SPAWN=1` | presses F3's E on frame 100: the hunter ahead, or the Usher in the theater |
 | `BACKROOMS_CHASE=1` | the hunter spawned on frame 300 chases; with `BACKROOMS_POS=15,15,0.8` and seed 1337 it catches you on frame 410, so the tape plays from there |
 | `BACKROOMS_CLEAN=1` | no intro fade or HUD |
 | `BACKROOMS_TIME=t` | fix rendering time (not the sim's) |
@@ -1627,7 +1698,7 @@ In game, F3 shows the debug HUD. While it is up:
 | key | effect |
 |---|---|
 | `B` | blackout now |
-| `E` | spawn the level's hunter stalking about 12 m ahead |
+| `E` | spawn the level's hunter stalking about 12 m ahead (in the theater, the Usher 9 m ahead) |
 | `C` | force a chase (also squeezes, so holding it does both) |
 | `H` | remove the hunter |
 | `G` | refill flares and ammo |

@@ -655,7 +655,7 @@ canStep from (33,0) north south west east -> 1011
 canStep from (-6,2) north south west east -> 1000
 canStep from (8,36) north south west east -> 0000
 canStep from (15,32) north south west east -> 1111
-canStep from (2,-8) north south west east -> 1111
+canStep from (2,-8) north south west east -> 1011
 canStep from (28,6) north south west east -> 0001
 canStep from (20,-8) north south west east -> 0000
 canStep from (45,23) north south west east -> 1110
@@ -666,7 +666,7 @@ canStep from (30,42) north south west east -> 1101
 canStep from (41,5) north south west east -> 0000
 canStep from (15,39) north south west east -> 1111
 canStep from (12,13) north south west east -> 1011
-canStep from (7,21) north south west east -> 1111
+canStep from (7,21) north south west east -> 1100
 canStep from (16,-5) north south west east -> 1110
 canStep from (45,22) north south west east -> 1100
 canStep from (34,-14) north south west east -> 1011
@@ -679,7 +679,7 @@ pathStep (23,25) to (11,24) -> none
 pathStep (37,5) to (41,4) -> none
 pathStep (5,-14) to (9,-17) -> (5,-15)
 pathStep (18,13) to (8,1) -> (19,13)
-pathStep (-9,1) to (-8,-8) -> (-8,1)
+pathStep (-9,1) to (-8,-8) -> (-10,1)
 pathStep (38,28) to (31,40) -> (38,29)
 pathStep (17,39) to (20,31) -> (17,38)
 pathStep (-12,-5) to (-9,-8) -> (-12,-6)
@@ -701,7 +701,7 @@ findOpenSpot (50.4527054,34.2621689) -> (51,35)
 groundAt sample at (93.4623108,20.5391846) feetY 0.5 -> 0
 collideCircle sample at (93.4623108,20.5391846) r 0.340000004 feetY 0 -> (93.4623108,20.5391846)
 findOpenSpot (93.4623108,20.5391846) -> (93,21)
-groundAt sample at (66.9599075,-28.4754715) feetY 0.5 -> -2.60000014
+groundAt sample at (66.9599075,-28.4754715) feetY 0.5 -> -2.29999995
 collideCircle sample at (66.9599075,-28.4754715) r 0.340000004 feetY 0 -> (66.9599075,-28.4754715)
 findOpenSpot (66.9599075,-28.4754715) -> (67,-29)
 groundAt sample at (-7.38990784,49.0913162) feetY 0.5 -> -0.300000012
@@ -723,7 +723,7 @@ groundAt sample at (0.130279541,54.6140747) feetY 0.5 -> 0
 collideCircle sample at (0.130279541,54.6140747) r 0.340000004 feetY 0 -> (0.130279541,54.6140747)
 findOpenSpot (0.130279541,54.6140747) -> (1,55)
 cell (-10,27) floorY -2.10000014 ceilY 5 pool 0 soft 0 key 0 manila 0
-cell (-11,34) floorY -3 ceilY 5 pool 0 soft 0 key 0 manila 0
+cell (-11,34) floorY -2.29999995 ceilY 5 pool 0 soft 0 key 0 manila 0
 cell (26,46) floorY 0 ceilY 5 pool 0 soft 0 key 0 manila 0
 cell (-5,4) floorY -0.900000036 ceilY 5 pool 0 soft 0 key 0 manila 0
 cell (23,-1) floorY 0 ceilY 5 pool 0 soft 0 key 0 manila 0

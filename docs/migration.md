@@ -330,6 +330,7 @@ input, assets, audio and rendering.
 | weapons.cpp | aim, the revolver and its rounds, flares, the party balloons |
 | items.cpp | pickups, drinking, the tape deck, the use key, chalk, supply crates |
 | hunters.cpp | the hunter (Clark, the Smiler, the Partygoer) |
+| usher.cpp | the theater's Usher, which patrols with a torch and whistles for the hunter |
 | place.cpp | blackouts, whispers, sanity and the slide, shifting walls, exits, the Manila Room |
 
 **Entry points.** A run starts from a `SimStart` (shared/sim/start.h): what the

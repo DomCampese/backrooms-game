@@ -5,7 +5,7 @@
 // false otherwise.
 struct DevKeys {
     bool blackout = false;     // B: a blackout now
-    bool spawnAhead = false;   // E: the hunter stalking ~12 m ahead
+    bool spawnAhead = false;   // E: the hunter stalking ~12 m ahead; in the theater, the Usher facing the player
     bool chase = false;        // C: a chase, spawning him first if hidden
     bool banish = false;       // H
     bool refill = false;       // G: flares and ammo
@@ -33,7 +33,7 @@ struct InputFrame {
     Vec2 look{};               // mouse or touch-drag delta, px
 
     float wheel = 0;              // weapon-cycle steps
-    bool pickRevolver = false, pickFlare = false, pickDeck = false;
+    bool pickHands = false, pickRevolver = false, pickFlare = false, pickDeck = false;
     bool fire = false;            // primary press, less a click that captured the mouse
     bool aim = false;             // secondary held (touch latches it)
     bool reload = false, throwFlare = false, flashlight = false;

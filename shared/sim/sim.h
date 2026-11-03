@@ -35,9 +35,11 @@ struct TapeDeck {
     float reel = 0;           // hub rotation, radians
 };
 
-// The held item. Keys 1/2/4 pick one; the wheel cycles in this order.
+// The held item. Keys 1/2/4/5 pick one; the wheel cycles in this order. A
+// run starts empty-handed, and the revolver is skipped until it is found.
 enum Weapon {
-    WEAPON_REVOLVER = 0,
+    WEAPON_HANDS = 0,
+    WEAPON_REVOLVER,
     WEAPON_FLARE,
     WEAPON_DECK,
     WEAPON_COUNT,
@@ -46,7 +48,7 @@ enum Weapon {
 // A loose item lying in a cell. Which one a cell holds is a pure function of
 // the cell and the seed (Sim::pickupAt), so drawing and collecting agree
 // without storing anything.
-enum class Pickup { None, AlmondWater, Doubloon, Battery, Tape, Key };
+enum class Pickup { None, AlmondWater, Doubloon, Battery, Tape, Key, Revolver };
 
 // Balloon and confetti colours are indices into LEVEL FUN's palette, which the
 // platform draws with (PARTY, web/src/util.h, must have this many entries).
@@ -101,6 +103,10 @@ struct Sim {
     // then every GAP..GAP+SPAN s, scaled by 0.45 + 0.55 * sanity.
     static constexpr double DISTANT_LEAD = 20, DISTANT_GAP = 35, DISTANT_SPAN = 50;
     static constexpr int   MAXAMMO = 6;
+    // One empty floor cell in this many holds the revolver: about one every
+    // dozen chunks, so most runs find it on Level 0 or the theater.
+    static constexpr uint32_t REVOLVER_ODDS = 2003;
+    static constexpr float REVOLVER_FOUND = 3.2f;   // s the "revolver" banner shows
     static constexpr float MUZZLE_FLASH = 0.09f;   // s the muzzle flash lights the room
     // Hiding stops the hunter seeing the player and blocks the catch, so it
     // requires standing still. Two thresholds, so hiding does not flicker on and
@@ -170,6 +176,20 @@ struct Sim {
     static constexpr double BLACKOUT_NEVER = 1e18;   // a schedule that never fires
     static constexpr int   MAXCHALK = 128;      // marks per level
     static constexpr float DRINK_TIME = 1.75f;  // s the can is up
+    static constexpr uint32_t BACKSTAGE_COIN_RATE = 12;
+    static constexpr int   SNACK_COST = 2;      // doubloons
+    static constexpr float SNACK_SANITY = 0.12f;
+    // The Usher's torch: it sees the player inside USHER_BEAM_HALF radians of
+    // the beam and USHER_BEAM_M metres (half that crouched), and whistles once
+    // they have been held there USHER_SPOT seconds.
+    static constexpr float USHER_BEAM_M = 14.0f;
+    static constexpr float USHER_BEAM_HALF = 0.30f;
+    static constexpr float USHER_SPOT = 0.6f;
+    static constexpr float USHER_WALK = 1.15f;     // m/s
+    static constexpr float USHER_HOLD = 5.0f;      // s it keeps the beam on the player after whistling
+    static constexpr float USHER_REST = 25.0f;     // s before it can whistle again
+    static constexpr float USHER_HEAR_M = 12.0f;   // a sprint or a lit torch this close turns its beam
+    static constexpr float USHER_TORCH_Y = 1.25f;  // the torch above its feet
 
     // ---- configuration, set by the platform before the first step
     bool noBlackout = false;     // never schedule a blackout (headless captures)
@@ -227,7 +247,8 @@ struct Sim {
     float foundT = 0;                // s the hunter's find keeps the player from hiding again
 
     // ---- hands
-    int weapon = WEAPON_REVOLVER;
+    int weapon = WEAPON_HANDS;
+    bool hasRevolver = false;        // found this run; until then key 5 and the wheel skip it
     int ammo = MAXAMMO;
     bool aiming = false;
     float aimBlend = 0;
@@ -247,6 +268,9 @@ struct Sim {
     // ---- the run
     int level = 0;
     Entity ent;
+    Usher usher;
+    float usherDist = 1e9f;          // to the Usher, this tick
+    Rng usherRng{1};                 // its own stream, so it does not shift grng on other levels
     float entDist = 1e9f;            // to the hunter, this tick
     float entPrevX = 0, entPrevZ = 0;   // his position last tick, for his velocity
     float entDarkCur = 0;            // how much the hunter dims nearby lights
@@ -304,7 +328,7 @@ struct Sim {
     float winTime = 0; int winM = 0, winKills = 0;
     // Overlay timers, seconds left.
     float deathT = 0, escapeT = 0, killT = 0, fellT = 0, winT = 0;
-    float closeCallT = 0, tapeFoundT = 0, sanityWarnT = 0;
+    float closeCallT = 0, tapeFoundT = 0, revolverFoundT = 0, sanityWarnT = 0;
     float noteT = 0, manilaCardT = 0, deckNoteT = 0;
     const char *tapeLine = "";       // the recovered tape's line
     const char *sanityLine = "";     // the last sanity (or migraine) warning
@@ -343,6 +367,7 @@ struct Sim {
     void updateManila(float dt, double now);
     void updateCrates(double now);
     void updateEntity(float dt, double now, bool forceSpawn = false);
+    void updateUsher(float dt, double now);
     void updateExits(double now);
     void updateTimers(float dt);
     void updateHealth(float dt);
@@ -389,9 +414,12 @@ struct Sim {
     // no shelf. Matches the prop AABB tops in gatherCellAABBs.
     float bottleShelfY(int a, int b);
     Vec2 pickupSpot(int a, int b);
+    bool backstageAt(int a, int b);          // behind an auditorium's screen (the theater)
+    bool stageTapeAt(int a, int b);          // the tape in the middle of the walkway backstage
     bool coinAt(int a, int b);
     bool batteryAt(int a, int b);
     bool tapeAt(int a, int b);
+    bool revolverAt(int a, int b);
     bool hideSpotAt(int a, int b);            // furniture big enough to hide beside
     bool balloonAt(int a, int b, Vec3 &out);
     // A party table's balloon bunch: fills pos[]/colours[] (up to 4) and the
@@ -403,6 +431,7 @@ struct Sim {
     void markChalk();
     bool crateAt(int a, int b);
     void openCrate(int a, int b);
+    void buySnack();
     void markWayOut();               // chalk the way from the Manila Room to the nearest exit
 
     // ---- the place
@@ -422,6 +451,11 @@ struct Sim {
     bool nextCover(Vec2 &spot);                    // the next cover to check while searching
     bool hunterOpensDoor(float dt);              // true while he stands at a shut door, knocking on it
     void hunterNotice(float x, float z);   // the hunter now knows the player is at (x, z)
+    void spawnUsher(double now);
+    void usherRoamTarget(double now);
+    bool inUsherBeam();        // the player is lit by its torch and it can see them
+    void usherWhistle();             // brings the hunter: spawned if hidden, chasing either way
+    void bulletHitsUsher();
 
     // ---- the run's shape
     void applyLevel(int lv, double now);

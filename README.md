@@ -207,7 +207,7 @@ sounds and hunter. Exits lead to the next level.
 |---|---|
 | ![Level 0](docs/levels/level_0.png) **LEVEL 0 · THRESHOLD**: empty rooms, yellow chevron wallpaper, damp carpet, an uneven grid of ceiling lights that hums, stairs up to more floors like this one, and railed openings down to others. The exits are walls you walk through. The hunter is Pirate Clark. | ![Level 1](docs/levels/level_1.png) **LEVEL 1 · HABITABLE ZONE**: a concrete warehouse with dim tube lights, many of them dead, low fog on the floor, exposed rebar, supply crates that move during blackouts, and exit doors marked with symbols. The hunter is a Smiler. |
 | ![The Poolrooms](docs/levels/level_2.png) **THE POOLROOMS**: white tile and water: colonnaded halls, flooded tunnels, staircases down into deep water, and windows of white light. No hunter and no blackouts. | ![Level Fun](docs/levels/level_3.png) **LEVEL FUN =)**: red carpet, a black ceiling, bunting, balloons and party tables. The hunter is the Partygoer. |
-| ![The Theater](docs/levels/level_4.png) **THE THEATER**: the second level; Level 0's exits lead here. Lobbies have film posters and concession counters. Auditoriums have stepped rows of red seats facing a screen whose colour changes every few seconds; the screen lights the room, and the ceiling lights are off. Crouch next to a row to hide. The hunter is a Smiler. |
+| ![The Theater](docs/levels/level_4.png) **THE THEATER**: a cinema that does not end. Lobbies are two halls with film posters, a concession counter with a roped queue, and drink and snack machines (a snack costs two doubloons and heals you). Dark auditoriums have stepped rows of red seats facing a screen that is still showing a film; the screen is the only light in the room. Slip past either end of the screen to reach backstage, where a tape and loose doubloons lie among the cartons. The Usher, a faceless figure in a burgundy uniform, walks the aisles with a torch: if its beam holds you, it whistles and the Smiler comes running. Crouch still between the rows to hide from both. It is the second level: Level 0's exits lead here. |
 
 All hunters use the same rules: look at one for about 1.6 s, or let it get
 within 8 m of you in view, and it chases you.
@@ -348,7 +348,11 @@ AGENTS.md has the module map file by file.
   walls and burns for 9 s as a point light in the shader. The hunter will not
   come within 6 m of a burning flare and runs from one. You carry up to three
   and find more over time. Water puts them out.
-- **Revolver.** Select with 1 or the mouse wheel. Hold right mouse to aim.
+- **Revolver.** A run starts empty-handed (1 puts whatever you hold away).
+  The revolver is found, not carried: about one empty floor cell in 2,000
+  holds one, roughly one every ten chunks, turning in the air in a column of
+  gold light. Walk into it to take it. Then select it with 5 or the mouse
+  wheel. Hold right mouse to aim.
   Six rounds; R reloads once the sights are lowered. A hit slows the hunter
   briefly but does not stop it, and it now knows where you are. Three hits
   put it down for a couple of minutes. Fire is the only thing that makes it
@@ -489,7 +493,7 @@ The Poolrooms and Manila Room remain safe.
 | SPACE | jump / hold to stay up while swimming (let go to dive) |
 | F / L | flashlight |
 | hold right mouse | revolver iron sights (release to lower; no reload while aiming) |
-| 1 / 2 / 4 / wheel | select item (revolver / flare / tape player) |
+| 1 / 2 / 4 / 5 / wheel | select item (empty hands / flare / tape player / revolver, once found) |
 | left click | use selected weapon |
 | Q | throw flare (always) |
 | R | reload revolver |

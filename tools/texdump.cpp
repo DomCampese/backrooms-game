@@ -223,6 +223,7 @@ static int dumpForUnreal(const char *revolver) {
     exported("smiler", makeSmilerTex(false), CLAMPED);
     exported("smiler_glow", makeSmilerTex(true), CLAMPED);
     exported("partygoer", makePartygoerTex(), CLAMPED);
+    exported("usher", makeUsherTex(), CLAMPED);
     const bool gun = exportRevolver(revolver);
     fprintf(gJson, "\n  ]\n}\n");
     fclose(gJson);
@@ -265,6 +266,7 @@ int main(int argc, char **argv) {
     sprite("deck", makeDeckTex);
     sprite("clark", makeClarkTex);
     sprite("partygoer", makePartygoerTex);
+    sprite("usher", makeUsherTex);
     if (wanted("smiler")) { dump("smiler", makeSmilerTex(false), false); dump("smiler_glow", makeSmilerTex(true), false); }
     return 0;
 }

@@ -47,9 +47,42 @@ bool hunterSprite(const Sim &sim, ActorSprite &out) {
     return true;
 }
 
+bool usherSprite(const Sim &sim, ActorSprite &out) {
+    const Usher &u = sim.usher;
+    if (u.st == UState::Gone || sim.usherDist >= 45) return false;
+    out = {};
+    out.sheet = SpriteSheet::Usher;
+    float sink = 0;
+    if (u.st == UState::Down) {   // folds at the knees and fades
+        float t = clampf(u.life / 1.5f, 0, 1);
+        sink = 1.2f * t * t; out.fade = 1.0f - t;
+    }
+    float gph = u.gait * 0.5f;
+    gaitFrames(gph, ENT_FRAMES, out.frame0, out.frame1, out.blend);
+    float bob = 0.026f * fabsf(sinf(gph * TAU));
+    float cx = sim.px - u.x, cz = sim.pz - u.z, cl = sqrtf(cx * cx + cz * cz) + 1e-4f;
+    float facing = (cosf(u.beamYaw) * cx + sinf(u.beamYaw) * cz) / cl;
+    out.row = facing > 0.55f ? ENT_ROW_FACE : facing > -0.2f ? ENT_ROW_HALF : ENT_ROW_AWAY;
+    out.centre = { u.x, u.dispY + 1.06f - sink + bob, u.z };
+    out.w = 1.06f; out.h = 2.12f;
+    out.litAt = { u.x, u.dispY + 1.0f, u.z };
+    return true;
+}
+
+// Held at chest height a little ahead of it, tipped 10 degrees down.
+bool usherTorch(const Sim &sim, Vec3 &at, Vec3 &dir) {
+    const Usher &u = sim.usher;
+    if ((u.st != UState::Patrol && u.st != UState::Spot) || sim.usherDist >= 45) return false;
+    float c = cosf(u.beamYaw), s = sinf(u.beamYaw);
+    at = { u.x + c * 0.30f, u.dispY + Sim::USHER_TORCH_Y, u.z + s * 0.30f };
+    dir = { c * 0.985f, -0.174f, s * 0.985f };
+    return true;
+}
+
 std::vector<ActorSprite> actorSprites(const Sim &sim) {
     std::vector<ActorSprite> out;
     ActorSprite s;
     if (hunterSprite(sim, s)) out.push_back(s);
+    if (usherSprite(sim, s)) out.push_back(s);
     return out;
 }
