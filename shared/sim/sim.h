@@ -136,7 +136,7 @@ struct Sim {
     // Doors. The use key shuts or opens a doorway within DOOR_REACH m of its
     // middle that the player faces. Shutting or opening one is heard DOOR_NOISE m
     // away for DOOR_NOISE_TIME s. The hunter opens a shut door in his way after
-    // DOOR_OPEN_TIME s, knocking on it every DOOR_KNOCK s; the pack cannot open one.
+    // DOOR_OPEN_TIME s, knocking on it every DOOR_KNOCK s.
     static constexpr float DOOR_REACH = 1.6f;
     static constexpr float DOOR_NOISE = 14.0f, DOOR_NOISE_TIME = 0.5f;
     static constexpr float DOOR_OPEN_TIME = 1.6f, DOOR_KNOCK = 0.45f;

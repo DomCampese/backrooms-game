@@ -220,7 +220,7 @@ bool Sim::findDoor(DoorReach &d) {
     return d.ok;
 }
 
-// Anyone (the player, the hunter, a dog) within reach of where the leaf of
+// Anyone (the player or the hunter) within reach of where the leaf of
 // edge (ci, ck) closes.
 bool Sim::bodyInDoorway(int ci, int ck, bool west) const {
     float line = west ? ci * CELL : ck * CELL, e0 = west ? ck * CELL : ci * CELL;

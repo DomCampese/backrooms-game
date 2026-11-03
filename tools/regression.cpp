@@ -755,7 +755,7 @@ int main() {
     printf("PASS theater auditoriums, steps, reachability, seat collision and hiding\n");
 
     // ---- doors. The use key shuts a doorway the player faces; a shut door
-    // blocks bodies, the pack's router, sight and light; the hunter's router
+    // blocks bodies, the default router, sight and light; the hunter's router
     // passes it, and he opens it after DOOR_OPEN_TIME s.
     {
         sim.applyLevel(0,GetTime()); sim.beginDescent(0);
