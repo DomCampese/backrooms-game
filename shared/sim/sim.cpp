@@ -23,6 +23,10 @@ void Sim::step(const InputFrame &in, float dt, double now) {
     AudioEvent &loops = audioEvent(AudioEvent::LOOPS);
     loops.loops = loopCue();
     loops.dt = dt;
+    InputFrame observation = in;
+    observation.observing = in.playing;
+    observation.observationCos = portableCos(in.screenFov * 0.00872664626f);
+    updateMannequin(observation, dt, now);
     updateEntity(dt, now, in.forceSpawn);
     updateDogs(dt, now);
     updateExits(now);
@@ -83,6 +87,7 @@ void Sim::setPaused(bool on, double now) {
         nextDistant += held;
         runStart += held;
         ent.nextSpawn += held;
+        mannequin.nextSpawn += held;
         nextPack += held;
         nextHowl += held;
         nextHeartbeat += held;
@@ -177,6 +182,8 @@ void Sim::applyLevel(int lv, double now) {
     ambience.droneLevel = lv == 1 ? 1.0f : 0.0f;
     nextBlackout = lv == 2 ? BLACKOUT_NEVER : blackoutIn(now, 30, 60);   // no blackouts in the Poolrooms
     blackoutEnd = -1;
+    mannequin = {};
+    mannequin.nextSpawn = now + 150;
     shadowsStale = true;
     for (auto &d : dogs) d.st = DState::Gone;
     nextPack = now + (lv == 3 ? 8 + grng.f01() * 8 : 1e9);

@@ -484,6 +484,17 @@ AGENTS.md has the module map file by file.
 - **Camera movement.** The view tilts slightly when you strafe and dips when
   you land.
 
+## The Mannequin
+
+On Levels 0 and 1, the Mannequin can appear after two and a half minutes.
+Keep its body centred in your view to freeze it. Turn away and it pursues
+you, changing pose between sightings. The camera records continuously.
+
+Flares within five metres hold it back. Bullets stagger it briefly but do
+not kill it. Break its line of sight and get more than 24 metres away for
+eight seconds to escape. The usual hunter stays out of this encounter.
+The Poolrooms and Manila Room remain safe.
+
 ## Controls
 
 | key | action |

@@ -2435,3 +2435,14 @@ three rules:
   was not enough. `tools/web-render-check.mjs` with `BROWSER_CHANNEL=chrome`
   detects both by isolated pixel discontinuities; absolute gun brightness is
   not stable across lighting changes.
+
+# The Mannequin
+
+- Rules live in shared/sim/mannequin.cpp. Its body and HUD are shared by both
+  builds. Sim::step derives observation from the active player's view and
+  screen FOV. The continuously recording camera has no handheld toggle.
+- MannequinStep has its own sound channel. Reusing another footstep channel
+  would leave that clip with the Mannequin's spatial volume and pan.
+- Level entries clear the encounter. A storey change ends it on the next tick;
+  its position must not be shifted with objects on the player's new floor.
+- Run make mannequin-check for observation, movement, flares and reset checks.

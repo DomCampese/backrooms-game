@@ -23,6 +23,7 @@ template <class F> void inputFields(InputFrame &in, F &&f) {
     f("pickRevolver", in.pickRevolver); f("pickFlare", in.pickFlare); f("pickDeck", in.pickDeck);
     f("fire", in.fire); f("aim", in.aim);
     f("reload", in.reload); f("throwFlare", in.throwFlare); f("flashlight", in.flashlight);
+    f("observing", in.observing); f("observationCos", in.observationCos);
     f("use", in.use); f("drink", in.drink); f("chalk", in.chalk);
     f("begin", in.begin);
     f("devBlackout", in.dev.blackout); f("devSpawnAhead", in.dev.spawnAhead); f("devChase", in.dev.chase);
@@ -221,6 +222,13 @@ std::string simDigest(const Sim &sim) {
         snprintf(n, sizeof n, "dog%dZ", i); l(n, sim.dogs[i].z);
     }
     l("nextBlackout", sim.nextBlackout); l("blackoutEnd", sim.blackoutEnd);
+    if (sim.mannequin.active) {
+        const auto &m = sim.mannequin;
+        l("mannequinPos", m.pos); l("mannequinStorey", m.storey); l("mannequinPose", m.pose);
+        l("mannequinPinned", m.pinned); l("mannequinWarded", m.warded);
+        l("mannequinYaw", m.yaw); l("mannequinGrace", m.grace); l("mannequinLost", m.lost);
+        l("mannequinGait", m.gait); l("mannequinStagger", m.stagger); l("mannequinNext", m.nextSpawn);
+    }
     l("bullets", (int)sim.bullets.size()); l("impacts", (int)sim.bulletImpacts.size());
     l("deaths", sim.deathCount); l("kills", sim.killCount);
     l("shifted", (int)sim.world.shifted.size()); l("unlocked", (int)sim.world.unlockedDoors.size());
