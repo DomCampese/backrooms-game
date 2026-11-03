@@ -9,7 +9,7 @@ UENUM(BlueprintType)
 enum class EBackroomsControl : uint8
 {
 	Forward, Back, Left, Right, Sprint, Crouch, Squeeze, Jump,
-	PickRevolver, PickFlare, PickDeck, Fire, Aim, Reload, Throw, Flashlight, Use, Drink, Chalk,
+	PickHands, PickRevolver, PickFlare, PickDeck, Fire, Aim, Reload, Throw, Flashlight, Use, Drink, Chalk,
 	Pause, DebugHud, DevBlackout, DevBanish, DevRefill, DevStoreyUp, DevStoreyDown, DevNextLevel,
 	Begin, Look, Wheel,
 	Count UMETA(Hidden)
@@ -35,7 +35,7 @@ struct FBackroomsHudState
 	UPROPERTY(BlueprintReadOnly, Category = "Backrooms") float Stamina = 1.0f;
 	UPROPERTY(BlueprintReadOnly, Category = "Backrooms") float Battery = 1.0f;
 	UPROPERTY(BlueprintReadOnly, Category = "Backrooms") bool bFlashlightOn = false;
-	UPROPERTY(BlueprintReadOnly, Category = "Backrooms") int32 Weapon = 0;   // 0 revolver, 1 flare, 2 tape deck
+	UPROPERTY(BlueprintReadOnly, Category = "Backrooms") int32 Weapon = 0;   // 0 empty hands, 1 revolver, 2 flare, 3 tape deck
 	UPROPERTY(BlueprintReadOnly, Category = "Backrooms") int32 Ammo = 0;
 	UPROPERTY(BlueprintReadOnly, Category = "Backrooms") int32 Flares = 0;
 	UPROPERTY(BlueprintReadOnly, Category = "Backrooms") int32 Coins = 0;

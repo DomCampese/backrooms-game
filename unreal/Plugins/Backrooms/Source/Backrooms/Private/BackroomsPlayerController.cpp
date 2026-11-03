@@ -43,7 +43,8 @@ TArray<FControlKeys> ControlKeys()
 		{ EControl::Crouch, V::Boolean, { EKeys::LeftControl } },
 		{ EControl::Squeeze, V::Boolean, { EKeys::C } },
 		{ EControl::Jump, V::Boolean, { EKeys::SpaceBar } },
-		{ EControl::PickRevolver, V::Boolean, { EKeys::One } },
+		{ EControl::PickHands, V::Boolean, { EKeys::One } },
+		{ EControl::PickRevolver, V::Boolean, { EKeys::Five } },
 		{ EControl::PickFlare, V::Boolean, { EKeys::Two } },
 		{ EControl::PickDeck, V::Boolean, { EKeys::Four } },
 		{ EControl::Fire, V::Boolean, { EKeys::LeftMouseButton } },
@@ -225,6 +226,7 @@ void ABackroomsPlayerController::PlayerTick(float DeltaTime)
 	In.look = { float(LookDelta.X) * Settings->LookScale,
 		float(LookDelta.Y) * Settings->LookScale * (Settings->bInvertLookY ? 1.0f : -1.0f) };
 	In.wheel = Wheel;
+	In.pickHands = Pressed(EControl::PickHands);
 	In.pickRevolver = Pressed(EControl::PickRevolver);
 	In.pickFlare = Pressed(EControl::PickFlare);
 	In.pickDeck = Pressed(EControl::PickDeck);

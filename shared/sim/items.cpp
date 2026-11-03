@@ -59,6 +59,7 @@ Pickup Sim::pickupAt(int a, int b) {
     if (coinAt(a, b))    return Pickup::Doubloon;
     if (batteryAt(a, b)) return Pickup::Battery;
     if (tapeAt(a, b))    return Pickup::Tape;
+    if (revolverAt(a, b)) return Pickup::Revolver;
     return Pickup::None;
 }
 
@@ -83,6 +84,13 @@ bool Sim::batteryAt(int a, int b) {
 bool Sim::tapeAt(int a, int b) {
     if (world.pillarAt(a, b) || world.propAt(a, b) || world.poolAt(a, b)) return false;
     return ih(a, b, pickupSalt() ^ 0x7A9Eu) % 401 == 0;
+}
+
+// Still placed once the player has one, so crates and the other pickups do
+// not move; collectPickups and the scene skip it instead.
+bool Sim::revolverAt(int a, int b) {
+    if (ih(a, b, pickupSalt() ^ 0x6E7Au) % REVOLVER_ODDS != 0) return false;
+    return !world.pillarAt(a, b) && !world.propAt(a, b) && !world.poolAt(a, b);
 }
 
 // tools/mapdump.cpp counts and marks these.
@@ -269,6 +277,7 @@ void Sim::collectPickups() {
         if (!world.lineOfSight(px, pz, spot.x, spot.y)) continue;
         if (fabsf(py - (world.floorY(a, b) + (onShelf ? bottleShelfY(a, b) : 0))) > 1.5f) continue;
         if (kind == Pickup::Battery && battery > 0.98f) continue;
+        if (kind == Pickup::Revolver && hasRevolver) continue;
         taken.insert(ky);
         switch (kind) {
         case Pickup::AlmondWater:
@@ -293,6 +302,14 @@ void Sim::collectPickups() {
             keys++;
             deckNoteT = 2.4f; deckNote = "a key. something near here is locked.";
             play(Sfx::Click).atPitch(1.45f);
+            break;
+        case Pickup::Revolver:
+            hasRevolver = true;
+            ammo = MAXAMMO; reloadT = 0;
+            weapon = WEAPON_REVOLVER;
+            revolverFoundT = REVOLVER_FOUND;
+            play(Sfx::TapeChime).atPitch(0.75f);
+            play(Sfx::Click).atPitch(1.15f);
             break;
         case Pickup::None:
             break;

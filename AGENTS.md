@@ -1172,6 +1172,21 @@ entries, and the 2002 photograph (CREDITS.md).
 
 # Revolver
 
+- **A run starts empty-handed, and the revolver is found** (November 2026).
+  Key 1 is `WEAPON_HANDS` (no viewmodel, no crosshair); the revolver is key 5
+  and the wheel skips it until `Sim::hasRevolver`. `Sim::revolverAt` places
+  one in one empty floor cell in `REVOLVER_ODDS` (2003): about 0.1 per chunk
+  on Levels 0, 1 and the theater, counted with seed 1337 over 128 x 128
+  cells. It is the lowest-priority `Pickup`, so it never moves another item.
+- **A found revolver stays placed** in `pickupAt` once the player has one;
+  `collectPickups` and the scene skip it. Removing it from `pickupAt` would
+  change `crateAt`'s answer for that cell and move a Level 1 crate.
+- **The floating gun is each build's own model** at `looseRevolver`'s
+  transform (render.cpp's `drawRevolver`, `ABackroomsHeldActor::Show`); its
+  gold halo, light column, floor pool and motes are `sceneDraws`. Held and
+  loose never show together, so Unreal reuses the held actor's mesh.
+- G (F3's refill) also hands over the revolver. tools/record-trace.sh presses
+  G and 5 before it shoots; walk-l0-l2.trace was re-recorded for this.
 - Hold RMB to aim. F or L toggles the flashlight. Aiming never toggles or
   queues a reload.
 - A reload needs the sights fully lowered; a reload already running finishes
