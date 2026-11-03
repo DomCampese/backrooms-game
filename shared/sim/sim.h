@@ -35,9 +35,11 @@ struct TapeDeck {
     float reel = 0;           // hub rotation, radians
 };
 
-// The held item. Keys 1/2/4 pick one; the wheel cycles in this order.
+// The held item. Keys 1/2/4/5 pick one; the wheel cycles in this order. A
+// run starts empty-handed, and the revolver is skipped until it is found.
 enum Weapon {
-    WEAPON_REVOLVER = 0,
+    WEAPON_HANDS = 0,
+    WEAPON_REVOLVER,
     WEAPON_FLARE,
     WEAPON_DECK,
     WEAPON_COUNT,
@@ -46,7 +48,7 @@ enum Weapon {
 // A loose item lying in a cell. Which one a cell holds is a pure function of
 // the cell and the seed (Sim::pickupAt), so drawing and collecting agree
 // without storing anything.
-enum class Pickup { None, AlmondWater, Doubloon, Battery, Tape, Key };
+enum class Pickup { None, AlmondWater, Doubloon, Battery, Tape, Key, Revolver };
 
 // Balloon and confetti colours are indices into Level 4's palette, which the
 // platform draws with (PARTY, web/src/util.h, must have this many entries).
@@ -101,6 +103,10 @@ struct Sim {
     // then every GAP..GAP+SPAN s, scaled by 0.45 + 0.55 * sanity.
     static constexpr double DISTANT_LEAD = 20, DISTANT_GAP = 35, DISTANT_SPAN = 50;
     static constexpr int   MAXAMMO = 6;
+    // One empty floor cell in this many holds the revolver: about one every
+    // dozen chunks, so most runs find it on Level 0 or the theater.
+    static constexpr uint32_t REVOLVER_ODDS = 2003;
+    static constexpr float REVOLVER_FOUND = 3.2f;   // s the "revolver" banner shows
     static constexpr float MUZZLE_FLASH = 0.09f;   // s the muzzle flash lights the room
     // Hiding stops the hunter seeing the player and blocks the catch, so it
     // requires standing still. Two thresholds, so hiding does not flicker on and
@@ -246,7 +252,8 @@ struct Sim {
     float foundT = 0;                // s the hunter's find keeps the player from hiding again
 
     // ---- hands
-    int weapon = WEAPON_REVOLVER;
+    int weapon = WEAPON_HANDS;
+    bool hasRevolver = false;        // found this run; until then key 5 and the wheel skip it
     int ammo = MAXAMMO;
     bool aiming = false;
     float aimBlend = 0;
@@ -332,7 +339,7 @@ struct Sim {
     float winTime = 0; int winM = 0, winKills = 0;
     // Overlay timers, seconds left.
     float deathT = 0, escapeT = 0, killT = 0, fellT = 0, winT = 0;
-    float closeCallT = 0, tapeFoundT = 0, valveT = 0, sanityWarnT = 0;
+    float closeCallT = 0, tapeFoundT = 0, revolverFoundT = 0, valveT = 0, sanityWarnT = 0;
     float noteT = 0, manilaCardT = 0, deckNoteT = 0;
     const char *tapeLine = "";       // the recovered tape's line
     const char *sanityLine = "";     // the last sanity (or migraine) warning
@@ -425,6 +432,7 @@ struct Sim {
     bool coinAt(int a, int b);
     bool batteryAt(int a, int b);
     bool tapeAt(int a, int b);
+    bool revolverAt(int a, int b);
     bool hideSpotAt(int a, int b);            // furniture big enough to hide beside
     bool balloonAt(int a, int b, Vec3 &out);
     // A party table's balloon bunch: fills pos[]/colours[] (up to 4) and the

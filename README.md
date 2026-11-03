@@ -350,7 +350,11 @@ AGENTS.md has the module map file by file.
   walls and burns for 9 s as a point light in the shader. The hunter will not
   come within 6 m of a burning flare and runs from one. You carry up to three
   and find more over time. Water puts them out.
-- **Revolver.** Select with 1 or the mouse wheel. Hold right mouse to aim.
+- **Revolver.** A run starts empty-handed (1 puts whatever you hold away).
+  The revolver is found, not carried: about one empty floor cell in 2,000
+  holds one, roughly one every ten chunks, turning in the air in a column of
+  gold light. Walk into it to take it. Then select it with 5 or the mouse
+  wheel. Hold right mouse to aim.
   Six rounds; R reloads once the sights are lowered. A hit slows the hunter
   briefly but does not stop it, and it now knows where you are. Three hits
   put it down for a couple of minutes. Fire is the only thing that makes it
@@ -507,7 +511,7 @@ The Poolrooms and Manila Room remain safe.
 | SPACE | jump / hold to stay up while swimming (let go to dive) |
 | F / L | flashlight |
 | hold right mouse | revolver iron sights (release to lower; no reload while aiming) |
-| 1 / 2 / 4 / wheel | select item (revolver / flare / tape player) |
+| 1 / 2 / 4 / 5 / wheel | select item (empty hands / flare / tape player / revolver, once found) |
 | left click | use selected weapon |
 | Q | throw flare (always) |
 | R | reload revolver |

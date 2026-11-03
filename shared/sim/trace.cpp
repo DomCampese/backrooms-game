@@ -20,7 +20,7 @@ template <class F> void inputFields(InputFrame &in, F &&f) {
     f("jumpHeld", in.jumpHeld); f("jumpPressed", in.jumpPressed);
     f("lookX", in.look.x); f("lookY", in.look.y);
     f("wheel", in.wheel);
-    f("pickRevolver", in.pickRevolver); f("pickFlare", in.pickFlare); f("pickDeck", in.pickDeck);
+    f("pickHands", in.pickHands); f("pickRevolver", in.pickRevolver); f("pickFlare", in.pickFlare); f("pickDeck", in.pickDeck);
     f("fire", in.fire); f("aim", in.aim);
     f("reload", in.reload); f("throwFlare", in.throwFlare); f("flashlight", in.flashlight);
     f("observing", in.observing); f("observationCos", in.observationCos);
@@ -210,7 +210,7 @@ std::string simDigest(const Sim &sim) {
     l("level", sim.level); l("storey", sim.world.storey); l("visit", sim.world.visit); l("seed", sim.world.seed);
     l("grng", sim.grng.s);
     l("inMenu", sim.inMenu); l("paused", sim.paused);
-    l("weapon", sim.weapon); l("ammo", sim.ammo); l("reloadT", sim.reloadT); l("flares", sim.flares);
+    l("weapon", sim.weapon); l("hasRevolver", sim.hasRevolver); l("ammo", sim.ammo); l("reloadT", sim.reloadT); l("flares", sim.flares);
     l("coins", sim.coins); l("almond", sim.almond); l("tapes", sim.tapes); l("keys", sim.keys);
     l("flashOn", sim.flashOn);
     l("entSt", (int)sim.ent.st); l("entX", sim.ent.x); l("entZ", sim.ent.z); l("entHp", sim.ent.hp);

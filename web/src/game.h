@@ -130,6 +130,7 @@ struct Game {
     void renderScene(double now);             // 3D world into the offscreen target
     void renderUI(double now);                // post pass, HUD, overlays
     void drawHeldWeapon(const Camera3D &cam);
+    void drawRevolver(const Matrix &m, float reloadT, float gunCd, int ammo);
     void drawScene(const SceneDraw &d, const Camera3D &cam);
     std::vector<SceneDraw> sceneBuf;   // port/draw.h's draws, reused each frame
 };

@@ -419,7 +419,8 @@ InputFrame Game::readInput(bool captureClick) {
     in.jumpPressed = inKeyPressed(KEY_SPACE);
     in.look = fromRl(inMouseDelta());
     in.wheel = inWheel();
-    in.pickRevolver = inKeyPressed(KEY_ONE);
+    in.pickHands = inKeyPressed(KEY_ONE);
+    in.pickRevolver = inKeyPressed(KEY_FIVE);
     in.pickFlare = inKeyPressed(KEY_TWO);
     in.pickDeck = inKeyPressed(KEY_FOUR);
     in.fire = inMousePressed(MOUSE_BUTTON_LEFT) && !captureClick;

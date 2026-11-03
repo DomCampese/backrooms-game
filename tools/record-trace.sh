@@ -1,8 +1,8 @@
 #!/bin/bash
 # Record tests/traces/walk-l0-l2.trace: the game driven through a fixed script
 # of keys and mouse moves under Xvfb (xdotool), with BACKROOMS_RECORD on. The
-# script starts a run, walks, sprints, looks round, calls the hunter up and
-# shoots at it, reloads, throws a flare, drinks, pauses, and takes the F3 key to
+# script starts a run, walks, sprints, looks round, calls the hunter up, takes
+# the revolver with the refill key and shoots at it, reloads, throws a flare, drinks, pauses, and takes the F3 key to
 # the next level twice (Level 0 to 2).
 #
 #   tools/record-trace.sh [OUT] [BINARY]
@@ -56,6 +56,8 @@ key f                               # torch
 key m                               # chalk
 key F3                              # the debug keys
 key e                               # the hunter, about 12 m ahead
+key g                               # refill, which hands over the revolver
+key 5                               # draw it
 sleep 3
 click; click                        # two shots
 key r
@@ -67,7 +69,7 @@ key 3                               # a drink
 key p; sleep 2; key p               # pause and resume
 key n                               # Level 1
 hold w 4
-key 4; key 1
+key 4; key 1; key 5                 # deck, empty hands, revolver
 look 0 -80
 click
 key n                               # Level 2

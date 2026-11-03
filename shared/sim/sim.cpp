@@ -44,6 +44,7 @@ void Sim::updateTimers(float dt) {
     closeCallT = fmaxf(0, closeCallT - dt);
     doorNoiseT = fmaxf(0, doorNoiseT - dt);
     tapeFoundT = fmaxf(0, tapeFoundT - dt);
+    revolverFoundT = fmaxf(0, revolverFoundT - dt);
     valveT = fmaxf(0, valveT - dt);
 }
 
@@ -123,6 +124,7 @@ void Sim::beginDescent(double now) {
     px = sp.x; pz = sp.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
     yaw = 0.8f; pitch = 0.0f;
     coins = 0; almond = 0; tapes = 0; keys = 0; flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; battery = 1.0f;
+    weapon = WEAPON_HANDS; hasRevolver = false; revolverFoundT = 0;
     deck = TapeDeck{}; stopVoice();
     escapeCount = 0; killCount = 0; distWalked = 0;
     deepest = level;
@@ -309,7 +311,7 @@ void Sim::updateDevKeys(const DevKeys &dev, double now) {
     if (dev.banish) {
         ent.st = EState::Hidden; ent.nextSpawn = now + 20 + grng.f01() * 20;
     }
-    if (dev.refill) { flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; }
+    if (dev.refill) { flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; hasRevolver = true; }
     if (world.storeyH > 0.0f && (dev.storeyUp || dev.storeyDown)) {
         changeStorey(dev.storeyUp ? 1 : -1, now);
         Vec2 spot = world.findOpenSpot(px, pz);

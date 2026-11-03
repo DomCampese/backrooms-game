@@ -63,24 +63,31 @@ bool ABackroomsHeldActor::Load()
 	return true;
 }
 
-void ABackroomsHeldActor::Show(const Sim& Game, const UBackroomsRender& Render, const FVector& Origin,
+void ABackroomsHeldActor::Show(Sim& Game, const UBackroomsRender& Render, const FVector& Origin, float Now,
 	std::vector<SceneDraw>& Draws)
 {
-	if (heldItem(Game) != Held::Revolver || !Load())
+	// In hand, or one not yet found turning in the air (looseRevolver): never
+	// both, since none lies loose once the player has one.
+	const bool bHeld = heldItem(Game) == Held::Revolver;
+	Xform X;
+	if (bHeld)
+	{
+		X = xformOf(heldWeapon(Game, simView(Game)));
+	}
+	if ((!bHeld && !looseRevolver(Game, Now, X)) || !Load())
 	{
 		Gun->SetVisibility(false);
 		return;
 	}
-	if (Model.pose(Game.reloadT, Game.gunCd, Game.ammo))
+	if (bHeld ? Model.pose(Game.reloadT, Game.gunCd, Game.ammo) : Model.pose(0, 0, Sim::MAXAMMO))
 	{
 		for (size_t P = 0; P < Model.glb.prims.size(); P++)
 		{
 			Model.skinned((int)P, Positions[P], Normals[P]);
 		}
 	}
-	// The GLB's frame into the world: heldWeapon's axes, a mirror like the
-	// Web build's (port/held.h), then Unreal's.
-	const Xform X = xformOf(heldWeapon(Game, simView(Game)));
+	// X is the GLB's frame into the world: a mirror like the Web build's
+	// (port/held.h), then Unreal's.
 	for (size_t P = 0; P < Model.glb.prims.size(); P++)
 	{
 		const GlbPrimitive& Prim = Model.glb.prims[P];
@@ -118,6 +125,10 @@ void ABackroomsHeldActor::Show(const Sim& Game, const UBackroomsRender& Render, 
 		}
 	}
 	Gun->SetVisibility(true);
+	if (!bHeld)
+	{
+		return;
+	}
 
 	// The muzzle flash and its smoke (Game::drawHeldWeapon).
 	const Vec3 Right = { Game.r2x, 0, Game.r2z };

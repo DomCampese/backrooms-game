@@ -99,6 +99,13 @@ struct SceneDraw {
 // Level 1's mist and the impacts. `now` is the render clock.
 void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneDraw> &out);
 
+// The nearest revolver lying unfound within the scene's pickup reach, turning
+// in the air above its cell, as a transform for the revolver's model (a
+// left-handed set, as heldWeapon's). Each build draws its own model there;
+// sceneDraws adds the gold glow round it. False when there is none, which is
+// always once the player has one.
+bool looseRevolver(Sim &sim, float now, Xform &xf);
+
 // The can, the deck or a flare in hand (the revolver is each build's own
 // model): what render.cpp draws for heldItem.
 void heldDraws(const Sim &sim, const SimView &view, float now, std::vector<SceneDraw> &out);

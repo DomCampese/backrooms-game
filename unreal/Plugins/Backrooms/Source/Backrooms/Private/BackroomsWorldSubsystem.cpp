@@ -601,7 +601,7 @@ void UBackroomsWorldSubsystem::ShowFrame(const Vec3& Eye)
 	const size_t FirstHeld = Draws.size();
 	const SimView View = simView(S);
 	heldDraws(S, View, T, Draws);
-	Hand->Show(S, *Render, StoreyOrigin(), Draws);
+	Hand->Show(S, *Render, StoreyOrigin(), T, Draws);
 	Scene->Show(Draws, FirstHeld, View, *Render, StoreyOrigin());
 
 	// The frame onto tape, as the Web build grabs its render target after

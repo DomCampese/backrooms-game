@@ -19,13 +19,16 @@ bool Sim::canReload() const {
 }
 
 void Sim::updateWeapons(const InputFrame &in, float dt, double now) {
-    if (in.pickRevolver) weapon = WEAPON_REVOLVER;
+    if (in.pickHands) weapon = WEAPON_HANDS;
+    if (in.pickRevolver && hasRevolver) weapon = WEAPON_REVOLVER;
     if (in.pickFlare) weapon = WEAPON_FLARE;
     if (in.pickDeck) weapon = WEAPON_DECK;
     wheelCd = fmaxf(0, wheelCd - dt);
     // The wheel runs the loop both ways: +1 forward, -1 as +(N-1) to stay positive.
     if (wheelCd <= 0 && fabsf(in.wheel) > 0.5f) {
-        weapon = (weapon + (in.wheel > 0 ? 1 : WEAPON_COUNT - 1)) % WEAPON_COUNT;
+        int step = in.wheel > 0 ? 1 : WEAPON_COUNT - 1;
+        weapon = (weapon + step) % WEAPON_COUNT;
+        if (weapon == WEAPON_REVOLVER && !hasRevolver) weapon = (weapon + step) % WEAPON_COUNT;
         wheelCd = 0.25f;
     }
     updateAim(in.playing && in.aim, dt);

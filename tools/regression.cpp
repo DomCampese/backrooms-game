@@ -143,6 +143,40 @@ int main() {
         CHECK(sim.taken.count(key) && sim.battery>0.8f); testedBattery=true;
     }
     CHECK(testedBattery);
+
+    // A run starts empty-handed. The revolver cannot be drawn or wheeled to
+    // until it is found; walking onto one takes it and draws it.
+    sim.applyLevel(0,GetTime()); sim.beginDescent(0);
+    CHECK(sim.weapon==WEAPON_HANDS && !sim.hasRevolver);
+    {
+        InputFrame in=noInput(g); in.pickRevolver=true;
+        sim.updateWeapons(in,.016f,0); CHECK(sim.weapon==WEAPON_HANDS);
+        in=noInput(g); in.wheel=1; sim.wheelCd=0;
+        sim.updateWeapons(in,.016f,0); CHECK(sim.weapon==WEAPON_FLARE);
+        sim.weapon=WEAPON_HANDS;
+        in=noInput(g); in.fire=true; sim.updateWeapons(in,.016f,0);
+        CHECK(sim.ammo==Sim::MAXAMMO && sim.bullets.empty());
+    }
+    bool testedRevolver=false;
+    for (int x=-90;x<90 && !testedRevolver;++x) for (int z=-90;z<90 && !testedRevolver;++z) {
+        if (sim.pickupAt(x,z)!=Pickup::Revolver) continue;
+        Xform loose;
+        sim.px=x*CELL+1-3.2f; sim.pz=z*CELL+1; sim.py=sim.world.floorY(x,z);
+        CHECK(looseRevolver(sim,0,loose));
+        if (sim.world.lineOfSight(sim.px,sim.pz,x*CELL+1,z*CELL+1)) {
+            sim.eyeY=sim.py+1.62f; sim.yaw=0; sim.pitch=-0.12f; capture(g,"revolver-loose.png");
+        }
+        sim.px=x*CELL+1; sim.pz=z*CELL+1;
+        sim.updateInteraction(noInput(g));
+        CHECK(sim.hasRevolver && sim.weapon==WEAPON_REVOLVER && sim.revolverFoundT>0);
+        CHECK(sim.taken.count(Sim::cellKey2(x,z)) && !looseRevolver(sim,0,loose));
+        InputFrame in=noInput(g); in.pickHands=true;
+        sim.updateWeapons(in,.016f,0); CHECK(sim.weapon==WEAPON_HANDS);
+        in=noInput(g); in.pickRevolver=true;
+        sim.updateWeapons(in,.016f,0); CHECK(sim.weapon==WEAPON_REVOLVER);
+        testedRevolver=true;
+    }
+    CHECK(testedRevolver);
     sim.applyLevel(0,GetTime()); sim.px=15;sim.pz=15;sim.py=0;sim.eyeY=1.62f;sim.yaw=0.8f;sim.pitch=0;
     sim.weapon=WEAPON_REVOLVER;sim.ammo=3;
     sim.updateAim(true,.2f);CHECK(sim.aiming && sim.aimBlend==1 && !sim.canReload());
