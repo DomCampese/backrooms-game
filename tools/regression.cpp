@@ -658,6 +658,14 @@ int main() {
                 if (d.prop[x][z]==PROP_SEATS) { seats++; CHECK((d.propRot[x][z]&3)==audFacing(dir)); }
             }
             CHECK(seats==(AUD_ROW1-AUD_ROW0+1)*(AUD_N-3));
+            // The screen wall runs across the room between backstage and the
+            // front floor, open at both ends.
+            auto open=[&](int u0,int v0,int u1,int v1){
+                int ax,az,bx2,bz2; audCell(dir,u0,v0,ax,az); audCell(dir,u1,v1,bx2,bz2);
+                return w.canStep(cx*CCELLS+ax,cz*CCELLS+az,cx*CCELLS+bx2,cz*CCELLS+bz2);
+            };
+            for (int u=0;u<AUD_N;++u)
+                CHECK(open(u,AUD_BACKSTAGE-1,u,AUD_BACKSTAGE)==(u==0||u==m));
             for (int x=0;x<CCELLS;++x) for (int z=0;z<CCELLS;++z) {
                 if (z>0 && !blocksEdge(d.wallN[x][z])) CHECK(abs(d.elev[x][z]-d.elev[x][z-1])<=MAX_STEP_UNITS);
                 if (x>0 && !blocksEdge(d.wallW[x][z])) CHECK(abs(d.elev[x][z]-d.elev[x-1][z])<=MAX_STEP_UNITS);
@@ -692,6 +700,22 @@ int main() {
             for (int sl=0;sl<MESH_COUNT;++sl) CHECK(geo.parts[sl].v.size()/3<=65536);
         }
         CHECK(auds>0 && lobbies>0 && w.data(0,0).audDir<0);
+        // A lobby is split by a wall with doorways, and has its queue rope and
+        // vending machines. Not the spawn chunk's: the spawn room is cleared.
+        for (int cx=-3;cx<=3;++cx) for (int cz=-3;cz<=3;++cz) {
+            ChunkData &d=w.data(cx,cz);
+            if ((cx==0 && cz==0) || d.audDir>=0) continue;
+            int solid=0, doors=0, ropes=0, machines=0;
+            for (int x=AUD_LO;x<AUD_LO+AUD_N;++x) {
+                if (d.wallN[x][LOBBY_SPLIT]==WALL_SOLID) solid++;
+                else if (!blocksEdge(d.wallN[x][LOBBY_SPLIT])) doors++;
+            }
+            for (int x=0;x<CCELLS;++x) for (int z=0;z<CCELLS;++z) {
+                ropes+=d.prop[x][z]==PROP_ROPE;
+                machines+=d.prop[x][z]==PROP_VENDING;
+            }
+            CHECK(solid>=AUD_N/2 && doors>=1 && ropes==4 && machines>=2);
+        }
         // A seat row's collision box fills the back of its cell: a body walks the
         // legroom along the row, and is pushed out of the seats.
         {
@@ -724,7 +748,7 @@ int main() {
             sim.crouchCur=0; sim.updateHiding(0.0f,0.1f); CHECK(!sim.hidden);
             // and the stage end of the room, as the player sees it from the front
             // row, for the captures
-            int fx,fz; audCell(d.audDir,AUD_N/2,1,fx,fz);
+            int fx,fz; audCell(d.audDir,AUD_N/2,AUD_BACKSTAGE,fx,fz);
             Auditorium a; CHECK(sim.world.auditorium(1,0,a));
             sim.px=(CCELLS+fx)*CELL+1.0f; sim.pz=fz*CELL+1.0f; sim.py=sim.world.floorY(CCELLS+fx,fz);
             sim.eyeY=sim.py+1.62f; sim.yaw=atan2f(a.normal.z,a.normal.x); sim.pitch=0.12f;
@@ -738,8 +762,68 @@ int main() {
             sim.applyLevel(0,GetTime());
             g.syncLevelLook();
         }
+        // Backstage: a tape in the middle of the walkway behind the screen.
+        {
+            sim.applyLevel(THEATER,GetTime());
+            ChunkData &d=sim.world.data(1,0);
+            int x,z; audCell(d.audDir,AUD_N/2,AUD_BACKSTAGE-1,x,z);
+            CHECK(sim.backstageAt(CCELLS+x,z) && sim.pickupAt(CCELLS+x,z)==Pickup::Tape);
+            audCell(d.audDir,AUD_N/2,AUD_BACKSTAGE,x,z);
+            CHECK(!sim.backstageAt(CCELLS+x,z));
+            sim.applyLevel(0,GetTime());
+        }
+        // Snack machines: two in three of the theater's vending machines. A
+        // snack costs SNACK_COST and closes a wound.
+        {
+            sim.applyLevel(THEATER,GetTime());
+            int snacks=0, drinks=0;
+            for (int ci=-48;ci<48;++ci) for (int ck=-48;ck<48;++ck) {
+                if (sim.world.propAt(ci,ck)!=PROP_VENDING) continue;
+                if (sim.world.snackAt(ci,ck)) snacks++; else drinks++;
+            }
+            CHECK(snacks>drinks && drinks>0);
+            sim.coins=Sim::SNACK_COST-1; sim.health=0.4f;
+            sim.buySnack();
+            CHECK(sim.coins==Sim::SNACK_COST-1 && sim.health==0.4f);
+            sim.coins=Sim::SNACK_COST+1;
+            sim.buySnack();
+            CHECK(sim.coins==1 && sim.health==1.0f);
+            sim.coins=0;
+            sim.applyLevel(0,GetTime());
+            CHECK(!sim.world.snackAt(0,0));
+        }
+        // The Usher: its beam on a player standing in the back aisle brings the
+        // hunter at a run; crouched still beside the seats, the player is not seen.
+        {
+            sim.applyLevel(THEATER,GetTime());
+            ChunkData &d=sim.world.data(1,0);
+            const int m=AUD_N-1;
+            auto at=[&](int u,int v){ int x,z; audCell(d.audDir,u,v,x,z); return Vec2{(CCELLS+x)*CELL+1.0f,z*CELL+1.0f}; };
+            auto stand=[&](Vec2 u,Vec2 p,bool crouch){
+                sim.usher=Usher{}; sim.usher.st=UState::Patrol;
+                sim.usher.x=u.x; sim.usher.z=u.y; sim.usher.dispY=sim.world.floorY(cellOf(u.x),cellOf(u.y));
+                sim.usher.roamX=p.x; sim.usher.roamZ=p.y; sim.usher.wpx=p.x; sim.usher.wpz=p.y;
+                sim.usher.nextRoam=GetTime()+60;
+                sim.usher.beamYaw=atan2f(p.y-u.y,p.x-u.x);
+                sim.px=p.x; sim.pz=p.y; sim.velx=sim.velz=0; sim.sprinting=false; sim.flashOn=false;
+                sim.crouchCur=crouch?1.0f:0.0f; sim.hidden=crouch;
+                sim.ent.st=EState::Hidden; sim.ent.nextSpawn=GetTime()+600;
+            };
+            stand(at(1,m),at(AUD_N/2,m),false);
+            for (int i=0;i<30;++i) sim.updateUsher(1.0f/30,GetTime());
+            CHECK(sim.usher.st==UState::Spot && sim.ent.st==EState::Chase);
+            stand(at(AUD_N/2,m),at(AUD_N/2,AUD_ROW0+4),true);
+            for (int i=0;i<30;++i) sim.updateUsher(1.0f/30,GetTime());
+            CHECK(sim.usher.st==UState::Patrol && sim.ent.st==EState::Hidden);
+            // Two shots put it down.
+            sim.bulletHitsUsher(); sim.bulletHitsUsher();
+            CHECK(sim.usher.st==UState::Down);
+            sim.usher=Usher{}; sim.crouchCur=0; sim.hidden=false;
+            sim.applyLevel(0,GetTime());
+            CHECK(sim.usher.st==UState::Gone);
+        }
     }
-    printf("PASS theater auditoriums, steps, reachability, seat collision and hiding\n");
+    printf("PASS theater auditoriums, backstage, lobbies, snack machines, the Usher, seat collision and hiding\n");
 
     // ---- the catch, only from a lunge. The old proximity test caught the
     // player as soon as they came within 1.25 m, with no warning.

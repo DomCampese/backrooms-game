@@ -49,6 +49,7 @@ struct PropPlacement {
     uint8_t turn;            // quarter turns (propRot & 3)
     float yaw;               // turn * PROP_TURN, radians
     bool againstWall;        // PROP_AGAINST_WALL: backed onto the solid wall behind it
+    bool snack;              // a vending machine that sells snacks (World::snackAt)
     uint32_t hash;           // per-piece variation: ih(gi, gk, sseed() ^ PROP_HASH_SALT)
     uint32_t hash2;          // a second stream: the party table's cloth and cups
 };

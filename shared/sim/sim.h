@@ -142,6 +142,20 @@ struct Sim {
     static constexpr int   MAXCHALK = 128;      // marks per level
     static constexpr float DRINK_TIME = 1.75f;  // s the can is up
     static constexpr int   VALVES_NEEDED = 3;
+    static constexpr uint32_t BACKSTAGE_COIN_RATE = 12;
+    static constexpr int   SNACK_COST = 2;      // doubloons
+    static constexpr float SNACK_SANITY = 0.12f;
+    // The Usher's torch: it sees the player inside USHER_BEAM_HALF radians of
+    // the beam and USHER_BEAM_M metres (half that crouched), and whistles once
+    // they have been held there USHER_SPOT seconds.
+    static constexpr float USHER_BEAM_M = 14.0f;
+    static constexpr float USHER_BEAM_HALF = 0.30f;
+    static constexpr float USHER_SPOT = 0.6f;
+    static constexpr float USHER_WALK = 1.15f;     // m/s
+    static constexpr float USHER_HOLD = 5.0f;      // s it keeps the beam on the player after whistling
+    static constexpr float USHER_REST = 25.0f;     // s before it can whistle again
+    static constexpr float USHER_HEAR_M = 12.0f;   // a sprint or a lit torch this close turns its beam
+    static constexpr float USHER_TORCH_Y = 1.25f;  // the torch above its feet
 
     // ---- configuration, set by the platform before the first step
     bool noBlackout = false;     // never schedule a blackout (headless captures)
@@ -220,6 +234,9 @@ struct Sim {
     int level = 0;
     Entity ent;
     Dog dogs[MAXDOGS];
+    Usher usher;
+    float usherDist = 1e9f;          // to the Usher, this tick
+    Rng usherRng{1};                 // its own stream, so it does not shift grng on other levels
     double nextPack = 0, nextHowl = 0;
     float entDist = 1e9f;            // to the hunter, this tick
     float entPrevX = 0, entPrevZ = 0;   // his position last tick, for his velocity
@@ -317,6 +334,7 @@ struct Sim {
     void updateCrates(double now);
     void updateEntity(float dt, double now, bool forceSpawn = false);
     void updateDogs(float dt, double now);
+    void updateUsher(float dt, double now);
     void updateExits(double now);
     void updateTimers(float dt);
     void updateHealth(float dt);
@@ -364,6 +382,8 @@ struct Sim {
     // no shelf. Matches the prop AABB tops in gatherCellAABBs.
     float bottleShelfY(int a, int b);
     Vec2 pickupSpot(int a, int b);
+    bool backstageAt(int a, int b);          // behind an auditorium's screen (the theater)
+    bool stageTapeAt(int a, int b);          // the tape in the middle of the walkway backstage
     bool coinAt(int a, int b);
     bool batteryAt(int a, int b);
     bool tapeAt(int a, int b);
@@ -378,6 +398,7 @@ struct Sim {
     void markChalk();
     bool crateAt(int a, int b);
     void openCrate(int a, int b);
+    void buySnack();
     void markWayOut();               // chalk the way from the Manila Room to the nearest exit
 
     // ---- the place
@@ -393,6 +414,11 @@ struct Sim {
     float packNoise(float &x, float &z) const;   // how far the loudest noise carries, and where
     bool updateDog(int i, float dt, double now, float noise, float nsx, float nsz);   // true if it ended the run
     bool hunterChase(float dt, double now, bool entVisible, float &fearT);   // true if it ended the run
+    void spawnUsher(double now);
+    void usherRoamTarget(double now);
+    bool inUsherBeam();        // the player is lit by its torch and it can see them
+    void usherWhistle();             // brings the hunter: spawned if hidden, chasing either way
+    void bulletHitsUsher();
 
     // ---- the run's shape
     void applyLevel(int lv, double now);

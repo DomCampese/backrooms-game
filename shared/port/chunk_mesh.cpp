@@ -408,7 +408,7 @@ static void addProp(const PropPlacement &site, int level, MB &pr, MB &ce, MB &ao
         break;
     }
     case PROP_VENDING: {  // vending machine
-        // A glass-front drink machine at real size (0.88 x 1.83 x 0.72 m): a cabinet,
+        // A glass-front drink or snack machine at real size (0.88 x 1.83 x 0.72 m): a cabinet,
         // a door cut round its two openings, and the painted front in the fixtures
         // atlas (drawVendingFront, laid out by VEND_* in textures.h). The cans are
         // painted on the back of the cabinet 6 cm behind the glass, behind real
@@ -448,7 +448,7 @@ static void addProp(const PropPlacement &site, int level, MB &pr, MB &ce, MB &ao
         // a painted face on the plane lz, sampling the door where it covers it
         auto face = [&](float x0, float y0, float x1, float y1, float lz, unsigned char alpha) {
             fx.quad(P(x0, y0, lz), P(x1, y0, lz), P(x1, y1, lz), P(x0, y1, lz), fn,
-                    vendUV(x0, y0), vendUV(x1, y0), vendUV(x1, y1), vendUV(x0, y1),
+                    vendUV(x0, y0, site.snack), vendUV(x1, y0, site.snack), vendUV(x1, y1, site.snack), vendUV(x0, y1, site.snack),
                     Rgba{ 255, 255, 255, alpha });
         };
         const float ZF = -0.362f, ZBODY = -0.30f, ZBACK = VEND_DEPTH_BACK;
@@ -598,6 +598,23 @@ static void addProp(const PropPlacement &site, int level, MB &pr, MB &ce, MB &ao
             part(0.35f, 0.05f, 0.26f, 0.20f, ey + top, ey + top + 0.12f, Surface::Metal, Rgba{ 150, 30, 30, 254 });
             part(0.35f, 0.05f, 0.25f, 0.19f, ey + top + 0.12f, ey + top + 0.66f, Surface::Metal, Rgba{ 255, 214, 110, 240 });
             part(0.35f, 0.05f, 0.27f, 0.21f, ey + top + 0.66f, ey + top + 0.74f, Surface::Metal, Rgba{ 150, 30, 30, 254 });
+        }
+        break;
+    }
+    case PROP_ROPE: {   // two brass posts and a velvet rope sagging between them, along local x
+        const Rgba brass = { 196, 152, 70, 254 }, velvet = { 128, 18, 28, 255 };
+        const float post = 0.75f, hook = top - 0.06f, sag = 0.16f;
+        for (float sx : { -post, post }) {
+            roundPart(sx, 0, 0.15f, 0.13f, ey, ey + 0.03f, brass);
+            roundPart(sx, 0, 0.022f, 0.022f, ey + 0.03f, ey + top - 0.03f, brass);
+            roundPart(sx, 0, 0.040f, 0.010f, ey + top - 0.03f, ey + top + 0.03f, brass);
+        }
+        // Short boxes stepping down a parabola: fine enough at 3.5 cm thick.
+        const int N = 12;
+        for (int i = 0; i < N; i++) {
+            float t = (i + 0.5f) / N, x = -post + t * 2 * post;
+            float y = ey + hook - sag * 4 * t * (1 - t);
+            part(x, 0, post / N + 0.004f, 0.018f, y - 0.018f, y + 0.018f, Surface::Metal, velvet);
         }
         break;
     }
@@ -1057,12 +1074,13 @@ static void addStreamer(MB &pr, const Fixture &s) {
 // An auditorium's fittings round its screen, which sceneDraws draws so it can
 // show a film. The room's frame: s across from the u = 0 wall, t back from
 // the screen wall's centreline, both in metres; the cells are 2 m in each.
+// Backstage is behind the screen wall, at negative t.
 static void addAuditorium(MB &pr, MB &fx, const Fixture &f) {
     const int dir = f.variant;
     const Vec3 n = f.normal;
     const Vec3 A[4] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, -1 }, { 0, 0, 1 } };
     const Vec3 a = A[dir & 3];
-    const float half = AUD_N * CELL * 0.5f, depth = AUD_N * CELL;
+    const float half = AUD_N * CELL * 0.5f, depth = AUD_N * CELL, behind = AUD_BACKSTAGE * CELL;
     const Vec3 w0 = { f.pos.x - n.x * (WT + AUD_SCREEN_OFF) - a.x * half, 0,
                       f.pos.z - n.z * (WT + AUD_SCREEN_OFF) - a.z * half };
     auto at = [&](float s, float t) { return Vec3{ w0.x + a.x * s + n.x * t, 0, w0.z + a.z * s + n.z * t }; };
@@ -1074,7 +1092,7 @@ static void addAuditorium(MB &pr, MB &fx, const Fixture &f) {
     const float face = WT, wallH = LEVEL_RULES[THEATER].wallH;
     const float y0 = audElev(0) * ELEV_UNIT + AUD_SCREEN_LIFT, y1 = wallH - AUD_SCREEN_TOP;
     const float s0 = half - AUD_SCREEN_W * 0.5f, s1 = half + AUD_SCREEN_W * 0.5f;
-    const float stage = audElev(0) * ELEV_UNIT, floorLo = audElev(1) * ELEV_UNIT;
+    const float floorLo = audElev(AUD_BACKSTAGE) * ELEV_UNIT;
     // Black masking round the screen; it stands proud of the screen's plane, so
     // the two never share a depth.
     const Rgba mask = { 12, 12, 14, 254 };
@@ -1083,7 +1101,7 @@ static void addAuditorium(MB &pr, MB &fx, const Fixture &f) {
     box(pr, s1, m0, s1 + 0.40f, m1, y0 - 0.20f, y1 + 0.20f, mask);
     box(pr, s0, m0, s1, m1, y1, y1 + 0.20f, mask);
     box(pr, s0, m0, s1, m1, y0 - 0.20f, y0, mask);
-    box(pr, s0 - 0.40f, m0, s1 + 0.40f, m1, stage, y0 - 0.20f, Rgba{ 20, 18, 18, 254 });
+    box(pr, s0 - 0.40f, m0, s1 + 0.40f, m1, floorLo, y0 - 0.20f, Rgba{ 20, 18, 18, 254 });
     // Velvet curtains drawn back either side, in folds, and a valance along the top.
     const Rgba velvet = { 104, 14, 22, 255 }, velvetDark = { 70, 8, 14, 255 };
     for (int side = 0; side < 2; side++) {
@@ -1104,12 +1122,12 @@ static void addAuditorium(MB &pr, MB &fx, const Fixture &f) {
         for (int v = 1; v < AUD_N; v++) {
             int lo = audElev(v - 1), hi = audElev(v);
             if (hi <= lo) continue;
-            float t = v * CELL - 0.35f, yl = lo * ELEV_UNIT + 0.04f;
+            float t = v * CELL - behind - 0.35f, yl = lo * ELEV_UNIT + 0.04f;
             for (float sl : { u * CELL + 0.16f, u * CELL + CELL - 0.30f })
                 box(pr, sl, t - 0.012f, sl + 0.14f, t, yl, yl + 0.06f, amber);
         }
     // The projection port high in the back wall: a dim lit pane in a black frame.
-    const float tb = depth - face, yp = wallH - 1.1f;
+    const float tb = depth - behind - face, yp = wallH - 1.1f;
     box(pr, half - 0.45f, tb - 0.03f, half + 0.45f, tb, yp - 0.32f, yp + 0.32f, mask);
     box(pr, half - 0.34f, tb - 0.035f, half + 0.34f, tb - 0.03f, yp - 0.22f, yp + 0.22f, Rgba{ 60, 62, 70, 40 });
     // Exit signs over the four doors (World::generate puts them at u = 2 and
@@ -1125,8 +1143,9 @@ static void addAuditorium(MB &pr, MB &fx, const Fixture &f) {
     const Vec3 back = { -n.x, 0, -n.z }, right = { -a.x, 0, -a.z };
     sign(2 * CELL + CELL * 0.5f, tb, back);
     sign((AUD_N - 3) * CELL + CELL * 0.5f, tb, back);
-    sign(face, (AUD_N - 1) * CELL + CELL * 0.5f, a);
-    sign(depth - face, (AUD_N - 1) * CELL + CELL * 0.5f, right);
+    const float backAisle = (AUD_N - 1) * CELL + CELL * 0.5f - behind;
+    sign(face, backAisle, a);
+    sign(depth - face, backAisle, right);
 }
 
 // A film poster in a light box: a black frame round a backlit face (vertex alpha

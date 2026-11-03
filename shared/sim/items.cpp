@@ -55,6 +55,7 @@ Pickup Sim::pickupAt(int a, int b) {
     if (world.keyAt(a, b)) return Pickup::Key;
     // Nothing lies on a flight or over a hole.
     if (world.storeyH > 0.0f && (world.vflagAt(a, b) & (VF_STAIR | VF_HOLE))) return Pickup::None;
+    if (stageTapeAt(a, b)) return Pickup::Tape;
     if (bottleAt(a, b))  return Pickup::AlmondWater;
     if (coinAt(a, b))    return Pickup::Doubloon;
     if (batteryAt(a, b)) return Pickup::Battery;
@@ -70,8 +71,20 @@ uint32_t Sim::pickupSalt() const {
                                 ^ ((uint32_t)world.storey * 0xC2B2AE35u);
 }
 
+bool Sim::backstageAt(int a, int b) {
+    int u, v;
+    return world.audAt(a, b, u, v) && v < AUD_BACKSTAGE;
+}
+
+bool Sim::stageTapeAt(int a, int b) {
+    int u, v;
+    return world.audAt(a, b, u, v) && v == AUD_BACKSTAGE - 1 && u == AUD_N / 2;
+}
+
+// Backstage, a doubloon on one floor cell in BACKSTAGE_COIN_RATE.
 bool Sim::coinAt(int a, int b) {
     if (world.pillarAt(a, b) || world.propAt(a, b) || world.poolAt(a, b)) return false;
+    if (backstageAt(a, b)) return ih(a, b, pickupSalt() ^ 0xC01Eu) % BACKSTAGE_COIN_RATE == 0;
     return ih(a, b, pickupSalt() ^ 0xC01Du) % 449 == 0;
 }
 
@@ -252,6 +265,21 @@ void Sim::collectPickups() {
     }
 }
 
+// A snack is eaten on the spot: it closes a wound and refills stamina, and
+// takes the edge off the sanity drain.
+void Sim::buySnack() {
+    if (coins < SNACK_COST) {
+        deckNoteT = 2.2f; deckNote = "two doubloons for a snack.";
+        return;
+    }
+    coins -= SNACK_COST;
+    health = 1.0f;
+    stamina = 1.0f;
+    sanity = clampf(sanity + SNACK_SANITY, 0.0f, 1.0f);
+    deckNoteT = 2.6f; deckNote = "stale, but it helps.";
+    play(Sfx::Vend);
+}
+
 // E uses a crate, the Manila notes, a standpipe, a vending machine, a locked
 // door, or a deck that was set down. They never share a cell.
 void Sim::useWhatIsNear() {
@@ -308,7 +336,9 @@ void Sim::useWhatIsNear() {
         if (world.propAt(a, b) != PROP_VENDING) continue;
         float mx = a * CELL + 1.0f, mz = b * CELL + 1.0f;
         float ddx = px - mx, ddz = pz - mz;
-        if (ddx * ddx + ddz * ddz < 1.6f * 1.6f && coins >= 3) {
+        if (ddx * ddx + ddz * ddz >= 1.6f * 1.6f) continue;
+        if (world.snackAt(a, b)) { buySnack(); dx = dz = 2; }
+        else if (coins >= 3) {
             coins -= 3; almond++;
             play(Sfx::Click).atPitch(0.8f);
         }

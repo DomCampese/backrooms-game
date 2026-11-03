@@ -76,9 +76,10 @@ enum PropKind : uint8_t {
     PROP_MANILA_TABLE,
     PROP_SEATS,          // 17 a row of four cinema seats facing the screen (the theater)
     PROP_CONCESSION,     // 18 a concession counter, run along x (the theater)
+    PROP_ROPE,           // 19 a queue rope between two brass posts, run along x (the theater)
 };
 
-constexpr int PROP_KINDS = PROP_CONCESSION + 1;
+constexpr int PROP_KINDS = PROP_ROPE + 1;
 
 // A prop's collision box, as offsets from its cell's min corner, and its top
 // above the floor it stands on. The mesher builds each piece to this top and
@@ -111,6 +112,7 @@ constexpr PropShape PROP_SHAPES[PROP_KINDS] = {
     {},                                                    // PROP_MANILA_TABLE: the room's furniture is not boxed
     {},                                                    // PROP_SEATS: turned, so gatherCellAABBs boxes it (seatBox)
     { true, 0.00f, 0.55f, 2.00f, 1.45f, 1.05f, true },    // PROP_CONCESSION: full length, so a run is one counter
+    { true, 0.00f, 0.92f, 2.00f, 1.08f, 0.95f, false },   // PROP_ROPE: full length, so a run is one barrier
 };
 // Where things lie on the Manila Room's table: its notes and its can, 2 mm
 // over the top (0.785) so they do not fight it for depth.
@@ -156,16 +158,25 @@ constexpr int MANILA_MID = MANILA_LO + 2;
 // The seats are rows AUD_ROW0..AUD_ROW1, each AUD_RISE decimetres above the
 // row in front, so the back cross aisle (v = AUD_N - 1) is at floor 0 and the
 // front of the room is sunk AUD_DEPTH below it. A sunken cell keeps the room's
-// ceiling, so the ceiling stays flat. v = 0 is a stage AUD_STAGE above the
-// front floor. Aisles run at u = 0, AUD_N / 2 and AUD_N - 1.
+// ceiling, so the ceiling stays flat. Aisles run at u = 0, AUD_N / 2 and
+// AUD_N - 1.
+//
+// The screen hangs on a wall across the room between rows AUD_BACKSTAGE - 1
+// and AUD_BACKSTAGE. Behind it, rows 0..AUD_BACKSTAGE - 1 are backstage, a
+// stage AUD_STAGE above the front floor, entered past either end of the
+// screen wall from the side aisles.
 constexpr int AUD_LO = HALL_LO;
 constexpr int AUD_N = CCELLS - HALL_LO - HALL_HI;
-constexpr int AUD_ROW0 = 2, AUD_ROW1 = AUD_N - 2;
+constexpr int AUD_BACKSTAGE = 2;
+constexpr int AUD_ROW0 = AUD_BACKSTAGE + 1, AUD_ROW1 = AUD_N - 2;
 constexpr int AUD_RISE = 3;
 constexpr int AUD_DEPTH = AUD_RISE * (AUD_N - 1 - AUD_ROW0);
 constexpr int AUD_STAGE = 4;
 // One chunk in AUD_LOBBY_RATE is a lobby instead, and so is the spawn chunk.
 constexpr uint32_t AUD_LOBBY_RATE = 4;
+// A lobby's dividing wall runs along the north edge of chunk-local row
+// LOBBY_SPLIT.
+constexpr int LOBBY_SPLIT = 10;
 // The screen: AUD_SCREEN_W m across, from AUD_SCREEN_LIFT above the stage up to
 // AUD_SCREEN_TOP below the ceiling, standing AUD_SCREEN_OFF off the wall face.
 constexpr float AUD_SCREEN_W = 16.0f, AUD_SCREEN_LIFT = 0.6f, AUD_SCREEN_TOP = 0.4f;
@@ -182,9 +193,20 @@ inline void audCell(int dir, int u, int v, int &x, int &z) {
     default: x = AUD_LO + m - v; z = AUD_LO + u;     break;
     }
 }
+// The inverse of audCell: auditorium cell (u, v) of chunk-local cell (x, z).
+// Outside the room, u or v is out of 0..AUD_N - 1.
+inline void audUV(int dir, int x, int z, int &u, int &v) {
+    const int m = AUD_N - 1, lx = x - AUD_LO, lz = z - AUD_LO;
+    switch (dir) {
+    case 0:  u = lx;     v = lz;     break;
+    case 1:  u = m - lx; v = m - lz; break;
+    case 2:  u = m - lz; v = lx;     break;
+    default: u = lz;     v = m - lx; break;
+    }
+}
 // Floor of auditorium row v, decimetres.
 inline int audElev(int v) {
-    if (v <= 0) return -AUD_DEPTH + AUD_STAGE;
+    if (v < AUD_BACKSTAGE) return -AUD_DEPTH + AUD_STAGE;
     if (v < AUD_ROW0) return -AUD_DEPTH;
     return -AUD_RISE * (AUD_N - 1 - v);
 }
@@ -467,6 +489,12 @@ struct World {
     void unlockEdge(int ci, int ck, bool west);  // open a locked door for good, and rebake
     // Is there a key lying loose in this cell? One per chunk at most.
     bool keyAt(int ci, int ck);
+    // The theater: the auditorium cell (u, v) that global cell (ci, ck) is,
+    // or false outside an auditorium.
+    bool audAt(int ci, int ck, int &u, int &v);
+    // A vending machine that sells snacks: two in three in the theater, none
+    // elsewhere.
+    bool snackAt(int ci, int ck);
     void rebuildChunk(int cx, int cz);           // report its geometry stale (staleChunks)
     // Chunks whose geometry went stale: unloaded (unloadFar, unloadAll) or
     // rebuilt after a wall changed (rebuildChunk). Core only appends; a renderer

@@ -10,7 +10,7 @@
 #include <cstdint>
 #include <vector>
 
-enum class SpriteSheet : uint8_t { Clark, Smiler, Partygoer, Dog, Count };
+enum class SpriteSheet : uint8_t { Clark, Smiler, Partygoer, Dog, Usher, Count };
 
 struct ActorSprite {
     SpriteSheet sheet;
@@ -34,5 +34,10 @@ void gaitFrames(float phase, int frames, int &f0, int &f1, float &t);
 bool dogSprite(const Sim &sim, int i, ActorSprite &out);
 // The hunter, if it is drawn (not hidden, and within 45 m).
 bool hunterSprite(const Sim &sim, ActorSprite &out);
-// The pack, then the hunter.
+// The Usher, if it is drawn (out of the Gone state and within 45 m). Its
+// head row follows the torch: the face row when the beam points at the camera.
+bool usherSprite(const Sim &sim, ActorSprite &out);
+// The torch it carries, and where it points (unit), when it is lit.
+bool usherTorch(const Sim &sim, Vec3 &at, Vec3 &dir);
+// The pack, then the hunter, then the Usher.
 std::vector<ActorSprite> actorSprites(const Sim &sim);

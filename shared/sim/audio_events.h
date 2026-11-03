@@ -22,6 +22,8 @@ enum class Sfx : uint8_t {
     FarKnock,         // 3: Distant::Knock (Level 3)
     FarPop,           // 3: Distant::Pop (Level 4)
     FarBoom,          // 3: Distant::Boom (the theater)
+    Vend,             // a snack machine: its spiral motor, the drop and the wrapper
+    Whistle,          // the Usher's whistle: two blasts
 };
 
 // What the ambience synth (audio.cpp) chases. The rules write each field where
