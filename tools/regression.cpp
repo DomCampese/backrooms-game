@@ -825,12 +825,102 @@ int main() {
     }
     printf("PASS theater auditoriums, backstage, lobbies, snack machines, the Usher, seat collision and hiding\n");
 
+    // ---- doors. The use key shuts a doorway the player faces; a shut door
+    // blocks bodies, the pack's router, sight and light; the hunter's router
+    // passes it, and he opens it after DOOR_OPEN_TIME s.
+    {
+        sim.applyLevel(0,GetTime()); sim.beginDescent(0);
+        sim.inMenu=false; sim.deathT=0; sim.hidden=false; sim.health=1; sim.hurtT=0;
+        sim.velx=sim.velz=0; sim.sprinting=false; sim.crouchCur=0; sim.muzzleT=0; sim.gunCd=0;
+        sim.deck.playing=false; for (auto &f : sim.litFlares) f.active=false;
+        World &w=sim.world;
+        // A north-edge doorway with level, empty cells either side and no
+        // doorway beside it.
+        int da=0, db=0; bool found=false;
+        for (int a=-20;a<20 && !found;++a) for (int b=-20;b<20 && !found;++b) {
+            if (w.wallNVal(a,b)!=WALL_DOOR || w.doorJoined(a,b,false)) continue;
+            if (!w.canStep(a,b,a,b-1) || !w.canStep(a,b-1,a,b)) continue;
+            if (w.floorY(a,b)!=0 || w.floorY(a,b-1)!=0) continue;
+            if (w.propAt(a,b+1) || w.pillarAt(a,b+1) || w.propAt(a,b-2) || w.pillarAt(a,b-2)) continue;
+            da=a; db=b; found=true;
+        }
+        CHECK(found);
+        int cdx=fdiv(da,CCELLS), cdz=fdiv(db,CCELLS);
+        ChunkGeometry before; bakeChunkGeometry(w,cdx,cdz,before);
+        // the player, south of it, facing it from 1 m
+        sim.px=da*CELL+1.0f; sim.pz=db*CELL+1.0f; sim.py=0; sim.yaw=-1.5707963f; sim.pitch=0;
+        sim.updateLook(noInput(g));
+        InputFrame use=noInput(g); use.use=true;
+        sim.audio.clear();
+        sim.updateInteraction(noInput(g));
+        CHECK(sim.doorReach.ok && sim.doorReach.i==da && sim.doorReach.k==db && !sim.doorReach.west && !sim.doorReach.shut);
+        sim.updateInteraction(use);
+        CHECK(w.wallNVal(da,db)==WALL_SHUT && sim.doorNoiseT>0 && sim.shadowsStale);
+        bool heard=false;
+        for (const AudioEvent &e : sim.audio) heard|=e.kind==AudioEvent::PLAY && e.sfx==Sfx::DoorShut;
+        CHECK(heard);
+        sim.eyeY=sim.py+1.62f; sim.pitch=-0.15f; capture(g,"door-shut.png"); sim.pitch=0;
+        float nx, nz; CHECK(sim.packNoise(nx,nz)>=Sim::DOOR_NOISE);
+        // what a shut door does
+        CHECK(!w.canStep(da,db,da,db-1) && w.canStep(da,db,da,db-1,true));
+        int oi,ok; CHECK(!w.pathStep(da,db,da,db-1,oi,ok) || !(oi==da && ok==db-1));
+        CHECK(w.pathStep(da,db,da,db-1,oi,ok,true) && oi==da && ok==db-1);
+        CHECK(!w.lineOfSight(da*CELL+1.0f,db*CELL+1.0f,da*CELL+1.0f,db*CELL-1.0f));
+        CHECK(blocksLight(w.wallNVal(da,db)));
+        float bx=da*CELL+1.0f, bz=db*CELL+0.1f;
+        w.collideCircle(bx,bz,0.34f,0.0f);
+        CHECK(bz>db*CELL+0.3f);   // pushed back out of the leaf
+        ChunkGeometry after; bakeChunkGeometry(w,cdx,cdz,after);
+        CHECK(after.parts[MESH_PROPS].v.size()!=before.parts[MESH_PROPS].v.size());   // the leaf is drawn
+        // the same key opens it; and it will not shut on someone in the doorway
+        sim.updateInteraction(use);
+        CHECK(w.wallNVal(da,db)==WALL_DOOR);
+        sim.pz=db*CELL+0.15f; sim.updateInteraction(use);
+        CHECK(w.wallNVal(da,db)==WALL_DOOR);
+        // The hunter, north of the shut door, chasing the player he heard to the
+        // south: he stops at the door, knocks on it, and opens it after
+        // DOOR_OPEN_TIME s.
+        sim.pz=db*CELL+1.4f; sim.updateInteraction(use);
+        CHECK(w.wallNVal(da,db)==WALL_SHUT);
+        sim.doorNoiseT=0; sim.audio.clear();
+        sim.ent.st=EState::Chase; sim.ent.hp=3; sim.ent.stagger=0; sim.ent.dispY=0; sim.ent.lunge=0;
+        sim.ent.lungeCd=5; sim.ent.repathT=0; sim.ent.doorT=0;
+        sim.ent.x=da*CELL+1.0f; sim.ent.z=db*CELL-0.6f;
+        sim.ent.lastX=sim.px; sim.ent.lastZ=sim.pz; sim.ent.lostT=0;
+        int frames=0, knocks=0;
+        for (; frames<200 && w.wallNVal(da,db)==WALL_SHUT; ++frames) {
+            sim.audio.clear();
+            sim.updateEntity(1.0f/30, 200.0+frames/30.0);
+            for (const AudioEvent &e : sim.audio) knocks+=e.kind==AudioEvent::PLAY && e.sfx==Sfx::DoorKnock;
+            CHECK(sim.ent.z<db*CELL);   // he stays on his side until it opens
+        }
+        CHECK(w.wallNVal(da,db)==WALL_DOOR);
+        CHECK(frames>=(int)(Sim::DOOR_OPEN_TIME*30)-1 && frames<=(int)(Sim::DOOR_OPEN_TIME*30)+2);
+        CHECK(knocks>=3);
+        // A new level starts with every door open.
+        sim.updateInteraction(use);
+        sim.ent.st=EState::Hidden;
+        w.shutEdge(da,db,false,true); CHECK(!w.shutDoors.empty());
+        sim.applyLevel(0,GetTime());
+        CHECK(sim.world.shutDoors.empty());
+    }
+    printf("PASS doors: shut and opened by the use key, block bodies, sight, light and the pack, opened by the hunter\n");
+
     // ---- the catch, only from a lunge. The old proximity test caught the
     // player as soon as they came within 1.25 m, with no warning.
     {
         sim.applyLevel(0,GetTime()); sim.beginDescent(0);
         sim.inMenu=false; sim.deathT=0; sim.hidden=false; sim.deathCount=0;
-        sim.px=40; sim.pz=40; sim.py=0; sim.yaw=0; sim.pitch=0; sim.updateLook(noInput(g));
+        // A spot with a clear 2.5 m along +x on level floor: a lunge needs him to
+        // see the player, and the maze here depends on how many times the tests
+        // above entered Level 0 (each entry is a new visit).
+        sim.px=40; sim.pz=40;
+        for (int t=0;t<400;++t) {
+            Vec2 p=sim.world.findOpenSpot(40+(t%20)*2.0f, 40+(t/20)*2.0f);
+            if (sim.world.lineOfSight(p.x,p.y,p.x+2.5f,p.y) && sim.world.floorY(cellOf(p.x),cellOf(p.y))==0 &&
+                sim.world.floorY(cellOf(p.x+2.5f),cellOf(p.y))==0) { sim.px=p.x; sim.pz=p.y; break; }
+        }
+        sim.py=0; sim.yaw=0; sim.pitch=0; sim.updateLook(noInput(g));
         sim.ent.st=EState::Chase; sim.ent.hp=3; sim.ent.stagger=0; sim.ent.dispY=0;
         // well inside reach, but he has not committed and cannot yet
         sim.ent.x=sim.px+1.0f; sim.ent.z=sim.pz; sim.ent.lunge=0; sim.ent.lungeCd=5.0f;
@@ -881,6 +971,122 @@ int main() {
         capture(g,"death-card.png");
         sim.deathT=0; sim.inMenu=false;
     }
+
+    // ---- out of sight and quiet, the hunter goes to where he last saw or
+    // heard the player and searches there; he used to path to the player's
+    // cell through walls. Noise inside packNoise's radius gives him the
+    // player again, and he gives up after SEARCH_TIME without contact.
+    {
+        sim.applyLevel(0,GetTime()); sim.beginDescent(0);
+        sim.inMenu=false; sim.deathT=0; sim.hidden=false; sim.health=1; sim.hurtT=0;
+        sim.velx=sim.velz=0; sim.sprinting=false; sim.crouchCur=0;
+        sim.muzzleT=0; sim.gunCd=0; sim.deck.playing=false; for (auto &f : sim.litFlares) f.active=false;
+        // a spot 14-18 m from the player with no line of sight, both open floor
+        bool found=false; float hx=0,hz=0;
+        for (int t=0;t<400 && !found;++t) {
+            Vec2 p=sim.world.findOpenSpot(40+(t%20)*4.0f, 40+(t/20)*4.0f);
+            Vec2 q=sim.world.findOpenSpot(p.x+16, p.y);
+            float d=hypotf(q.x-p.x,q.y-p.y);
+            if (d>14 && d<18 && !sim.world.lineOfSight(p.x,p.y,q.x,q.y)) {
+                sim.px=p.x; sim.pz=p.y; hx=q.x; hz=q.y; found=true;
+            }
+        }
+        CHECK(found);
+        sim.py=0; sim.yaw=0; sim.pitch=0; sim.updateLook(noInput(g));
+        Vec2 last=sim.world.findOpenSpot(hx+4, hz+4);
+        sim.ent.st=EState::Chase; sim.ent.hp=3; sim.ent.stagger=0; sim.ent.dispY=0;
+        sim.ent.lunge=0; sim.ent.lungeCd=0; sim.ent.repathT=0;
+        sim.ent.x=hx; sim.ent.z=hz; sim.ent.lastX=last.x; sim.ent.lastZ=last.y; sim.ent.lostT=0;
+        float d0=hypotf(sim.ent.x-last.x, sim.ent.z-last.y);
+        for (int i=0;i<30;++i) sim.updateEntity(1.0f/30, 100.0+i/30.0);
+        CHECK(sim.ent.st==EState::Chase && sim.ent.lunge<=0);
+        CHECK(sim.ent.lostT>0.9f && sim.ent.lostT<1.1f);
+        CHECK(sim.ent.lastX==last.x && sim.ent.lastZ==last.y);
+        // he walked at search speed toward the last-known spot
+        CHECK(hypotf(sim.ent.x-last.x, sim.ent.z-last.y) < d0-0.5f || d0<1.5f);
+        // sprinting within 20 m is heard: the last-known spot is the player
+        sim.sprinting=true;
+        sim.ent.x=hx; sim.ent.z=hz;
+        sim.updateEntity(1.0f/30, 102.0);
+        CHECK(sim.ent.lastX==sim.px && sim.ent.lastZ==sim.pz && sim.ent.lostT==0);
+        // standing still out of sight, he gives up after SEARCH_TIME
+        sim.sprinting=false;
+        sim.ent.x=hx; sim.ent.z=hz; sim.ent.lastX=last.x; sim.ent.lastZ=last.y;
+        int frames=0;
+        for (; frames<30*30 && sim.ent.st==EState::Chase; ++frames) {
+            // keep him out of sight and earshot, wherever the search takes him
+            if (hypotf(sim.ent.x-sim.px, sim.ent.z-sim.pz)<12 ||
+                sim.world.lineOfSight(sim.ent.x,sim.ent.z,sim.px,sim.pz)) { sim.ent.x=hx; sim.ent.z=hz; }
+            sim.updateEntity(1.0f/30, 103.0+frames/30.0);
+        }
+        CHECK(sim.ent.st==EState::Hidden);
+        CHECK(frames>=(int)(Sim::SEARCH_TIME*30)-2 && frames<=(int)(Sim::SEARCH_TIME*30)+2);
+        CHECK(sim.health==1 && !sim.inMenu);
+    }
+    printf("PASS hunter searches the last-known spot out of sight, hears sprinting, gives up\n");
+
+    // ---- searching, he checks the cover near where he last heard the player.
+    // A player hidden at it is found when he walks up to it; one hidden at
+    // cover outside SEARCH_COVER_R is not, and he gives up.
+    {
+        sim.applyLevel(0,GetTime()); sim.beginDescent(0);
+        sim.inMenu=false; sim.deathT=0; sim.health=1; sim.hurtT=0; sim.foundT=0;
+        sim.velx=sim.velz=0; sim.sprinting=false; sim.muzzleT=0; sim.gunCd=0; sim.doorNoiseT=0;
+        sim.deck.playing=false; for (auto &f : sim.litFlares) f.active=false;
+        World &w=sim.world;
+        auto coversNear=[&](float x,float z,float r) {
+            int n=0, ci=cellOf(x), ck=cellOf(z), rr=(int)(r/CELL)+1;
+            for (int a=ci-rr;a<=ci+rr;++a) for (int b=ck-rr;b<=ck+rr;++b) {
+                float dx=a*CELL+1-x, dz=b*CELL+1-z;
+                if (dx*dx+dz*dz<=r*r && sim.hideSpotAt(a,b)) n++;
+            }
+            return n;
+        };
+        // A cover cell H with an open, level neighbour S, and a search centre C
+        // 3-6 m from S with only this cover within reach of it.
+        bool found=false; int sa=0,sb=0; float cxw=0,czw=0;
+        for (int a=-40;a<40 && !found;++a) for (int b=-40;b<40 && !found;++b) {
+            if (!sim.hideSpotAt(a,b)) continue;
+            int na=a+1, nb=b;
+            if (w.pillarAt(na,nb) || w.propAt(na,nb) || w.floorY(na,nb)!=0) continue;
+            Vec2 c=w.findOpenSpot(na*CELL+1+4.5f, nb*CELL+1);
+            float d=hypotf(c.x-(na*CELL+1), c.y-(nb*CELL+1));
+            if (d<3 || d>6 || coversNear(c.x,c.y,Sim::SEARCH_COVER_R)!=1) continue;
+            sa=na; sb=nb; cxw=c.x; czw=c.y; found=true;
+        }
+        CHECK(found);
+        // The player crouched still beside it, hidden.
+        // (within 1.35 m of the cover cell's centre, which is 2 m west of S's)
+        sim.px=sa*CELL+0.2f; sim.pz=sb*CELL+1.0f; sim.py=0; sim.crouchCur=1.0f; sim.hidden=false;
+        sim.updateHiding(0.0f,0.05f);
+        CHECK(sim.hidden);
+        // He last heard them at C and is searching from there.
+        sim.ent.st=EState::Chase; sim.ent.hp=3; sim.ent.stagger=0; sim.ent.dispY=0;
+        sim.ent.lunge=0; sim.ent.lungeCd=5; sim.ent.repathT=0; sim.ent.doorT=0;
+        sim.ent.x=cxw; sim.ent.z=czw; sim.hunterNotice(cxw,czw);
+        int frames=0;
+        for (; frames<(int)(Sim::SEARCH_TIME*30) && sim.hidden; ++frames) {
+            sim.updateHiding(0.0f,1.0f/30);
+            sim.updateEntity(1.0f/30, 300.0+frames/30.0);
+        }
+        CHECK(!sim.hidden && sim.foundT>0 && sim.ent.st==EState::Chase);
+        CHECK(hypotf(sim.ent.x-sim.px, sim.ent.z-sim.pz)<Sim::FIND_REACH);
+        // Hiding cannot be taken back until FOUND_TIME has run out.
+        sim.updateHiding(0.0f,1.0f/30); CHECK(!sim.hidden);
+        // The same cover, but he last heard the player far from it: he checks
+        // nothing near them and gives up with the player still hidden.
+        sim.foundT=0; sim.hidden=false; sim.updateHiding(0.0f,0.05f); CHECK(sim.hidden);
+        Vec2 far=w.findOpenSpot(sim.px+30.0f, sim.pz);
+        sim.ent.st=EState::Chase; sim.ent.x=far.x; sim.ent.z=far.y; sim.ent.repathT=0;
+        sim.hunterNotice(far.x,far.y);
+        for (frames=0; frames<(int)(Sim::SEARCH_TIME*30)+30 && sim.ent.st==EState::Chase; ++frames) {
+            sim.updateHiding(0.0f,1.0f/30);
+            sim.updateEntity(1.0f/30, 400.0+frames/30.0);
+        }
+        CHECK(sim.ent.st==EState::Hidden && sim.hidden);
+        sim.crouchCur=0; sim.hidden=false;
+    }
+    printf("PASS searching, he checks cover near where he lost the player and finds a player hidden there\n");
 
     // ---- the hunter's movement and walk cycle (ENT-01/ENT-02). Check the
     // captures by eye too.

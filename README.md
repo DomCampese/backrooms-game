@@ -2,20 +2,21 @@
 
 ### ▶ [Play it in your browser](https://domcampese.github.io/backrooms-game/)
 
-No install, no download. Works on a phone — touch controls appear automatically.
+No install. Works on a phone: touch controls appear automatically.
 
 Disclaimer: just for fun, mostly generated with Claude models
 
-A procedurally-infinite backrooms horror game in a small C++ codebase, running
-natively and on WebAssembly. Procedural worlds and sound, with an animated CC0
-revolver and compact texture assets embedded at build time.
+A Backrooms horror game with an infinite, procedurally generated world, written
+in C++ and running natively and on WebAssembly. The levels and sounds are
+generated in code; an animated CC0 revolver and a few CC0 textures are
+embedded at build time.
 
 The game comes in two builds from one repository:
 
 | build | what it is | where it runs |
 |---|---|---|
-| **Web** (`web/`) | the game on raylib: light, quick to load, playable from a link | any browser, phones (touch controls), and natively on desktop |
-| **Unreal** (`unreal/`) | the same game in Unreal Engine 5: real lighting, materials and meshes | desktop (Mac first); see [unreal/README.md](unreal/README.md) |
+| **Web** (`web/`) | the game on raylib; small, quick to load, playable from a link | any browser, phones (touch controls), and natively on desktop |
+| **Unreal** (`unreal/`) | the same game in Unreal Engine 5, drawing the Web build's world with the same lighting | desktop (Mac first); see [unreal/README.md](unreal/README.md) |
 
 Both compile the same game from `shared/`: the generator (`core`), the rules
 (`sim`) and what a renderer needs from them (`port`). A seed is the same maze,
@@ -53,9 +54,9 @@ is cached in `.raylib-web/` afterwards. Both are gitignored.
 
 The dev knobs are URL query parameters rather than environment variables:
 `?seed=1337`, `?level=2`, `?pos=95,79,1.2`, `?flash=1`, `?exits=1`,
-`?noblackout=1`. Pass `noblackout=1` for any screenshot — there is no
-`BACKROOMS_SHOT` on the web to turn blackouts off for you, and a capture that
-lands in one is a black frame that looks exactly like a failed shader compile.
+`?noblackout=1`. Pass `noblackout=1` for any screenshot: there is no
+`BACKROOMS_SHOT` on the web to turn blackouts off, and a capture during a
+blackout is a black frame that looks like a failed shader compile.
 
 Records are kept in IndexedDB rather than `$HOME`, so they survive a reload but
 are per-browser.
@@ -67,42 +68,36 @@ in the lower left (push it all the way to run), drag anywhere else to look, and
 a button cluster for fire, aim, reload, jump, use, torch, item, throw, chalk
 and drink. Force them on or off with `?touch=1` / `?touch=0`.
 
-**Tap anywhere to begin**, or just push the stick — the title card and the
-death card both start a run on any tap of open screen, and a stick push starts
-one with you already walking. Hunting for one small button in a corner was the
-only way in before. Both are edges rather than held states, so a thumb still
-resting on the stick when you die cannot dismiss the death card before you have
-read it.
+**Tap anywhere to begin**, or push the stick. The title card and the death
+card both start a run on a tap of open screen, and a stick push starts one
+with you already walking. Both trigger on the press, not while held, so a
+thumb still on the stick when you die does not dismiss the death card.
 
-**Sprint is a push past the ring**, not a hard shove inside it — the drawn edge
-of the thumbstick is the line, so you can see where it is. The ring lights up
-while you are running. Sprint is currently unlimited — the stamina meter is
-still drawn and still recovers, but nothing drains it. (`SPRINT_DRAIN` in
-`updateSprint` puts the limit back: it was a 16 second tank against 6 seconds
-to recover.)
+**Sprint is a push past the ring.** The drawn edge of the thumbstick is the
+line, and the ring lights up while you run. Sprint is currently unlimited: the
+stamina meter is still drawn and still recovers, but nothing drains it.
+(`SPRINT_DRAIN` in `updateSprint` restores the limit: it was 16 s of sprint
+against 6 s to recover.)
 
 **Look sensitivity** is set so one thumb drag across the screen turns you about
-half way round; it was a quarter turn, which made looking behind you a four-swipe
-job. `tools/mobile-check.mjs` asserts the resulting degrees-per-drag rather than
-the constant, since the game's own rad-per-pixel is the other half of it.
+half way round (it was a quarter turn). `tools/mobile-check.mjs` checks the
+resulting degrees per drag rather than the constant, since the game's own
+radians per pixel are the other half of it.
 
-**AIM taps** rather than holds: one tap raises the sights, another drops them.
-Holding it is what a mouse does, and it asks the right thumb to stay parked on
-one button for the length of a gunfight — leaving nothing to fire with. The
-latch belongs to the game, not to the button, so anything that makes the aim
-illegal drops it, and tapping LOAD lowers the sights first (a reload cannot
-start while they are up).
+**AIM is a toggle** rather than a hold: one tap raises the sights, another
+lowers them, so the right thumb is free to fire. The game owns the toggle, so
+anything that makes aiming impossible lowers the sights, and tapping LOAD
+lowers them first (a reload cannot start while they are up).
 
-They are drawn by the page, not the game; `web/src/input.h` folds them into the same
-input questions the desktop build asks, so the game itself does not know which
-it is running on.
+The controls are drawn by the page, not the game. `web/src/input.h` turns them
+into the same input calls the desktop build makes, so the game does not know
+which it is running on.
 
-`node tools/mobile-check.mjs` loads `web/shell.html` in Chromium at seven phone
-and desktop sizes and asserts the things a screenshot of the world will never
-show you: that no two on-screen controls overlap, that the splash fits or
-scrolls with ENTER on screen, that the canvas keeps its aspect ratio whatever
-size raylib gives it, and that the title-screen gestures resolve correctly — a
-tap or a stick push begins a run, a button press or a look drag does not.
+`node tools/mobile-check.mjs` loads `web/shell.html` in Chromium at eight phone
+and desktop sizes and checks that no two controls overlap, that the splash fits
+or scrolls with ENTER on screen, that the canvas keeps its aspect ratio at any
+size raylib gives it, and that a tap or a stick push starts a run while a
+button press or a look drag does not.
 
 ![screenshot](docs/screenshot.png)
 
@@ -119,9 +114,9 @@ normal detail, and firing/reload animation. It retains the six-shot mechanics an
 fits the existing wall-clearance envelope. [Import details and screenshots](docs/revolver-import.md)
 and [source/license](assets/revolver/README.md).
 
-Wood and fabric furniture has softened
-edges. Scanned metal, wood, and upholstery feed the existing shared prop atlas;
-object gloss is independent of each level's floor gloss.
+Wood and fabric furniture has bevelled edges. Scanned metal, wood and
+upholstery textures are in the shared prop atlas; object gloss is independent
+of each level's floor gloss.
 
 The external tiles add about 45 KB compressed, are embedded in the executable,
 and need no runtime downloads. [Sources and licensing](assets/materials/README.md).
@@ -130,103 +125,102 @@ are needed. See [validation](docs/object-realism-pass-two.md).
 
 ## Surface realism pass
 
-Every floor, wall and ceiling is generated again from scratch, at its real size
-and with real relief:
+Every floor, wall and ceiling texture is generated in code at real size, with
+a height field for its relief:
 
-- **Relief is modelled, not guessed.** Each surface paints its colour, its
-  height in millimetres and its gloss together, so the printed chevrons on the
-  wallpaper stay flat while the roll seams lift, the ceiling grid stands proud
-  of fissured boards, mortar is raked back behind the brick and pool grout sits
-  below the glaze. The old bump maps were the colour's brightness, which
-  embossed every print and stain.
-- **Real dimensions.** Level 0's ceiling is 2 ft boards on a white T-bar grid,
-  with each light filling a 2x2 bay; the Red Halls are real-size brick (was
-  0.75 m blocks); the Poolrooms' tile is the same 6-inch tile on the walls as on
-  the floor, so the grout lines meet; the skirting is a 12 cm board, not a
-  27 cm band.
-- **No seams, no grid of repeats.** Every texture now wraps exactly (the old
-  ones had a visible seam every 2-3 m), and the shader varies tone in world
-  space so grime no longer repeats in a grid. Ceiling boards are each their own
-  shade, and a few are water-stained, different on every floor.
-- **Materials.** Formed concrete with plywood sheet marks, form-tie holes and
-  rust runs, a damp band at the foot, a power-trowelled slab with burnish swirls,
-  heathered loop-pile carpet, a patterned banquet carpet for LEVEL FUN.
-- **Objects.** Cartons are taped and printed like real shipping cases, with a
-  barcoded label; the almond water can and tape deck are redrawn at 3-4x the
-  resolution with clean printed lettering; outlets are real duplex receptacles;
-  the pack's hounds have an actual dog's anatomy.
-- **The revolver.** Its stainless steel now reflects the room — the ceiling and
-  its tubes along the top strap, the walls in the level's own colour down the
-  flats, the floor underneath — instead of shading as grey plastic, and it has
-  checkered walnut stocks where the source's grip was the same grey as the steel.
+- **Relief comes from a height map, not from the colour.** Each surface paints
+  colour, height in millimetres and gloss together. Printed patterns on the
+  wallpaper stay flat while roll seams are raised; the ceiling grid stands
+  above the boards; mortar sits behind the brick face; pool grout sits below
+  the tile. The old bump maps were the colour's brightness, so every printed
+  pattern and stain was embossed.
+- **Real dimensions.** Level 0's ceiling is 2 ft boards on a white grid, with
+  each light filling a 2 x 2 bay. The Red Halls' bricks are real size (they
+  were 0.75 m blocks). Pool tile is 6 inches on walls and floors, so the grout
+  lines meet. The skirting is a 12 cm board (it was a 27 cm band).
+- **No visible repeats.** Every texture wraps exactly; the old ones had a
+  visible seam every 2-3 m. The shader also varies tone in world space so
+  grime does not repeat in a grid. Each ceiling board has its own shade, and
+  about one in twenty is water-stained, different on every floor.
+- **Materials.** Formed concrete with plywood marks, form-tie holes, rust runs
+  and a damp band at the foot; a trowelled concrete slab; loop-pile carpet; a
+  patterned carpet for LEVEL FUN; a carpet with coloured shapes, fabric wall
+  panels and a black board ceiling for the theater.
+- **Objects.** Cartons have tape and a barcoded label. The almond water can
+  and tape deck are redrawn at 3-4x the resolution with printed lettering.
+  Outlets are duplex receptacles. The dogs have a dog's proportions.
+- **The revolver.** Its steel reflects an approximation of the room (the
+  ceiling and its lights along the top, the walls in the level's colour, the
+  floor below) instead of shading as grey plastic, and the grips are walnut.
 
-Exposure is unchanged: every surface keeps its predecessor's mean brightness.
-`tools/sandbox-build.sh texdump && ./texdump out/` writes every texture to PNG
-with its mean colour.
+Each surface keeps its predecessor's mean brightness, so exposure did not
+change. `tools/sandbox-build.sh texdump && ./texdump out/` writes every
+texture to PNG with its mean colour.
 
 ## Graphics update
 
-The renderer now uses generated, mipmapped surface-detail maps, recessed fluorescent
-housings, and physical baseboard trim. Tile grout reduces gloss independently of the
-glaze. Flashlight haze is kept faint so the illuminated surfaces remain readable.
-The revolver and flare are 3D, including recoil, reload dip, and muzzle effects;
-held almond water sits lower and is smaller. Model transforms now also transform lighting
-positions and normals, correcting misplaced lighting on cans and tape decks.
+The renderer uses generated, mipmapped surface-detail maps, recessed fluorescent
+housings and baseboard trim. Tile grout has lower gloss than the glaze.
+Flashlight haze is kept faint so lit surfaces stay readable. The revolver and
+flare are 3D, with recoil, reload dip and muzzle effects; the almond water in
+hand sits lower and is smaller. Model transforms also transform lighting
+positions and normals, which fixed misplaced lighting on cans and tape decks.
 
-Furniture has separate wood and fabric atlas regions, cushion seams, cabinet handles,
-wardrobe panels, round lampshades and cooler bottles, and leaf geometry. Post-processing
-uses less grain and chromatic aberration, with 12 bloom taps instead of 20. Visible chunks
-are culled against the camera and opaque chunks draw near-first.
+Furniture has separate wood and fabric atlas regions, cushion seams, cabinet
+handles, wardrobe panels, round lampshades, cooler bottles and leaf geometry.
+Post-processing uses less grain and chromatic aberration, with 12 bloom taps
+instead of 20. Chunks outside the camera are culled and opaque chunks draw
+nearest first.
 
-Chalk marks are directional arrows. Exhausted sprinting waits for recovery instead of
-oscillating between running and walking; a new run restores stamina. Footsteps and distance
-records follow actual travel. Full batteries remain available to collect later.
+Chalk marks are arrows. When sprint is exhausted it waits for recovery instead
+of switching between running and walking; a new run restores stamina.
+Footsteps and distance records follow actual travel. Batteries can be picked up
+later even when the flashlight is full.
 
 See [validation and limitations](docs/graphics-update.md).
 
+## The camcorder and the tape
 
-## The camcorder, and the tape it leaves
+The player carries a camcorder that records the whole run. It is never held
+up. The view is drawn through a lighter version of its tape effect (see
+"Camcorder view" below), and a small blinking **REC** mark sits in the top
+left during play.
 
-You carry a camcorder, and it is always recording. You never raise it: you
-see the halls through a lighter version of its tape (the "Camcorder eye" below),
-and a small blinking **REC** sits in the top left while you play.
+- **Interference.** When a hunter is near, the tape shows interference
+  through walls: torn lines, a rolling tracking band and dropouts. It gets
+  stronger as the hunter gets closer, and strongest in a chase. You see it
+  when the tape plays back.
+- **Playback on death.** When you die, the death card plays back the last four
+  seconds of the tape, with the sounds from that stretch. The last second
+  plays at a third of the speed and pitch, then holds on the last frame, and
+  the card's text appears over it. Any key skips it after 1.6 s.
 
-- **It knows before you do.** The tape picks up anything that hunts as
-  interference, through walls: torn lines, a rolling tracking band, dropouts,
-  worse the closer it is and worst in a chase. You see it when the tape plays
-  back.
-- **The recovered tape.** When something takes you, the death card does not
-  just name it. The deck clunks, the screen snows, and the last four seconds
-  of your tape play back as found footage, with every sound the run made in
-  that stretch coming back off the tape. The final second drags at a third of
-  speed, pitch and all, and stops on a shivering still of the last frame
-  before the card's words come up over it. Any key skips it after the first
-  1.6 s, as before.
-
-The tape is kept at 15 frames a second in one 2048-pixel texture, so the
-whole reel is a single framebuffer (14 MB at 1440x850) whatever the window. None of this
-reaches the sim, so traces and replays are unchanged.
+The tape is stored at 15 frames a second in one 2048-pixel texture (14 MB at
+1440x850), whatever the window size. None of this reaches the sim, so traces
+and replays are unchanged.
 
 ## The levels
 
-Six procedurally-generated levels, each with its own palette, lighting,
-soundscape, and things that live there. Exits lead deeper — usually.
+Six procedurally generated levels, each with its own palette, lighting,
+sounds and hunter. Exits lead to the next level; about one in six is cursed
+and leads to the Red Halls.
 
 | | |
 |---|---|
-| ![Level 0](docs/levels/level_0.png) **LEVEL 0 · THRESHOLD** — empty rooms, mono-yellow chevron wallpaper, sodden carpet, a humming, uneven grid of tubes, stairs up to floors that look exactly like this one and railed openings down to more of them, and no way out but through a wall. Home of Pirate Clark. | ![Level 1](docs/levels/level_1.png) **LEVEL 1 · HABITABLE ZONE** — a concrete warehouse under dim, failing tube lights, fog lying on the slab, exposed rebar, supply crates that move in the blackouts, and doors marked with symbols. Where a Smiler waits in the dark. |
-| ![The Poolrooms](docs/levels/level_2.png) **THE POOLROOMS** — endless white tile and still water: colonnaded halls, flooded tunnels, staircases sinking into deep water, windows onto white light. No blackouts, no exit in a hurry. | ![The Red Halls](docs/levels/level_3.png) **THE RED HALLS** — oppressive dark-red brick, someone's abandoned bedroom furniture. |
-| ![Level Fun](docs/levels/level_4.png) **LEVEL FUN =)** — the party that never ended: deep red carpet, a ceiling gone black so the lights hang like a party hall's, bunting, balloons, party tables, and a resident who is very glad you came. | ![The Theater](docs/levels/level_5.png) **THE THEATER**: a cinema that does not end. Lobbies are two halls with film posters, a concession counter with a roped queue, and drink and snack machines (a snack costs two doubloons and heals you). Dark auditoriums have stepped rows of red seats facing a screen that is still showing a film; the screen is the only light in the room. Slip past either end of the screen to reach backstage, where a tape and loose doubloons lie among the cartons. The Usher, a faceless figure in a burgundy uniform, walks the aisles with a torch: if its beam holds you, it whistles and the Smiler comes running. Crouch still between the rows to hide from both. It is the second level: Level 0's exits lead here. |
+| ![Level 0](docs/levels/level_0.png) **LEVEL 0 · THRESHOLD**: empty rooms, yellow chevron wallpaper, damp carpet, an uneven grid of ceiling lights that hums, stairs up to more floors like this one, and railed openings down to others. The exits are walls you walk through. The hunter is Pirate Clark. | ![Level 1](docs/levels/level_1.png) **LEVEL 1 · HABITABLE ZONE**: a concrete warehouse with dim tube lights, many of them dead, low fog on the floor, exposed rebar, supply crates that move during blackouts, and exit doors marked with symbols. The hunter is a Smiler. |
+| ![The Poolrooms](docs/levels/level_2.png) **THE POOLROOMS**: white tile and water: colonnaded halls, flooded tunnels, staircases down into deep water, and windows of white light. No hunter and no blackouts. | ![The Red Halls](docs/levels/level_3.png) **THE RED HALLS**: dark red brick and bedroom furniture. A Smiler and a pack of dogs that hunt by sound. |
+| ![Level Fun](docs/levels/level_4.png) **LEVEL FUN =)**: red carpet, a black ceiling, bunting, balloons and party tables. The hunter is the Partygoer. | ![The Theater](docs/levels/level_5.png) **THE THEATER**: a cinema that does not end. Lobbies are two halls with film posters, a concession counter with a roped queue, and drink and snack machines (a snack costs two doubloons and heals you). Dark auditoriums have stepped rows of red seats facing a screen that is still showing a film; the screen is the only light in the room. Slip past either end of the screen to reach backstage, where a tape and loose doubloons lie among the cartons. The Usher, a faceless figure in a burgundy uniform, walks the aisles with a torch: if its beam holds you, it whistles and the Smiler comes running. Crouch still between the rows to hide from both. It is the second level: Level 0's exits lead here. |
 
-The wandering entity — **Pirate Clark** on Level 0, **a Smiler** on Level 1, in the Red Halls and in the theater, **the Partygoer =)**
-in LEVEL FUN — stalks out of the fog, and gives chase if you stare too long.
+All hunters use the same rules: look at one for about 1.6 s, or let it get
+within 8 m of you in view, and it chases you.
 
 <p align="center"><img src="docs/partygoer.png" width="300" alt="The Partygoer"></p>
 
 ## Build & run
 
-The Web build natively on desktop. Requires [raylib](https://www.raylib.com) 5.x (`brew install raylib` on macOS;
-any distro package or pkg-config install works on Linux).
+Running the Web build natively on desktop needs [raylib](https://www.raylib.com)
+5.x (`brew install raylib` on macOS; any distro package or pkg-config install
+works on Linux).
 
 ```sh
 make run
@@ -234,11 +228,11 @@ make run
 
 ## Code layout
 
-| path | what lives there |
+| path | contents |
 |---|---|
 | `shared/core/` | the infinite maze: generation, storeys, collision, line of sight, pathfinding, chunk layout. No engine |
 | `shared/sim/` | the rules (`Sim`): the player, weapons, pickups, the hunter and the pack, levels, blackouts. No engine |
-| `shared/port/` | what any renderer needs from the sim: the camera, the greybox, what is held and loose, sprite poses, the sound mix |
+| `shared/port/` | what any renderer needs from the sim: the camera, the greybox, items held and loose, sprite poses, the sound mix |
 | `web/src/` | the Web build: window, input, mesher, textures, shaders, rendering and audio on raylib |
 | `web/shell.html` | the browser page around the WebAssembly build, with the touch controls |
 | `unreal/` | the Unreal build: a project and one plugin that compiles `shared/` |
@@ -249,328 +243,257 @@ AGENTS.md has the module map file by file.
 
 ## How it works
 
-- **Infinite world** — deterministic chunk generation (32 m chunks, hashed from
-  a world seed): wall runs with doorway gaps, pillars, all baked into 3 meshes
-  per chunk. Chunks stream in around you and unload behind you.
-- **Storeys** — Level 0 is a stack of whole floors, 4.32 m apart, joined by
-  enclosed dogleg stairwells, straight flights rising through openings in the
-  ceiling, and double-height halls railed round on the floor above. Every floor
-  is its own maze, generated from its own seed. The one you stand on is always
-  at y = 0, so collision, pathfinding, sight lines and the shadow march stay
-  two-dimensional; the floors above and below are drawn a storey up or down,
-  and only through an opening you can see. Walk past the middle of a flight and
-  the world re-bases by one storey under you. The stairs, openings and the
-  rails round them are a pure function of the chunk and the two floors they
-  join, so both floors build the same stairwell without ever reading each
-  other. Light falls down the openings from the tubes above, stairwells have a
-  batten on the half landing, Clark follows you up the stairs, and a drop over
-  a railing hurts.
-- **Lighting** — ceiling lights sit on a global 8 m grid, so the fragment shader
-  computes the 9 nearest fluorescents *procedurally* — zero light data. A hash
-  decides which tubes are dead and which strobe. Periodic blackout events kill
-  the whole floor.
-- **Light actually stops at walls** — every source in the game is occluded by
-  real geometry: the fluorescents, your flashlight, a burning flare, the muzzle
-  flash. The trick is that each floor of this maze is a 2D floorplan extruded
-  floor-to-ceiling, so "can this light reach this point" is a *2D* question. The cells around you
-  are packed into a small byte grid (one bit per wall edge, one for pillars) and
-  uploaded as a texture; the fragment shader runs a DDA across it, testing the
-  wall edge it crosses at each step. No shadow maps, no light volumes, no extra
-  passes — one 64×64 texture and a loop.
+- **Infinite world.** Chunks of 32 m are generated from the world seed (wall
+  runs with doorways, rooms, pillars, props) and meshed. They load around you
+  and unload behind you.
+- **Storeys.** Level 0 is a stack of floors 4.32 m apart, joined by enclosed
+  stairwells, straight flights through openings in the ceiling, and
+  double-height halls with railings on the floor above. Each floor is its own
+  maze. The floor you stand on is always at y = 0, so collision, pathfinding,
+  line of sight and shadows stay two-dimensional; other floors are drawn
+  offset by the storey height, and only through an opening you can see.
+  Crossing the middle of a flight moves the world one storey. Stairs,
+  openings and railings are computed from the chunk and the two floors they
+  join, so both floors build the same stairwell independently. Light from the
+  floor above comes down through openings, stairwells have a light on the
+  half landing, the hunter follows you up stairs, and falling over a railing
+  hurts.
+- **Lighting.** Ceiling lights sit on a grid (4 m on Level 0, 12 m on Level 1,
+  8 m elsewhere), so the fragment shader computes the 9 nearest lights from
+  their positions with no light data. A hash decides which tubes are dead and
+  which flicker. Blackouts turn off every light on the level for a while.
+- **Light stops at walls.** The ceiling lights, the flashlight, flares and the
+  muzzle flash are all blocked by walls. Each floor is a 2D floorplan extruded
+  to the ceiling, so whether a light reaches a point is a 2D question. The
+  cells around you are packed into a 64 x 64 byte texture (one bit per wall
+  edge, one for pillars), and the fragment shader walks a line across it
+  toward each light, testing the wall edges it crosses. There are no shadow
+  maps and no extra passes. Doorways and window glass are not in the grid, so
+  light passes through them.
+- **Soft shadows.** A ceiling panel is about a metre wide, so each is traced
+  from both ends and the two results are averaged, which softens shadow
+  edges. A wall blocks the direct light only; a fixed fraction still reaches
+  the far side to stand in for bounced light, so rooms next to lit ones are
+  not black.
+- **The hunter casts a shadow** when lit by the flashlight or a flare. It is
+  treated as a body rather than a column, so a beam that passes over its head
+  still lights the ceiling behind it.
+- **Audio.** One synthesized stream: a 120 Hz hum with harmonics, room tone,
+  and a growl that gets louder when a hunter is near. Footsteps and other
+  one-shots are synthesized samples.
+- **The hum.** The Backrooms wiki describes the hum as louder than ordinary
+  fluorescent lights and as causing headaches, so it is mixed prominently on
+  Level 0. Two tones 0.6 Hz apart beat about twice a second, and standing
+  under a working light makes it louder. In a blackout the hum stops and a
+  thin high tone remains.
+- **Reverb.** A Schroeder reverb on the ambience, with decay and wet level set
+  from the average open distance around you, so a corridor and a warehouse
+  hall sound different. The left and right channels use different all-pass
+  chains, which gives the stream stereo width.
+- **Sound through walls.** Every positional one-shot has a second version for
+  when there is a wall in the way: low-passed, with a softer attack, quieter,
+  and falling off faster with distance. Which one plays is decided by line of
+  sight when it plays.
+- **Props.** Carton stacks, filing cabinets, folding tables and fallen ceiling
+  tiles, placed by the generator. All are solid.
+- **Pirate Clark** (Level 0): tricorn hat, one glowing eye, a hook and a peg
+  leg.
+- **The Smiler** (Levels 1 and 3, and the theater), from the
+  [Backrooms wiki](https://backrooms.fandom.com/wiki/Entity_3): a dark shape
+  with two glowing eyes and a glowing grin, drawn unlit so it shows in dark
+  corridors. Lights go out around it.
+- **Health.** A landed lunge or dog bite takes 0.6 of your health, so you can
+  survive one; a second before you recover kills you. Health starts coming
+  back after 6 s without being hit and is full about 10 s later.
+- **Walk cycle.** The hunter's six-frame walk is generated by the same code
+  that draws it, and is driven by the distance it has covered, so the frame
+  where a foot lands matches the footstep sound. It bobs and leans forward
+  when chasing and further when lunging.
+- **Turning to look.** A second row of the sprite sheet has the hunter facing
+  you. It is used while the same timer that starts a chase is running, so it
+  shows just before it chases.
+- **Where it appears.** About a third of the time the hunter appears close to
+  you and out of sight: around the corner you are heading for, or at the far
+  end of a corridor you are about to walk down. The rest of the time it
+  appears in the distance.
+- **Death.** When you die, a card shows the level, the time, the metres walked
+  and what killed you, then the title screen returns. Your deepest level and
+  longest run are kept with the other records.
+- **The lunge.** The hunter has to start a lunge from within 2.5 m. The lunge
+  plays a sound and lasts 0.6 s, and only a lunge in progress can hit you.
+  Sprint out of reach and it has to reposition.
+- **Losing the hunter.** In a chase the hunter goes straight for you while it
+  can see you. Once a wall is between you, it does not know where you are. It
+  walks to the last place it saw or heard you, then checks each piece of
+  cover within 8 m of it, nearest first, stopping 1 s at each. It gives up
+  after 10 s without seeing or hearing you. It hears walking
+  within 11 m, sprinting within 20 m, the tape player, a flare being lit and a
+  shot.
+- **Doors.** Face a doorway and press E (USE on touch) to shut or open it. A
+  shut door blocks the hunter's sight and the light, and the dogs in the Red
+  Halls cannot open one. The hunter can: it stops, knocks on it every 0.45 s,
+  and opens it after 1.6 s. Shutting or opening a door can be heard 14 m
+  away.
+- **Darkness around the hunter.** Ceiling lights go dark in a radius around
+  the hunter and the dark area moves with it: partly while it stalks, fully
+  while it chases. The flashlight and flares are not affected, so they show
+  where it is.
 
-  Everything falls out of that for free: rooms you haven't lit stay dark, light
-  pours through doorways in shafts, pillars throw shadows across the floor, and
-  your torch beam stops dead at a corner instead of shining through it. Doorways
-  and window glass simply aren't in the grid, so light streams through them.
-- **Soft shadows, and no black holes** — a ceiling panel is a metre-wide strip,
-  not a point, so each one is traced from both ends and averaged: shadow edges
-  land soft, the way a real fluorescent casts them. And a wall blocks the *direct*
-  beam only — a fixed fraction still gets through to stand in for the light that
-  bounces around it, because a real room next to a lit one is never pitch black.
-  Net effect on the frame is a wider dynamic range, not a dimmer picture.
-- **The thing casts a shadow** — catch the hunter in your flashlight or a flare
-  and it throws its own silhouette down the hall. It's treated as a body rather
-  than a column, so a beam that clears its head still lights the ceiling behind.
-- **Audio** — one continuously synthesized stream: 120 Hz fluorescent hum with
-  harmonics, low room tone, and a growl that swells when something is near.
-  Footsteps are generated noise-burst samples.
-- **The buzz is the level** — canon is explicit that the hum is "notably louder
-  and more obtrusive than ordinary fluorescent lights" and that it gives you
-  migraines that outlast the building, so it is mixed to be the thing you
-  remember about Level 0 and are relieved to get away from. Two fundamentals sit
-  0.6 Hz apart and beat against each other about twice a second, which is what
-  stops the ear filing it away; standing under a live fitting swells it. In a
-  blackout it does not simply stop — what is left underneath is a thin high
-  ring, which is worse than silence.
-- **Rooms sound like rooms** — a Schroeder reverb on the ambience bus, its decay
-  and its wet/dry riding the mean open run measured around you, so a corridor
-  and a warehouse hall stop being acoustically identical. The two allpass chains
-  differ left to right, which is also the first stereo width the stream has had.
-- **Sound knows about walls** — every positional one-shot has a second,
-  through-a-wall version: two poles of low-pass, a softened transient, a level
-  drop and a harder distance rolloff, picked on line of sight at the moment it
-  plays. On Level 0 a point 20 m away is occluded most of the time, so this is
-  most of what you actually hear — and it is the difference between knowing
-  something is near and knowing *where*.
-- **Clutter** — cardboard box stacks, filing cabinets, folding tables, and
-  collapsed ceiling tiles (with the dark hole they left behind), all placed by
-  the same deterministic generator and all solid.
-- **PIRATE CLARK** — Level 0's hunter: tricorn hat, one glowing eye, a hook,
-  a peg leg.
-- **THE SMILER** — Level 1 and the Red Halls, true to the [Backrooms lore](https://backrooms.fandom.com/wiki/Entity_3):
-  no body you can pin down, just a shape of darker dark with two glowing eyes
-  and a grin of teeth that carries its own light, so it shows first in an unlit
-  corridor. Lights die around it. Line-of-sight is ray-marched against real
-  wall geometry.
-- **All three hunters** — Clark, the Smiler and the Partygoer — share one
-  brain: stare too long and they chase, slightly slower than your sprint.
-  You can survive one landed lunge (or dog bite), but a second
-  before you've recovered kills you. Health starts coming back after 6 seconds
-  untouched and is full again about 10 seconds later.
-- **He walks** — a six-frame stride, generated by the same procedural code that
-  draws him, driven by the distance he has actually covered so the frame his
-  boot lands on is the frame you hear it. One full stride per cycle rather than
-  half of one mirrored, because a real leg and a peg leg do not swing the same.
-  He bobs, he leans into a chase, and he leans harder into the lunge.
-- **And his head comes round** — a second row of the sheet has him looking at
-  you instead of down the corridor, and it is selected off the same gaze timer
-  that is about to tip him into a chase. When his eye moves to the centre of his
-  face, you have already been noticed.
-- **He does not always walk out of the fog** — about a third of his arrivals are
-  close and already out of your sight: round the corner you are heading for, or
-  at the far end of the run you have just decided to walk down. The rest still
-  resolve out of the distance, because one fixed ritual replaced by another
-  fixed ritual buys nothing.
-- **Being caught ends the run** — there is no waking up somewhere else any
-  more. He takes you, the run is over, and a card names the level, the time,
-  the metres walked and what got you before the title screen comes back. Your
-  deepest level and longest run are kept with the other records.
-- **...but the grab is telegraphed** — he has to commit from about two and a
-  half metres, the commit is announced and lasts a little over half a second,
-  and only a commit that is still running can take you. Sprint clear of it and
-  he has to back off and set up again. The catch used to be a silent proximity
-  test, which is fine when being caught costs nothing and simply unfair when
-  it costs the run.
-- **He hunts you around corners** — in a chase he beelines while he can see you,
-  but the moment a wall breaks his line of sight he routes around it: a breadth-
-  first search over the cell grid picks the next turn toward you, so he comes
-  through the doorway instead of grinding against the wall you ducked behind.
-- **It brings the dark** — the fluorescents die in a pool around the hunter and
-  the shadow travels with it, so the corridor ahead goes black as it closes in
-  and it stands in its own darkness. Your flashlight and your flares cut
-  straight through that pool — they're how you find it. The dread deepens with
-  the hunt: a hint of gathering dark while it stalks, full black-out as it
-  chases.
+  <p align="center"><img src="docs/entity_dark_flashlight.png" width="480" alt="The hunter in its dark area, lit by the flashlight"></p>
+- **Hiding.** Crouch (CTRL) still next to cover (a couch, filing cabinet,
+  armoire, desk, shelving, party table, carton stack, theater seats or a
+  counter) and the hunter cannot see you from a distance. If it comes within
+  1.4 m with a clear line to you, which it does when it checks your cover, it
+  finds you: you hear it, and you cannot hide again for 2 s. Hide away from
+  where it lost you, more than 8 m off, and it does not check there.
+- **Flares.** Throw one (Q, or left click when selected). It bounces off
+  walls and burns for 9 s as a point light in the shader. The hunter will not
+  come within 6 m of a burning flare and runs from one. You carry up to three
+  and find more over time. Water puts them out.
+- **Revolver.** Select with 1 or the mouse wheel. Hold right mouse to aim.
+  Six rounds; R reloads once the sights are lowered. A hit slows the hunter
+  briefly but does not stop it, and it now knows where you are. Three hits
+  put it down for a couple of minutes. Fire is the only thing that makes it
+  run.
+- **Flashlight battery.** The flashlight lasts about 100 s on a full battery,
+  flickers when the battery is low, and switches off when it runs out.
+  Batteries can be found in the world.
+- **Sanity.** A meter that drains while you are on a level: about 9 minutes
+  from full on Level 0, 4 in LEVEL FUN. It drains faster in the dark or while
+  a hunter is after you, and slower while you are hidden. As it drops,
+  whispers come more often and you hear your pulse. Below a tenth, the view
+  narrows and the whispers and pulse get louder. At zero the run ends. Almond
+  water and the tape player restore it.
+- **Shifting walls.** Below a tenth of your sanity, doorways you have passed
+  through can become walls. Only doorways you cannot currently see change, and
+  never a room's last way out.
+- **Almond water.** Press 3 to drink. The can comes up for three swallows,
+  during which you cannot use your hands. It restores about a third of your
+  sanity and your stamina. Cans are found on the floor and on tables, desks,
+  cabinets and nightstands.
+- **Cassette tapes.** Rarer pickups, each with a line of text. The tape player
+  uses them.
+- **The tape player** (4). Load a tape and press play: a synthesized voice
+  with tape noise plays, and while you can hear it your sanity slowly goes up
+  instead of down.
 
-  <p align="center"><img src="docs/entity_dark_flashlight.png" width="480" alt="The hunter in its pool of dead light, found by the flashlight"></p>
-- **Hiding** — crouch (CTRL) in beside real cover — a couch, a filing cabinet,
-  an armoire, a desk, shelving, a party table — and the hunt loses you outright,
-  however close it gets. It can walk right up and stand there not knowing;
-  hold still and it gives up faster than it would out in the open. Get away
-  with it and you'll know: *it stood right there, and never saw you.*
-- **Flares** — throw one (Q, or left click when selected) and it arcs,
-  clatters off walls, and burns orange for nine seconds — a real point light
-  in the shader, with a synthesized strike-and-hiss. The hunter won't come near
-  fire: catch it in the glow and it bolts. You carry three; you find another
-  in your coat every so often. Water puts them out.
-- **Revolver** — select with 1 (or the mouse wheel). Hold right mouse for iron sights; release to lower the gun. Six rounds, R to reload after lowering the sights
-  (the gun dips while the cylinder's out), synthesized gunshot, muzzle flash
-  that lights the hall. A hit rocks the hunter back and costs it a
-  moment's speed, but it does not turn it — it tells it exactly where you
-  are, and it comes on. Three put it down; the halls stay quiet for a
-  couple of minutes, then something out in the fog stands back up. Fire is
-  the only thing that makes it break off. With the flare selected you
-  carry it in hand, cap out, ready to strike.
-- **The flashlight runs on a battery** — it drains while it's on, flickers a
-  warning as it dies, and goes dark if you let it run out — you can always
-  switch it off, but a dead battery won't switch back on. Spares turn up
-  in the world like almond water and doubloons do, and top up a solid chunk
-  of charge. Choose when you actually need it.
-- **Sanity** — a meter that only ever goes one way on its
-  own. It drains the whole time you're down here, faster the deeper you go
-  (roughly nine minutes' worth on Level 0, four in LEVEL FUN), faster again
-  in the dark or while something is hunting you, and slower when you're
-  tucked in and breathing slow. As it slips, the walls start to move on you,
-  the whispers come closer together, and eventually you can hear your own
-  pulse. The last tenth is a slide you can feel arriving: the corridor narrows,
-  the whispers come up out of the walls, and your own pulse crowds out the rest
-  of the mix. At zero the place has you, and the run ends with its own card.
-  Almond water is the only thing that puts any of it back.
-- **And the building stops holding still** — down in that last tenth, doorways
-  you came through are walls when you turn round. It only ever closes an edge
-  you cannot currently see, and never the last way out of a room, so it reads as
-  the place taking you rather than as the maze breaking. The Backrooms is
-  canonically non-Euclidean; a perfectly consistent grid was the one thing the
-  world model was doing against the source material.
-- **Almond water** — a proper aluminium can now: brushed top and base, a
-  cream label with the brown band and the almond on it, the wordmark
-  wrapping round the curve the way print on a can does, and a little
-  stained from however long it's been sitting there. Press 3 and you
-  actually drink it — the can comes up, tips right back for three
-  swallows, and drops away, and both hands are busy the whole time, so you
-  can't shoot your way out of a decision to drink. It steadies you,
-  restores your wind, and puts a solid third of your sanity back. They turn
-  up on the floor and standing on tables, desks, cabinets and nightstands
-  — wherever somebody set one down and didn't come back.
-- **Cassette tapes** — rarer finds, scattered through the halls: someone
-  else's fragment of the descent, a line of found text and a warble of tape
-  hiss when you pick one up. They are what the tape player runs on.
-- **The tape player** — a battered field recorder, on 4. Thread one of the
-  tapes you've found and press play, and a voice comes up out of the hiss:
-  synthesized formants through tape wow and dropouts, garbled just past
-  intelligible. The words aren't the point. Someone was here, and while you
-  can hear them your sanity climbs back instead of draining — the
-  only thing besides a can that gives any of it back, and unlike a can it
-  gives it back slowly, for as long as you let the tape run.
+  A playing tape is loud: in the Red Halls the dogs hear it from 32 m. You
+  can set the deck down while it plays and walk away. The dogs then go to the
+  deck instead of you and stay there until the tape ends. The deck only
+  restores sanity within about 14 m, less through walls, which is well inside
+  the range the dogs hear it from. The record lamp blinks while it plays; pick
+  it up again with E.
+- **Terrain.** Level 0 has sunken areas, Level 1 has raised loading docks, and
+  the pools have steps down into the water. You can jump onto most furniture
+  and walk across it.
+- **Windows.** Some Red Halls walls have a glass window you can see through.
 
-  The catch is that a running deck is *loud*. In the Red Halls, where the pack
-  hunts by sound, playing a tape in your hand makes you a beacon they can hear
-  from thirty metres. So the other thing you can do is press play, then set the
-  deck down and walk away: the noise is now over **there**, and so are they.
-  They commit to the deck, not to you, and stay on it until the tape runs out.
-  You give up the voice to do it: the further the deck is from you, and the
-  more wall between, the less it steadies you, and it does nothing at all for
-  you past about fourteen metres — which is well inside the range the pack can
-  still hear it from. Leave it close enough to keep hearing and they arrive
-  where you're standing. The record lamp pulses while it runs, and you fetch it
-  back with E.
-- **Terrain** — Level 0 sinks into carpeted conversation pits, Level 1 raises
-  concrete loading docks, and the pools get proper steps down into the water.
-  Real stair geometry, smooth step physics — and you can jump onto most of
-  the furniture and walk across it.
-- **Windows** — rarely, a Red Halls wall has one, and now you can see through it: a
-  translucent glass pane, clear in the middle and catching the light at
-  grazing angles, with the next room laid out on the far side.
+  <p align="center"><img src="docs/window.png" width="440" alt="A window"></p>
+- **Furniture.** Couches, armoires, floor lamps, nightstands, party tables and
+  mattresses, all solid and most of them climbable. Level 0 has none: following
+  the wiki's description of empty rooms, it has only carton stacks and fallen
+  ceiling tiles.
+- **Level 0 details.** Yellow chevron wallpaper (from the 2002 photograph),
+  drop-ceiling lights with a fifth of them dead and the rest uneven, carpet
+  with rotten patches, and a hum that builds a migraine effect which stays
+  for a while after you leave. White doors lead on; red doors lead to the Red
+  Halls. Some areas have 3, 5 or 7 stacked floors around a shared opening.
+- **Level 1 details.** Bare concrete with a damp line at the bottom of the
+  walls and exposed rebar, low fog, and twin-tube lights with three in ten
+  dead. Supply crates hold something useful or junk, and move to new places
+  after each blackout. Exits are steel doors with a symbol painted on each.
+  The lift doors never open.
+- **The Manila Room.** A rare 8 m square room on Level 0 with manila
+  wallpaper, wooden floorboards, a door on each wall, a table with two chairs
+  under a chandelier, almond water in the cupboard, and notes to read (E). The
+  hum stops inside, your sanity recovers, and the notes mark a way out with
+  chalk.
+- **Atriums.** Level 0 sometimes has a sunken hall: the floor steps down in
+  0.5 m rings to 2.5 m below the rest, with stairs at every edge. Level 1's
+  loading docks can be two tiers high.
+- **Pipes in the Red Halls.** Pipes run along the corridors under the
+  ceiling, with collars every few metres. Each corridor either has a pipe
+  along its whole length or none.
+- **The dogs.** The Red Halls have a pack of dogs that hunt by sound only, not
+  sight. Sprinting, gunshots and lighting a flare are loud; crouching and
+  standing still are nearly silent. Cover does not hide you from them, and a
+  playing tape player in your inventory gives you away. They are faster than
+  you, so you cannot outrun them. Fire turns them away, a bullet kills one,
+  staying quiet makes them lose you, and a tape player set down somewhere
+  else draws them to it. Their barks are panned to where each dog is.
+- **The pipe valves.** Three valves in the Red Halls can be turned off (E at
+  each). When all three are off, a pile of doubloons appears. The valves show
+  red while open and green once shut.
+- **Exits.** Exit doors are set into wall runs. A normal one takes you to the
+  next level; about one in six is cursed (red) and leads to the Red Halls.
+- **Escaping.** Hunters drop doubloons when you put them down. With 12
+  doubloons, uncursed exit doors turn green, and walking through one ends the
+  run as an escape, which is timed and recorded. Doubloons also buy almond
+  water from vending machines, so spending them delays escaping.
 
-  <p align="center"><img src="docs/window.png" width="440" alt="A see-through window"></p>
-- **Furniture** — couches, armoires, floor lamps, nightstands, party tables
-  and the occasional bare mattress, arranged by no one, for no one. All of it
-  solid, and most of it climbable. Level 0 has none: the lore's "randomly
-  segmented empty rooms" hold only the odd stack of cartons and the ceiling
-  tiles that have come down.
-- **Level 0, by the book** — mono-yellow chevron wallpaper (the paper in the
-  2002 photograph), lay-in troffers crowded into a drop ceiling with a fifth
-  of them dead and the rest uneven, clean carpet with visibly rotten patches, and a hum that gives you a migraine
-  which follows you out. Glowing white doors lead onward; red doors lead to the
-  Red Halls. Connected rooms offer routes around interrupted corridors, and
-  occasional courts have 3, 5, or 7 stacked floors overlooking the same void.
-- **Level 1, by the book** — the Habitable Zone's warehouse: bare concrete with
-  a damp tide line at the foot of every wall and rebar showing where the cover
-  has blown off, a low fog lying on the clean floor, and
-  twin-tube battens, three in ten of them dead. Supply crates stand about with
-  something useful inside — or crayons, shoelaces, loose change — and after
-  every blackout they are somewhere else. The ways on are steel doors with a
-  symbol painted over each, and nobody has ever seen the lifts come.
-- **The Manila Room** — walk far enough and you may find it: an 8 m square room
-  with manila wallpaper, wooden floorboards, a door on each wall, an octagonal
-  table with two chairs under a chandelier, almond water in the cupboard and
-  notes left by the wanderers before you (E to read). The hum goes quiet
-  inside, your grip comes back, and the notes chalk you a way out.
-- **Another floor down** — Level 0 rarely opens into a grand atrium: the
-  carpet falls away in broad terraces, half a metre a ring, down to a hall
-  two and a half metres below the office, with real stairs at every edge and
-  the walls above reading as balconies. The warehouse stacks its loading
-  docks two tiers high. There was always another floor.
-- **The Red Halls have pipework** — service runs of rusted iron and dull steel
-  follow the corridors just under the ceiling, with collars every few metres.
-  Runs are decided per corridor rather than per cell, so a pipe follows a wall
-  the whole way instead of appearing in patches.
-- **The pack hunts by sound, and only sound** — furniture is nothing to them in
-  either direction: standing dead still in the open loses them, and crouching
-  behind a cabinet with a tape running in your coat does not. Putting the deck
-  down somewhere else is the play.
-- **The pack** — the Red Halls have their own residents, and they don't hunt
-  the way Clark and the Smiler do. They hunt by sight: stare at it and it comes. **The
-  dogs hunt by sound.** Sprinting carries, a gunshot carries a long way, a
-  struck flare carries — crouching and standing still barely carries at all.
-  Prowling, they nose around the halls on their own business; hear you and they
-  commit, and they are faster than you are, so running is never the answer.
-  Fire turns them, a bullet puts one down, going quiet makes them lose the
-  thread — and a tape player left running somewhere else takes them there
-  instead. You hear them before you see them: barks panned to whichever one
-  spoke, and the pack calling to each other across the dark.
-- **Shutting off the pipes** — three standpipes in the Red Halls carry a
-  seized shut-off wheel. Turn all three (E at each) and the pipes go quiet and
-  the halls give up the cache they were holding — a spill of doubloons, which
-  is the currency you need to leave for good. The wheels read red while open
-  and green once shut, so you can see at a glance which ones you've found.
-- **Exits** — glowing doorways carved into wall runs. A normal one takes you
-  one level deeper (and ~1 in 6 is cursed: it glows red and drops you into the
-  Red Halls instead).
-- **Getting out for good** — the doubloons a hunter leaves when you put it
-  down are your ticket. Bank enough of them and the honest doors start to burn
-  green: step through one and you *escape the backrooms* — a real win, timed and
-  recorded. But doubloons also buy almond water from the vending machines, so
-  every coin is a choice between surviving now and leaving later, and you have
-  to fight the hunters to earn your way out at all.
-
-  <p align="center"><img src="docs/escape_door.png" width="420" alt="A door burning green — the way out"> <img src="docs/escape_win.png" width="420" alt="The escape screen"></p>
-- **LEVEL FUN =)** — the poolrooms exit doesn't lead home. Deep red banquet
-  carpet with confetti ground into it, a ceiling gone black so the fluorescent
-  panels hang like a darkened party hall's, bunting on every wall, crayon
-  smileys, balloons nosing the ceiling, crepe streamers, presents wrapped in
-  party colours, and party tables laid with paper cups, a cake nobody ever
-  cut, and balloon bunches knotted to the cloth — the candles are still lit,
-  and they stay lit through the blackouts — while a party loop plays somewhere
-  too slow and too flat, wandering in pitch like a tape on a dying motor.
+  <p align="center"><img src="docs/escape_door.png" width="420" alt="A green exit door"> <img src="docs/escape_win.png" width="420" alt="The escape screen"></p>
+- **LEVEL FUN details.** Red carpet with confetti in it, a black ceiling,
+  bunting, crayon smileys, balloons on the ceiling, streamers, wrapped
+  presents, and party tables with cups, a cake and balloons tied to them. The
+  candles stay lit during blackouts. A recorded party loop plays slowed down
+  and out of tune.
 
   <p align="center"><img src="docs/party_table.png" width="440" alt="A LEVEL FUN party table"></p>
-- **Surface relief** — generated mipmapped maps follow material UVs. Ceramic
-  joints have recessed relief and reduced gloss; smooth objects opt out.
-- **Baked ambient occlusion** — soft contact shadows are baked into every
-  chunk's geometry as gradient decals: along each wall's base and ceiling
-  crease, creeping up the skirting, around every pillar's feet and head. Walls
-  sit *in* the room instead of on top of it, and it costs nothing per frame.
-- **Post** — threshold bloom that makes the fluorescents actually glow, a gentle
-  filmic contrast + saturation lift, plus
-  vignette, chromatic aberration, and a mains-frequency luma
-  shimmer — the fear-driven ones scale as the fear does.
-- **Camcorder eye** — you always see the world as a lighter take on the
-  camcorder's tape: colour smeared to the right, slightly soft detail, tape
-  noise, faint scanlines, a slow tracking band, a skewed bottom edge and the
-  odd dropout. Fear pushes it toward the full tape. There is no toggle.
-- **Title screen** — a drifting camera pans across a fresh hall behind the card:
-  *THE BACKROOMS*, a pulsing *press any key to descend*, your best run so far,
-  and the controls. Any key or click drops you in from the top.
+- **Surface relief.** Generated, mipmapped detail maps follow the material
+  UVs. Tile joints are recessed and less glossy; smooth objects have no relief.
+- **Baked ambient occlusion.** Contact shadows are baked into each chunk's
+  geometry as gradient strips: along the base and top of each wall, up the
+  skirting, and around each pillar. They cost nothing per frame.
+- **Post-processing.** Bloom on the lights, a filmic tone curve with a slight
+  contrast and saturation lift, vignette, chromatic aberration and a faint
+  brightness flicker at mains frequency. Some of these increase with fear.
+- **Camcorder view.** The view always has a lighter version of the camcorder
+  tape effect: colour smeared to the right, slightly soft detail, noise,
+  faint scanlines, a slow tracking band, a skewed bottom edge and occasional
+  dropouts. Fear moves it toward the full tape effect. There is no toggle.
+- **Title screen.** A camera moves slowly through a hall behind the title,
+  the "press any key" prompt, your best run and the controls. Any key or
+  click starts a run on Level 0.
 
-## The little things
+## Smaller details
 
-Details that reward paying attention:
-
-- **The Partygoer =)** — LEVEL FUN has its own resident: pale yellow, a
-  painted-on smile, a striped party hat. It stalks and chases like Clark and the Smiler,
-  and the danger banners change to match.
-- **Balloons pop** — shoot a balloon in LEVEL FUN and it bursts with a
-  synthesized pop and a scatter of confetti cubes that tumble to the carpet.
-  The bunches knotted to party tables pop too — clip any one and the whole
-  bunch goes at once.
+- **The Partygoer** (LEVEL FUN): pale yellow, a painted smile and a striped
+  party hat. It uses the same rules as the other hunters.
+- **Balloons.** Shooting a balloon in LEVEL FUN pops it with a sound and a
+  burst of confetti. Hitting one balloon in a bunch tied to a table pops the
+  whole bunch.
 
   <p align="center"><img src="docs/confetti.png" width="440" alt="A popped balloon and its confetti"></p>
-- **Footsteps per floor** — separate synthesized clips for carpet (Levels 0
-  and 4), concrete (Levels 1 and 3), tile (Level 2) and wood (the Manila
-  Room).
-- **Distant sounds** — every 35-85 s (sooner at low sanity) a muffled one-shot
+- **Footsteps per floor.** Separate synthesized clips for carpet (Levels 0
+  and 4 and the theater), concrete (Levels 1 and 3), tile (Level 2) and wood
+  (the Manila Room).
+- **Distant sounds.** Every 35-85 s (sooner at low sanity) a muffled sound
   plays from a random direction: a door closing on Level 0, a metal clang on
-  Level 1, pipe knocking on Level 3, a balloon pop on Level 4. None on
-  Level 2.
-- **Footsteps in the dark** — when the entity chases, you *hear* it: heavy
-  footfalls, panned to its bearing and fading with distance, even around
-  corners you can't see past.
-- **Some doors are shut** — about one chunk in three has a door with a leaf
-  still in it, locked, and its key lying loose within a few metres on the side
-  you can already reach. Behind it is either a closet worth opening or a
-  shortcut. `E` / `USE` turns the key, and the door stays open.
-- **The floor is a lie** — Level 0 has rare soft, dark patches of carpet.
-  Linger on one and it gives way — you drop through into Level 1.
-- **Cursed exits** — roughly one exit door in six glows red instead of warm.
-  Those don't lead deeper. They lead to the Red Halls.
-- **Wall scrawl** — earlier wanderers left messages. *NO CLIP.* *day 407.*
-  *the exit lies.* *he hears the flares.* Drawn procedurally, pressed into
-  the walls, rare enough to unsettle.
-- **Muzzle smoke** — powder haze curls off the revolver and drifts up after
-  each shot.
-- **Camera feel** — the view leans into your strafes and the knees absorb a
-  landing.
+  Level 1, pipe knocking on Level 3, a balloon pop on Level 4, a low boom in
+  the theater. None on Level 2.
+- **Hunter footsteps.** In a chase you hear the hunter's footsteps, panned to
+  its direction and quieter with distance, including through walls.
+- **Locked doors.** About one chunk in three has a locked door, with its key
+  within a few metres on the side you can reach. Behind it is either a small
+  room or a shortcut. E (USE on touch) unlocks it for good.
+- **Rotten floor.** Level 0 has rare dark patches of carpet. Stand on one for
+  too long and you fall through to Level 1.
+- **Wall writing.** Some walls have handwritten messages ("NO CLIP", "day
+  407", "the exit lies", "he hears the flares").
+- **Muzzle smoke** rises from the revolver after each shot.
+- **Camera movement.** The view tilts slightly when you strafe and dips when
+  you land.
+
+## The Mannequin
+
+On Levels 0 and 1, the Mannequin can appear after two and a half minutes.
+Keep its body centred in your view to freeze it. Turn away and it pursues
+you, changing pose between sightings. The camera records continuously.
+
+Flares within five metres hold it back. Bullets stagger it briefly but do
+not kill it. Break its line of sight and get more than 24 metres away for
+eight seconds to escape. The usual hunter stays out of this encounter.
+The Poolrooms and Manila Room remain safe.
 
 ## Controls
 
@@ -591,7 +514,7 @@ Details that reward paying attention:
 | 3 | drink almond water |
 | 4 | tape player (click to play a tape; click again to set it down running) |
 | M | chalk a directional floor arrow |
-| E | vending machine, or pick the tape player back up |
+| E | shut or open a door; unlock a locked door; buy from a vending machine; pick up the tape player; read the Manila Room's notes; turn a valve; open a crate |
 | F11 | borderless fullscreen |
 | P | pause |
 | ESC / click | release / capture mouse |
@@ -601,22 +524,22 @@ Details that reward paying attention:
 
 With the F3 debug HUD open, dev hotkeys are live: `B` force blackout,
 `E` spawn the level's hunter stalking ahead, `C` force a chase, `H` despawn it,
-`G` refill flares + ammo, `N` jump to the next level (including the Red Halls),
+`G` refill flares and ammo, `N` jump to the next level by number (0 to 5),
 `PageUp`/`PageDown` up or down a storey where you stand (Level 0).
 
-- `BACKROOMS_SHOT=out.png` — run headlessly, save a screenshot, exit.
-- `BACKROOMS_SHOTFRAME=n` — which frame that screenshot is taken on (default 600).
+- `BACKROOMS_SHOT=out.png`: run headlessly, save a screenshot, exit.
+- `BACKROOMS_SHOTFRAME=n`: which frame that screenshot is taken on (default 600).
   Lower it to sweep the game quickly; the software renderer is slow.
-- `BACKROOMS_MENU=1` — hold on the title screen (skips the auto-start; visual testing).
-- `BACKROOMS_EXITS=1` — exit doors everywhere (visual testing).
-- `BACKROOMS_MANILA=1` — a Manila Room in the chunk east of spawn, centred at x 48, z 16 (visual testing).
-- `BACKROOMS_RECORD=path` — record every call on the sim to a trace; `./replay path` replays it without the game (shared/sim/trace.h).
-- `BACKROOMS_CHASE=1` — the hunter the headless capture spawns on frame 300 gives chase, which is how a capture reaches the death card's tape.
-- `BACKROOMS_POS="x,z,yaw[,pitch]"` — start at a specific spot and heading, optionally looking up (+) or down (-) by `pitch` radians (visual testing).
-- `BACKROOMS_LEVEL=n` — start on level n (visual testing).
-- `BACKROOMS_SEED=n` — fix the world seed (repeatable maze).
-- `BACKROOMS_STOREY=n` — start on storey n of Level 0 (0 is the floor you wake on).
-- `BACKROOMS_NOBLACKOUT=1` — never schedule a blackout. Defaults to on whenever
+- `BACKROOMS_MENU=1`: hold on the title screen (skips the auto-start; visual testing).
+- `BACKROOMS_EXITS=1`: exit doors everywhere (visual testing).
+- `BACKROOMS_MANILA=1`: a Manila Room in the chunk east of spawn, centred at x 48, z 16 (visual testing).
+- `BACKROOMS_RECORD=path`: record every call on the sim to a trace; `./replay path` replays it without the game (shared/sim/trace.h).
+- `BACKROOMS_CHASE=1`: the hunter the headless capture spawns on frame 300 gives chase, which is how a capture reaches the death card's tape.
+- `BACKROOMS_POS="x,z,yaw[,pitch]"`: start at a specific spot and heading, optionally looking up (+) or down (-) by `pitch` radians (visual testing).
+- `BACKROOMS_LEVEL=n`: start on level n, 0 to 5 (visual testing).
+- `BACKROOMS_SEED=n`: fix the world seed (repeatable maze).
+- `BACKROOMS_STOREY=n`: start on storey n of Level 0 (0 is the floor you wake on).
+- `BACKROOMS_NOBLACKOUT=1`: never schedule a blackout. Defaults to on whenever
   `BACKROOMS_SHOT` is set, because blackouts run on the wall clock and a headless
   capture is slow enough to land inside one; pass `0` to capture a blackout
   deliberately. The F3 `B` key still forces one either way.
@@ -644,8 +567,8 @@ Revolver rounds travel through the world and stop at the first surface or target
 
 ### Poolrooms and swimming
 
-The Poolrooms draw on [Level 37: Sublimity](https://backrooms-wiki.wikidot.com/level-37): pristine ceramic, blue-green water, broad tiled arches, oversized colonnaded halls, flooded tunnels, underwater staircases, windows into a light void, and quiet isolation. The game retains its five-level progression; this is the Poolrooms destination within it. No entities spawn here, and your grip slowly recovers.
+The Poolrooms are based on [Level 37: Sublimity](https://backrooms-wiki.wikidot.com/level-37): white tile, blue-green water, tiled arches, large colonnaded halls, flooded tunnels, underwater staircases, and windows of white light. No hunter spawns here, and sanity slowly recovers.
 
-Pools have shallow shelves and deep centres. In deep water, hold **SPACE** to swim up and stay at the surface; let go and you sink, which is how you dive. **SHIFT** swims faster. On touch screens hold **JUMP**. Swim toward a shelf at the surface to climb out; submerged risers remain solid. There is no breath timer in this refuge.
+Pools have shallow shelves and deep centres. In deep water, hold **SPACE** to swim up and stay at the surface; let go and you sink, which is how you dive. **SHIFT** swims faster. On touch screens hold **JUMP**. Swim toward a shelf at the surface to climb out; submerged steps are solid. There is no breath limit.
 
 See [the Poolrooms implementation and visual checks](docs/poolrooms.md).

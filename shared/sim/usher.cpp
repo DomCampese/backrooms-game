@@ -83,9 +83,10 @@ void Sim::usherWhistle() {
     play(Sfx::Whistle).atPan(sd).atVolume(clampf(1.6f / (1.0f + 0.012f * usherDist * usherDist), 0.3f, 1.0f));
     deckNoteT = 2.6f; deckNote = "a whistle. something heard it.";
     if (ent.st == EState::Hidden) spawnHunter();
-    if (ent.st == EState::Stalk) {
+    if (ent.st == EState::Stalk || ent.st == EState::Chase) {
         ent.st = EState::Chase;
-        ent.life = 0; ent.unseen = 0; ent.repathT = 0;
+        ent.gaze = 0; ent.life = 0; ent.repathT = 0;
+        hunterNotice(px, pz);
     }
 }
 

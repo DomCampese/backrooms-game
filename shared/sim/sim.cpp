@@ -23,6 +23,10 @@ void Sim::step(const InputFrame &in, float dt, double now) {
     AudioEvent &loops = audioEvent(AudioEvent::LOOPS);
     loops.loops = loopCue();
     loops.dt = dt;
+    InputFrame observation = in;
+    observation.observing = in.playing;
+    observation.observationCos = portableCos(in.screenFov * 0.00872664626f);
+    updateMannequin(observation, dt, now);
     updateEntity(dt, now, in.forceSpawn);
     updateDogs(dt, now);
     updateUsher(dt, now);
@@ -38,6 +42,7 @@ void Sim::updateTimers(float dt) {
     fellT = fmaxf(0, fellT - dt);
     winT = fmaxf(0, winT - dt);
     closeCallT = fmaxf(0, closeCallT - dt);
+    doorNoiseT = fmaxf(0, doorNoiseT - dt);
     tapeFoundT = fmaxf(0, tapeFoundT - dt);
     valveT = fmaxf(0, valveT - dt);
 }
@@ -84,6 +89,7 @@ void Sim::setPaused(bool on, double now) {
         nextDistant += held;
         runStart += held;
         ent.nextSpawn += held;
+        mannequin.nextSpawn += held;
         nextPack += held;
         nextHowl += held;
         nextHeartbeat += held;
@@ -179,6 +185,8 @@ void Sim::applyLevel(int lv, double now) {
     ambience.droneLevel = lv == 1 ? 1.0f : 0.0f;
     nextBlackout = lv == 2 ? BLACKOUT_NEVER : blackoutIn(now, 30, 60);   // no blackouts in the Poolrooms
     blackoutEnd = -1;
+    mannequin = {};
+    mannequin.nextSpawn = now + 150;
     shadowsStale = true;
     for (auto &d : dogs) d.st = DState::Gone;
     nextPack = now + (lv == 3 ? 8 + grng.f01() * 8 : 1e9);
@@ -287,7 +295,7 @@ void Sim::updateDevKeys(const DevKeys &dev, double now) {
     } else if (dev.spawnAhead) {
         Vec2 spot = world.findOpenSpot(px + f2x * 12, pz + f2z * 12);
         ent.x = spot.x; ent.z = spot.y;
-        ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.hp = 3; ent.stagger = 0;
+        ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.hp = 3; ent.stagger = 0;
     }
     if (dev.chase) {
         if (ent.st == EState::Hidden) {
@@ -295,7 +303,8 @@ void Sim::updateDevKeys(const DevKeys &dev, double now) {
             ent.x = spot.x; ent.z = spot.y;
             ent.hp = 3;
         }
-        ent.st = EState::Chase; ent.gaze = 0; ent.life = 0; ent.unseen = 0; ent.repathT = 0;
+        ent.st = EState::Chase; ent.gaze = 0; ent.life = 0; ent.repathT = 0;
+        hunterNotice(px, pz);
     }
     if (dev.banish) {
         ent.st = EState::Hidden; ent.nextSpawn = now + 20 + grng.f01() * 20;

@@ -20,6 +20,8 @@ struct DevKeys {
 struct InputFrame {
     // The mouse is captured, or the touch controls are up (inCursorHidden).
     // Looking, aiming, firing, throwing, reloading and squeezing need it.
+    bool observing = false;       // the raised viewfinder can pin the Mannequin
+    float observationCos = 1;    // inner cone of the actual zoomed view
     bool playing = false;
     bool touch = false;          // touch controls are up: the stick sprints, so no double-tap run
 

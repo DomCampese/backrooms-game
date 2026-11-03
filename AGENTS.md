@@ -110,7 +110,38 @@ no row for it.
 - tests/golden gained lines for the new level and lost none; walk-l0-l2.trace
   plays back unchanged.
 
-## Backstage, lobbies, snack machines and the Usher (November 2026)
+# Doors (November 2026)
+
+The use key shuts or opens a doorway (`Sim::findDoor`, `useDoor`,
+shared/sim/items.cpp). A shut door is `WALL_SHUT`, which no chunk stores: the
+`World::shutDoors` overlay turns a `WALL_DOOR` into it in `wallNVal` and
+`wallWVal`, like `unlockedDoors` and `shifted`.
+
+- **`WALL_SHUT` blocks bodies, light and sight** (`blocksEdge`,
+  `blocksLight`, and the full-height box `gatherCellAABBs` gives any blocking
+  edge). The layout calls it `OpeningKind::ShutDoor`, and the mesher and the
+  greybox build it as a locked door.
+- **`World::shutEdge` rebakes both chunks that draw the edge**, and the sim
+  sets `shadowsStale`, as for an unlocked door. `unloadAll` clears the set, so
+  a new level starts with every door open.
+- **The hunter routes through shut doors and the pack does not.**
+  `canStep` and `pathStep` take `throughShut`, which only `hunterChase` passes.
+  At a shut door between him and his waypoint he stops, knocks on it every
+  `DOOR_KNOCK` s (`Sfx::DoorKnock`) and opens it after `DOOR_OPEN_TIME` s
+  (`Sim::hunterOpensDoor`). Without the stop, the router walked him into the
+  leaf and collision held him there.
+- **A doorway joined to its neighbour takes no leaf** (`World::doorJoined`):
+  the two share one opening with no jamb between them, and a leaf in one would
+  leave half the opening open.
+- **A door will not shut on a body** (`bodyInDoorway`): the player, the
+  hunter or a dog within its radius of the leaf's line.
+- **Shutting or opening is a noise** (`doorNoiseT`, `DOOR_NOISE` 14 m in
+  `packNoise`), so the hunter and the pack hear it.
+- **`Sim::crateAt` treats `WALL_SHUT` as a doorway**, or shutting a door
+  would move Level 1's crates.
+- The HUD shows "E · shut the door" or "open the door" while one is in reach.
+
+# The theater: backstage, lobbies, snack machines and the Usher (November 2026)
 
 - **The screen hangs on a wall across the auditorium** between rows
   `AUD_BACKSTAGE - 1` and `AUD_BACKSTAGE`, open at u = 0 and u = AUD_N - 1.
@@ -190,6 +221,51 @@ Levels 0 and 4 (`Sfx::Step`, unchanged), concrete on Levels 1 and 3
   frames and two recordings never left Level 0. Use `KEY_HOLD=2` on a slow
   machine, and check a new recording reached every level with
   `grep -o 'level=[0-9]' | sort | uniq -c`.
+
+# The hunter can lose the player (October 2026)
+
+In a chase the hunter used to path to the player's cell through any number of
+walls, and gave up only after a fixed time unseen. Now he chases what he
+knows (`Sim::hunterChase`, shared/sim/hunters.cpp).
+
+- **He sees the player** within `HUNTER_SIGHT` (30 m) with line of sight,
+  unless they are hidden or crouched more than 7 m away. **He hears them**
+  inside `packNoise`'s radius, the one the pack uses: 5 m standing, 11 m
+  walking, 20 m sprinting (x0.45 crouched), the tape player, a flare strike, a
+  shot. Either sets `Entity::lastX/lastZ` and zeroes `lostT`
+  (`Sim::hunterNotice`).
+- **Without contact** he walks at `SEARCH_SPEED` to the last-known spot, then
+  to open spots 3-7 m around it, and goes `Hidden` after `SEARCH_TIME` (10 s).
+  He cannot lunge without sight.
+- **Every way into a chase must call `hunterNotice`** (the stare, the shot
+  alert in weapons.cpp, F3's C). Without it he searches wherever the last
+  chase ended.
+- **The search draws from `grng`.** walk-l0-l2.trace has no chase, so it still
+  plays back the same; a recording with a chase out of sight would not.
+- No platform code changed, so both builds get it.
+
+# The searching hunter checks cover (November 2026)
+
+When the hunter loses the player it walks to the last-known spot and then
+checks the cover near it (`Sim::nextCover`, shared/sim/hunters.cpp), before
+the random spots it used to try.
+
+- **Cover is a `hideSpotAt` cell within `SEARCH_COVER_R` (8 m) of the search
+  centre** (`Entity::searchX/searchZ`, set by `hunterNotice`). He stands in an
+  open neighbour 0.4 m toward it, waits `CHECK_TIME` (1 s), and takes the
+  nearest unchecked one next. `Entity::checked` holds the last six cells, so
+  he does not check one twice. `hunterNotice` clears it.
+- **He finds a hidden player within `FIND_REACH` (1.4 m) with line of sight.**
+  That clears `hidden`, plays `Sfx::Scare` low, and sets `foundT`
+  (`FOUND_TIME`, 2 s), during which `updateHiding` will not hide the player
+  again. Without it the player re-hid on the next frame and the find did
+  nothing.
+- **A local named `best` shadows `Sim::best`** (the records). The Unreal
+  module builds with `-Wshadow -Werror` and refuses it; the sandbox build
+  does not. It happened twice (`findDoor`, `nextCover`); `tools/unreal-check.sh`
+  catches it. Call such locals `nearest`.
+- No new `Sfx` and no platform code, so both builds get it. walk-l0-l2.trace
+  has no chase and plays back unchanged.
 
 # Distant one-shots (October 2026)
 
@@ -2415,3 +2491,14 @@ three rules:
   was not enough. `tools/web-render-check.mjs` with `BROWSER_CHANNEL=chrome`
   detects both by isolated pixel discontinuities; absolute gun brightness is
   not stable across lighting changes.
+
+# The Mannequin
+
+- Rules live in shared/sim/mannequin.cpp. Its body and HUD are shared by both
+  builds. Sim::step derives observation from the active player's view and
+  screen FOV. The continuously recording camera has no handheld toggle.
+- MannequinStep has its own sound channel. Reusing another footstep channel
+  would leave that clip with the Mannequin's spatial volume and pan.
+- Level entries clear the encounter. A storey change ends it on the next tick;
+  its position must not be shifted with objects on the player's new floor.
+- Run make mannequin-check for observation, movement, flares and reset checks.
