@@ -342,6 +342,70 @@ void seatBox(uint8_t rotByte, float x0, float z0, float &bx0, float &bz0, float 
     }
 }
 
+// Protects the edge between auditorium cells (sd[0], sd[1]) and (sd[2], sd[3]).
+static void protectEdge(ChunkData &d, const int sd[4]) {
+    int ax, az, bx, bz;
+    audCell(d.audDir, sd[0], sd[1], ax, az);
+    audCell(d.audDir, sd[2], sd[3], bx, bz);
+    if (bz == az - 1) d.prot[ax][az] |= 1;
+    else if (bz == az + 1) d.prot[ax][bz] |= 1;
+    else if (bx == ax - 1) d.prot[ax][az] |= 2;
+    else d.prot[bx][az] |= 2;
+}
+
+// Backstage: cartons and shelving along the wall behind it (v = 0), leaving
+// the row against the screen wall clear to walk from one side to the other.
+static void stockBackstage(ChunkData &d, int dir, Rng &rng) {
+    for (int u = 2; u < AUD_N - 2; u++) {
+        float r = rng.f01();
+        if (r > 0.55f) continue;
+        int x, z;
+        audCell(dir, u, 0, x, z);
+        d.prop[x][z] = r < 0.40f ? PROP_BOXES : PROP_SHELVING;
+        d.propRot[x][z] = 0;
+    }
+}
+
+// A lobby: two halls split by a wall with two doorways. The front hall has
+// the concession counter with a roped queue lane in front of it, columns,
+// benches and plants; vending machines stand against the dividing wall on
+// both sides, and against the back wall. The patch's own wall has the doors
+// in.
+static void furnishLobby(ChunkData &d, Rng &rng) {
+    const int x0 = AUD_LO, x1 = AUD_LO + AUD_N - 1;
+    int cz0 = 3 + rng.ri(0, 1), cxa = 4 + rng.ri(0, 3);
+    for (int x = cxa; x < cxa + 4; x++) {
+        d.prop[x][cz0] = PROP_CONCESSION; d.propRot[x][cz0] = 0;
+        d.prop[x][cz0 + 2] = PROP_ROPE; d.propRot[x][cz0 + 2] = 0;
+    }
+    const int cols[4][2] = { { 4, 8 }, { 10, 8 }, { 4, 12 }, { 10, 12 } };
+    for (const auto &c : cols) if (rng.f01() < 0.7f) d.pillar[c[0]][c[1]] = 1;
+    for (int x = x0; x <= x1; x++) d.wallN[x][LOBBY_SPLIT] = WALL_SOLID;
+    const int doors[2] = { x0 + 1 + rng.ri(0, 3), x1 - 1 - rng.ri(0, 3) };
+    for (int x : doors) {
+        d.wallN[x][LOBBY_SPLIT] = WALL_DOOR;
+        d.pillar[x][LOBBY_SPLIT - 1] = d.pillar[x][LOBBY_SPLIT] = 0;
+    }
+    auto isDoor = [&](int x) { return x == doors[0] || x == doors[1]; };
+    auto vending = [&](int z, int count) {
+        for (int tries = 0; tries < 8 && count > 0; tries++) {
+            int x = x0 + 1 + rng.ri(0, AUD_N - 3);
+            if (isDoor(x) || d.pillar[x][z] || d.prop[x][z]) continue;
+            d.prop[x][z] = PROP_VENDING; d.propRot[x][z] = 0;
+            count--;
+        }
+    };
+    vending(LOBBY_SPLIT - 1, 2);
+    vending(LOBBY_SPLIT, 1);
+    vending(AUD_LO + AUD_N - 1, 2);
+    for (int b = 0; b < 4; b++) {
+        int x = 2 + rng.ri(0, 10), z = 7 + rng.ri(0, 5);
+        if (d.pillar[x][z] || d.prop[x][z] || (isDoor(x) && (z == LOBBY_SPLIT - 1 || z == LOBBY_SPLIT))) continue;
+        d.prop[x][z] = rng.f01() < 0.6f ? PROP_COUCH : PROP_PLANT;
+        d.propRot[x][z] = (uint8_t)rng.ri(0, 3);
+    }
+}
+
 bool World::auditorium(int cx, int cz, Auditorium &a) {
     if (level != THEATER) return false;
     const ChunkData &d = data(cx, cz);
@@ -357,7 +421,7 @@ bool World::auditorium(int cx, int cz, Auditorium &a) {
     a.halfW = AUD_SCREEN_W * 0.5f;
     a.y0 = audElev(0) * ELEV_UNIT + AUD_SCREEN_LIFT;
     a.y1 = LEVEL_RULES[THEATER].wallH - AUD_SCREEN_TOP;
-    const float toScreen = half - WT - AUD_SCREEN_OFF;
+    const float toScreen = half - AUD_BACKSTAGE * CELL - WT - AUD_SCREEN_OFF;
     a.screen = { mx - a.normal.x * toScreen, (a.y0 + a.y1) * 0.5f, mz - a.normal.z * toScreen };
     // Close enough that its light reaches the curtains and the stage, which
     // the shader lights only within about 9.5 m of it.
@@ -724,6 +788,12 @@ void World::generate(ChunkData &d, int cx, int cz) {
                 audCell(dir, dr[2], dr[3], bx, bz);
                 edge(ax, az, bx, bz) = WALL_DOOR;
             }
+            for (int u = 1; u < m; u++) {
+                int ax, az, bx, bz;
+                audCell(dir, u, AUD_BACKSTAGE - 1, ax, az);
+                audCell(dir, u, AUD_BACKSTAGE, bx, bz);
+                edge(ax, az, bx, bz) = WALL_SOLID;
+            }
             for (int u = 0; u < AUD_N; u++) for (int v = 0; v < AUD_N; v++) {
                 int x, z;
                 audCell(dir, u, v, x, z);
@@ -734,19 +804,9 @@ void World::generate(ChunkData &d, int cx, int cz) {
                     d.propRot[x][z] = audFacing(dir);
                 }
             }
+            stockBackstage(d, dir, rng);
         } else {
-            // A lobby: a concession counter, a few columns, benches and plants
-            // in one hall, entered through the doors the patch's wall already has.
-            int cz0 = 3 + rng.ri(0, 1), cxa = 4 + rng.ri(0, 3);
-            for (int x = cxa; x < cxa + 4; x++) { d.prop[x][cz0] = PROP_CONCESSION; d.propRot[x][cz0] = 0; }
-            const int cols[4][2] = { { 4, 8 }, { 10, 8 }, { 4, 12 }, { 10, 12 } };
-            for (const auto &c : cols) if (rng.f01() < 0.7f) d.pillar[c[0]][c[1]] = 1;
-            for (int b = 0; b < 4; b++) {
-                int x = 2 + rng.ri(0, 10), z = 7 + rng.ri(0, 5);
-                if (d.pillar[x][z] || d.prop[x][z]) continue;
-                d.prop[x][z] = rng.f01() < 0.6f ? PROP_COUCH : PROP_PLANT;
-                d.propRot[x][z] = (uint8_t)rng.ri(0, 3);
-            }
+            furnishLobby(d, rng);
         }
     }
     if (level == 0 || level == 1) {   // sunken lounges (L0) / loading docks (L1), never under walls
@@ -790,19 +850,15 @@ void World::generate(ChunkData &d, int cx, int cz) {
     // An auditorium's outer wall is protected too, so the passes below put no
     // doorway, lock or exit in it: a door at the front of the room would open
     // 3 m above its floor. Marked here, after prot is cleared above.
+    // The screen wall is protected for the same reason: a doorway in it would
+    // open through the screen.
     if (d.audDir >= 0) {
         const int m = AUD_N - 1;
         for (int t = 0; t < AUD_N; t++) {
             const int sides[4][4] = { { t, 0, t, -1 }, { t, m, t, m + 1 }, { 0, t, -1, t }, { m, t, m + 1, t } };
-            for (const auto &sd : sides) {
-                int ax, az, bx, bz;
-                audCell(d.audDir, sd[0], sd[1], ax, az);
-                audCell(d.audDir, sd[2], sd[3], bx, bz);
-                if (bz == az - 1) d.prot[ax][az] |= 1;
-                else if (bz == az + 1) d.prot[ax][bz] |= 1;
-                else if (bx == ax - 1) d.prot[ax][az] |= 2;
-                else d.prot[bx][az] |= 2;
-            }
+            const int screenWall[4] = { t, AUD_BACKSTAGE - 1, t, AUD_BACKSTAGE };
+            for (const auto &sd : sides) protectEdge(d, sd);
+            if (t > 0 && t < m) protectEdge(d, screenWall);
         }
     }
     // ---- the Manila Room. Stamped before the connectivity flood so the flood
@@ -1157,6 +1213,19 @@ uint8_t World::wallWVal(int ci, int ck) {
 
 // A key lies in at most one cell per chunk, on the reachable side of that
 // chunk's locked door, and is gone once that door is open.
+bool World::audAt(int ci, int ck, int &u, int &v) {
+    if (level != THEATER) return false;
+    int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
+    const ChunkData &d = data(cx, cz);
+    if (d.audDir < 0) return false;
+    audUV(d.audDir, ci - cx * CCELLS, ck - cz * CCELLS, u, v);
+    return u >= 0 && u < AUD_N && v >= 0 && v < AUD_N;
+}
+
+bool World::snackAt(int ci, int ck) {
+    return level == THEATER && propAt(ci, ck) == PROP_VENDING && ih(ci, ck, sseed() ^ 0x5AC1u) % 3 != 0;
+}
+
 bool World::keyAt(int ci, int ck) {
     int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
     ChunkData &d = data(cx, cz);

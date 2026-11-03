@@ -1,7 +1,8 @@
 #pragma once
 #include <cstdint>
-// The level's hunter (Clark, a Smiler or the Partygoer) and the Red Halls
-// dogs. The state machines are Sim::updateEntity and Sim::updateDog.
+// The level's hunter (Clark, a Smiler or the Partygoer), the Red Halls dogs
+// and the theater's Usher. The state machines are Sim::updateEntity,
+// Sim::updateDog and Sim::updateUsher.
 
 enum class EState { Hidden, Stalk, Chase, Flee, Die };
 
@@ -20,6 +21,24 @@ struct Dog {
     float lost = 0;              // s since it last heard the player
     double nextBark = 0;
     float gait = 0;              // footfall count: +1 per DOG_STRIDE metres, drives the walk cycle
+    int hp = 2;
+};
+// The theater's Usher patrols the auditoriums with a torch. It never attacks:
+// when its beam holds the player it blows a whistle that brings the hunter
+// running. Sim::updateUsher has the rules.
+enum class UState { Gone, Patrol, Spot, Down };
+struct Usher {
+    UState st = UState::Gone;
+    float x = 0, z = 0, dispY = 0;
+    float vx = 0, vz = 0;        // world velocity, for its heading
+    float beamYaw = 0;           // where the torch points: (cos, sin) on the ground plane
+    float wpx = 0, wpz = 0;      // next cell on its route
+    float roamX = 0, roamZ = 0;  // where it is walking to
+    double nextRoam = 0, repathT = 0, nextSpawn = 0;
+    float life = 0;              // s in the current state
+    float caught = 0;            // s the player has been held in the beam
+    float whistleCd = 0;         // s before it can whistle again
+    float gait = 0;              // footfall count, as Entity::gait
     int hp = 2;
 };
 struct Entity {

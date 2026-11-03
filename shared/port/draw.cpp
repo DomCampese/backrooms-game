@@ -524,6 +524,43 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             spriteDraw(out, ShapeTex::SmilerGlow, sp, sp.frame1, { 255, 255, 255, cl8(ga * sp.blend) });
         }
     }
+    if (ActorSprite sp; usherSprite(sim, sp)) {
+        const LevelCfg &c = LEVELS[sim.level];
+        float ambLum = (c.amb.x + c.amb.y + c.amb.z) / 3.0f;
+        float lum = lightAtCPU(sp.litAt.x, sp.litAt.y, sp.litAt.z, sim.blackoutCur,
+                               c.ls, c.wallH - LIGHT_DROP, c.dead, c.lightMul, ambLum, 0, 0, 0, c.vary);
+        float ux = sp.litAt.x - sim.px, uz = sp.litAt.z - sim.pz, ud = sqrtf(ux * ux + uz * uz) + 1e-4f;
+        if (sim.flashCur > 0.05f) {
+            float cone = powf(fmaxf((ux * sim.fwd.x + uz * sim.fwd.z) / ud, 0.0f), 26.0f);
+            lum = clampf(lum + sim.flashCur * cone * 7.5f / (1.0f + 0.10f * ud * ud), 0.0f, 1.0f);
+        }
+        if (flareInt > 0.01f) {
+            float fx = sp.litAt.x - flarePos.x, fz = sp.litAt.z - flarePos.z;
+            lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fx * fx + fz * fz)), 0.0f, 1.0f);
+        }
+        // Its own torch lights its front a little, so it shows in a dark auditorium.
+        lum = clampf(lum + (sp.row == ENT_ROW_FACE ? 0.22f : 0.08f), 0.0f, 1.0f);
+        const float fogf = expf(-ud * c.fogDen);
+        unsigned char l8 = cl8(40 + 215 * lum);
+        unsigned char al = cl8(255 * clampf(fogf * 1.6f, 0, 1) * sp.fade);
+        spriteDraw(out, ShapeTex::Usher, sp, sp.frame0, { l8, l8, l8, cl8(al * (1.0f - sp.blend)) });
+        spriteDraw(out, ShapeTex::Usher, sp, sp.frame1, { l8, l8, l8, cl8(al * sp.blend) });
+        Vec3 torch, dir;
+        if (usherTorch(sim, torch, dir)) {
+            // The lens, then the beam through the haze: a cone USHER_BEAM_M long
+            // and USHER_BEAM_HALF wide, as the sim sees with it. Brighter when
+            // it has found the player.
+            bool spot = sim.usher.st == UState::Spot;
+            const float len = Sim::USHER_BEAM_M * 0.75f;
+            Shape lens = billboardWhole(ShapeTex::Particle, torch, 0.20f, { 255, 238, 196, cl8(230 * fminf(1.0f, fogf * 2.0f)) });
+            lens.additive = true;
+            put(out, lens);
+            Shape beam = cylinderEx(torch, add(torch, scale(dir, len)), 0.05f, len * tanf(Sim::USHER_BEAM_HALF), 16,
+                                    { 255, 228, 176, cl8((spot ? 20 : 10) * fogf + 3) });
+            beam.depthWrite = false;
+            put(out, beam);
+        }
+    }
     for (const Sim::Bullet &b : sim.bullets) {
         Vec3 tail = sub(b.pos, scale(b.direction, fminf(1.2f, dist(b.pos, b.tail))));
         put(out, cylinderEx(tail, b.pos, 0.006f, 0.009f, 5, { 255, 211, 126, 220 }));
@@ -602,6 +639,7 @@ void shapeTexSize(ShapeTex t, int &w, int &h) {
     case ShapeTex::Particle: w = 32; h = 32; return;
     case ShapeTex::Dog: w = DOG_FRAME_W * DOG_FRAMES; h = DOG_FRAME_H; return;
     case ShapeTex::Clark: case ShapeTex::Smiler: case ShapeTex::SmilerGlow: case ShapeTex::Partygoer:
+    case ShapeTex::Usher:
         w = ENT_FRAME_W * ENT_FRAMES; h = ENT_FRAME_H * ENT_ROWS; return;
     default: w = h = 1; return;
     }

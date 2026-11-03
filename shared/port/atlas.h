@@ -43,9 +43,13 @@ constexpr int   VEND_ROWS = 6, VEND_COLS = 5;    // what the spirals hold: six s
 constexpr float VEND_ROW0 = 0.645f, VEND_ROWP = 0.176f;   // top of the lowest shelf, and the pitch
 // One price strip per shelf, clipped into the shelf's front lip: at (x, y + r * 12)
 constexpr int   VEND_STRIP_PX[4] = { 780, 4, 240, 10 };
-inline Vec2 vendUV(float x, float y) {
-    return { (VEND_PX[0] + (x + VEND_HW) / (2 * VEND_HW) * VEND_PX[2]) / FIX_ATLAS_W,
-             (VEND_PX[1] + (VEND_Y1 - y) / (VEND_Y1 - VEND_Y0) * VEND_PX[3]) / FIX_ATLAS_H };
+// The snack machine's door (the theater): the same rects at the same aspect,
+// painted smaller in the space under the price strips.
+constexpr int   SNACK_PX[4] = { 790, 82, 210, 423 };
+inline Vec2 vendUV(float x, float y, bool snack) {
+    const int *px = snack ? SNACK_PX : VEND_PX;
+    return { (px[0] + (x + VEND_HW) / (2 * VEND_HW) * px[2]) / FIX_ATLAS_W,
+             (px[1] + (VEND_Y1 - y) / (VEND_Y1 - VEND_Y0) * px[3]) / FIX_ATLAS_H };
 }
 
 // Metres per texture repeat. Floors and ceilings map (x, z) / FLOOR_TILE_M;

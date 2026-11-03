@@ -5,7 +5,7 @@
 // false otherwise.
 struct DevKeys {
     bool blackout = false;     // B: a blackout now
-    bool spawnAhead = false;   // E: the hunter stalking ~12 m ahead
+    bool spawnAhead = false;   // E: the hunter stalking ~12 m ahead; in the theater, the Usher facing the player
     bool chase = false;        // C: a chase, spawning him first if hidden
     bool banish = false;       // H
     bool refill = false;       // G: flares and ammo

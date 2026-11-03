@@ -23,6 +23,7 @@ Surface makeCeilingSurface();      // Level 0: 600 mm fissured mineral board on 
 // The sheets' frame counts, frame sizes and rows are port/sheets.h's.
 Texture2D makeClarkTex();          // Pirate Clark, Level 0's hunter, ENT_FRAMES wide
 Texture2D makeSmilerTex(bool glow);   // the Smiler: fog body, or its unlit eyes and grin; ENT_FRAMES wide
+Texture2D makeUsherTex();          // the Usher, the theater's torch-bearer, ENT_FRAMES wide
 Texture2D makePartygoerTex();      // the Partygoer, LEVEL FUN's hunter
 Texture2D makeScrawlTex();         // graffiti atlas: 4 x 8 phrases
 Texture2D makePropsTex();          // prop atlas: cardboard / cabinet / metal

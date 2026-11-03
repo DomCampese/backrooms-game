@@ -497,6 +497,7 @@ ChunkLayout chunkLayout(World &w, int cx, int cz) {
         p.turn = d.propRot[i][kk] & 3;
         p.yaw = p.turn * PROP_TURN;
         p.againstWall = (d.propRot[i][kk] & PROP_AGAINST_WALL) != 0;
+        p.snack = kind == PROP_VENDING && w.snackAt(gi, gk);
         p.hash = ih(gi, gk, seed ^ PROP_HASH_SALT);
         p.hash2 = ih(gi, gk, seed ^ 0xCAFEu);
         L.propAt[i][kk] = (int16_t)L.props.size();

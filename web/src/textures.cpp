@@ -382,6 +382,102 @@ Texture2D makePartygoerTex() {
     return finishTexture(img, false);
 }
 
+// The Usher, six walk frames: a tall, thin figure in a burgundy usher's
+// jacket with brass buttons and a pillbox cap, white gloves and black
+// trousers with a gold stripe. Its face is blank wax. The right hand holds a
+// torch: toward the camera on the face row, out to the side on the half row,
+// hidden on the away row. The lean rows repeat the face row; it never runs.
+Texture2D makeUsherTex() {
+    const int FW = ENT_FRAME_W, FH = ENT_FRAME_H, W = FW * ENT_FRAMES, H = FH * ENT_ROWS;
+    Image img = GenImageColor(W, H, BLANK);
+    Color *p = (Color *)img.data;
+    int fx = 0, fy = 0;
+    auto put = [&](int x, int y, Color c) { x += fx; y += fy; if (x >= 0 && x < W && y >= 0 && y < H) p[y * W + x] = c; };
+    auto hspan = [&](int y, float cx, float halfw, Color c) {
+        for (int x = (int)(cx - halfw); x <= (int)(cx + halfw); x++) put(x, y, c);
+    };
+    auto disc = [&](float cx, float cy, float r, Color c) {
+        for (int y = (int)(cy - r); y <= (int)(cy + r); y++)
+            for (int x = (int)(cx - r); x <= (int)(cx + r); x++)
+                if ((x - cx) * (x - cx) + (y - cy) * (y - cy) <= r * r) put(x, y, c);
+    };
+    auto shade = [](Color c, float k) { return Color{ cl8(c.r * k), cl8(c.g * k), cl8(c.b * k), c.a }; };
+    const Color jacket = { 120, 20, 32, 255 }, gold = { 206, 164, 72, 255 }, black = { 20, 18, 22, 255 };
+    const Color wax = { 214, 205, 188, 255 }, glove = { 232, 230, 222, 255 }, hair = { 34, 26, 22, 255 };
+    for (int hr = 0; hr < ENT_ROWS; hr++)
+    for (int f = 0; f < ENT_FRAMES; f++) {
+    fx = f * FW; fy = hr * FH;
+    const int row = hr > ENT_ROW_FACE ? ENT_ROW_FACE : hr;
+    const bool face = row == ENT_ROW_FACE, away = row == ENT_ROW_AWAY;
+    float lx0, ll0, rx0, rl0;
+    legPose((float)f / ENT_FRAMES, lx0, ll0);
+    legPose((float)f / ENT_FRAMES + 0.5f, rx0, rl0);
+    const float cx = 64;
+    for (int y = 14; y < 252; y++) {
+        float grain = 0.92f + 0.10f * vnoise2(0.3f * y, 3.1f * f, 211u);
+        if (y < 30) {   // the cap: flat top, gold band
+            hspan(y, cx, 15.0f, y >= 26 ? gold : shade(jacket, grain * (y < 17 ? 1.15f : 1.0f)));
+        } else if (y < 64) {   // the head
+            float dy = (y - 46) / 18.0f;
+            float hw = 14.5f * sqrtf(fmaxf(0.0f, 1.0f - dy * dy * 0.9f));
+            hspan(y, cx, hw, away ? hair : shade(wax, 1.02f - 0.10f * fabsf(dy)));
+            if (!away && !face) hspan(y, cx - hw * 0.55f, hw * 0.45f, hair);   // turned: the back of the head shows
+        } else if (y < 72) {
+            hspan(y, cx, 7.0f, away ? jacket : glove);   // the collar
+            if (!away && y >= 68) hspan(y, cx, 5.0f, black);   // bow tie
+        } else if (y < 170) {   // the jacket
+            float t = (y - 72) / 98.0f;
+            float hw = y < 80 ? 22.0f + (y - 72) : t < 0.7f ? 30.0f - 9.0f * (t / 0.7f) : 21.0f + 10.0f * (t - 0.7f);
+            hspan(y, cx, hw, shade(jacket, grain * (1.05f - 0.25f * t)));
+            if (y < 82) { hspan(y, cx - hw + 3, 4.0f, gold); hspan(y, cx + hw - 3, 4.0f, gold); }   // epaulettes
+            if (y > 140 && y < 145) hspan(y, cx, hw, shade(jacket, 0.6f));                            // the belt line
+            // Arms down each side; the torch arm is drawn on top below.
+            float aw = 4.6f, ax = hw + 2.0f;
+            if (y < 156 && !(face && y > 92 && y < 118)) {
+                hspan(y, cx - ax, aw, shade(jacket, grain * 0.85f));
+                if (away || face || y > 118) hspan(y, cx + ax, aw, shade(jacket, grain * 0.85f));
+            }
+            if (y >= 150 && y < 162) {   // gloved hands
+                hspan(y, cx - ax, 4.0f, glove);
+                if (away) hspan(y, cx + ax, 4.0f, glove);
+            }
+        } else if (y < 246) {   // trousers, the legs walking as legPose has them
+            float t = (y - 170) / 76.0f;
+            float lx = cx - 8 + lx0 * 6.0f * t, rx = cx + 8 + rx0 * 6.0f * t;
+            if (y < 246 - ll0 * 5.0f) { hspan(y, lx, 6.0f, black); put((int)(lx - 5), y, gold); }
+            if (y < 246 - rl0 * 5.0f) { hspan(y, rx, 6.0f, black); put((int)(rx + 5), y, gold); }
+        } else {   // shoes
+            float lx = cx - 8 + lx0 * 6.0f, rx = cx + 8 + rx0 * 6.0f;
+            if (ll0 < 0.3f) hspan(y, lx, 7.0f, Color{ 8, 8, 10, 255 });
+            if (rl0 < 0.3f) hspan(y, rx, 7.0f, Color{ 8, 8, 10, 255 });
+        }
+    }
+    if (!away) {
+        for (int b = 0; b < 5; b++) {   // two columns of brass buttons
+            float by = 90 + b * 12;
+            disc(cx - 7, by, 2.0f, gold);
+            if (face) disc(cx + 7, by, 2.0f, gold);
+        }
+    }
+    if (face) {
+        // Two shallow dents where eyes would be, and nothing else.
+        for (int s2 = -1; s2 <= 1; s2 += 2) disc(cx + s2 * 6.0f, 44.0f, 2.5f, shade(wax, 0.86f));
+        // The torch arm folded across the chest, and the torch pointing out of the frame.
+        for (int y = 96; y < 116; y++) hspan(y, cx + 14 - (y - 96) * 0.4f, 6.0f, shade(jacket, 0.8f));
+        disc(cx + 6, 108, 6.0f, glove);
+        disc(cx + 6, 104, 7.0f, black);
+        disc(cx + 6, 104, 5.0f, Color{ 255, 244, 210, 255 });
+    } else if (!away) {
+        // Out to the side at chest height.
+        for (int y = 98; y < 108; y++) hspan(y, cx + 30, 9.0f, shade(jacket, 0.85f));
+        disc(cx + 40, 104, 5.0f, glove);
+        for (int y = 100; y < 109; y++) hspan(y, cx + 51, 9.0f, black);
+        for (int y = 98; y < 111; y++) hspan(y, cx + 61, 2.0f, Color{ 255, 244, 210, 255 });
+    }
+    }
+    return finishTexture(img, false);
+}
+
 // ---------------------------------------------------------------- wall scrawl
 //
 // Handwritten wall text, drawn stroke by stroke instead of with raylib's bitmap
@@ -715,9 +811,13 @@ Texture2D makeScrawlTex() {
 // door into pieces along the VEND_* rects and gives the header, the display,
 // the price strips and the back of the cabinet (where the cans are painted)
 // vertex alpha 240, which the world shader lights from behind as well.
-static void drawVendingFront(Color *p, int W, int H) {
+// The vending machine's door at `px` in the atlas: VEND_PX for a drink machine,
+// SNACK_PX for a snack machine, which differ in the header and what is behind
+// the glass. Text sizes are pixels at VEND_PX's scale.
+static void drawVendingFront(Color *p, int W, int H, const int px[4], bool snack) {
     const unsigned char OP = 254;
-    const int X0 = VEND_PX[0], Y0 = VEND_PX[1], PW = VEND_PX[2], PH = VEND_PX[3];
+    const int X0 = px[0], Y0 = px[1], PW = px[2], PH = px[3];
+    const float TS = (float)PW / VEND_PX[2];
     auto pxOf = [&](float x) { return X0 + (x + VEND_HW) / (2 * VEND_HW) * PW; };
     auto pyOf = [&](float y) { return Y0 + (VEND_Y1 - y) / (VEND_Y1 - VEND_Y0) * PH; };
     const float PPM = PW / (2 * VEND_HW);                       // pixels per metre
@@ -739,6 +839,7 @@ static void drawVendingFront(Color *p, int W, int H) {
     };
     auto text = [&](const char *s, float cx, float y, float h, Color ink, float weight = 0.12f) {
         // centred on cx (metres), cap top at y (metres)
+        h *= TS;
         printText(p, W, H, s, pxOf(cx) - printWidth(s, h) * 0.5f, pyOf(y), h, ink, weight);
     };
     auto frameRect = [&](float x0, float y0, float x1, float y1, float t, Color c) {   // t in metres, outside the rect
@@ -746,6 +847,62 @@ static void drawVendingFront(Color *p, int W, int H) {
         fill(x0 - t, y0 - t, x1 + t, y0, [&](int, int, float, float) { return c; });
         fill(x0 - t, y0, x0, y1, [&](int, int, float, float) { return c; });
         fill(x1, y0, x1 + t, y1, [&](int, int, float, float) { return c; });
+    };
+
+    // The snack machine's header: red acrylic with a yellow name.
+    auto drawSnackHeader = [&](float x0, float y0, float x1, float y1) {
+        const Color yellow = { 255, 212, 84, OP }, red = { 176, 26, 24, OP };
+        fill(x0, y0, x1, y1, [&](int, int, float u, float v) {
+            float k = 0.88f + 0.12f * sinf(u * 3.14159f) + 0.04f * (1.0f - v);
+            if (v < 0.10f || v > 0.90f) return scale(red, 0.55f);
+            if (v < 0.14f || v > 0.86f) return yellow;
+            return scale(red, k * 1.25f);
+        });
+        text("SNACKS", 0.0f, y1 - 0.024f, 16, yellow, 0.13f);
+    };
+    // One item in its spiral, front-on, bottom centre on the shelf at (cx, yr):
+    // a crisp bag, a chocolate bar or a cookie pack, by `e`. The stuck one leans.
+    auto drawSnack = [&](float cx, float yr, uint32_t e, bool stuck) {
+        static const Color BAG[5] = { { 210, 40, 36, OP }, { 40, 92, 186, OP }, { 236, 190, 40, OP },
+                                      { 46, 150, 70, OP }, { 232, 118, 30, OP } };
+        const int kind = (int)(e >> 8) % 3;
+        const float wm = kind == 1 ? 0.078f : 0.070f, hm = kind == 0 ? 0.118f : kind == 1 ? 0.052f : 0.090f;
+        const float cw = wm * PPM, ch = hm * PPM, ang = stuck ? 0.30f : 0.0f;
+        const float bx = pxOf(cx), by = pyOf(yr + 0.006f + (stuck ? 0.03f : 0.0f));
+        const float ca = cosf(ang), sa = sinf(ang);
+        const Color base = BAG[(e >> 12) % 5];
+        for (int y = (int)(by - ch - 6); y <= (int)by + 6; y++)
+            for (int x = (int)(bx - ch); x <= (int)(bx + ch); x++) {
+                float dx = x + 0.5f - bx, dy = y + 0.5f - by;
+                float lx = dx * ca + dy * sa, ly = -dx * sa + dy * ca;
+                float u = lx / (cw * 0.5f), t = -ly / ch;
+                if (t < 0.0f || t > 1.0f) continue;
+                Color c;
+                if (kind == 0) {
+                    // a pillow: crimped strips top and bottom, bulging in between
+                    float bulge = 1.0f - 0.10f * (1.0f - 4.0f * (t - 0.5f) * (t - 0.5f));
+                    if (fabsf(u) > bulge) continue;
+                    bool crimp = t < 0.08f || t > 0.92f;
+                    if (crimp && ((int)((u + 1.0f) * 9.0f) & 1) && (t < 0.03f || t > 0.97f)) continue;
+                    c = crimp ? scale(base, 0.75f) : base;
+                    float ox = u * 0.9f, oy = (t - 0.52f) * 2.4f;
+                    if (!crimp && ox * ox + oy * oy < 0.30f) c = { 246, 240, 226, OP };   // the label
+                    if (!crimp && fabsf(oy) < 0.10f && fabsf(ox) < 0.35f) c = scale(base, 0.5f);
+                    c = scale(c, 0.65f + 0.45f * sqrtf(std::max(0.0f, 1.0f - u * u)));   // the bulge's shading
+                } else if (kind == 1) {
+                    // a chocolate bar in a paper sleeve over foil ends
+                    if (fabsf(u) > 1.0f) continue;
+                    c = fabsf(u) > 0.84f ? Color{ 190, 192, 198, OP } : scale(base, 0.85f);
+                    if (fabsf(u) < 0.84f && t > 0.38f && t < 0.62f) c = { 92, 52, 30, OP };
+                } else {
+                    // a stack of cookies in a clear wrapper
+                    if (fabsf(u) > 0.92f) continue;
+                    float row = fmodf(t * 4.0f, 1.0f);
+                    c = scale(Color{ 196, 150, 90, OP }, 0.7f + 0.5f * sinf(row * 3.14159f));
+                    if (fabsf(u) > 0.78f) c = scale(c, 1.25f);
+                }
+                put(x, y, c);
+            }
     };
 
     // -- the door: black powder coat, orange-peel texture, the folded edge
@@ -771,6 +928,8 @@ static void drawVendingFront(Color *p, int W, int H) {
         const float y0 = VEND_HEADER.y0 + 0.016f, y1 = VEND_HEADER.y1 - 0.014f;
         frameRect(x0, y0, x1, y1, 0.005f, Color{ 150, 152, 156, OP });
         const Color brown = { 94, 60, 38, OP };
+        if (snack) drawSnackHeader(x0, y0, x1, y1);
+        else {
         fill(x0, y0, x1, y1, [&](int, int, float u, float v) {
             float k = 0.90f + 0.10f * sinf(u * 3.14159f) + 0.04f * (1.0f - v);   // brightest over the tube
             if (v < 0.10f || v > 0.90f) return brown;
@@ -778,7 +937,8 @@ static void drawVendingFront(Color *p, int W, int H) {
             return scale(Color{ 244, 236, 212, OP }, k);
         });
         text("ALMOND WATER", 0.02f, y1 - 0.024f, 15, brown, 0.11f);
-        for (int s = -1; s <= 1; s += 2) {                    // an almond each side of the name
+        }
+        for (int s = -1; s <= 1 && !snack; s += 2) {          // an almond each side of the name
             float cx = pxOf(s * 0.345f), cy = pyOf((y0 + y1) * 0.5f);
             for (int y = -8; y <= 8; y++) for (int x = -6; x <= 6; x++) {
                 float t = (y + 8) / 16.0f, hw = 5.2f * sinf(powf(t, 0.72f) * 3.0f);
@@ -822,7 +982,8 @@ static void drawVendingFront(Color *p, int W, int H) {
                 float cx = w.x0 + (c + 0.5f) * pitch;
                 bool stuck = (r == 3 && c == 1);                  // one can stuck in its spiral
                 bool empty = !stuck && e % 6 == 0;
-                if (!empty) {
+                if (!empty && snack) drawSnack(cx, yr, e, stuck);
+                else if (!empty) {
                     // A can front-on, drawn in its own frame so the stuck one can lean
                     float ang = stuck ? 0.30f : 0.0f;
                     float cw = 0.066f * PPM, ch = 0.122f * PPM;
@@ -905,7 +1066,7 @@ static void drawVendingFront(Color *p, int W, int H) {
                 if (u < 0.05f || u > 0.95f || v < 0.12f || v > 0.88f) return Color{ 18, 18, 20, OP };
                 return Color{ 30, 9, 8, OP };
             });
-            text("INSERT 3", (d.x0 + d.x1) * 0.5f, d.y1 - 0.024f, 8, Color{ 255, 72, 40, OP }, 0.11f);
+            text(snack ? "INSERT 2" : "INSERT 3", (d.x0 + d.x1) * 0.5f, d.y1 - 0.024f, 8, Color{ 255, 72, 40, OP }, 0.11f);
         }
         // keypad: letters for the shelf, digits for the spiral
         const char *keys = "ABCDEF123456";
@@ -1009,8 +1170,9 @@ static void drawVendingFront(Color *p, int W, int H) {
         c = { cl8(c.r * g), cl8(c.g * g), cl8(c.b * g), OP };
     }
 
-    // -- the price strips clipped into each shelf's front lip, top shelf A
-    for (int r = 0; r < VEND_ROWS; r++) {
+    // -- the price strips clipped into each shelf's front lip, top shelf A. Both
+    // machines' shelves share them.
+    for (int r = 0; r < VEND_ROWS && !snack; r++) {
         const int sx = VEND_STRIP_PX[0], sy = VEND_STRIP_PX[1] + r * 12, sw = VEND_STRIP_PX[2], sh = VEND_STRIP_PX[3];
         for (int y = sy; y < sy + sh; y++) for (int x = sx; x < sx + sw; x++)
             p[y * W + x] = { 44, 46, 50, OP };
@@ -1275,7 +1437,8 @@ Texture2D makeFixturesTex() {
             p[y * W + x] = { cl8(150 * v), cl8(150 * v), cl8(146 * v), OP };
         }
     }
-    drawVendingFront(p, W, H);
+    drawVendingFront(p, W, H, VEND_PX, false);
+    drawVendingFront(p, W, H, SNACK_PX, true);
     return finishTexture(img, false);
 }
 

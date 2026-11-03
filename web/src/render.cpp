@@ -192,7 +192,7 @@ void Game::drawScene(const SceneDraw &d, const Camera3D &cam) {
     case ShapeKind::CylinderEx: DrawCylinderEx(toRl(s.a), toRl(s.b), s.r0, s.r1, s.sides, c); break;
     case ShapeKind::Billboard: {
         const Texture2D *tex[(int)ShapeTex::Count] = { &texParticle, &texParticle, &texClark, &texEntity,
-                                                       &texEntityGlow, &texPartygoer, &texDog };
+                                                       &texEntityGlow, &texPartygoer, &texDog, &texUsher };
         if (s.additive) BeginBlendMode(BLEND_ADDITIVE);
         if (!s.depthWrite) { rlDrawRenderBatchActive(); rlDisableDepthMask(); }
         DrawBillboardRec(cam, *tex[(int)s.tex], { s.src[0], s.src[1], s.src[2], s.src[3] }, toRl(s.a),

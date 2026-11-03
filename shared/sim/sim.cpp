@@ -29,6 +29,7 @@ void Sim::step(const InputFrame &in, float dt, double now) {
     updateMannequin(observation, dt, now);
     updateEntity(dt, now, in.forceSpawn);
     updateDogs(dt, now);
+    updateUsher(dt, now);
     updateExits(now);
     updateTimers(dt);
 }
@@ -61,6 +62,7 @@ void Sim::menuDrift(float dt, double now) {
     eyeY = EYE_H; bobAmt = 0; leanCur = 0; landDip = 0; softTimer = 0; softSag = 0;
     flashOn = false; flashCur = 0;
     ent.st = EState::Hidden; entDist = 1e9f; entDarkCur = 0;
+    usher.st = UState::Gone; usherDist = 1e9f;
     fear = 0.0f; blackoutCur = 1.0f;
     deathT = fmaxf(0, deathT - dt);
 }
@@ -92,6 +94,7 @@ void Sim::setPaused(bool on, double now) {
         nextHowl += held;
         nextHeartbeat += held;
         for (auto &d : dogs) { d.nextBark += held; d.nextRoam += held; }
+        usher.nextSpawn += held; usher.nextRoam += held;
     }
     play(Sfx::Click).atPitch(paused ? 0.7f : 1.1f);
 }
@@ -188,6 +191,9 @@ void Sim::applyLevel(int lv, double now) {
     for (auto &d : dogs) d.st = DState::Gone;
     nextPack = now + (lv == 3 ? 8 + grng.f01() * 8 : 1e9);
     nextHowl = now + 12 + grng.f01() * 20;
+    usherRng = Rng(hash64((uint64_t)world.seed ^ ((uint64_t)world.visit << 32) ^ 0x05E4ULL));
+    usher = Usher{};
+    usher.nextSpawn = now + 20.0 + usherRng.f01() * 20.0;
     distantRng = Rng(hash64((uint64_t)world.seed ^ ((uint64_t)lv << 40) ^ ((uint64_t)world.visit << 48) ^ 0xD157A47ULL));
     nextDistant = now + DISTANT_LEAD + distantRng.f01() * DISTANT_SPAN;
     valvesTurned.clear(); pipesShut = false; valveT = 0;
@@ -278,7 +284,15 @@ void Sim::updateDevKeys(const DevKeys &dev, double now) {
         blackoutEnd = now + 3.0 + grng.f01() * 3.0;
         nextBlackout = level == 2 ? BLACKOUT_NEVER : blackoutIn(blackoutEnd, 45, 75);
     }
-    if (dev.spawnAhead) {
+    if (dev.spawnAhead && level == THEATER) {
+        Vec2 spot = world.findOpenSpot(px + f2x * 9, pz + f2z * 9);
+        spawnUsher(now);
+        usher.x = spot.x; usher.z = spot.y;
+        usher.dispY = world.groundAt(usher.x, usher.z, 1.0f);
+        usher.wpx = usher.x; usher.wpz = usher.z;
+        usher.roamX = usher.x; usher.roamZ = usher.z; usher.nextRoam = now + 6.0;
+        usher.beamYaw = portableAtan2(pz - usher.z, px - usher.x) + 0.6f;   // just off the player
+    } else if (dev.spawnAhead) {
         Vec2 spot = world.findOpenSpot(px + f2x * 12, pz + f2z * 12);
         ent.x = spot.x; ent.z = spot.y;
         ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.hp = 3; ent.stagger = 0;

@@ -64,10 +64,11 @@ struct Game {
     bool debugHud = false;                    // F3; the dev keys act only while it is up
     bool everFlashed = false;                 // HUD: the flashlight hint shows until first use
     bool chaseKnob = false;                   // BACKROOMS_CHASE: the forced spawn chases (the tape's capture)
+    bool spawnKnob = false;                   // BACKROOMS_SPAWN: F3's E on frame 100
     char bestPath[512] = {};                  // where the records live
 
     // resources
-    Texture2D texClark{}, texEntity{}, texEntityGlow{}, texPartygoer{}, texProps{}, texScrawl{}, texFixtures{}, texAO{}, texOcc{}, texDog{},
+    Texture2D texClark{}, texEntity{}, texEntityGlow{}, texPartygoer{}, texUsher{}, texProps{}, texScrawl{}, texFixtures{}, texAO{}, texOcc{}, texDog{},
               texAlmondWrap{}, texDeck{}, texParticle{};
     Revolver revolver;
     Mesh flareMesh{};

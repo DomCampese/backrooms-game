@@ -43,7 +43,7 @@ EMat MatOfSlot(int32 Slot)
 
 // The sheets the billboards are cut from, by ShapeTex.
 const TCHAR* const SheetNames[(int32)ShapeTex::Count] = {
-	TEXT("particle"), TEXT("particle"), TEXT("clark"), TEXT("smiler"), TEXT("smiler_glow"), TEXT("partygoer"), TEXT("dog"),
+	TEXT("particle"), TEXT("particle"), TEXT("clark"), TEXT("smiler"), TEXT("smiler_glow"), TEXT("partygoer"), TEXT("dog"), TEXT("usher"),
 };
 
 // The colour raylib clears the scene to: the Poolrooms' haze, black elsewhere.
