@@ -189,6 +189,29 @@ knows (`Sim::hunterChase`, shared/sim/hunters.cpp).
   plays back the same; a recording with a chase out of sight would not.
 - No platform code changed, so both builds get it.
 
+# The searching hunter checks cover (November 2026)
+
+When the hunter loses the player it walks to the last-known spot and then
+checks the cover near it (`Sim::nextCover`, shared/sim/hunters.cpp), before
+the random spots it used to try.
+
+- **Cover is a `hideSpotAt` cell within `SEARCH_COVER_R` (8 m) of the search
+  centre** (`Entity::searchX/searchZ`, set by `hunterNotice`). He stands in an
+  open neighbour 0.4 m toward it, waits `CHECK_TIME` (1 s), and takes the
+  nearest unchecked one next. `Entity::checked` holds the last six cells, so
+  he does not check one twice. `hunterNotice` clears it.
+- **He finds a hidden player within `FIND_REACH` (1.4 m) with line of sight.**
+  That clears `hidden`, plays `Sfx::Scare` low, and sets `foundT`
+  (`FOUND_TIME`, 2 s), during which `updateHiding` will not hide the player
+  again. Without it the player re-hid on the next frame and the find did
+  nothing.
+- **A local named `best` shadows `Sim::best`** (the records). The Unreal
+  module builds with `-Wshadow -Werror` and refuses it; the sandbox build
+  does not. It happened twice (`findDoor`, `nextCover`); `tools/unreal-check.sh`
+  catches it. Call such locals `nearest`.
+- No new `Sfx` and no platform code, so both builds get it. walk-l0-l2.trace
+  has no chase and plays back unchanged.
+
 # Distant one-shots (October 2026)
 
 Levels 0, 1, 3 and 4 play a muffled one-shot at intervals from a random

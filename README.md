@@ -324,8 +324,9 @@ AGENTS.md has the module map file by file.
   Sprint out of reach and it has to reposition.
 - **Losing the hunter.** In a chase the hunter goes straight for you while it
   can see you. Once a wall is between you, it does not know where you are. It
-  walks to the last place it saw or heard you, searches the area around it,
-  and gives up after 10 s without seeing or hearing you. It hears walking
+  walks to the last place it saw or heard you, then checks each piece of
+  cover within 8 m of it, nearest first, stopping 1 s at each. It gives up
+  after 10 s without seeing or hearing you. It hears walking
   within 11 m, sprinting within 20 m, the tape player, a flare being lit and a
   shot.
 - **Doors.** Face a doorway and press E (USE on touch) to shut or open it. A
@@ -341,8 +342,10 @@ AGENTS.md has the module map file by file.
   <p align="center"><img src="docs/entity_dark_flashlight.png" width="480" alt="The hunter in its dark area, lit by the flashlight"></p>
 - **Hiding.** Crouch (CTRL) still next to cover (a couch, filing cabinet,
   armoire, desk, shelving, party table, carton stack, theater seats or a
-  counter) and the hunter cannot see you, however close it gets. It gives up
-  sooner than it would in the open.
+  counter) and the hunter cannot see you from a distance. If it comes within
+  1.4 m with a clear line to you, which it does when it checks your cover, it
+  finds you: you hear it, and you cannot hide again for 2 s. Hide away from
+  where it lost you, more than 8 m off, and it does not check there.
 - **Flares.** Throw one (Q, or left click when selected). It bounces off
   walls and burns for 9 s as a point light in the shader. The hunter will not
   come within 6 m of a burning flare and runs from one. You carry up to three

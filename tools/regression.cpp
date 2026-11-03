@@ -941,6 +941,69 @@ int main() {
     }
     printf("PASS hunter searches the last-known spot out of sight, hears sprinting, gives up\n");
 
+    // ---- searching, he checks the cover near where he last heard the player.
+    // A player hidden at it is found when he walks up to it; one hidden at
+    // cover outside SEARCH_COVER_R is not, and he gives up.
+    {
+        sim.applyLevel(0,GetTime()); sim.beginDescent(0);
+        sim.inMenu=false; sim.deathT=0; sim.health=1; sim.hurtT=0; sim.foundT=0;
+        sim.velx=sim.velz=0; sim.sprinting=false; sim.muzzleT=0; sim.gunCd=0; sim.doorNoiseT=0;
+        sim.deck.playing=false; for (auto &f : sim.litFlares) f.active=false;
+        World &w=sim.world;
+        auto coversNear=[&](float x,float z,float r) {
+            int n=0, ci=cellOf(x), ck=cellOf(z), rr=(int)(r/CELL)+1;
+            for (int a=ci-rr;a<=ci+rr;++a) for (int b=ck-rr;b<=ck+rr;++b) {
+                float dx=a*CELL+1-x, dz=b*CELL+1-z;
+                if (dx*dx+dz*dz<=r*r && sim.hideSpotAt(a,b)) n++;
+            }
+            return n;
+        };
+        // A cover cell H with an open, level neighbour S, and a search centre C
+        // 3-6 m from S with only this cover within reach of it.
+        bool found=false; int sa=0,sb=0; float cxw=0,czw=0;
+        for (int a=-40;a<40 && !found;++a) for (int b=-40;b<40 && !found;++b) {
+            if (!sim.hideSpotAt(a,b)) continue;
+            int na=a+1, nb=b;
+            if (w.pillarAt(na,nb) || w.propAt(na,nb) || w.floorY(na,nb)!=0) continue;
+            Vec2 c=w.findOpenSpot(na*CELL+1+4.5f, nb*CELL+1);
+            float d=hypotf(c.x-(na*CELL+1), c.y-(nb*CELL+1));
+            if (d<3 || d>6 || coversNear(c.x,c.y,Sim::SEARCH_COVER_R)!=1) continue;
+            sa=na; sb=nb; cxw=c.x; czw=c.y; found=true;
+        }
+        CHECK(found);
+        // The player crouched still beside it, hidden.
+        // (within 1.35 m of the cover cell's centre, which is 2 m west of S's)
+        sim.px=sa*CELL+0.2f; sim.pz=sb*CELL+1.0f; sim.py=0; sim.crouchCur=1.0f; sim.hidden=false;
+        sim.updateHiding(0.0f,0.05f);
+        CHECK(sim.hidden);
+        // He last heard them at C and is searching from there.
+        sim.ent.st=EState::Chase; sim.ent.hp=3; sim.ent.stagger=0; sim.ent.dispY=0;
+        sim.ent.lunge=0; sim.ent.lungeCd=5; sim.ent.repathT=0; sim.ent.doorT=0;
+        sim.ent.x=cxw; sim.ent.z=czw; sim.hunterNotice(cxw,czw);
+        int frames=0;
+        for (; frames<(int)(Sim::SEARCH_TIME*30) && sim.hidden; ++frames) {
+            sim.updateHiding(0.0f,1.0f/30);
+            sim.updateEntity(1.0f/30, 300.0+frames/30.0);
+        }
+        CHECK(!sim.hidden && sim.foundT>0 && sim.ent.st==EState::Chase);
+        CHECK(hypotf(sim.ent.x-sim.px, sim.ent.z-sim.pz)<Sim::FIND_REACH);
+        // Hiding cannot be taken back until FOUND_TIME has run out.
+        sim.updateHiding(0.0f,1.0f/30); CHECK(!sim.hidden);
+        // The same cover, but he last heard the player far from it: he checks
+        // nothing near them and gives up with the player still hidden.
+        sim.foundT=0; sim.hidden=false; sim.updateHiding(0.0f,0.05f); CHECK(sim.hidden);
+        Vec2 far=w.findOpenSpot(sim.px+30.0f, sim.pz);
+        sim.ent.st=EState::Chase; sim.ent.x=far.x; sim.ent.z=far.y; sim.ent.repathT=0;
+        sim.hunterNotice(far.x,far.y);
+        for (frames=0; frames<(int)(Sim::SEARCH_TIME*30)+30 && sim.ent.st==EState::Chase; ++frames) {
+            sim.updateHiding(0.0f,1.0f/30);
+            sim.updateEntity(1.0f/30, 400.0+frames/30.0);
+        }
+        CHECK(sim.ent.st==EState::Hidden && sim.hidden);
+        sim.crouchCur=0; sim.hidden=false;
+    }
+    printf("PASS searching, he checks cover near where he lost the player and finds a player hidden there\n");
+
     // ---- the hunter's movement and walk cycle (ENT-01/ENT-02). Check the
     // captures by eye too.
     {
