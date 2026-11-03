@@ -10,7 +10,7 @@ in docs/unreal-handoff.md.
 | layer | directory | may depend on | contains |
 |---|---|---|---|
 | core | `shared/core/` | the C++17 standard library only | math types, hashes and noise, per-level rules, chunk generation, storeys and features, collision, line of sight, pathfinding, the light-occlusion grid, the layout description |
-| sim | `shared/sim/` | core | game state and rules: player, hunter, dogs, health, pickups, exits, blackouts, storey changes. Takes an input frame and a clock, emits events |
+| sim | `shared/sim/` | core | game state and rules: player, hunter, health, pickups, exits, blackouts, storey changes. Takes an input frame and a clock, emits events |
 | port | `shared/port/` | core, sim | engine-neutral code a port shares with the Web build: the view the camera shows (`simView`, `windowFovY`), the greybox mesher (docs/unreal-handoff.md, M2), the synthesized sound clips and ambience bed (`sounds.h`, `ambience.h`), and a software mixer for a port (`mixer.h`) |
 | platform (Web) | `web/src/` | everything | the raylib backend: window, input, mesher, textures, shaders, rendering, audio, the revolver model |
 
@@ -260,9 +260,9 @@ frame. `bakeChunk` builds each item and decides nothing about where it goes.
 | list | holds |
 |---|---|
 | `props` | kind, cell, centre (after `vendFootprint`), floor height, quarter turns and yaw, the against-wall flag, the variation hashes the mesher builds from |
-| `fixtures` | outlets (whole and broken), switches, grilles, exit signs, diffusers, sprinklers, conduit runs, scrawl (phrase, size, tilt, tint), lift doors, spalls on walls and columns, pipe runs, valve standpipes; per chunk, the Manila Room and Level 4's streamers |
+| `fixtures` | outlets (whole and broken), switches, grilles, exit signs, diffusers, sprinklers, conduit runs, scrawl (phrase, size, tilt, tint), lift doors, spalls on walls and columns, pipe runs; per chunk, the Manila Room and LEVEL FUN's streamers |
 | `fittings` | every light fitting on the level's grid in the chunk: position, the ceiling it hangs from, why one is not there (under an opening, in the Manila Room), Level 1's turn, and the static tube state (dead, output, faulty) from the same hash as the shader and `lightAtCPU` |
-| `openings` | doorways (with joined neighbours), locked doors, exits and cursed exits (with their glyph and room for an open leaf), windows, rails (cap heights, which side is a void): the opening, wall base and top, header, sill |
+| `openings` | doorways (with joined neighbours), locked doors, exits (with their glyph and room for an open leaf), windows, rails (cap heights, which side is a void): the opening, wall base and top, header, sill |
 
 The per-level choice of decorations is one table (`DECOR` in layout.cpp).
 Flicker, blackouts and the hunter's dead-light pool vary with time and stay in
@@ -274,7 +274,6 @@ Still decided in the mesher, and why:
 | what | why it stays |
 |---|---|
 | how walls, floors, ceilings, stairs, pools and arches are built (wall boxes, step blocks, nosing, the rotten patch's bowl, AO strips, skirting) | looks: `chunkFloorplan` decides where each goes and how high (below) |
-| the Red Rooms tint | a colour field round cursed exits in the 3 x 3 chunks, read from core's `cursedExit`; it is how the walls look, not something standing there |
 | the Manila Room's floorboards, paper, notes and chandelier | built from one `Rng` seeded by the layout's seed; the notes share the stream with the boards, so moving them means moving the boards |
 | each prop's shape and variation (stacked cartons, the dead vending machine, cup count) | derived from the layout's hashes; how a prop looks |
 | fitting style per level (troffer, batten, tray), exit glow colours, which exits get a glyph (Level 1), Level 2's emissive window panes | looks |
@@ -330,7 +329,7 @@ input, assets, audio and rendering.
 | player.cpp | look, movement, sprint, squeeze, swimming, the soft floor, gait, hiding, falls, storey changes |
 | weapons.cpp | aim, the revolver and its rounds, flares, the party balloons |
 | items.cpp | pickups, drinking, the tape deck, the use key, chalk, supply crates |
-| hunters.cpp | the hunter (Clark, the Smiler, the Partygoer) and the Red Halls pack |
+| hunters.cpp | the hunter (Clark, the Smiler, the Partygoer) |
 | place.cpp | blackouts, whispers, sanity and the slide, shifting walls, exits, the Manila Room |
 
 **Entry points.** A run starts from a `SimStart` (shared/sim/start.h): what the
@@ -345,12 +344,12 @@ up; `Game::init` calls them in the order that keeps grng's draws where they were
 
 **Tick order** (`Sim::step`): flashlight, stranger's chalk, look, movement, dev
 keys, weapons, bullets, flare, tape deck, interaction, drink, ambience, Manila
-Room, crates, the loop-audio cue, entity, dogs, exits, timers. Each may rely on
+Room, crates, the loop-audio cue, entity, exits, timers. Each may rely on
 the ones before it.
 
 **Clock.** `dt` is `GetFrameTime()` clamped to 0.05 s; `now` is `GetTime()`,
 read once at the top of the tick. The sim reads no other clock. Blackouts,
-spawns, whispers, the pack and flare regeneration are scheduled against `now`,
+spawns, whispers and flare regeneration are scheduled against `now`,
 so they run on the wall clock as before. `clockSeed` (wall-clock seconds, set
 each tick) seeds a new descent unless `fixedSeed`.
 
@@ -465,7 +464,7 @@ then play `audio`, clear the flags and draw. What a port must supply: an
 a way to play the `Sfx` ids with persistent per-clip pitch, volume and pan,
 the tape voice and the two loops, and the ambience synth fed from
 `AmbienceMix`. What it reads to draw: the player (`px, py, pz, eyeY, yaw,
-pitch, fwd, fov`, lean, roll), the hunter (`ent`), `dogs`, `litFlares`, `deck`,
+pitch, fwd, fov`, lean, roll), the hunter (`ent`), `litFlares`, `deck`,
 `bullets`, `bulletImpacts`, `coinsWorld`, `confetti`, `chalk`, the pickup and
 balloon functions, and the HUD state above. Replays are deterministic given the
 seed and the sequence of InputFrames, `dt` and `now`, with one exception: a

@@ -474,9 +474,9 @@ void queriesSampled(Golden &g, World &w) {
     }
     for (int t = 0; t < 8; t++) {
         Cell c = { rng.ri(PROBE_LO, PROBE_HI - 1), rng.ri(PROBE_LO, PROBE_HI - 1) };
-        g.put("cell (%d,%d) floorY %.9g ceilY %.9g pool %d soft %d valve %d key %d cursed %d manila %d\n", c.i, c.k,
-              w.floorY(c.i, c.k), w.ceilY(c.i, c.k), w.poolAt(c.i, c.k), w.softAt(c.i, c.k), w.valveAt(c.i, c.k),
-              w.keyAt(c.i, c.k), w.cursedExit(c.i, c.k), w.manilaAt(c.i, c.k));
+        g.put("cell (%d,%d) floorY %.9g ceilY %.9g pool %d soft %d key %d manila %d\n", c.i, c.k,
+              w.floorY(c.i, c.k), w.ceilY(c.i, c.k), w.poolAt(c.i, c.k), w.softAt(c.i, c.k),
+              w.keyAt(c.i, c.k), w.manilaAt(c.i, c.k));
     }
 }
 
@@ -767,7 +767,7 @@ std::vector<Golden> produce() {
         queriesDoors(q, w); queriesVending(q, w); queriesOccupancy(q, w);
     }
     {
-        World w; setup(w, 4, 1);
+        World w; setup(w, LEVEL_FUN, 1);
         queriesVending(q, w);
     }
     for (int lv = 0; lv < NLEVELS; lv++) {

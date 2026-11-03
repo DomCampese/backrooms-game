@@ -23,7 +23,6 @@ const LevelDecor DECOR[NLEVELS] = {
     { true,  true,  false, false, false, false, false },   // Level 0
     { true,  true,  true,  true,  true,  false, false },   // Level 1
     { false, false, false, false, false, false, false },   // the Poolrooms
-    { true,  true,  false, false, true,  false, false },   // the Red Halls
     { true,  true,  false, false, false, true,  false },   // LEVEL FUN
     { true,  true,  false, false, false, false, true  },   // the multiplex
 };
@@ -114,7 +113,7 @@ bool openingOn(World &w, Opening &op, int cx, int cz, int i, int k, bool west) {
     case WALL_LOCKED: op.kind = OpeningKind::LockedDoor; break;
     case WALL_WINDOW: op.kind = OpeningKind::Window; break;
     case WALL_RAIL:   op.kind = OpeningKind::Rail; break;
-    case WALL_EXIT:   op.kind = w.cursedExit(gi, gk) ? OpeningKind::CursedExit : OpeningKind::Exit; break;
+    case WALL_EXIT:   op.kind = OpeningKind::Exit; break;
     default: return false;
     }
     op.i = (uint8_t)i;
@@ -143,7 +142,7 @@ bool openingOn(World &w, Opening &op, int cx, int cz, int i, int k, bool west) {
         op.joinLo = along(-1) == WALL_DOOR;
         op.joinHi = along(1) == WALL_DOOR;
     }
-    if (op.kind == OpeningKind::Exit || op.kind == OpeningKind::CursedExit) {
+    if (op.kind == OpeningKind::Exit) {
         op.leafRoom = along(1) == WALL_SOLID;
         glyphOn(op, ih(gi, gk, w.sseed() ^ (west ? 0x51B1u : 0x51B0u)));
     }
@@ -153,7 +152,7 @@ bool openingOn(World &w, Opening &op, int cx, int cz, int i, int k, bool west) {
 
 // The fixtures of one cell, in the order the mesher emits them: lift doors,
 // wall spalls, wall fittings, the ceiling fitting, conduit, scrawl, posters, a column
-// spall, pipes, a valve. North edge before west throughout.
+// spall, pipes. North edge before west throughout.
 void cellFixtures(World &w, const ChunkData &d, const LevelDecor &decor, int cx, int cz, int i, int kk,
                   std::vector<Fixture> &out) {
     const unsigned seed = w.sseed();
@@ -357,12 +356,6 @@ void cellFixtures(World &w, const ChunkData &d, const LevelDecor &decor, int cx,
             uint32_t rh = ih(gi0, 3313, seed ^ 0x9292u);
             if (rh % 4 == 0) pipe(rh, true, gk0);
         }
-    }
-    if (w.valveAt(gi0, gk0)) {
-        Fixture f = fixture(FixtureKind::Valve, i, kk);
-        f.pos = { gx + 1.0f, d.elev[i][kk] * ELEV_UNIT, gz + 1.0f };
-        f.end = { f.pos.x, cyc, f.pos.z };
-        out.push_back(f);
     }
 }
 

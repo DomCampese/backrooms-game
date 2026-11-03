@@ -24,7 +24,6 @@ void Sim::step(const InputFrame &in, float dt, double now) {
     loops.loops = loopCue();
     loops.dt = dt;
     updateEntity(dt, now, in.forceSpawn);
-    updateDogs(dt, now);
     updateExits(now);
     updateTimers(dt);
 }
@@ -38,7 +37,6 @@ void Sim::updateTimers(float dt) {
     winT = fmaxf(0, winT - dt);
     closeCallT = fmaxf(0, closeCallT - dt);
     tapeFoundT = fmaxf(0, tapeFoundT - dt);
-    valveT = fmaxf(0, valveT - dt);
 }
 
 void Sim::updateHealth(float dt) {
@@ -82,10 +80,7 @@ void Sim::setPaused(bool on, double now) {
         nextDistant += held;
         runStart += held;
         ent.nextSpawn += held;
-        nextPack += held;
-        nextHowl += held;
         nextHeartbeat += held;
-        for (auto &d : dogs) { d.nextBark += held; d.nextRoam += held; }
     }
     play(Sfx::Click).atPitch(paused ? 0.7f : 1.1f);
 }
@@ -119,7 +114,6 @@ void Sim::beginDescent(double now) {
     deepest = level;
     for (int &v : visits) v = 0;
     slide = 0; nextShift = now + 30;
-    pipesPaid = false;
     // deathCount and winCount stay: they count this session's runs, and
     // dieRun increments deathCount just before calling here.
     fear = 0; boostT = 0;
@@ -172,17 +166,13 @@ void Sim::applyLevel(int lv, double now) {
     world.storeyH = c.storeyH;
     world.storey = world.qs = 0;       // every level begins on its storey 0
     storeyNoted = false;
-    ambience.humLevel = lv == 0 ? 1.0f : lv == 4 ? 0.5f : lv == 2 ? 0.035f : 0.15f;
+    ambience.humLevel = lv == 0 ? 1.0f : lv == LEVEL_FUN ? 0.5f : lv == 2 ? 0.035f : 0.15f;
     ambience.droneLevel = lv == 1 ? 1.0f : 0.0f;
     nextBlackout = lv == 2 ? BLACKOUT_NEVER : blackoutIn(now, 30, 60);   // no blackouts in the Poolrooms
     blackoutEnd = -1;
     shadowsStale = true;
-    for (auto &d : dogs) d.st = DState::Gone;
-    nextPack = now + (lv == 3 ? 8 + grng.f01() * 8 : 1e9);
-    nextHowl = now + 12 + grng.f01() * 20;
     distantRng = Rng(hash64((uint64_t)world.seed ^ ((uint64_t)lv << 40) ^ ((uint64_t)world.visit << 48) ^ 0xD157A47ULL));
     nextDistant = now + DISTANT_LEAD + distantRng.f01() * DISTANT_SPAN;
-    valvesTurned.clear(); pipesShut = false; valveT = 0;
     taken.clear(); coinsWorld.clear();
     // Chalk is kept per level for the whole descent; beginDescent clears it.
     chalkSeedPending = !chalkSeeded[lv];
@@ -228,7 +218,7 @@ bool Sim::hurtPlayer(double now, float dmg, const char *by, float fromX, float f
     // Pushed away, so the attacker is not overlapping the player when the grace ends.
     float dx = px - fromX, dz = pz - fromZ, d = portableHypot(dx, dz);
     if (d > 0.01f) { velx = dx / d * 6.0f; velz = dz / d * 6.0f; }
-    play(Sfx::Groan).atPitch(1.3f);   // the floor groan clip, pitched up, as the hit sound
+    play(Sfx::Hurt);
     fear = fmaxf(fear, 0.9f);
     return false;
 }
@@ -247,7 +237,7 @@ void Sim::bankRecords() {
 
 LoopCue Sim::loopCue() {
     return { level == 2 && !inMenu && eyeY < WATER_Y && world.poolAt(cellOf(px), cellOf(pz)),
-             level == 4 && !inMenu };
+             level == LEVEL_FUN && !inMenu };
 }
 
 AudioEvent &Sim::audioEvent(AudioEvent::Kind kind) {

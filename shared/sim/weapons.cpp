@@ -78,7 +78,7 @@ void Sim::updateBullets(float dt) {
         Ray3 ray{bullet.pos, bullet.direction};
         float nearest = travel;
         bool hit = false;
-        int target = -1;             // -1 level geometry, 0..MAXDOGS-1 a dog, MAXDOGS the hunter, -2 a balloon
+        int target = -1;             // -1 level geometry, 0 the hunter, -2 a balloon
         Vec3 normal = negate(bullet.direction);
         if (tracer && tracer->nearestSolid(ray, nearest, normal)) hit = true;
         auto body = [&](float x, float z, float y, float h, float radius, int id) {
@@ -87,15 +87,10 @@ void Sim::updateBullets(float dt) {
                 nearest = c.distance; normal = c.normal; target = id; hit = true;
             }
         };
-        for (int i = 0; i < MAXDOGS; ++i) {
-            const Dog &d = dogs[i];
-            if (d.st != DState::Gone && d.st != DState::Yelp)
-                body(d.x, d.z, d.dispY, 0.92f, 0.6f, i);
-        }
         if (ent.st == EState::Stalk || ent.st == EState::Chase || ent.st == EState::Flee)
-            body(ent.x, ent.z, ent.dispY, 1.95f, 0.55f, MAXDOGS);
+            body(ent.x, ent.z, ent.dispY, 1.95f, 0.55f, 0);
         // Balloons up to the nearest solid hit, in steps shorter than their radius.
-        if (level == 4) for (float d = 0; d < nearest; d += 0.1f) {
+        if (level == LEVEL_FUN) for (float d = 0; d < nearest; d += 0.1f) {
             if (popBalloonAt(add(ray.position, scale(ray.direction, d)))) {
                 nearest = d; hit = true; target = -2; break;
             }
@@ -107,25 +102,10 @@ void Sim::updateBullets(float dt) {
         if (!hit) continue;
         bullet.remaining = 0;
         bulletImpacts.push_back({add(bullet.pos, scale(normal, 0.012f)), normal, 0.24f, target >= 0});
-        if (target >= 0 && target < MAXDOGS) bulletHitsDog(target);
-        else if (target == MAXDOGS) bulletHitsHunter();
+        if (target == 0) bulletHitsHunter();
     }
     bullets.erase(std::remove_if(bullets.begin(), bullets.end(),
         [](const Bullet &b) { return b.remaining <= 0 && b.fade <= 0; }), bullets.end());
-}
-
-void Sim::bulletHitsDog(int i) {
-    Dog &d = dogs[i];
-    float ex = d.x - px, ez = d.z - pz;
-    if (--d.hp <= 0) {
-        d.st = DState::Yelp; d.life = 0;
-        play(Sfx::Bark, i % 3).atPitch(1.6f).atVolume(0.9f);
-    } else {
-        play(Sfx::Hit);
-        float dl = sqrtf(ex * ex + ez * ez) + 1e-4f;
-        d.x += ex / dl * 0.8f; d.z += ez / dl * 0.8f;   // pushed back slightly, not driven off
-        world.collideCircle(d.x, d.z, 0.3f, d.dispY);
-    }
 }
 
 void Sim::bulletHitsHunter() {
@@ -251,7 +231,7 @@ bool Sim::flyFlare(FlareProj &flare, float dt) {
 
 // LEVEL FUN's ceiling balloon in this cell, if there is one and it is not popped.
 bool Sim::balloonAt(int a, int b, Vec3 &out) {
-    if (level != 4) return false;
+    if (level != LEVEL_FUN) return false;
     if (poppedBalloons.count(cellKey2(a, b))) return false;
     uint32_t h = ih(a, b, pickupSalt() ^ 0xBA11u);
     if (h % 17 != 0 || world.pillarAt(a, b)) return false;
@@ -263,7 +243,7 @@ bool Sim::balloonAt(int a, int b, Vec3 &out) {
 
 // Ignores the renderer's sway, which is small compared with the hit radius.
 int Sim::tableBalloonBunch(int a, int b, Vec3 *pos, uint8_t *colours, Vec3 &tie) {
-    if (level != 4 || world.propAt(a, b) != PROP_PARTY_TABLE) return 0;
+    if (level != LEVEL_FUN || world.propAt(a, b) != PROP_PARTY_TABLE) return 0;
     uint32_t h = ih(a, b, pickupSalt() ^ 0x8A11u);
     if (h % 3 != 0) return 0;                       // most tables, not all
     float tx = a * CELL + 1.0f, tz = b * CELL + 1.0f;
@@ -282,7 +262,7 @@ int Sim::tableBalloonBunch(int a, int b, Vec3 *pos, uint8_t *colours, Vec3 &tie)
 }
 
 bool Sim::popBalloonAt(Vec3 point) {
-    if (level != 4) return false;
+    if (level != LEVEL_FUN) return false;
     auto burst = [&](Vec3 at, uint8_t base, int n) {
         for (int c2 = 0; c2 < n; c2++) {
             float aa = grng.f01() * TAU, sp = 1.2f + grng.f01() * 2.2f;

@@ -8,10 +8,8 @@
 // resolution of the gait: with six, adjacent frames differ by a few pixels and
 // the fade looks like motion blur.
 constexpr int ENT_FRAMES = 6;      // Clark, the Smiler and the partygoer
-constexpr int DOG_FRAMES = 4;      // the pack
 // A frame's size on its sheet, pixels.
 constexpr int ENT_FRAME_W = 128, ENT_FRAME_H = 256;
-constexpr int DOG_FRAME_W = 192, DOG_FRAME_H = 128;
 
 // Rows of the entity sheet, ENT_FRAME_H each. A billboard always faces the
 // camera, so a head turn or a lean has to be drawn into the sprite.

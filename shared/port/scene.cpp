@@ -60,7 +60,7 @@ void crates(Sim &sim, int ci, int ck, std::vector<SceneItem> &out) {
 }
 
 void balloons(Sim &sim, int ci, int ck, std::vector<SceneItem> &out) {
-    if (sim.level != 4) return;
+    if (sim.level != LEVEL_FUN) return;
     const int reach = SCENE_BALLOON_CELLS;
     for (int dx = -reach; dx <= reach; dx++)
         for (int dz = -reach; dz <= reach; dz++) {
@@ -75,7 +75,7 @@ void balloons(Sim &sim, int ci, int ck, std::vector<SceneItem> &out) {
 }
 
 void tableBunches(Sim &sim, int ci, int ck, std::vector<SceneItem> &out) {
-    if (sim.level != 4) return;
+    if (sim.level != LEVEL_FUN) return;
     const int reach = SCENE_BUNCH_CELLS;
     for (int dx = -reach; dx <= reach; dx++)
         for (int dz = -reach; dz <= reach; dz++) {
@@ -122,7 +122,7 @@ std::vector<SceneItem> simScene(Sim &sim) {
     }
     balloons(sim, ci, ck, out);
     tableBunches(sim, ci, ck, out);
-    if (sim.level == 4)
+    if (sim.level == LEVEL_FUN)
         for (const Sim::Confetti &c : sim.confetti) {
             SceneItem it;
             it.kind = SceneKind::Confetti;
@@ -167,16 +167,6 @@ std::vector<SceneItem> simScene(Sim &sim) {
         bool moving = sim.ent.vx * sim.ent.vx + sim.ent.vz * sim.ent.vz > 0.01f;
         it.yaw = moving ? yawOf(sim.ent.vx, sim.ent.vz) : yawOf(sim.px - sim.ent.x, sim.pz - sim.ent.z);
         it.variant = (uint8_t)sim.ent.st;
-        out.push_back(it);
-    }
-    for (const Dog &d : sim.dogs) {
-        float dx = d.x - sim.px, dz = d.z - sim.pz;
-        if (d.st == DState::Gone || sqrtf(dx * dx + dz * dz) > SCENE_DOG_M) continue;
-        SceneItem it;
-        it.kind = SceneKind::Dog;
-        it.pos = { d.x, d.dispY, d.z };
-        it.yaw = yawOf(d.wpx - d.x, d.wpz - d.z);
-        it.variant = (uint8_t)d.st;
         out.push_back(it);
     }
     return out;

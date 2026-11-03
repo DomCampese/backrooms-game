@@ -1,7 +1,7 @@
 #pragma once
 // What stands in the world besides its chunks, from the sim: loose pickups,
 // crates, the set-down tape deck, spilled doubloons, burning flares, chalk,
-// balloons and confetti, bullet impacts, the hunter and the pack. For each,
+// balloons and confetti, bullet impacts, the hunter. For each,
 // where it is and which way it faces, decided by the same calls the rules make
 // (pickupAt, crateAt, balloonAt, ...), so what a port draws is what the sim
 // tests. How each looks, and any bob or flicker, is the renderer's.
@@ -24,7 +24,6 @@ enum class SceneKind : uint8_t {
     Confetti,                                    // variant: its party colour; `amount` its life
     Impact,                                      // a round's mark; `normal` the face it hit
     Hunter,                                      // variant: its EState
-    Dog,                                         // variant: its DState
     Count,
 };
 
@@ -48,7 +47,6 @@ constexpr int SCENE_BALLOON_CELLS = 7;
 constexpr int SCENE_BUNCH_CELLS = 6;
 constexpr float SCENE_CHALK_M = 30;      // along each axis, a square
 constexpr float SCENE_HUNTER_M = 45;
-constexpr float SCENE_DOG_M = 42;
 
 // Everything near the player. Crates through chalk come in the order
 // render.cpp draws them, which matters for what blends over what. Non-const:

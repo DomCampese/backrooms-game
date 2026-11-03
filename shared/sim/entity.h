@@ -1,26 +1,9 @@
 #pragma once
-// The level's hunter (Clark, a Smiler or the Partygoer) and the Red Halls
-// dogs. The state machines are Sim::updateEntity and Sim::updateDog.
+// The level's hunter (Clark, a Smiler or the Partygoer). The state machine is
+// Sim::updateEntity.
 
 enum class EState { Hidden, Stalk, Chase, Flee, Die };
 
-// The Red Halls pack hunts by sound. Dogs are faster than the player, so they
-// cannot be outrun; a flare, a shot or staying quiet long enough breaks off a
-// chase.
-enum class DState { Gone, Prowl, Charge, Yelp };
-struct Dog {
-    DState st = DState::Gone;
-    float x = 0, z = 0, dispY = 0;
-    float wpx = 0, wpz = 0;      // next cell on its route
-    float roamX = 0, roamZ = 0;  // wander target while it has not heard the player
-    double nextRoam = 0;
-    double repathT = 0;
-    float life = 0;              // time in the current state
-    float lost = 0;              // s since it last heard the player
-    double nextBark = 0;
-    float gait = 0;              // footfall count: +1 per DOG_STRIDE metres, drives the walk cycle
-    int hp = 2;
-};
 struct Entity {
     float vx = 0, vz = 0;        // world velocity, for the sprite's lean
     EState st = EState::Hidden;

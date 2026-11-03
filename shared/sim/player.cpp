@@ -256,7 +256,7 @@ void Sim::updateGait(float spd, float speed, bool inWater, float dt) {
 }
 
 // Hiding needs cover and stillness: under HIDE_ENTER to start, and above
-// HIDE_BREAK for HIDE_GRACE to end. The pack only checks stillness.
+// HIDE_BREAK for HIDE_GRACE to end.
 void Sim::updateHiding(float speed, float dt) {
     nearCover = false;
     if (crouchCur > 0.75f) {
@@ -269,7 +269,6 @@ void Sim::updateHiding(float speed, float dt) {
             if (ddx * ddx + ddz * ddz < 1.35f * 1.35f) nearCover = true;
         }
     }
-    still = speed < HIDE_ENTER;
     if (!nearCover) { hidden = false; hideBreakT = 0; }
     else if (!hidden) { if (speed < HIDE_ENTER) hidden = true; hideBreakT = 0; }
     else if (speed > HIDE_BREAK) {
@@ -309,7 +308,6 @@ void Sim::changeStorey(int dir, double now) {
     for (auto &im : bulletImpacts) im.pos.y -= sh;
     for (auto &cw : coinsWorld) cw.y -= sh;
     for (auto &c : confetti) c.pos.y -= sh;
-    for (auto &d : dogs) d.dispY -= sh;
     ent.dispY -= sh;
     if (ent.st != EState::Hidden && ent.st != EState::Die) {
         if (ent.st == EState::Chase && entDist < 16.0f && onFlight) {

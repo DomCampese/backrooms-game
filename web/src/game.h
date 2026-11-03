@@ -67,7 +67,7 @@ struct Game {
     char bestPath[512] = {};                  // where the records live
 
     // resources
-    Texture2D texClark{}, texEntity{}, texEntityGlow{}, texPartygoer{}, texProps{}, texScrawl{}, texFixtures{}, texAO{}, texOcc{}, texDog{},
+    Texture2D texClark{}, texEntity{}, texEntityGlow{}, texPartygoer{}, texProps{}, texScrawl{}, texFixtures{}, texAO{}, texOcc{},
               texAlmondWrap{}, texDeck{}, texParticle{};
     Revolver revolver;
     Mesh flareMesh{};

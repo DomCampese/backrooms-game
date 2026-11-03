@@ -61,21 +61,17 @@ enum PropKind : uint8_t {
     PROP_TABLE,          // 3  folding table
     PROP_FALLEN_TILE,    // 4  collapsed ceiling, tile leaning below the hole
     PROP_COUCH,          // 5
-    PROP_ARMOIRE,        // 6
-    PROP_LAMP,           // 7  floor lamp
-    PROP_NIGHTSTAND,     // 8
-    PROP_BED,            // 9
-    PROP_VENDING,        // 10 vending machine, takes doubloons
-    PROP_PARTY_TABLE,    // 11 party table with a cake
-    PROP_DESK,           // 12 office desk + chair
-    PROP_SHELVING,       // 13 steel shelving
-    PROP_COOLER,         // 14 water cooler
-    PROP_PLANT,          // 15 potted plant
-    // 16: the Manila Room's table, chairs and cupboard. Anchored on room cell
+    PROP_VENDING,        // 6  vending machine, takes doubloons
+    PROP_PARTY_TABLE,    // 7  party table with a cake
+    PROP_DESK,           // 8  office desk + chair
+    PROP_SHELVING,       // 9  steel shelving
+    PROP_COOLER,         // 10 water cooler
+    PROP_PLANT,          // 11 potted plant
+    // 12: the Manila Room's table, chairs and cupboard. Anchored on room cell
     // (7,7) and built centred on that cell's far corner, the middle of the room.
     PROP_MANILA_TABLE,
-    PROP_SEATS,          // 17 a row of four cinema seats facing the screen (the multiplex)
-    PROP_CONCESSION,     // 18 a concession counter, run along x (the multiplex)
+    PROP_SEATS,          // 13 a row of four cinema seats facing the screen (the multiplex)
+    PROP_CONCESSION,     // 14 a concession counter, run along x (the multiplex)
 };
 
 constexpr int PROP_KINDS = PROP_CONCESSION + 1;
@@ -98,10 +94,6 @@ constexpr PropShape PROP_SHAPES[PROP_KINDS] = {
     { true, 0.32f, 0.32f, 1.68f, 1.68f, 0.72f, true },    // PROP_TABLE
     {},                                                    // PROP_FALLEN_TILE
     { true, 0.20f, 0.38f, 1.80f, 1.62f, 0.44f, false },   // PROP_COUCH: the seat
-    { true, 0.55f, 0.62f, 1.45f, 1.38f, 1.90f, false },   // PROP_ARMOIRE
-    { true, 0.82f, 0.82f, 1.18f, 1.18f, 1.62f, false },   // PROP_LAMP
-    { true, 0.66f, 0.66f, 1.34f, 1.34f, 0.60f, true },    // PROP_NIGHTSTAND
-    { true, 0.30f, 0.15f, 1.70f, 1.85f, 0.46f, false },   // PROP_BED: the mattress
     {},                                                    // PROP_VENDING
     { true, 0.40f, 0.40f, 1.60f, 1.60f, 0.74f, true },    // PROP_PARTY_TABLE
     { true, 0.30f, 0.50f, 1.70f, 1.50f, 0.74f, true },    // PROP_DESK
@@ -338,7 +330,7 @@ struct ChunkRef { int storey, cx, cz; };
 
 struct World {
     unsigned seed = 1337;
-    int level = 0;           // 0 = Level 0, 1 = Level 1, 2 = Poolrooms, 3 = Red Halls, 4 = LEVEL FUN
+    int level = 0;           // 0 = Level 0, 1 = Level 1, 2 = Poolrooms, 3 = LEVEL FUN, 4 = the multiplex
     // Which visit to this level, this descent (0 on arrival). Mixed into the
     // chunk seed so a revisit is a different maze; at 0 the mix is a no-op, so a
     // fresh descent reproduces the same maze.
@@ -444,11 +436,6 @@ struct World {
     // How far the rotten patch has sunk at (x,z), metres. The mesher and groundAt
     // both use it, so the dip drawn is the dip walked.
     float softDip(float x, float z);
-    // Red Halls only: a standpipe with a shut-off wheel. chunkLayout places it;
-    // the game runs the valve puzzle.
-    bool valveAt(int ci, int ck);
-    // Exits that lead to the Red Halls instead of onward.
-    bool cursedExit(int ci, int ck);
     Vec2 findOpenSpot(float x, float z);
     void unloadFar(int pcx, int pcz, int radius);
     void unloadAll();

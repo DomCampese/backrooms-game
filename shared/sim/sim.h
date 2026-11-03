@@ -23,8 +23,7 @@ struct FlareProj {
     float x = 0, y = 0, z = 0, vx = 0, vy = 0, vz = 0, burn = 0;
 };
 
-// The tape player. Playing a tape restores sanity. A playing deck is a noise
-// source for the Red Halls pack, so one set down while playing draws them to it.
+// The tape player. Playing a tape restores sanity.
 struct TapeDeck {
     bool carried = true;      // carried, or lying where it was set down
     bool playing = false;
@@ -48,12 +47,12 @@ enum Weapon {
 // without storing anything.
 enum class Pickup { None, AlmondWater, Doubloon, Battery, Tape, Key };
 
-// Balloon and confetti colours are indices into Level 4's palette, which the
+// Balloon and confetti colours are indices into LEVEL FUN's palette, which the
 // platform draws with (PARTY, web/src/util.h, must have this many entries).
 constexpr int PARTY_COLOURS = 5;
 
 // The Manila Room's notes: pages of up to four lines.
-constexpr int MANILA_NOTE_COUNT = 4;
+constexpr int MANILA_NOTE_COUNT = 3;
 extern const char *const MANILA_NOTES[MANILA_NOTE_COUNT][4];
 
 // A chalk arrow. `mine` is false for the two pre-placed on each level;
@@ -100,7 +99,6 @@ struct Sim {
     static constexpr float HIDE_BREAK = 1.2f;   // m/s that ends hiding
     static constexpr float HIDE_GRACE = 0.35f;  // s above HIDE_BREAK before hiding ends
     static constexpr float TAPE_RUN = 26.0f;    // s: one side of a tape
-    static constexpr float TAPE_NOISE = 32.0f;  // m a playing deck carries to the pack
     static constexpr int   ESCAPE_COST = 12;    // doubloons that buy the way out
     // The catch: the hunter starts a lunge from LUNGE_REACH, the lunge lasts
     // LUNGE_TIME with a warning, and only a lunge in progress can catch the
@@ -114,7 +112,6 @@ struct Sim {
     // hits are past zero, and REGEN_DELAY + 0.6 / REGEN_RATE (16 s) untouched
     // earns the spare hit back.
     static constexpr float ENTITY_HIT = 0.6f;
-    static constexpr float PACK_BITE = 0.6f;
     static constexpr float HURT_GRACE = 1.5f;   // s of immunity after a hit
     static constexpr float REGEN_DELAY = 6.0f;
     static constexpr float REGEN_RATE = 0.06f;  // meter-fraction per second
@@ -126,7 +123,6 @@ struct Sim {
     static constexpr float SPAWN_FAR_SPAN = 10.0f;
     static constexpr float W_TAP = 0.3f;        // s: double-tap window for W-to-run
     static constexpr float ENT_STRIDE = 1.05f;  // m per hunter footfall
-    static constexpr float DOG_STRIDE = 0.85f;  // m per dog footfall
     // Cells the room-size probe steps each way: 20 m, longer than any Level 0
     // room and shorter than the Level 1 halls, so a corridor measures near 0
     // and a hall near 1.
@@ -138,10 +134,8 @@ struct Sim {
     static constexpr double SHIFT_GAP_MIN = 9.0;
     static constexpr double SHIFT_GAP_SPAN = 22.0;
     static constexpr double BLACKOUT_NEVER = 1e18;   // a schedule that never fires
-    static constexpr int   MAXDOGS = 3;
     static constexpr int   MAXCHALK = 128;      // marks per level
     static constexpr float DRINK_TIME = 1.75f;  // s the can is up
-    static constexpr int   VALVES_NEEDED = 3;
 
     // ---- configuration, set by the platform before the first step
     bool noBlackout = false;     // never schedule a blackout (headless captures)
@@ -193,7 +187,6 @@ struct Sim {
     float softSag = 0;               // how far the patch has sagged under the player, m
     double nextGroan = 0;
     float distWalked = 0;
-    bool still = false;              // under HIDE_ENTER this tick: what the pack listens for
     bool hidden = false;             // crouched beside cover and still
     bool nearCover = false;
     float hideBreakT = 0;            // s moving too fast to hold the spot
@@ -219,8 +212,6 @@ struct Sim {
     // ---- the run
     int level = 0;
     Entity ent;
-    Dog dogs[MAXDOGS];
-    double nextPack = 0, nextHowl = 0;
     float entDist = 1e9f;            // to the hunter, this tick
     float entPrevX = 0, entPrevZ = 0;   // his position last tick, for his velocity
     float entDarkCur = 0;            // how much the hunter dims nearby lights
@@ -256,10 +247,6 @@ struct Sim {
     uint32_t crateEpoch = 0;
     std::unordered_set<uint64_t> cratesOpened;   // this epoch's, by cell
     bool crateWasDark = false;
-    // The Red Halls standpipes.
-    std::unordered_set<uint64_t> valvesTurned;
-    bool pipesShut = false;          // all closed on this visit
-    bool pipesPaid = false;          // their cache pays once a descent
 
     // ---- carried and collected
     int almond = 0, coins = 0, tapes = 0, keys = 0;
@@ -282,7 +269,7 @@ struct Sim {
     float winTime = 0; int winM = 0, winKills = 0;
     // Overlay timers, seconds left.
     float deathT = 0, escapeT = 0, killT = 0, fellT = 0, winT = 0;
-    float closeCallT = 0, tapeFoundT = 0, valveT = 0, sanityWarnT = 0;
+    float closeCallT = 0, tapeFoundT = 0, sanityWarnT = 0;
     float noteT = 0, manilaCardT = 0, deckNoteT = 0;
     const char *tapeLine = "";       // the recovered tape's line
     const char *sanityLine = "";     // the last sanity (or migraine) warning
@@ -316,7 +303,6 @@ struct Sim {
     void updateManila(float dt, double now);
     void updateCrates(double now);
     void updateEntity(float dt, double now, bool forceSpawn = false);
-    void updateDogs(float dt, double now);
     void updateExits(double now);
     void updateTimers(float dt);
     void updateHealth(float dt);
@@ -337,7 +323,6 @@ struct Sim {
     void updateAim(bool held, float dt);
     bool canReload() const;
     void fireBullet();
-    void bulletHitsDog(int i);
     void bulletHitsHunter();
     bool anyFlareLit() const;
     const FlareProj *nearestLitFlare(float x, float z) const;   // for warding: plain distance
@@ -385,13 +370,10 @@ struct Sim {
     bool updateSanity(float dt, bool blackout, double now);   // true if it ended the run
     void updateRoomSound(bool blackout);
     bool shiftAWall();               // close one doorway the player cannot see
-    bool packDeaf() const;           // quiet enough that the pack loses track of the player
     bool clarkLevel() const { return level == 0; }
-    const char *hunterName() const { return level == 4 ? "THE PARTYGOER" : level == 0 ? "PIRATE CLARK" : "A SMILER"; }
+    const char *hunterName() const { return level == LEVEL_FUN ? "THE PARTYGOER" : level == 0 ? "PIRATE CLARK" : "A SMILER"; }
     bool wayOpen() const { return coins >= ESCAPE_COST; }
     void spawnHunter();
-    float packNoise(float &x, float &z) const;   // how far the loudest noise carries, and where
-    bool updateDog(int i, float dt, double now, float noise, float nsx, float nsz);   // true if it ended the run
     bool hunterChase(float dt, double now, bool entVisible, float &fearT);   // true if it ended the run
 
     // ---- the run's shape

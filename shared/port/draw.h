@@ -72,7 +72,7 @@ enum class ShapeKind : uint8_t {
     Billboard,     // DrawBillboardRec: centre a, size.x by size.y, facing the camera
 };
 // The textures billboards are cut from (render.cpp's texParticle, the sheets).
-enum class ShapeTex : uint8_t { None, Particle, Clark, Smiler, SmilerGlow, Partygoer, Dog, Count };
+enum class ShapeTex : uint8_t { None, Particle, Clark, Smiler, SmilerGlow, Partygoer, Count };
 
 struct Shape {
     ShapeKind kind;
@@ -95,7 +95,7 @@ struct SceneDraw {
 
 // Everything render.cpp draws between the chunks and the held item: the
 // stairwells' landing tubes, the sim's scene (simScene), exits burning green,
-// Level 3's valves, the pack, the flares, the hunter, rounds in flight,
+// the flares, the hunter, rounds in flight,
 // Level 1's mist and the impacts. `now` is the render clock.
 void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneDraw> &out);
 

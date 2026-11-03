@@ -88,9 +88,8 @@ bool Sim::tapeAt(int a, int b) {
 // tools/mapdump.cpp counts and marks these.
 bool Sim::hideSpotAt(int a, int b) {
     switch (world.propAt(a, b)) {
-    case PROP_BOXES: case PROP_CABINET: case PROP_COUCH: case PROP_ARMOIRE:
-    case PROP_NIGHTSTAND: case PROP_BED: case PROP_PARTY_TABLE: case PROP_DESK:
-    case PROP_SHELVING: case PROP_SEATS: case PROP_CONCESSION:
+    case PROP_BOXES: case PROP_CABINET: case PROP_COUCH: case PROP_PARTY_TABLE:
+    case PROP_DESK: case PROP_SHELVING: case PROP_SEATS: case PROP_CONCESSION:
         return true;
     default:
         return false;
@@ -104,9 +103,8 @@ Vec2 Sim::pickupSpot(int a, int b) {
     return { a * CELL + 1.0f, b * CELL + 1.0f };
 }
 
-// A playing tape restores sanity only within earshot (none past 14 m, less
-// through a wall), but the pack hears it from TAPE_NOISE. So a deck set far
-// enough away to lure them gives the player no sanity.
+// A playing tape restores sanity only within earshot: none past 14 m, less
+// through a wall.
 void Sim::updateTapeDeck(const InputFrame &in, float dt, double now) {
     deckNoteT = fmaxf(0, deckNoteT - dt);
 
@@ -252,7 +250,7 @@ void Sim::collectPickups() {
     }
 }
 
-// E uses a crate, the Manila notes, a standpipe, a vending machine, a locked
+// E uses a crate, the Manila notes, a vending machine, a locked
 // door, or a deck that was set down. They never share a cell.
 void Sim::useWhatIsNear() {
     int pci = cellOf(px), pck = cellOf(pz);
@@ -271,36 +269,6 @@ void Sim::useWhatIsNear() {
             noteT = 9.0f;
             play(Sfx::Click).atPitch(1.9f);
             if (!notesRead) { notesRead = true; markWayOut(); }
-        }
-    }
-    if (level == 3) {
-        bool turned = false;
-        for (int dx = -1; dx <= 1 && !turned; dx++) for (int dz = -1; dz <= 1 && !turned; dz++) {
-            int a = pci + dx, b = pck + dz;
-            if (!world.valveAt(a, b)) continue;
-            uint64_t ky = cellKey2(a, b);
-            if (valvesTurned.count(ky)) continue;
-            float vx = a * CELL + 1.0f, vz = b * CELL + 1.0f;
-            float ddx = px - vx, ddz = pz - vz;
-            if (ddx * ddx + ddz * ddz > 1.7f * 1.7f) continue;
-            valvesTurned.insert(ky);
-            valveT = 3.4f;
-            turned = true;
-            play(Sfx::Valve);
-            if ((int)valvesTurned.size() >= VALVES_NEEDED && !pipesShut) {
-                pipesShut = true;
-                play(Sfx::Win);
-                // Once per descent. Paid per visit, the cursed exit's loop back
-                // here let players buy the way out without facing the hunter.
-                if (!pipesPaid) {
-                    pipesPaid = true;
-                    for (int c2 = 0; c2 < 9; c2++) {
-                        float aa = c2 * 0.698f + grng.f01();
-                        float rr = 1.2f + grng.f01() * 1.1f;
-                        coinsWorld.push_back({ px + portableCos(aa) * rr, py, pz + portableSin(aa) * rr });
-                    }
-                }
-            }
         }
     }
     for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {   // vending: three doubloons a can

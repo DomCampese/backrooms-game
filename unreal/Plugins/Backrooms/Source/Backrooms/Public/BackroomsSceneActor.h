@@ -20,7 +20,7 @@ struct FBackroomsSceneSection
 
 // Draws, each frame, what the Web build draws round the chunks
 // (shared/port/draw.h): the loose objects through the world shader, and
-// raylib's unlit shapes and billboards (the hunter, the pack, flares, coins,
+// raylib's unlit shapes and billboards (the hunter, flares, coins,
 // balloons, chalk, rounds in flight, impacts, the mist, the muzzle flash) lit
 // as render.cpp lights them. One procedural mesh, a section per material, in
 // the world's coordinates, built again only when a section's triangles change

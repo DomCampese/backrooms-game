@@ -44,7 +44,7 @@ messages to the user: short sentences, no jargon they would have to decode.
 
 # The multiplex (November 2026)
 
-Level 5 (`MULTIPLEX`, core/level_rules.h) is a cinema, and the second level
+Level 4 (`MULTIPLEX`, core/level_rules.h) is a cinema, and the second level
 you reach: Level 0's exits lead to it and its exits lead to Level 1. Three chunks in four are one
 auditorium filling the room patch; the rest, and the spawn chunk, are lobbies
 with a concession counter (`PROP_CONCESSION`), columns, benches and plants.
@@ -103,18 +103,47 @@ no row for it.
   skirting or anything else at a height: auditorium walls are 8 m tall and the
   texture repeats every 3 m. The mesher adds dark skirting.
 - `Distant::Boom` plays `Sfx::FarBoom`: a film's soundtrack through a wall.
-- **Its number is 5 but its place is second.** `EXIT_NEXT` sets the order,
+- **Its number is 4 but its place is second.** `EXIT_NEXT` sets the order,
   and the records' "deepest" compares `LEVEL_DEPTH`, not the level number;
   comparing numbers would rank the multiplex deepest of all. The records file
   still stores the number. F3's N still steps by number.
 - tests/golden gained lines for the new level and lost none; walk-l0-l2.trace
   plays back unchanged.
 
+# The Red Halls removed (November 2026)
+
+The Red Halls (Level 3), the dog pack that hunted them, their valve puzzle,
+the cursed exits that led there and the bedroom furniture only they used are
+gone. The levels are now 0, 1, 2 (the Poolrooms), 3 (LEVEL FUN, `LEVEL_FUN`)
+and 4 (the multiplex, `MULTIPLEX`).
+
+- **Name LEVEL FUN and the multiplex by their constants**, not by number.
+  Every `level == 4` meant LEVEL FUN before; a literal is how the next
+  renumbering breaks something.
+- **Levels 0-2 generate exactly as before.** Level 0 still draws the window
+  number it discards. The contract goldens for Levels 0-2 changed only where an
+  enum lost a value (props, fixtures, openings).
+- **LEVEL FUN and the multiplex have new maps.** `World::generate` seeds its
+  rng with the level number. With their old numbers the goldens matched line
+  for line, so nothing else about them changed.
+- **The records file has a numbering field** (`RECORDS_NUMBERING`, after
+  `longestRun`). A file without it uses the old numbers: 4 and 5 are read as
+  LEVEL FUN and the multiplex, and a Red Halls record as Level 0. Without the
+  mapping an old "deepest" of 5 indexes past `LEVELS`.
+- **The hurt sound is `Sfx::Hurt`** (`makeHurt`): a 110-50 Hz thud, a 700 Hz
+  noise slap and a short breath, 0.32 s. It used to be the soft floor's groan
+  pitched up, 1.3 s of low-passed noise that sounded like rushing water.
+- **A shot's targets are the hunter (0) and balloons (-2)**; -1 is level
+  geometry. `BulletImpact::body` is set for the hunter.
+- walk-l0-l2.trace was re-recorded. The old one replayed through the new sim
+  with every field equal except the dogs' and the audio hash, before the dogs'
+  `nextHowl` rng draw was removed.
+
 # Footstep clip per floor material (October 2026)
 
 Player footsteps and landings use a clip per floor material: carpet on
-Levels 0 and 4 (`Sfx::Step`, unchanged), concrete on Levels 1 and 3
-(`StepConcrete`), tile on Level 2 (`StepTile`), wood inside the Manila Room
+Level 0, LEVEL FUN and the multiplex (`Sfx::Step`, unchanged), concrete on
+Level 1 (`StepConcrete`), tile on Level 2 (`StepTile`), wood inside the Manila Room
 (`StepWood`).
 
 - **The floor material is `LevelRules::footing`** (core/level_rules.h), so
@@ -458,8 +487,8 @@ build. docs/unreal-handoff.md "Next" lists what is open.
   moved from render.cpp's `drawDrinkCan`/`drawHeldDeck` and checked bit for
   bit against the old code over 200k states. port/draw.cpp's `heldDraws` turns
   them into draws for both builds.
-- **The hunter's and the pack's poses are in shared/port/sprites.h**
-  (`hunterSprite`, `dogSprite`: sheet, walk frames, row, size, fade).
+- **The hunter's pose is in shared/port/sprites.h** (`hunterSprite`: sheet,
+  walk frames, row, size, fade).
   port/draw.cpp reads them and lights and fogs them for both builds; checked
   against the old inline code over 169k poses. The sheet layout
   (`ENT_FRAMES`, `ENT_FRAME_W`, `EntRow`, ...) is port/sheets.h, which
@@ -541,8 +570,7 @@ interfaces.
   `GetTime()`. `captureTime` (BACKROOMS_TIME) fixes only what rendering sees.
 - **Sound is a list of `AudioEvent`s, played in order after the step.** A
   raylib clip keeps its pitch, volume and pan between plays, and the rules rely
-  on that (the hurt groan plays at the volume the soft floor last set), so a
-  PLAY changes only the properties it flags. The tape voice, the looping
+  on that, so a PLAY changes only the properties it flags. The tape voice, the looping
   recordings and the synth feed are events too.
 - **The synth is fed once a tick, from `updateEntity`.** So it is not fed on
   Level 2 or the title screen, where that function returns early or does not
@@ -733,11 +761,8 @@ loose objects were redrawn.
     or the shader's stains straddle the T-bars.
 - **Each surface keeps its old mean brightness.** Each generator ends in
   `matchLuma(old mean)`, because the ambients, light multipliers and
-  `tools/sweep.sh` bands were tuned against the old surfaces. The brick is
-  matched on its red channel: at equal luma the new brick (grey mortar) came
-  out a tenth darker under the Red Halls' almost pure red light, because the
-  tone curve's toe removes all its green. Measure a region of the capture, not
-  the frame mean, which hid this. `./texdump` prints every mean.
+  `tools/sweep.sh` bands were tuned against the old surfaces. Measure a region
+  of the capture, not the frame mean, which can hide a regional change. `./texdump` prints every mean.
 - **Level 0's wallpaper repeats every 1.5 m down the tile** (noise period
   512 px). Tall walls reuse the 0.75-2.25 m band (`wallV`/`voidFace`).
   Anything that depends on height (damp, the dust line, the skirting) stays
@@ -759,8 +784,8 @@ loose objects were redrawn.
     hashes; a second octave of each term cost another 3% and was removed.
 - **Surfaces are generated on first entry to a level** (`Game::surface`), not
   at startup. A level's set costs 0.2-0.7 s natively, and only Level 0's is
-  paid before the first frame. Levels share slots (the Red Halls reuse Level
-  1's slab; the pool ceiling is its floor tile).
+  paid before the first frame. Levels can share a slot (the pool ceiling is
+  its floor tile).
 - **Lettering** (`printText` in textures.cpp) uses the scrawl glyph splines
   with an even pen, because raylib's 8 px bitmap font came out as a staircase
   on the can. It renders to a scratch buffer and composites by coverage,
@@ -773,8 +798,7 @@ loose objects were redrawn.
   lettered on a side region is drawn flipped in the atlas. The first capture
   had "ALMOND WATER" backwards on every carton. Tops map the right way round.
 - The can (576 px) and deck (512 px) are their old layouts at 3x and 4x, so
-  the mesh UVs did not change; both are mipmapped. The dog sheet keeps its
-  frame size and ground line; only the silhouette changed.
+  the mesh UVs did not change; both are mipmapped.
 - **The revolver reflects the room.**
   - `detailMap` (model_asset.cpp) writes metalness into detail alpha (128
     dielectric to 188 metal).
@@ -833,7 +857,7 @@ byte-identical.
 - **Crossing the middle of a flight changes storey.** At `py > H/2 + 0.1` (or
   below `-H/2 - 0.1` going down), `Sim::changeStorey` swaps the chunk maps and
   shifts everything with a position by one pitch: player, eye, fall height,
-  flares, the tape deck, bullets, impacts, coins, confetti, dogs, the hunter.
+  flares, the tape deck, bullets, impacts, coins, confetti, the hunter.
   **A new object with a position must go in that list**, or it jumps a storey
   when you cross one.
 - **`World::qs` is the storey the accessors read**, not `storey`. `data()`,
@@ -997,9 +1021,9 @@ Level 1 follows the wiki's "Habitable Zone" article (CREDITS.md).
   stand in a cell with a door, exit or lock on any edge. Clark walks through
   them.
 - **Exits** are steel doors with a glyph painted over them (`addSymbolDoor`):
-  strokes between 3x3 lattice points chosen by the edge hash; cursed ones red.
-- Rebar spalls (`addSpall`), dock safety edging and lift doors are fixtures or
-  props geometry. The pipework is the Red Halls' code, also used on Level 1.
+  strokes between 3x3 lattice points chosen by the edge hash.
+- Rebar spalls (`addSpall`), dock safety edging, lift doors and the pipework
+  are fixtures or props geometry.
 - **A capture with `BACKROOMS_LEVEL=1` shows Level 1's visit 0** (init
   applies Level 0, then Level 1 for the first time). Level 0 captures are
   visit 1. A tool that assumes the other visit points the camera at an empty
@@ -1007,8 +1031,8 @@ Level 1 follows the wiki's "Habitable Zone" article (CREDITS.md).
 
 # Level 0 (September 2026)
 
-Level 0 follows the wiki's "Threshold" article, the Manila Room and Red Rooms
-entries, and the 2002 photograph (CREDITS.md).
+Level 0 follows the wiki's "Threshold" article, the Manila Room entry, and
+the 2002 photograph (CREDITS.md).
 
 - **Empty rooms.** Level 0 furniture is cartons and fallen tiles only.
   Windows are still drawn from the rng and discarded, so the random stream
@@ -1030,15 +1054,9 @@ entries, and the 2002 photograph (CREDITS.md).
   repeating exactly 4 times (256 px). Any other period puts half a chevron at
   every seam.
 - **Noclip exits.** On Level 0 a `WALL_EXIT` is drawn as a full wall with
-  vertex alpha 250 (247 when cursed) and has no collision. The shader tears
-  those fragments with `textureGrad`; plain `texture()` on the jittered UV
-  picks the smallest mip at every tear edge and draws lines. The cursed flag
-  is in alpha, not colour, because the Red Rooms tint is multiplied into every
-  vertex near it.
-- **The Red Rooms tint.** `MB::tint` multiplies a colour field into every
-  vertex a builder emits (per vertex, so it grades smoothly rather than per
-  cell). Only the floor and wall builders get it; the greedy-meshed ceiling
-  would interpolate one tint across a whole chunk.
+  vertex alpha 250 and has no collision. The shader tears those fragments with
+  `textureGrad`; plain `texture()` on the jittered UV picks the smallest mip at
+  every tear edge and draws lines.
 - **The Manila Room.**
   - One chunk in `MANILA_RATE`, never within one chunk of spawn.
   - `generate()` stamps it before the connectivity flood and again at the
@@ -1217,7 +1235,7 @@ build's, in `web/src/`.
 | `main.cpp` | `init()`, the `while (!WindowShouldClose())` loop, `shutdown()` |
 | `sim/` | game state and rules (`Sim`), stepped once a tick by `Sim::step` |
 | `sim/sim.cpp` | tick order, levels, descents, death and escape |
-| `sim/player.cpp`, `weapons.cpp`, `items.cpp`, `hunters.cpp`, `place.cpp` | the player; held items; pickups, the deck and the use key; the hunter and the pack; blackouts, sanity, exits, the Manila Room |
+| `sim/player.cpp`, `weapons.cpp`, `items.cpp`, `hunters.cpp`, `place.cpp` | the player; held items; pickups, the deck and the use key; the hunter; blackouts, sanity, exits, the Manila Room |
 | `sim/input_frame.h`, `audio_events.h` | what the platform tells the sim, and the sounds the sim requests |
 | `game.{h,cpp}` | the platform: window, assets, input into an `InputFrame`, chunk streaming, the occupancy grid; `Game::tick` |
 | `game_audio.{h,cpp}` | every `Sound`/`Music` handle and the synth; plays the sim's `AudioEvent`s in order |
@@ -1235,7 +1253,7 @@ build's, in `web/src/`.
 | `port/chunk_mesh.{h,cpp}` | the chunk mesher (`bakeChunkGeometry`), `ChunkMesh` slots |
 | `port/mesh_builder.{h,cpp}`, `port/atlas.{h,cpp}`, `port/palette.h` | `MB`, `addPropBox`, `addSolidBox`, `PLAIN_UV`; the fixtures atlas layout and tile sizes; `cl8`, `PARTY_RGBA` |
 | `port/camcorder.{h,cpp}` | the camcorder's tape: interference, the frames and their playback, clips, the REC mark and the playback's OSD |
-| `sim/entity.h` | `Entity` (Clark on Level 0, the Smiler on 1 and 3, the Partygoer on 4) and `Dog` state |
+| `sim/entity.h` | `Entity`: Clark on Level 0, a Smiler on Level 1 and the multiplex, the Partygoer on LEVEL FUN |
 | `world_mesh.{h,cpp}`, `mesh_upload.h` | `bakeChunk` (the mesher's output as raylib meshes), `ChunkMeshCache` |
 | `object_meshes.{h,cpp}` | can, tape deck, reels, flare, supply crate |
 | `vec_rl.h` | `toRl` / `fromRl` between core's math types and raylib's |
@@ -1251,7 +1269,7 @@ build's, in `web/src/`.
 
 `Sim::step` calls the update functions in a fixed order: flashlight, look,
 movement, dev keys, weapons, bullets, flare, tape deck, interaction, drink,
-ambience, Manila Room, crates, loop-audio cue, entity, dogs, exits, timers.
+ambience, Manila Room, crates, loop-audio cue, entity, exits, timers.
 `Game::tick` then plays the audio events, streams chunks, rebuilds the
 occupancy grid and renders. The order matters: weapons run before the entity,
 so a shot lands before the entity reacts to it.
@@ -1544,7 +1562,7 @@ In game, F3 shows the debug HUD. While it is up:
 # Regression process
 
 Before pushing anything that touches rendering, the shader or world
-generation, run all six levels and the menu:
+generation, run all five levels and the menu:
 
 ```bash
 tools/sweep.sh
@@ -1555,9 +1573,6 @@ any frame whose mean luma is outside the per-level band in its header. A
 failed shader compile does not crash: the frame goes black and the frame rate
 goes up. A clean exit is necessary, not sufficient; look at the images too.
 
-- **A Level 3 frame is meant to be almost black.** The Red Halls sit at a mean
-  luma around 12 out of 255 (the band is in `tools/sweep.sh`). It was 16
-  before the fog took its brightness from the local light.
 - The sweep shoots one corridor spot per level. When you touch lighting, also
   take these two by hand:
 
@@ -1606,7 +1621,7 @@ goes up. A clean exit is necessary, not sufficient; look at the images too.
   differed by 0.044%, concentrated in the upper bands. A changed binary
   against the old one, both at 4 fps, differed by 4 pixels out of 1.22 M.
   `tools/shot.sh` prints `fps=`; check it matches and re-shoot if not.
-- **Level 4 has its own noise level, about 0.014%.** Its balloons bob on
+- **LEVEL FUN has its own noise level, about 0.014%.** Its balloons bob on
   wall-clock time, so they move with any frame-rate change: about 170 pixels
   differ against an unchanged binary. The other levels differ by single-digit
   pixels.
@@ -1633,7 +1648,7 @@ tools/sandbox-build.sh mapdump
 It reports enclosure (share of solid edges, and cells by number of solid
 sides), sightline percentiles and occlusion at 20 m, reachability (a flood
 fill using the pathfinder's `canStep`), and densities in m² per instance for
-pillars, props, hide spots, doubloons, soft floor, valves, exits, pools and
+pillars, props, hide spots, doubloons, soft floor, exits, pools and
 elevation. Use it for anything that touches the generator; screenshots
 mislead about layout. From screenshots the halls looked hundreds of metres
 long, but the median sightline was 7.0 m. The real problem, that 57% of
@@ -1797,8 +1812,7 @@ Each of these cost real debugging time.
     blockers.
   - Pools are exempt on both sides: a pool floor is 0.6 m down, and a blocker
     would override the `poolAt` branches that handle getting in and out.
-- **Actors' floor heights.** `ent.dispY` and `Dog::dispY` are smoothed floor
-  heights used by `collideCircle`, the shot hit tests and the billboard. The
+- **Actors' floor heights.** `ent.dispY` is a smoothed floor height used by `collideCircle`, the shot hit tests and the billboard. The
   six actor `collideCircle` calls used to pass `feetY = 0`, so Clark crossed
   a drop as if it were flat and stood inside a loading dock. They are smoothed
   after movement, so collision sees last frame's value. That is safe only
@@ -1820,7 +1834,7 @@ Each of these cost real debugging time.
   `ceilY(gi + 1, gk)` at a chunk edge calls `data()` on the neighbour. That is
   correct, but it moved `chunks=` in the capture banner from 40 to 45. If a
   frame gains distant geometry after a mesher change, check `chunks=` first.
-  Level 4's differing pixels in a regression diff are its balloons, not this.
+  LEVEL FUN's differing pixels in a regression diff are its balloons, not this.
 - **Decal geometry must clear the wall's face, not its centreline.** `WT` is
   the half-thickness (0.11), so a fitting at ±0.028 from `gz` is inside the
   wall. The conduit runs were built that way: hundreds generated, none
@@ -1946,16 +1960,15 @@ Each of these cost real debugging time.
   footfalls. The wrap at 4096 must stay an even integer, or both the crossing
   test and the sway jump.
 - **An actor's gait comes from distance travelled, not intended speed.**
-  `Entity::gait` and `Dog::gait` count footfalls like `bobPhase` and drive both
+  `Entity::gait` counts footfalls like `bobPhase` and drives both
   the walk-cycle frame and the footstep sound, so the sound matches the frame.
   The old `entStepAcc` added `chaseSpd * dt`, so a Clark stuck against a wall
   still sounded like he was crossing the room, and it only ran during a chase.
-- **Hit tests check height along the aim line.** Both actor hit tests used to
+- **Hit tests check height along the aim line.** The actor hit tests used to
   measure the miss distance in the horizontal plane, so aiming at the ceiling
   still hit. `shotHitsBody` takes the 3D `fwd`, walks the aim line out to the
   target's horizontal distance and checks that height against the body's
-  span. The eye is at 1.62 m and a dog stands 0.92 m, so a level shot passes
-  over a dog; you have to aim at it. `popBalloonsAlongAim` had no sight test
+  span. `popBalloonsAlongAim` had no sight test
   and popped balloons through walls; it now checks `lineOfSight` per balloon.
 
 ## Sound
@@ -1969,8 +1982,8 @@ Each of these cost real debugging time.
 
 ## Sprites
 
-- **The sheets' frame counts are defined in two files.** `ENT_FRAMES`,
-  `ENT_ROWS` and `DOG_FRAMES` (port/sheets.h) size the atlas in textures.cpp
+- **The sheets' frame counts are defined in two files.** `ENT_FRAMES` and
+  `ENT_ROWS` (port/sheets.h) size the atlas in textures.cpp
   and index the source rect when drawing. If they disagree, a sliver of the
   next frame shows down one edge of every sprite. A row is a full stride, not
   half of one mirrored: Clark has a real leg and a peg leg.
@@ -2034,7 +2047,7 @@ clearing them at every level change removed their use.
 | `< 0.62` | water surface |
 | `>= 0.62` | textured; `aOut = fragC.a * texel.a` |
 | `0.93..0.955` | backlit print (vending machine, alpha 240): textured plus its own texel, opaque |
-| `0.965..0.99` | Level 0 noclip wall: textured, torn by the shader; 247 cursed, 250 not |
+| `0.965..0.99` | Level 0 noclip wall (250): textured, torn by the shader |
 | `> 0.998` | also gets world-space relief |
 
 Relief suits grimy walls and carpet, not small curved objects, and not
@@ -2076,7 +2089,7 @@ the room's ceiling; lowering it with them hung a soffit round every pool
 depression from a lower storey.
 
 - **Anything fixed to the ceiling uses `ceilY` of its own cell**, not `wallH`:
-  light trays, diffusers, sprinklers, conduit runs, Level 3 pipework, Level 4
+  light trays, diffusers, sprinklers, conduit runs, Level 1 pipework, LEVEL FUN
   streamers and the ceiling crease AO strips. A crease left at `wallH` floats
   under a ceiling that moved.
 - **A wall between two cells of different height** starts at the lower floor
@@ -2141,8 +2154,8 @@ the fade there is a brightness seam along every light-cell boundary.
   only from this estimate.
 - **There is one flare point light** (`uFlarePos`/`uFlareInt`); the muzzle
   flash uses it when nothing is burning. Up to `MAXFLARES` can burn at once,
-  so one is chosen to feed it. The others still burn, keep Clark and the pack
-  away and hiss; they just do not light the room.
+  so one is chosen to feed it. The others still burn, keep the hunter away and
+  hiss; they just do not light the room.
 - **Choose that flare by `Sim::flarePresence`, not by distance.** Presence is
   `burn-fraction / (1 + FLAREFALL·d²)`. `dominantFlare` (the light) and the
   hiss in `updateFlare` both use it, so the flare you hear is the one lighting
@@ -2271,8 +2284,7 @@ three rules:
 ## Health, swimming, sprint and the hunters (September 2026)
 
 - **Being caught does not end the run.** `Sim::hurtPlayer` takes
-  `ENTITY_HIT` (0.6) for a landed lunge and `PACK_BITE` (0.6) per bite, so one
-  hit is survivable and a second before health regenerates is not. It pushes
+  `ENTITY_HIT` (0.6) for a landed lunge, so one hit is survivable and a second before health regenerates is not. It pushes
   the player away at 6 m/s and grants `HURT_GRACE` of immunity. `dieRun` fires
   only at 0 health. Both catch sites check `hurtT <= 0`, or one lunge
   overlapping the player for several frames takes the whole bar. After a
@@ -2293,8 +2305,8 @@ three rules:
 - **Double-tap W latches sprint** (`wSprint`) until W is released; the second
   press must come within `W_TAP`. Touch uses the push past the ring.
 - **One entity, three looks.** `Sim::hunterName()` and `clarkLevel()` choose
-  Pirate Clark on Level 0 (`makeClarkTex`), the Partygoer on Level 4 and a
-  Smiler on Levels 1 and 3. Death cards, the "IS DOWN" banner and `deathBy` go
+  Pirate Clark on Level 0 (`makeClarkTex`), the Partygoer on LEVEL FUN and a
+  Smiler on Level 1 and the multiplex. Death cards, the "IS DOWN" banner and `deathBy` go
   through `hunterName()`; the tally reads "hunters put down" because it spans
   levels.
 - **The Smiler is two sheets on the entity grid.** `makeSmilerTex(false)` is

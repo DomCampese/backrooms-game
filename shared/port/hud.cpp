@@ -224,7 +224,7 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
     }
     if (sim.killT > 0) {
         float a = clampf(sim.killT / 3.0f, 0, 1);
-        const char *t = (sim.level == 4) ? "THE PARTYGOER IS DOWN" : sim.clarkLevel() ? "PIRATE CLARK IS DOWN" : "THE SMILER IS DOWN";
+        const char *t = (sim.level == LEVEL_FUN) ? "THE PARTYGOER IS DOWN" : sim.clarkLevel() ? "PIRATE CLARK IS DOWN" : "THE SMILER IS DOWN";
         textC(t, sw / 2, sh / 2 - hud(96), hud(44), fade({ 205, 60, 40, 255 }, a));
         textC(fmt("...but nothing stays down, down here   ·   %d put down", sim.killCount), sw / 2, sh / 2 - hud(44),
               hud(18), fade({ 150, 122, 100, 255 }, a * 0.9f));
@@ -327,8 +327,8 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
             sim.weapon == WEAPON_DECK ? (sim.deck.playing ? Rgba{ 205, 150, 235, 220 } : selc) : dimc);
     }
     if (sim.wayOpen() && sim.winT <= 0 && sim.deathT <= 0 && sim.escapeT <= 0) {   // enough doubloons: find an exit
-        const char *t = sim.level == 0 ? "the walls know you now  ·  find one that isn't cursed"
-                                       : "the doors know you now  ·  find one that isn't cursed";
+        const char *t = sim.level == 0 ? "the walls know you now  ·  find one"
+                                       : "the doors know you now  ·  find one";
         float pl = 0.55f + 0.45f * sinf((float)now * 2.5f);
         textC(t, sw / 2, hud(70), hud(20), fade({ 120, 235, 145, 255 }, pl));
     }
@@ -368,20 +368,6 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         coverCol = { 180, 170, 140, 120 };
     }
     if (coverLine) textC(coverLine, sw / 2, sh - hud(62), hud(14), coverCol);
-    if (sim.level == 3 && sim.valveT > 0) {   // a valve was just closed
-        float a = clampf(sim.valveT / 1.6f, 0, 1);
-        if (sim.pipesShut) {
-            textC("THE PIPES GO QUIET", sw / 2, sh / 2 - hud(110), hud(34), fade({ 120, 230, 145, 255 }, a));
-            textC("...and the halls give up what they were holding", sw / 2, sh / 2 - hud(74), hud(16),
-                  fade({ 150, 200, 160, 255 }, a * 0.9f));
-        } else {
-            textC(fmt("VALVE SHUT   %d / %d", (int)sim.valvesTurned.size(), Sim::VALVES_NEEDED), sw / 2,
-                  sh / 2 - hud(100), hud(26), fade({ 210, 180, 120, 255 }, a));
-        }
-    }
-    if (sim.level == 3 && !sim.valvesTurned.empty() && !sim.pipesShut)   // valves closed so far
-        text(fmt("valves  %d / %d", (int)sim.valvesTurned.size(), Sim::VALVES_NEEDED), hud(16), sh - hud(138), hud(16),
-             { 198, 150, 96, 175 });
     if (sim.paused) {
         rect(0, 0, sw, sh, fade(BLACK_RGBA, 0.55f));
         textC("P A U S E D", sw / 2, sh / 2 - hud(42), hud(46), { 225, 212, 160, 235 });

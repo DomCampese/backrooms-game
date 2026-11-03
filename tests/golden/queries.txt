@@ -177,31 +177,29 @@ occupancy cells=333890c551fdc3f5 masks=f3fb6a6deb5af325
   byte1 bit0=0 bit1=0 bit2=0 bit3=0 bit4=0 bit5=0 bit6=0
   byte2 bit0=0 bit1=0 bit2=0 bit3=0 bit4=0 bit5=0 bit6=0
 
-## vending, L4 v1
-vending at cell (11,-11) propRot 6
-gatherCellAABBs vending cell (11,-11) props=1 -> 3
-  box x 21.8899994..24.1100006 z -22.1100006..-21.8899994 top 10000 seeThrough=0
-  box x 21.8899994..22.1100006 z -22.1100006..-21.6499996 top 10000 seeThrough=0
-  box x 22.5600014..23.4400063 z -21.8100052..-21.0599976 top 1.83000004 seeThrough=0
-gatherCellAABBs vending, no props cell (11,-11) props=0 -> 2
-  box x 21.8899994..24.1100006 z -22.1100006..-21.8899994 top 10000 seeThrough=0
-  box x 21.8899994..22.1100006 z -22.1100006..-21.6499996 top 10000 seeThrough=0
-collideCircle near vending at (23.0000038,-22.1500015) r 0.340000004 feetY 0 -> (23.0000038,-22.4500008)
-collideCircle near vending at (23.7000046,-21.4500008) r 0.340000004 feetY 0 -> (23.7800064,-21.4500008)
-collideCircle near vending at (23.0000038,-20.75) r 0.340000004 feetY 0 -> (23.0000038,-20.7199974)
-collideCircle near vending at (22.3000031,-21.4500008) r 0.340000004 feetY 0 -> (22.2200012,-21.3295174)
-collideCircle standing on vending at (23.0000038,-21.4500008) r 0.340000004 feetY 1.83000004 -> (23.0000038,-21.4500008)
-groundAt on vending top at (23.0000038,-21.4500008) feetY 1.84000003 -> 1.83000004
-vending at cell (20,-12) propRot 2
-gatherCellAABBs vending cell (20,-12) props=1 -> 1
-  box x 40.5599976..41.4400024 z -23.3600044..-22.6099968 top 1.83000004 seeThrough=0
-gatherCellAABBs vending, no props cell (20,-12) props=0 -> 0
-collideCircle near vending at (41,-23.7000008) r 0.340000004 feetY 0 -> (41,-23.7000046)
-collideCircle near vending at (41.7000008,-23) r 0.340000004 feetY 0 -> (41.7800026,-23)
-collideCircle near vending at (41,-22.2999992) r 0.340000004 feetY 0 -> (41,-22.2699966)
-collideCircle near vending at (40.2999992,-23) r 0.340000004 feetY 0 -> (40.2199974,-23)
-collideCircle standing on vending at (41,-23) r 0.340000004 feetY 1.83000004 -> (41,-23)
-groundAt on vending top at (41,-23) feetY 1.84000003 -> 1.83000004
+## vending, L3 v1
+vending at cell (45,-15) propRot 7
+gatherCellAABBs vending cell (45,-15) props=1 -> 2
+  box x 89.8899994..92.1100006 z -30.1100006..-29.8899994 top 10000 seeThrough=0
+  box x 91.0599899..91.8100052 z -29.4399986..-28.5599899 top 1.83000004 seeThrough=0
+gatherCellAABBs vending, no props cell (45,-15) props=0 -> 1
+  box x 89.8899994..92.1100006 z -30.1100006..-29.8899994 top 10000 seeThrough=0
+collideCircle near vending at (91.4499969,-29.699995) r 0.340000004 feetY 0 -> (91.4499969,-29.7799988)
+collideCircle near vending at (92.1499939,-28.9999943) r 0.340000004 feetY 0 -> (92.4499969,-28.9999943)
+collideCircle near vending at (91.4499969,-28.2999935) r 0.340000004 feetY 0 -> (91.4499969,-28.4500008)
+collideCircle near vending at (90.75,-28.9999943) r 0.340000004 feetY 0 -> (90.7199936,-28.9999943)
+collideCircle standing on vending at (91.4499969,-28.9999943) r 0.340000004 feetY 1.83000004 -> (91.4499969,-28.9999943)
+groundAt on vending top at (91.4499969,-28.9999943) feetY 1.84000003 -> 1.83000004
+vending at cell (16,-1) propRot 3
+gatherCellAABBs vending cell (16,-1) props=1 -> 1
+  box x 32.6099968..33.3600044 z -1.44000435..-0.559996068 top 1.83000004 seeThrough=0
+gatherCellAABBs vending, no props cell (16,-1) props=0 -> 0
+collideCircle near vending at (33,-1.70000005) r 0.340000004 feetY 0 -> (33,-1.78000438)
+collideCircle near vending at (33.7000008,-1) r 0.340000004 feetY 0 -> (33.7000046,-1)
+collideCircle near vending at (33,-0.300000012) r 0.340000004 feetY 0 -> (33,-0.219996065)
+collideCircle near vending at (32.2999992,-1) r 0.340000004 feetY 0 -> (32.2699966,-1)
+collideCircle standing on vending at (33,-1) r 0.340000004 feetY 1.83000004 -> (33,-1)
+groundAt on vending top at (33,-1) feetY 1.84000003 -> 1.83000004
 
 ## sampled, L0 v1
 lineOfSight sample (8.76818085,62.8947372) to (-5.19521332,73.065712) -> 0
@@ -300,14 +298,14 @@ findOpenSpot (76.0793915,88.7913895) -> (77,89)
 groundAt sample at (42.7081909,62.7171783) feetY 0.5 -> 0
 collideCircle sample at (42.7081909,62.7171783) r 0.340000004 feetY 0 -> (42.7081909,62.7171783)
 findOpenSpot (42.7081909,62.7171783) -> (43,63)
-cell (35,-14) floorY -0.400000006 ceilY 3 pool 0 soft 0 valve 0 key 0 cursed 1 manila 0
-cell (-13,-3) floorY 0 ceilY 3 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (9,8) floorY 0 ceilY 3 pool 0 soft 0 valve 0 key 0 cursed 1 manila 0
-cell (45,-3) floorY 0 ceilY 3 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (18,1) floorY 0 ceilY 3 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (30,31) floorY 0 ceilY 3 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (-5,16) floorY 0 ceilY 3 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (30,11) floorY 0 ceilY 3 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
+cell (35,-14) floorY -0.400000006 ceilY 3 pool 0 soft 0 key 0 manila 0
+cell (-13,-3) floorY 0 ceilY 3 pool 0 soft 0 key 0 manila 0
+cell (9,8) floorY 0 ceilY 3 pool 0 soft 0 key 0 manila 0
+cell (45,-3) floorY 0 ceilY 3 pool 0 soft 0 key 0 manila 0
+cell (18,1) floorY 0 ceilY 3 pool 0 soft 0 key 0 manila 0
+cell (30,31) floorY 0 ceilY 3 pool 0 soft 0 key 0 manila 0
+cell (-5,16) floorY 0 ceilY 3 pool 0 soft 0 key 0 manila 0
+cell (30,11) floorY 0 ceilY 3 pool 0 soft 0 key 0 manila 0
 
 ## sampled, L1 v1
 lineOfSight sample (48.7639618,92.91362) to (50.2719727,101.958382) -> 0
@@ -406,14 +404,14 @@ findOpenSpot (95.3762817,64.6394882) -> (93,65)
 groundAt sample at (-20.3531265,71.4619446) feetY 0.5 -> 0
 collideCircle sample at (-20.3531265,71.4619446) r 0.340000004 feetY 0 -> (-20.4500008,71.4619446)
 findOpenSpot (-20.3531265,71.4619446) -> (-21,71)
-cell (31,-16) floorY 0 ceilY 4.19999981 pool 0 soft 0 valve 0 key 0 cursed 1 manila 0
-cell (16,-2) floorY 0 ceilY 4.19999981 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (14,22) floorY 0 ceilY 4.19999981 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (-11,17) floorY 0 ceilY 4.19999981 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (13,7) floorY 0 ceilY 4.19999981 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (-5,41) floorY 0 ceilY 4.19999981 pool 0 soft 0 valve 0 key 0 cursed 1 manila 0
-cell (-7,-12) floorY 0 ceilY 4.19999981 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (8,34) floorY 0 ceilY 4.19999981 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
+cell (31,-16) floorY 0 ceilY 4.19999981 pool 0 soft 0 key 0 manila 0
+cell (16,-2) floorY 0 ceilY 4.19999981 pool 0 soft 0 key 0 manila 0
+cell (14,22) floorY 0 ceilY 4.19999981 pool 0 soft 0 key 0 manila 0
+cell (-11,17) floorY 0 ceilY 4.19999981 pool 0 soft 0 key 0 manila 0
+cell (13,7) floorY 0 ceilY 4.19999981 pool 0 soft 0 key 0 manila 0
+cell (-5,41) floorY 0 ceilY 4.19999981 pool 0 soft 0 key 0 manila 0
+cell (-7,-12) floorY 0 ceilY 4.19999981 pool 0 soft 0 key 0 manila 0
+cell (8,34) floorY 0 ceilY 4.19999981 pool 0 soft 0 key 0 manila 0
 
 ## sampled, L2 v1
 lineOfSight sample (64.745369,-24.5100479) to (49.7363052,-15.3153782) -> 0
@@ -512,14 +510,14 @@ findOpenSpot (94.3546371,-27.5439987) -> (95,-27)
 groundAt sample at (0.729629517,21.3113785) feetY 0.5 -> 0
 collideCircle sample at (0.729629517,21.3113785) r 0.340000004 feetY 0 -> (0.729629517,21.3113785)
 findOpenSpot (0.729629517,21.3113785) -> (1,21)
-cell (-7,-15) floorY -0.600000024 ceilY 7.5 pool 1 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (20,28) floorY -2.79999995 ceilY 7.5 pool 1 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (37,3) floorY -2.79999995 ceilY 7.5 pool 1 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (-11,47) floorY 0 ceilY 7.5 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (39,36) floorY -2 ceilY 7.5 pool 1 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (13,2) floorY 0 ceilY 7.5 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (30,6) floorY -2 ceilY 7.5 pool 1 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (-10,12) floorY -2.79999995 ceilY 7.5 pool 1 soft 0 valve 0 key 0 cursed 0 manila 0
+cell (-7,-15) floorY -0.600000024 ceilY 7.5 pool 1 soft 0 key 0 manila 0
+cell (20,28) floorY -2.79999995 ceilY 7.5 pool 1 soft 0 key 0 manila 0
+cell (37,3) floorY -2.79999995 ceilY 7.5 pool 1 soft 0 key 0 manila 0
+cell (-11,47) floorY 0 ceilY 7.5 pool 0 soft 0 key 0 manila 0
+cell (39,36) floorY -2 ceilY 7.5 pool 1 soft 0 key 0 manila 0
+cell (13,2) floorY 0 ceilY 7.5 pool 0 soft 0 key 0 manila 0
+cell (30,6) floorY -2 ceilY 7.5 pool 1 soft 0 key 0 manila 0
+cell (-10,12) floorY -2.79999995 ceilY 7.5 pool 1 soft 0 key 0 manila 0
 
 ## sampled, L3 v1
 lineOfSight sample (69.8524246,45.7914963) to (78.2325745,47.4587097) -> 0
@@ -532,9 +530,9 @@ lineOfSight sample (17.6313705,88.401413) to (6.38928795,95.5045319) -> 0
 lineOfSight sample (58.5844955,58.8198853) to (68.3434525,69.5639496) -> 0
 lineOfSight sample (-28.7425537,-9.06242371) to (-36.4311752,-19.1047592) -> 0
 lineOfSight sample (85.467865,61.8491669) to (100.754936,72.1448593) -> 0
-lineOfSight sample (-1.4979248,36.0086899) to (-7.31235504,37.4687881) -> 0
+lineOfSight sample (-1.4979248,36.0086899) to (-7.31235504,37.4687881) -> 1
 lineOfSight sample (64.5547638,58.0775986) to (78.137619,58.1534958) -> 0
-lineOfSight sample (11.5632935,68.2418594) to (8.46187973,65.8152771) -> 0
+lineOfSight sample (11.5632935,68.2418594) to (8.46187973,65.8152771) -> 1
 lineOfSight sample (51.4650726,11.0285492) to (52.4419136,22.3937035) -> 0
 lineOfSight sample (69.2726822,13.3556213) to (70.5178986,5.52779388) -> 1
 lineOfSight sample (13.0823135,40.0197678) to (19.4498291,43.1358414) -> 0
@@ -547,46 +545,46 @@ lineOfSight sample (1.40016937,89.5789413) to (-2.48640442,78.4181061) -> 0
 lineOfSight sample (-8.43313599,47.4108582) to (-0.429111481,59.0833397) -> 0
 lineOfSight sample (6.40679932,67.1911469) to (-4.20826149,74.4974518) -> 0
 canStep from (12,28) north south west east -> 1111
-canStep from (-9,25) north south west east -> 0111
+canStep from (-9,25) north south west east -> 1110
 canStep from (14,-12) north south west east -> 1101
 canStep from (5,-9) north south west east -> 1111
-canStep from (-9,-11) north south west east -> 0111
+canStep from (-9,-11) north south west east -> 1110
 canStep from (29,46) north south west east -> 0111
-canStep from (17,-1) north south west east -> 1111
+canStep from (17,-1) north south west east -> 1101
 canStep from (41,46) north south west east -> 0111
-canStep from (38,-12) north south west east -> 1111
+canStep from (38,-12) north south west east -> 1101
 canStep from (25,-7) north south west east -> 1111
-canStep from (20,40) north south west east -> 1110
+canStep from (20,40) north south west east -> 1011
 canStep from (42,34) north south west east -> 1100
-canStep from (39,11) north south west east -> 1010
-canStep from (36,-9) north south west east -> 1101
+canStep from (39,11) north south west east -> 1101
+canStep from (36,-9) north south west east -> 1111
 canStep from (22,3) north south west east -> 1111
-canStep from (25,-3) north south west east -> 1111
-canStep from (15,20) north south west east -> 1111
+canStep from (25,-3) north south west east -> 1001
+canStep from (15,20) north south west east -> 1011
 canStep from (12,-15) north south west east -> 0111
-canStep from (39,24) north south west east -> 1111
-canStep from (10,-12) north south west east -> 1110
+canStep from (39,24) north south west east -> 1110
+canStep from (10,-12) north south west east -> 1001
 canStep from (0,1) north south west east -> 1110
 canStep from (2,32) north south west east -> 1011
-canStep from (23,11) north south west east -> 0111
-canStep from (29,19) north south west east -> 1110
-pathStep (31,14) to (23,10) -> (30,14)
+canStep from (23,11) north south west east -> 1100
+canStep from (29,19) north south west east -> 1100
+pathStep (31,14) to (23,10) -> (31,13)
 pathStep (22,-15) to (18,-14) -> (22,-14)
 pathStep (35,-13) to (37,-7) -> (35,-12)
 pathStep (24,20) to (21,31) -> (24,21)
-pathStep (41,43) to (51,45) -> (41,44)
+pathStep (41,43) to (51,45) -> (41,42)
 pathStep (1,0) to (-2,-1) -> (1,-1)
 pathStep (28,7) to (18,5) -> (28,6)
 pathStep (32,-13) to (43,-25) -> (32,-14)
 pathStep (-8,17) to (-11,29) -> (-8,18)
 pathStep (10,20) to (13,13) -> (10,21)
-pathStep (47,17) to (59,18) -> (47,16)
-pathStep (32,17) to (37,18) -> (32,16)
+pathStep (47,17) to (59,18) -> (48,17)
+pathStep (32,17) to (37,18) -> (32,18)
 groundAt sample at (3.2299118,34.882637) feetY 0.5 -> 0
 collideCircle sample at (3.2299118,34.882637) r 0.340000004 feetY 0 -> (3.2299118,34.882637)
 findOpenSpot (3.2299118,34.882637) -> (3,35)
 groundAt sample at (53.2490768,22.4121323) feetY 0.5 -> 0
-collideCircle sample at (53.2490768,22.4121323) r 0.340000004 feetY 0 -> (53.2490768,22.4121323)
+collideCircle sample at (53.2490768,22.4121323) r 0.340000004 feetY 0 -> (53.2490768,22.4500008)
 findOpenSpot (53.2490768,22.4121323) -> (53,23)
 groundAt sample at (-22.8494873,-22.1604004) feetY 0.5 -> 0
 collideCircle sample at (-22.8494873,-22.1604004) r 0.340000004 feetY 0 -> (-22.8494873,-22.4500008)
@@ -595,14 +593,14 @@ groundAt sample at (-16.2123032,-11.1404037) feetY 0.5 -> 0
 collideCircle sample at (-16.2123032,-11.1404037) r 0.340000004 feetY 0 -> (-16.2123032,-11.1404037)
 findOpenSpot (-16.2123032,-11.1404037) -> (-17,-11)
 groundAt sample at (-21.2820511,14.1303635) feetY 0.5 -> 0
-collideCircle sample at (-21.2820511,14.1303635) r 0.340000004 feetY 0 -> (-21.2820511,14.4499998)
+collideCircle sample at (-21.2820511,14.1303635) r 0.340000004 feetY 0 -> (-21.2820511,14.1303635)
 findOpenSpot (-21.2820511,14.1303635) -> (-21,15)
 groundAt sample at (88.1963196,9.99254608) feetY 0.5 -> 0
-collideCircle sample at (88.1963196,9.99254608) r 0.340000004 feetY 0 -> (88.1963196,9.99254608)
+collideCircle sample at (88.1963196,9.99254608) r 0.340000004 feetY 0 -> (88.4499969,9.55000019)
 findOpenSpot (88.1963196,9.99254608) -> (89,9)
 groundAt sample at (48.9029465,94.2856369) feetY 0.5 -> 0
-collideCircle sample at (48.9029465,94.2856369) r 0.340000004 feetY 0 -> (48.9029465,94.2856369)
-findOpenSpot (48.9029465,94.2856369) -> (49,95)
+collideCircle sample at (48.9029465,94.2856369) r 0.340000004 feetY 0 -> (48.9029465,94.0100021)
+findOpenSpot (48.9029465,94.2856369) -> (47,93)
 groundAt sample at (-8.21414185,-31.5043259) feetY 0.5 -> 0
 collideCircle sample at (-8.21414185,-31.5043259) r 0.340000004 feetY 0 -> (-8.21414185,-31.5043259)
 findOpenSpot (-8.21414185,-31.5043259) -> (-9,-31)
@@ -613,108 +611,108 @@ groundAt sample at (40.3632889,-19.0566101) feetY 0.5 -> 0
 collideCircle sample at (40.3632889,-19.0566101) r 0.340000004 feetY 0 -> (40.3632889,-19.0566101)
 findOpenSpot (40.3632889,-19.0566101) -> (41,-19)
 groundAt sample at (86.0901794,18.5395203) feetY 0.5 -> 0
-collideCircle sample at (86.0901794,18.5395203) r 0.340000004 feetY 0 -> (86.0901794,18.6900005)
+collideCircle sample at (86.0901794,18.5395203) r 0.340000004 feetY 0 -> (86.0901794,18.5395203)
 findOpenSpot (86.0901794,18.5395203) -> (87,19)
 groundAt sample at (73.3320847,-25.259285) feetY 0.5 -> 0
 collideCircle sample at (73.3320847,-25.259285) r 0.340000004 feetY 0 -> (73.3320847,-25.259285)
 findOpenSpot (73.3320847,-25.259285) -> (73,-25)
-cell (33,10) floorY 0 ceilY 3 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (21,45) floorY 0 ceilY 3 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (30,24) floorY 0 ceilY 3 pool 0 soft 0 valve 0 key 0 cursed 1 manila 0
-cell (10,44) floorY 0 ceilY 3 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (40,23) floorY 0 ceilY 3 pool 0 soft 0 valve 0 key 0 cursed 1 manila 0
-cell (-11,14) floorY 0 ceilY 3 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (-14,32) floorY 0 ceilY 3 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (2,4) floorY 0 ceilY 3 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
+cell (33,10) floorY 0 ceilY 3 pool 0 soft 0 key 0 manila 0
+cell (21,45) floorY 0 ceilY 3 pool 0 soft 0 key 0 manila 0
+cell (30,24) floorY 0 ceilY 3 pool 0 soft 0 key 0 manila 0
+cell (10,44) floorY 0 ceilY 3 pool 0 soft 0 key 0 manila 0
+cell (40,23) floorY 0 ceilY 3 pool 0 soft 0 key 0 manila 0
+cell (-11,14) floorY 0 ceilY 3 pool 0 soft 0 key 0 manila 0
+cell (-14,32) floorY 0 ceilY 3 pool 0 soft 0 key 0 manila 0
+cell (2,4) floorY 0 ceilY 3 pool 0 soft 0 key 0 manila 0
 
 ## sampled, L4 v1
 lineOfSight sample (78.5629959,-25.5415649) to (86.915451,-35.7928963) -> 0
-lineOfSight sample (90.7637634,53.2440033) to (75.8535614,48.8797188) -> 0
+lineOfSight sample (90.7637634,53.2440033) to (75.8535614,48.8797188) -> 1
 lineOfSight sample (-17.4967804,60.7215042) to (-5.33278847,74.111763) -> 0
 lineOfSight sample (24.5690765,31.8559799) to (39.8391571,34.0607376) -> 0
-lineOfSight sample (35.5445099,16.0501175) to (40.0116577,30.3209248) -> 0
-lineOfSight sample (49.8406677,41.8736725) to (44.7541885,36.6932182) -> 0
+lineOfSight sample (35.5445099,16.0501175) to (40.0116577,30.3209248) -> 1
+lineOfSight sample (49.8406677,41.8736725) to (44.7541885,36.6932182) -> 1
 lineOfSight sample (65.7493973,9.65743256) to (78.2160568,2.74117851) -> 0
-lineOfSight sample (84.9296951,47.0653839) to (81.3381271,54.1993561) -> 0
+lineOfSight sample (84.9296951,47.0653839) to (81.3381271,54.1993561) -> 1
 lineOfSight sample (8.28874969,63.4526138) to (6.05681229,48.5849609) -> 0
 lineOfSight sample (30.6695023,47.4182358) to (30.4618912,63.3347664) -> 0
 lineOfSight sample (2.34246826,88.4237366) to (-2.45209503,87.4396362) -> 0
 lineOfSight sample (12.5806351,33.8389206) to (4.02915192,40.8054428) -> 0
-lineOfSight sample (-15.6507492,21.7404633) to (-9.95507622,22.288641) -> 0
+lineOfSight sample (-15.6507492,21.7404633) to (-9.95507622,22.288641) -> 1
 lineOfSight sample (6.10332489,-13.9931488) to (-4.46044731,-11.7123165) -> 0
 lineOfSight sample (31.5288696,40.6303864) to (18.8853474,52.7563286) -> 0
 lineOfSight sample (-30.6954498,-25.44664) to (-40.4071121,-22.2372723) -> 0
 lineOfSight sample (83.1810608,82.5988693) to (80.5468597,83.9212494) -> 1
-lineOfSight sample (86.5089417,46.9981232) to (70.7404556,44.8696442) -> 0
+lineOfSight sample (86.5089417,46.9981232) to (70.7404556,44.8696442) -> 1
 lineOfSight sample (61.8830338,82.4382172) to (69.3308868,89.2921219) -> 0
 lineOfSight sample (14.426445,1.6111145) to (22.6894913,16.538372) -> 0
 lineOfSight sample (-28.712677,88.7583847) to (-21.2370529,86.6394119) -> 1
-lineOfSight sample (6.34421539,-14.3289108) to (19.5598602,-15.5986404) -> 0
-lineOfSight sample (-7.3427887,41.9190674) to (-14.7896328,37.6901779) -> 0
+lineOfSight sample (6.34421539,-14.3289108) to (19.5598602,-15.5986404) -> 1
+lineOfSight sample (-7.3427887,41.9190674) to (-14.7896328,37.6901779) -> 1
 lineOfSight sample (93.8039932,-18.2007904) to (97.4878387,-3.95541) -> 0
 canStep from (29,-1) north south west east -> 1111
-canStep from (33,0) north south west east -> 1001
-canStep from (-6,2) north south west east -> 0111
-canStep from (8,36) north south west east -> 0101
-canStep from (15,32) north south west east -> 1110
+canStep from (33,0) north south west east -> 1011
+canStep from (-6,2) north south west east -> 1000
+canStep from (8,36) north south west east -> 0000
+canStep from (15,32) north south west east -> 1111
 canStep from (2,-8) north south west east -> 1111
-canStep from (28,6) north south west east -> 0111
-canStep from (20,-8) north south west east -> 1101
-canStep from (45,23) north south west east -> 1111
+canStep from (28,6) north south west east -> 0001
+canStep from (20,-8) north south west east -> 0000
+canStep from (45,23) north south west east -> 1110
 canStep from (32,-10) north south west east -> 1110
-canStep from (5,42) north south west east -> 1111
-canStep from (30,29) north south west east -> 1100
+canStep from (5,42) north south west east -> 0000
+canStep from (30,29) north south west east -> 1101
 canStep from (30,42) north south west east -> 1101
-canStep from (41,5) north south west east -> 0110
+canStep from (41,5) north south west east -> 0000
 canStep from (15,39) north south west east -> 1111
 canStep from (12,13) north south west east -> 1011
 canStep from (7,21) north south west east -> 1111
-canStep from (16,-5) north south west east -> 1111
-canStep from (45,22) north south west east -> 1110
-canStep from (34,-14) north south west east -> 1100
-canStep from (18,-4) north south west east -> 1111
-canStep from (-12,2) north south west east -> 0001
-canStep from (38,9) north south west east -> 1100
-canStep from (6,38) north south west east -> 0111
-pathStep (-2,0) to (-7,4) -> (-2,1)
-pathStep (23,25) to (11,24) -> (23,24)
-pathStep (37,5) to (41,4) -> (37,6)
+canStep from (16,-5) north south west east -> 1110
+canStep from (45,22) north south west east -> 1100
+canStep from (34,-14) north south west east -> 1011
+canStep from (18,-4) north south west east -> 0111
+canStep from (-12,2) north south west east -> 1000
+canStep from (38,9) north south west east -> 0001
+canStep from (6,38) north south west east -> 0100
+pathStep (-2,0) to (-7,4) -> none
+pathStep (23,25) to (11,24) -> none
+pathStep (37,5) to (41,4) -> none
 pathStep (5,-14) to (9,-17) -> (5,-15)
-pathStep (18,13) to (8,1) -> (18,12)
-pathStep (-9,1) to (-8,-8) -> (-10,1)
-pathStep (38,28) to (31,40) -> (37,28)
+pathStep (18,13) to (8,1) -> (19,13)
+pathStep (-9,1) to (-8,-8) -> (-8,1)
+pathStep (38,28) to (31,40) -> (38,29)
 pathStep (17,39) to (20,31) -> (17,38)
-pathStep (-12,-5) to (-9,-8) -> (-11,-5)
+pathStep (-12,-5) to (-9,-8) -> (-12,-6)
 pathStep (9,40) to (10,52) -> none
-pathStep (-16,-11) to (-10,-5) -> none
-pathStep (5,19) to (5,30) -> (4,19)
+pathStep (-16,-11) to (-10,-5) -> (-16,-10)
+pathStep (5,19) to (5,30) -> (5,20)
 groundAt sample at (-2.86637878,-25.662468) feetY 0.5 -> 0
 collideCircle sample at (-2.86637878,-25.662468) r 0.340000004 feetY 0 -> (-2.86637878,-25.662468)
 findOpenSpot (-2.86637878,-25.662468) -> (-3,-25)
-groundAt sample at (81.9842834,83.3149796) feetY 0.5 -> 0
-collideCircle sample at (81.9842834,83.3149796) r 0.340000004 feetY 0 -> (81.9842834,83.3100052)
-findOpenSpot (81.9842834,83.3149796) -> (81,83)
+groundAt sample at (81.9842834,83.3149796) feetY 0.5 -> -1.20000005
+collideCircle sample at (81.9842834,83.3149796) r 0.340000004 feetY 0 -> (81.9842834,83.3149796)
+findOpenSpot (81.9842834,83.3149796) -> (79,81)
 groundAt sample at (-8.42508698,64.7342529) feetY 0.5 -> 0
 collideCircle sample at (-8.42508698,64.7342529) r 0.340000004 feetY 0 -> (-8.42508698,64.7342529)
 findOpenSpot (-8.42508698,64.7342529) -> (-9,65)
-groundAt sample at (50.4527054,34.2621689) feetY 0.5 -> 0
-collideCircle sample at (50.4527054,34.2621689) r 0.340000004 feetY 0 -> (50.5402107,34.3918152)
+groundAt sample at (50.4527054,34.2621689) feetY 0.5 -> -2.4000001
+collideCircle sample at (50.4527054,34.2621689) r 0.340000004 feetY 0 -> (50.4527054,34.4500008)
 findOpenSpot (50.4527054,34.2621689) -> (51,35)
 groundAt sample at (93.4623108,20.5391846) feetY 0.5 -> 0
 collideCircle sample at (93.4623108,20.5391846) r 0.340000004 feetY 0 -> (93.4623108,20.5391846)
 findOpenSpot (93.4623108,20.5391846) -> (93,21)
-groundAt sample at (66.9599075,-28.4754715) feetY 0.5 -> 0
+groundAt sample at (66.9599075,-28.4754715) feetY 0.5 -> -2.60000014
 collideCircle sample at (66.9599075,-28.4754715) r 0.340000004 feetY 0 -> (66.9599075,-28.4754715)
 findOpenSpot (66.9599075,-28.4754715) -> (67,-29)
-groundAt sample at (-7.38990784,49.0913162) feetY 0.5 -> 0
-collideCircle sample at (-7.38990784,49.0913162) r 0.340000004 feetY 0 -> (-7.38990784,49.0913162)
-findOpenSpot (-7.38990784,49.0913162) -> (-7,49)
+groundAt sample at (-7.38990784,49.0913162) feetY 0.5 -> -0.300000012
+collideCircle sample at (-7.38990784,49.0913162) r 0.340000004 feetY 0 -> (-7.39000034,49.0913162)
+findOpenSpot (-7.38990784,49.0913162) -> (-9,47)
 groundAt sample at (-1.48935699,-16.920929) feetY 0.5 -> 0
 collideCircle sample at (-1.48935699,-16.920929) r 0.340000004 feetY 0 -> (-1.48935699,-16.920929)
 findOpenSpot (-1.48935699,-16.920929) -> (-1,-17)
 groundAt sample at (66.5616302,32.0663223) feetY 0.5 -> 0
 collideCircle sample at (66.5616302,32.0663223) r 0.340000004 feetY 0 -> (66.5616302,32.0663223)
-findOpenSpot (66.5616302,32.0663223) -> (67,33)
+findOpenSpot (66.5616302,32.0663223) -> (65,31)
 groundAt sample at (62.6622543,12.7127304) feetY 0.5 -> 0
 collideCircle sample at (62.6622543,12.7127304) r 0.340000004 feetY 0 -> (62.6622543,12.7127304)
 findOpenSpot (62.6622543,12.7127304) -> (63,13)
@@ -724,117 +722,11 @@ findOpenSpot (-18.4562988,-13.2812576) -> (-19,-13)
 groundAt sample at (0.130279541,54.6140747) feetY 0.5 -> 0
 collideCircle sample at (0.130279541,54.6140747) r 0.340000004 feetY 0 -> (0.130279541,54.6140747)
 findOpenSpot (0.130279541,54.6140747) -> (1,55)
-cell (-10,27) floorY 0 ceilY 3 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (-11,34) floorY 0 ceilY 3 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (26,46) floorY 0 ceilY 3 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (-5,4) floorY 0 ceilY 3 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (23,-1) floorY 0 ceilY 3 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (-12,-15) floorY 0 ceilY 3 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (40,39) floorY 0 ceilY 3 pool 0 soft 0 valve 0 key 0 cursed 1 manila 0
-cell (-8,43) floorY 0 ceilY 3 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-
-## sampled, L5 v1
-lineOfSight sample (26.8105469,-5.19638062) to (12.2930393,9.6995182) -> 0
-lineOfSight sample (-19.633194,90.946106) to (-8.49803543,89.177887) -> 1
-lineOfSight sample (52.5314484,44.0316925) to (41.6654663,47.6561317) -> 1
-lineOfSight sample (3.00934601,7.18704987) to (-6.49799538,6.42860985) -> 0
-lineOfSight sample (35.0785904,-0.568809509) to (23.7740746,4.74439812) -> 0
-lineOfSight sample (67.4529419,41.7933197) to (71.8291168,25.9998322) -> 0
-lineOfSight sample (-29.2738113,40.7393875) to (-14.4051456,36.5473862) -> 1
-lineOfSight sample (17.2241898,82.2657852) to (31.3055305,77.3854218) -> 0
-lineOfSight sample (1.88397217,79.7584) to (5.51612091,91.5256653) -> 0
-lineOfSight sample (51.283905,57.1564255) to (44.6517029,50.8845825) -> 1
-lineOfSight sample (50.1735611,9.23147583) to (36.8352432,-2.52638626) -> 0
-lineOfSight sample (14.9139099,18.8333511) to (21.2595463,3.8628788) -> 1
-lineOfSight sample (30.0260849,-8.06184387) to (38.5565643,-19.4409847) -> 0
-lineOfSight sample (59.6697006,19.3786545) to (64.4563141,20.4929523) -> 0
-lineOfSight sample (49.7223358,-4.59310913) to (58.4081039,-4.33552551) -> 1
-lineOfSight sample (45.5444489,-21.924202) to (33.1823502,-25.9475155) -> 0
-lineOfSight sample (-25.6652298,91.2232056) to (-14.4749088,77.053894) -> 1
-lineOfSight sample (66.5365982,70.0259857) to (81.9377441,60.437149) -> 0
-lineOfSight sample (-26.6648407,37.7321243) to (-12.0368996,29.8703041) -> 0
-lineOfSight sample (20.0061493,91.137413) to (19.5030594,97.1623459) -> 0
-lineOfSight sample (27.6697693,18.1017303) to (24.3925133,20.4523888) -> 1
-lineOfSight sample (57.5858612,84.0340958) to (59.7355576,77.4569321) -> 1
-lineOfSight sample (22.3132324,83.490921) to (14.8696651,76.6782837) -> 1
-lineOfSight sample (35.2452011,81.5952835) to (43.5316734,71.4484329) -> 1
-canStep from (-15,-15) north south west east -> 0101
-canStep from (40,-12) north south west east -> 0010
-canStep from (34,27) north south west east -> 1110
-canStep from (-7,40) north south west east -> 0000
-canStep from (10,-15) north south west east -> 0111
-canStep from (1,25) north south west east -> 1101
-canStep from (36,36) north south west east -> 0000
-canStep from (31,-1) north south west east -> 1111
-canStep from (14,34) north south west east -> 1101
-canStep from (-1,43) north south west east -> 1111
-canStep from (11,24) north south west east -> 1101
-canStep from (29,-5) north south west east -> 1100
-canStep from (22,38) north south west east -> 0100
-canStep from (0,30) north south west east -> 1111
-canStep from (44,9) north south west east -> 0001
-canStep from (-9,-6) north south west east -> 1111
-canStep from (19,42) north south west east -> 0010
-canStep from (-16,44) north south west east -> 1110
-canStep from (28,4) north south west east -> 0001
-canStep from (-14,-3) north south west east -> 1011
-canStep from (-12,26) north south west east -> 0000
-canStep from (26,3) north south west east -> 1000
-canStep from (6,47) north south west east -> 1101
-canStep from (-1,23) north south west east -> 1111
-pathStep (31,21) to (33,26) -> (31,20)
-pathStep (41,-10) to (46,-15) -> none
-pathStep (24,21) to (21,33) -> none
-pathStep (-3,-1) to (-1,0) -> (-3,0)
-pathStep (22,43) to (31,37) -> none
-pathStep (43,-4) to (50,-1) -> (43,-3)
-pathStep (34,-8) to (43,-20) -> none
-pathStep (28,46) to (29,54) -> (28,47)
-pathStep (11,14) to (12,17) -> (11,15)
-pathStep (-8,0) to (2,11) -> (-7,0)
-pathStep (-1,30) to (10,24) -> none
-pathStep (23,-9) to (28,-9) -> none
-groundAt sample at (-17.7309036,74.7584839) feetY 0.5 -> -2.4000001
-collideCircle sample at (-17.7309036,74.7584839) r 0.340000004 feetY 0 -> (-17.7309036,74.7584839)
-findOpenSpot (-17.7309036,74.7584839) -> (-17,75)
-groundAt sample at (3.16543579,-0.802757263) feetY 0.5 -> 0
-collideCircle sample at (3.16543579,-0.802757263) r 0.340000004 feetY 0 -> (3.16543579,-0.802757263)
-findOpenSpot (3.16543579,-0.802757263) -> (3,-1)
-groundAt sample at (70.3155136,78.3596344) feetY 0.5 -> -1.80000007
-collideCircle sample at (70.3155136,78.3596344) r 0.340000004 feetY 0 -> (70.3155136,78.3596344)
-findOpenSpot (70.3155136,78.3596344) -> (67,75)
-groundAt sample at (75.5059433,-28.4548874) feetY 0.5 -> -2.60000014
-collideCircle sample at (75.5059433,-28.4548874) r 0.340000004 feetY 0 -> (75.5059433,-28.4548874)
-findOpenSpot (75.5059433,-28.4548874) -> (75,-29)
-groundAt sample at (1.7564621,-2.48682404) feetY 0.5 -> 0
-collideCircle sample at (1.7564621,-2.48682404) r 0.340000004 feetY 0 -> (1.7564621,-2.48682404)
-findOpenSpot (1.7564621,-2.48682404) -> (1,-3)
-groundAt sample at (-12.9061203,39.0278702) feetY 0.5 -> -0.200000048
-collideCircle sample at (-12.9061203,39.0278702) r 0.340000004 feetY 0 -> (-12.9061203,39.0278702)
-findOpenSpot (-12.9061203,39.0278702) -> (-17,35)
-groundAt sample at (11.8030014,1.03990173) feetY 0.5 -> 0
-collideCircle sample at (11.8030014,1.03990173) r 0.340000004 feetY 0 -> (11.5500002,1.03990173)
-findOpenSpot (11.8030014,1.03990173) -> (11,1)
-groundAt sample at (44.0911407,-10.6530228) feetY 0.5 -> -2.70000005
-collideCircle sample at (44.0911407,-10.6530228) r 0.340000004 feetY 0 -> (44.0911407,-10.6530228)
-findOpenSpot (44.0911407,-10.6530228) -> (47,-13)
-groundAt sample at (28.6874466,8.21920776) feetY 0.5 -> 0
-collideCircle sample at (28.6874466,8.21920776) r 0.340000004 feetY 0 -> (28.6874466,8.21920776)
-findOpenSpot (28.6874466,8.21920776) -> (29,9)
-groundAt sample at (51.2613678,90.2848587) feetY 0.5 -> -1.20000005
-collideCircle sample at (51.2613678,90.2848587) r 0.340000004 feetY 0 -> (51.2613678,90.2848587)
-findOpenSpot (51.2613678,90.2848587) -> (51,91)
-groundAt sample at (0.647567749,28.5610504) feetY 0.5 -> 0
-collideCircle sample at (0.647567749,28.5610504) r 0.340000004 feetY 0 -> (0.647567749,28.5610504)
-findOpenSpot (0.647567749,28.5610504) -> (1,29)
-groundAt sample at (38.075943,26.1388016) feetY 0.5 -> 0
-collideCircle sample at (38.075943,26.1388016) r 0.340000004 feetY 0 -> (38.1084976,26.2399998)
-findOpenSpot (38.075943,26.1388016) -> (39,27)
-cell (12,17) floorY 0 ceilY 5 pool 0 soft 0 valve 0 key 0 cursed 1 manila 0
-cell (-1,40) floorY 0 ceilY 5 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (10,39) floorY -2.70000005 ceilY 5 pool 0 soft 0 valve 0 key 0 cursed 1 manila 0
-cell (0,-2) floorY 0 ceilY 5 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (-4,-11) floorY 0 ceilY 5 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (19,32) floorY 0 ceilY 5 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
-cell (21,36) floorY -2.4000001 ceilY 5 pool 0 soft 0 valve 0 key 0 cursed 1 manila 0
-cell (-5,35) floorY -3 ceilY 5 pool 0 soft 0 valve 0 key 0 cursed 0 manila 0
+cell (-10,27) floorY -2.10000014 ceilY 5 pool 0 soft 0 key 0 manila 0
+cell (-11,34) floorY -3 ceilY 5 pool 0 soft 0 key 0 manila 0
+cell (26,46) floorY 0 ceilY 5 pool 0 soft 0 key 0 manila 0
+cell (-5,4) floorY -0.900000036 ceilY 5 pool 0 soft 0 key 0 manila 0
+cell (23,-1) floorY 0 ceilY 5 pool 0 soft 0 key 0 manila 0
+cell (-12,-15) floorY 0 ceilY 5 pool 0 soft 0 key 0 manila 0
+cell (40,39) floorY -1.80000007 ceilY 5 pool 0 soft 0 key 0 manila 0
+cell (-8,43) floorY -0.600000024 ceilY 5 pool 0 soft 0 key 0 manila 0

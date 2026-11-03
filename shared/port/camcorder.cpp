@@ -81,17 +81,12 @@ Pcm hissClip() {
     return p;
 }
 
-// How close the hunter or a dog is, 0..1, ignoring walls. The tape shows it as
+// How close the hunter is, 0..1, ignoring walls. The tape shows it as
 // interference before the player can see it.
 float threatOf(const Sim &sim) {
     float th = 0;
     if (sim.ent.st == EState::Stalk || sim.ent.st == EState::Chase || sim.ent.st == EState::Flee)
         th = smooth01(30.0f, 4.0f, sim.entDist) * (sim.ent.st == EState::Chase ? 1.0f : 0.7f);
-    for (const Dog &d : sim.dogs) {
-        if (d.st == DState::Gone) continue;
-        float dist = hypotf(d.x - sim.px, d.z - sim.pz);
-        th = fmaxf(th, smooth01(24.0f, 3.0f, dist) * (d.st == DState::Charge ? 1.0f : 0.6f));
-    }
     // Low sanity also adds interference.
     if (sim.sanity < 0.25f) th = fmaxf(th, (0.25f - sim.sanity) * 1.6f);
     return clampf(th, 0.0f, 1.0f);

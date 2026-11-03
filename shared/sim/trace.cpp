@@ -214,12 +214,6 @@ std::string simDigest(const Sim &sim) {
     l("flashOn", sim.flashOn);
     l("entSt", (int)sim.ent.st); l("entX", sim.ent.x); l("entZ", sim.ent.z); l("entHp", sim.ent.hp);
     l("entNextSpawn", sim.ent.nextSpawn);
-    for (int i = 0; i < Sim::MAXDOGS; i++) {
-        char n[16];
-        snprintf(n, sizeof n, "dog%dSt", i); l(n, (int)sim.dogs[i].st);
-        snprintf(n, sizeof n, "dog%dX", i); l(n, sim.dogs[i].x);
-        snprintf(n, sizeof n, "dog%dZ", i); l(n, sim.dogs[i].z);
-    }
     l("nextBlackout", sim.nextBlackout); l("blackoutEnd", sim.blackoutEnd);
     l("bullets", (int)sim.bullets.size()); l("impacts", (int)sim.bulletImpacts.size());
     l("deaths", sim.deathCount); l("kills", sim.killCount);

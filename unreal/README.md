@@ -39,7 +39,7 @@ tools/unreal.sh log # the "Backrooms:" lines from the last run
 | `.../BackroomsPlayerController` | the sim's controls as Enhanced Input actions; fills an `InputFrame` each frame |
 | `.../BackroomsPawn` | the camera, placed where the sim's view is (shared/port/view.h) |
 | `.../BackroomsChunkActor`, `BackroomsChunkBuild` | a chunk: the Web build's mesher (shared/port/chunk_mesh.h) as procedural mesh sections, masked and translucent |
-| `.../BackroomsSceneActor` | what render.cpp draws round the chunks (shared/port/draw.h): crates, cans, the deck, coins, balloons, chalk, flares, the hunter and the pack, rounds, impacts, mist, the muzzle flash |
+| `.../BackroomsSceneActor` | what render.cpp draws round the chunks (shared/port/draw.h): crates, cans, the deck, coins, balloons, chalk, flares, the hunter, rounds, impacts, mist, the muzzle flash |
 | `.../BackroomsHeldActor` | the revolver: assets/models/revolver.glb read at run time and posed by shared/port/revolver.h |
 | `Plugins/Backrooms/Content/Python` | run by the editor on open: imports the recorded sounds, and the Web build's textures with the materials (`backrooms_world.py`) |
 | `.../BackroomsSettings` | Project Settings > Game > Backrooms |
@@ -130,7 +130,7 @@ material is unlit, and its colour is the Web build's.
 | their colour | `WORLD_FS` (web/src/shaders.cpp): the 3x3 panels, shadows marched over the occupancy grid, the torch and its beam in the air, the flare, the chandelier, fog, the tone curve | `Shaders/BackroomsWorld.ush`, the same arithmetic, in `M_BackroomsWorld` (masked) and `M_BackroomsWorldBlend` (translucent) |
 | per-frame uniforms | `frameLight` (shared/port/draw.h) | the same, into `MPC_Backrooms` (`UBackroomsRender::Frame`) |
 | shadow grid | `World::buildOccupancy`, 64 cells, recentred every 6 | the same, a transient texture (`UBackroomsRender::UpdateOccupancy`) |
-| crates, cans, the deck, coins, balloons, flares, the hunter, the pack, rounds, impacts, mist | `sceneDraws` (shared/port/draw.h), lit by `lightAtCPU` | the same list (`ABackroomsSceneActor`), raylib's shapes tessellated by `shapeTriangles` |
+| crates, cans, the deck, coins, balloons, flares, the hunter, rounds, impacts, mist | `sceneDraws` (shared/port/draw.h), lit by `lightAtCPU` | the same list (`ABackroomsSceneActor`), raylib's shapes tessellated by `shapeTriangles` |
 | the revolver | raylib 5.5's glTF animation and CPU skinning | shared/port/revolver.h, bit-identical to raylib 5.5 over the whole reload |
 | post pass | `POST_FS` | `Shaders/BackroomsPost.ush` in `M_BackroomsPost`, in place of Unreal's tonemapper |
 | the HUD: title and death cards, intro, cards, meters, inventory, hints | `hudDraws` (shared/port/hud.h), measured with raylib's font | the same list (`ABackroomsHUD`), measured and drawn with the engine's medium font; gradients in 48 bands |

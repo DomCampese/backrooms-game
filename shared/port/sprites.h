@@ -1,5 +1,5 @@
 #pragma once
-// The hunter and the pack as billboards: which sheet, which two walk frames
+// The hunter as a billboard: which sheet, which two walk frames
 // and how far between them, which row, where and how big. Decided from the
 // sim, so both builds draw the same pose; render.cpp and the Unreal scene read
 // these. Lighting and fog are each renderer's own.
@@ -10,7 +10,7 @@
 #include <cstdint>
 #include <vector>
 
-enum class SpriteSheet : uint8_t { Clark, Smiler, Partygoer, Dog, Count };
+enum class SpriteSheet : uint8_t { Clark, Smiler, Partygoer, Count };
 
 struct ActorSprite {
     SpriteSheet sheet;
@@ -19,8 +19,8 @@ struct ActorSprite {
     float w = 0, h = 0;      // its size, metres
     int frame0 = 0, frame1 = 0;
     float blend = 0;         // frame0 at 1 - blend, frame1 at blend
-    int row = 0;             // EntRow; 0 on the dog sheet
-    float fade = 1;          // 1, falling to 0 as the hunter dies or a dog yelps away
+    int row = 0;             // EntRow
+    float fade = 1;          // 1, falling to 0 as the hunter dies
     Vec3 litAt{};            // where the renderer samples the room's light
 };
 
@@ -30,9 +30,7 @@ struct ActorSprite {
 // strobes. A cross-fade looks like motion blur.
 void gaitFrames(float phase, int frames, int &f0, int &f1, float &t);
 
-// Dog i, if it is drawn (out of the pack's Gone state and within 42 m).
-bool dogSprite(const Sim &sim, int i, ActorSprite &out);
 // The hunter, if it is drawn (not hidden, and within 45 m).
 bool hunterSprite(const Sim &sim, ActorSprite &out);
-// The pack, then the hunter.
+// The hunter, if drawn.
 std::vector<ActorSprite> actorSprites(const Sim &sim);

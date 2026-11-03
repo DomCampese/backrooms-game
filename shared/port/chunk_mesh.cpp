@@ -269,11 +269,11 @@ static void addProp(const PropPlacement &site, int level, MB &pr, MB &ce, MB &ao
         addContactShadow(ao, pcx, pcz, ey, rot, hx, hz);
     };
     switch (site.kind) {
-    case PROP_BOXES: {   // cartons; on Level 4 wrapped like presents
+    case PROP_BOXES: {   // cartons; on LEVEL FUN wrapped like presents
         blob(0.40f, 0.40f);
         float bh = 0.55f + r1 * 0.2f, bhx = 0.34f + r2 * 0.08f;
         auto wrap = [&](int rot2) {
-            if (level != 4) return RGBA_WHITE;
+            if (level != LEVEL_FUN) return RGBA_WHITE;
             Rgba c = PARTY_RGBA[(h >> rot2) % 5];
             return Rgba{ cl8(c.r * 0.9f + 46), cl8(c.g * 0.9f + 46), cl8(c.b * 0.9f + 46), 255 };
         };
@@ -343,33 +343,6 @@ static void addProp(const PropPlacement &site, int level, MB &pr, MB &ce, MB &ao
             part(i*0.41f,0.12f,0.196f,0.34f,ey+0.44f,ey+0.49f,Surface::Fabric,uph);
             part(i*0.41f,0.454f,0.192f,0.006f,ey+0.452f,ey+0.461f,Surface::Fabric,{213,191,131,255});
         }
-        break;
-    }
-    case PROP_ARMOIRE:     // armoire
-        blob(0.54f, 0.46f);
-        part(0, 0, 0.44f, 0.36f, ey, ey + 1.78f, Surface::Wood, Rgba{ 118, 82, 58, 255 });
-        part(0, 0, 0.48f, 0.40f, ey + 1.78f, ey + top, Surface::Wood, Rgba{ 92, 63, 44, 255 });   // cornice
-        part(0, 0.37f, 0.015f, 0.015f, ey + 0.85f, ey + 1.0f, Surface::Metal, Rgba{ 190, 170, 110, 255 }); // handles
-        for (int i=-1;i<=1;i+=2)
-            part(i*0.218f,0.362f,0.193f,0.003f,ey+0.15f,ey+1.67f,Surface::Wood,{155,113,79,255});
-        break;
-    case PROP_LAMP:     // floor lamp
-        blob(0.22f, 0.22f);
-        part(0, 0, 0.14f, 0.14f, ey, ey + 0.05f, Surface::Metal, Rgba{ 66, 62, 60, 255 });
-        part(0, 0, 0.025f, 0.025f, ey, ey + 1.34f, Surface::Metal, Rgba{ 66, 62, 60, 255 });
-        roundPart(0.05f,0,0.17f,0.10f,ey+1.30f,ey+1.60f,{214,190,142,254});
-        break;
-    case PROP_NIGHTSTAND:     // nightstand
-        blob(0.36f, 0.36f);
-        part(0, 0, 0.26f, 0.26f, ey, ey + 0.55f, Surface::Wood, Rgba{ 126, 90, 62, 255 });
-        part(0, 0, 0.30f, 0.30f, ey + 0.55f, ey + top, Surface::Wood, Rgba{ 104, 74, 50, 255 });
-        break;
-    case PROP_BED: {   // bed: frame, mattress, headboard
-        blob(0.60f, 1.02f);
-        Rgba wd = { 110, 78, 54, 255 };
-        part(0, 0, 0.52f, 0.92f, ey + 0.12f, ey + 0.26f, Surface::Wood, wd);          // frame
-        part(0, 0.04f, 0.48f, 0.86f, ey + 0.26f, ey + top, Surface::Fabric, Rgba{ 216, 208, 188, 255 });  // mattress
-        part(0, -0.97f, 0.52f, 0.05f, ey, ey + 0.95f, Surface::Wood, wd);             // headboard
         break;
     }
     case PROP_PARTY_TABLE: {  // party table: cloth, cake, cups
@@ -653,12 +626,10 @@ static void addSpall(MB &fx, MB &pr, const Fixture &sp) {
 }
 
 // ---- a Level 1 exit: a steel frame, a leaf pinned open against the wall, and
-// over it the exit's glyph and a caged bulkhead lamp. Cursed exits paint the
-// glyph red.
+// over it the exit's glyph and a caged bulkhead lamp.
 static void addSymbolDoor(MB &pr, MB &fx, const Opening &op) {
     const int ax = op.west ? 1 : 0;              // 0: a wall along x at z = w0; 1: along z at x = w0
     const float w0 = op.line, base = op.base;
-    const bool cursed = op.kind == OpeningKind::CursedExit;
     auto P = [&](float a, float y, float n) {             // wall-local -> world
         return ax == 0 ? Vec3{ a, y, w0 + n } : Vec3{ w0 + n, y, a };
     };
@@ -683,7 +654,7 @@ static void addSymbolDoor(MB &pr, MB &fx, const Opening &op) {
     // the glyph: strokes of paint between lattice points, both faces
     const uint8_t *pts = op.glyph;
     const int np = op.glyphLen;
-    Rgba paint = cursed ? Rgba{ 210, 40, 30, 254 } : Rgba{ 250, 238, 190, 254 };
+    const Rgba paint = { 250, 238, 190, 254 };
     const Vec2 uv = PLAIN_UV;
     float sc = 0.30f, cA = (o0 + o1) * 0.5f, cY = base + 2.78f;
     for (int sd = -1; sd <= 1; sd += 2) {
@@ -1031,14 +1002,6 @@ static void addPipe(MB &pr, const Fixture &p) {
     }
 }
 
-// A valve station: a standpipe floor to ceiling. The renderer draws the wheel.
-static void addValve(MB &pr, const Fixture &v) {
-    const float vx = v.pos.x, vz = v.pos.z, fy = v.pos.y;
-    addSolidBox(pr, vx - 0.085f, fy, vz - 0.085f, vx + 0.085f, v.end.y, vz + 0.085f, Rgba{ 84, 60, 44, 255 });
-    addSolidBox(pr, vx - 0.13f, fy + 1.02f, vz - 0.13f, vx + 0.13f, fy + 1.24f, vz + 0.13f,
-                Rgba{ 104, 80, 58, 255 });   // the body the wheel sits on
-}
-
 // A crepe streamer: two quads sagging to the low point between its ends.
 static void addStreamer(MB &pr, const Fixture &s) {
     const float ax = s.pos.x, az = s.pos.z, bx2 = s.end.x, bz2 = s.end.z, ytop = s.pos.y, ymid = s.h;
@@ -1179,7 +1142,6 @@ static void addFixture(const FixtureMeshes &m, const Fixture &f) {
     case FixtureKind::Spall:
     case FixtureKind::PillarSpall: addSpall(m.fx, m.pr, f); break;
     case FixtureKind::Pipe:        addPipe(m.pr, f); break;
-    case FixtureKind::Valve:       addValve(m.pr, f); break;
     case FixtureKind::Streamer:    addStreamer(m.pr, f); break;
     case FixtureKind::ManilaRoom:  addManilaRoom(m.pr, m.fx, m.ao, f.pos.x, f.pos.z, f.pos.y, f.seed); break;
     case FixtureKind::Auditorium:  addAuditorium(m.pr, m.fx, f); break;
@@ -1192,7 +1154,7 @@ static void addFixture(const FixtureMeshes &m, const Fixture &f) {
 enum class FixtureStage { Walls, Pillar, Service };
 static FixtureStage stageOf(FixtureKind k) {
     if (k == FixtureKind::PillarSpall) return FixtureStage::Pillar;
-    if (k == FixtureKind::Pipe || k == FixtureKind::Valve) return FixtureStage::Service;
+    if (k == FixtureKind::Pipe) return FixtureStage::Service;
     return FixtureStage::Walls;
 }
 
@@ -1328,40 +1290,6 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
     const float AOW = 0.55f;   // reach across the floor / ceiling
     const float AOH = 0.48f;   // creep up / down the wall face
     const float AOC = 0.30f;   // ceiling creases start partway down the gradient (softer)
-    // ---- the Red Rooms tint (Level 0): walls and floors shade toward red
-    // within 11 m of a cursed exit. Exits in this chunk and its eight neighbours.
-    struct RedSrc { float x, z; };
-    RedSrc reds[16]; int nred = 0;
-    if (w.level == 0) {
-        for (int ncx = cx - 1; ncx <= cx + 1; ncx++) for (int ncz = cz - 1; ncz <= cz + 1; ncz++) {
-            ChunkData &nd = w.data(ncx, ncz);
-            for (int a = 0; a < CCELLS; a++) for (int b = 0; b < CCELLS; b++) {
-                int gi = ncx * CCELLS + a, gk = ncz * CCELLS + b;
-                bool n = nd.wallN[a][b] == WALL_EXIT, west = nd.wallW[a][b] == WALL_EXIT;
-                if ((!n && !west) || !w.cursedExit(gi, gk) || nred >= 16) continue;
-                reds[nred++] = { gi * CELL + (n ? 1.0f : 0.0f), gk * CELL + (n ? 0.0f : 1.0f) };
-            }
-        }
-    }
-    auto redAt = [&](float x, float z) {
-        float best = 0;
-        for (int r = 0; r < nred; r++) {
-            float dx = x - reds[r].x, dz = z - reds[r].z;
-            float t = 1.0f - sqrtf(dx * dx + dz * dz) / 11.0f;
-            if (t > best) best = t;
-        }
-        return best * best * (3 - 2 * best);
-    };
-    // Multiplied into the texture, so it only takes colour away. Alpha stays 255,
-    // so the relief does too.
-    auto redTint = [&](float x, float z) {
-        float t = redAt(x, z);
-        // rust colour at the edge, dark red in the middle
-        float t2 = t * t;
-        return Rgba{ (unsigned char)(255 - 30 * t - 60 * t2), (unsigned char)(255 - 150 * t - 72 * t2),
-                      (unsigned char)(255 - 110 * t - 90 * t2), 255 };
-    };
-    if (nred) { wa.tint = redTint; fl.tint = redTint; }
     if (w.level == 2) {
         Rgba water = { 72, 172, 162, 128 };
         for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) {
@@ -1552,13 +1480,7 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
         // The openings in this cell's north and west edges, as the layout has them.
         const Opening *on = L.opening(i, kk, false), *ow = L.opening(i, kk, true);
         auto is = [](const Opening *op, OpeningKind k) { return op && op->kind == k; };
-        auto isExit = [](const Opening *op) {
-            return op && (op->kind == OpeningKind::Exit || op->kind == OpeningKind::CursedExit);
-        };
-        // Exits glow, red where cursed.
-        auto exitGlow = [](const Opening &op) {
-            return op.kind == OpeningKind::CursedExit ? Rgba{ 255, 60, 40, 70 } : Rgba{ 255, 248, 225, 70 };
-        };
+        const Rgba exitGlow = { 255, 248, 225, 70 };
         if (is(on, OpeningKind::Rail)) railEdge(*on);
         // addBoxSides' masks: buried end caps (bits 2-3 on an x-running wall, 0-1 on a
         // z-running one) and faces that look into a hole (bits 0-1, 2-3).
@@ -1568,12 +1490,12 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
             addBoxSides(wa, gx - WT, nb, gz - WT, gx + CELL + WT, nt, gz + WT, false, sk, RGBA_WHITE, vfN);
         }
         else if (is(on, OpeningKind::Window)) addWindowN(wa, gl, *on, gx, gz, nb, nt, w.level);
-        else if (isExit(on)) {   // exit doorway on x-running wall
+        else if (is(on, OpeningKind::Exit)) {   // exit doorway on x-running wall
             const float a0 = on->a0, a1 = on->a1, head = on->headY;
             addBoxSides(wa, gx - WT, nb, gz - WT, a0, nt, gz + WT);
             addBoxSides(wa, a1, nb, gz - WT, gx + CELL + WT, nt, gz + WT);
             addBoxSides(wa, a0, head, gz - WT, a1, nt, gz + WT, true);
-            Rgba glow = exitGlow(*on);
+            const Rgba glow = exitGlow;
             wa.quad({a0,nb,gz},{a1,nb,gz},{a1,head,gz},{a0,head,gz},{0,0,-1},
                     {0,1},{1,1},{1,0},{0,0},glow);
             wa.quad({a1,nb,gz},{a0,nb,gz},{a0,head,gz},{a1,head,gz},{0,0,1},
@@ -1631,12 +1553,12 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
             addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wt2, gz + CELL + WT, false, sk, RGBA_WHITE, vfW);
         }
         else if (is(ow, OpeningKind::Window)) addWindowW(wa, gl, *ow, gx, gz, wb, wt2, w.level);
-        else if (isExit(ow)) {   // exit doorway on z-running wall
+        else if (is(ow, OpeningKind::Exit)) {   // exit doorway on z-running wall
             const float a0 = ow->a0, a1 = ow->a1, head = ow->headY;
             addBoxSides(wa, gx - WT, wb, gz - WT, gx + WT, wt2, a0);
             addBoxSides(wa, gx - WT, wb, a1, gx + WT, wt2, gz + CELL + WT);
             addBoxSides(wa, gx - WT, head, a0, gx + WT, wt2, a1, true);
-            Rgba glow = exitGlow(*ow);
+            const Rgba glow = exitGlow;
             wa.quad({gx,wb,a0},{gx,wb,a1},{gx,head,a1},{gx,head,a0},{1,0,0},
                     {0,1},{1,1},{1,0},{0,0},glow);
             wa.quad({gx,wb,a1},{gx,wb,a0},{gx,head,a0},{gx,head,a1},{-1,0,0},
@@ -1678,10 +1600,10 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
                             xf + TRIM_T, fy0 + 1.07f, gz + 1.50f, LOCK_COL);
             }
         }
-        if (w.level == 0 || w.level == 4 || w.level == MULTIPLEX) {
+        if (w.level == 0 || w.level == LEVEL_FUN || w.level == MULTIPLEX) {
             // Skirting on Levels 0 and 4 and the multiplex: thin timber within the
             // collision clearance, no separate obstacle.
-            Rgba trim = w.level == 0 ? Rgba{91, 71, 39, 254} : w.level == 4 ? Rgba{67, 41, 34, 254} : Rgba{28, 22, 20, 254};
+            Rgba trim = w.level == 0 ? Rgba{91, 71, 39, 254} : w.level == LEVEL_FUN ? Rgba{67, 41, 34, 254} : Rgba{28, 22, 20, 254};
             if (nv == WALL_SOLID) {
                 float tS = en.floorLo, tN = en.floorHi;
                 if (flS) addSolidBox(pr, gx, tS, gz-WT-0.025f, gx+CELL, tS + 0.13f, gz-WT, trim);
@@ -1777,7 +1699,7 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
                         std::max(lo2.x, hi2.x), lamp.y + 0.06f, std::max(lo2.z, hi2.z), Rgba{ 150, 150, 142, 254 });
         }
     }
-    // Pipework and valve standpipes, a second walk over the cells so a pipe run's
+    // Pipework, a second walk over the cells so a pipe run's
     // segments abut; then what belongs to the whole chunk (the Manila Room,
     // streamers).
     for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++)

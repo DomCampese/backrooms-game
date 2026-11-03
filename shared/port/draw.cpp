@@ -135,10 +135,6 @@ void put(std::vector<SceneDraw> &out, ObjMesh m, const Xform &xf, float tint = 1
 
 // Where a sprite's frame sits on its sheet, pixels.
 void spriteSrc(const ActorSprite &sp, int frame, float src[4]) {
-    if (sp.sheet == SpriteSheet::Dog) {
-        src[0] = (float)frame * DOG_FRAME_W; src[1] = 0; src[2] = (float)DOG_FRAME_W; src[3] = (float)DOG_FRAME_H;
-        return;
-    }
     src[0] = (float)frame * ENT_FRAME_W; src[1] = (float)sp.row * ENT_FRAME_H;
     src[2] = (float)ENT_FRAME_W; src[3] = (float)ENT_FRAME_H;
 }
@@ -402,7 +398,7 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             break;
         }
     }
-    if (sim.wayOpen()) {   // enough doubloons: uncursed exits glow green
+    if (sim.wayOpen()) {   // enough doubloons: exits glow green
         float pulse = 0.7f + 0.3f * sinf(now * 3.0f);
         for (int dx = -6; dx <= 6; dx++) for (int dz = -6; dz <= 6; dz++) {
             int i = pci + dx, k = pck + dz;
@@ -410,53 +406,11 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             if (sim.world.wallNVal(i, k) == WALL_EXIT) { doorX = i * CELL + 1.0f; doorZ = k * CELL; }
             else if (sim.world.wallWVal(i, k) == WALL_EXIT) { doorX = i * CELL; doorZ = k * CELL + 1.0f; }
             else continue;
-            if (sim.world.cursedExit(i, k)) continue;   // cursed exits never glow green
             Vec3 gp = { doorX, 1.15f, doorZ };
             put(out, sphere(gp, 0.34f, { 150, 255, 170, (unsigned char)(150 * pulse) }));   // bright core
             put(out, sphere(gp, 0.62f, { 90, 255, 120, (unsigned char)(95 * pulse) }));
             put(out, sphere(gp, 1.35f, { 60, 235, 110, (unsigned char)(40 * pulse) }));     // wide halo
         }
-    }
-    if (sim.level == 3) {   // valve wheels on their standpipes: red while open, green once shut
-        for (int dx = -7; dx <= 7; dx++) for (int dz = -7; dz <= 7; dz++) {
-            int a = pci + dx, b = pck + dz;
-            if (!sim.world.valveAt(a, b)) continue;
-            float vx = a * CELL + 1.0f, vz = b * CELL + 1.0f;
-            float wy = sim.world.floorY(a, b) + 1.13f;
-            bool shut = sim.valvesTurned.count(Sim::cellKey2(a, b)) > 0;
-            float pl = propLum(vx, wy, vz);
-            Rgba rim = shut ? Rgba{ 96, 210, 128, 255 } : Rgba{ 196, 62, 48, 255 };
-            // a handwheel lying flat on a vertical pipe: rim, punched centre, hub
-            put(out, cylinderEx({ vx, wy - 0.022f, vz }, { vx, wy + 0.022f, vz }, 0.21f, 0.21f, 12, lit(rim, pl)));
-            put(out, cylinderEx({ vx, wy - 0.03f, vz }, { vx, wy + 0.03f, vz }, 0.125f, 0.125f, 12,
-                                lit({ 84, 60, 44, 255 }, pl)));
-            put(out, cylinderEx({ vx, wy - 0.05f, vz }, { vx, wy + 0.05f, vz }, 0.045f, 0.045f, 8,
-                                lit({ 122, 96, 70, 255 }, pl)));
-        }
-    }
-    for (int i = 0; i < Sim::MAXDOGS; i++) {   // the dogs
-        ActorSprite sp;
-        if (!dogSprite(sim, i, sp)) continue;
-        float ddx = sp.litAt.x - sim.px, ddz = sp.litAt.z - sim.pz;
-        float dd = sqrtf(ddx * ddx + ddz * ddz);
-        const LevelCfg &c = LEVELS[sim.level];
-        float ambLum = (c.amb.x + c.amb.y + c.amb.z) / 3.0f;
-        float lum = lightAtCPU(sp.litAt.x, sp.litAt.y, sp.litAt.z, sim.blackoutCur,
-                               c.ls, c.wallH - LIGHT_DROP, c.dead, c.lightMul, ambLum, 0, 0, 0, c.vary);
-        if (sim.flashCur > 0.05f) {
-            float d2 = dd * dd + 1e-4f;
-            float cone = powf(fmaxf((ddx * sim.fwd.x + ddz * sim.fwd.z) / (dd + 1e-4f), 0.0f), 26.0f);
-            lum = clampf(lum + sim.flashCur * cone * 7.5f / (1.0f + 0.10f * d2), 0.0f, 1.0f);
-        }
-        if (flareInt > 0.01f) {
-            float fx = sp.litAt.x - flarePos.x, fz = sp.litAt.z - flarePos.z;
-            lum = clampf(lum + flareInt * 3.0f / (1.0f + 0.30f * (fx * fx + fz * fz)), 0.0f, 1.0f);
-        }
-        lum = clampf(lum, 0.0f, 1.0f);
-        unsigned char l8 = cl8(40 + 215 * lum);
-        unsigned char al = cl8(255 * clampf(expf(-dd * c.fogDen) * 1.6f, 0, 1) * sp.fade);
-        spriteDraw(out, ShapeTex::Dog, sp, sp.frame0, { l8, l8, l8, cl8(al * (1.0f - sp.blend)) });
-        spriteDraw(out, ShapeTex::Dog, sp, sp.frame1, { l8, l8, l8, cl8(al * sp.blend) });
     }
     for (const FlareProj &f : sim.litFlares) {   // each flare: core, orange halo, and the stick
         if (!f.active) continue;
@@ -575,7 +529,6 @@ void muzzleDraws(const Sim &sim, Vec3 muzzle, Vec3 up, std::vector<SceneDraw> &o
 void shapeTexSize(ShapeTex t, int &w, int &h) {
     switch (t) {
     case ShapeTex::Particle: w = 32; h = 32; return;
-    case ShapeTex::Dog: w = DOG_FRAME_W * DOG_FRAMES; h = DOG_FRAME_H; return;
     case ShapeTex::Clark: case ShapeTex::Smiler: case ShapeTex::SmilerGlow: case ShapeTex::Partygoer:
         w = ENT_FRAME_W * ENT_FRAMES; h = ENT_FRAME_H * ENT_ROWS; return;
     default: w = h = 1; return;

@@ -63,7 +63,6 @@ void Game::init() {
     texProps = makePropsTex();
     texScrawl = makeScrawlTex();
     texFixtures = makeFixturesTex();
-    texDog = makeDogTex();
     texAlmondWrap = makeAlmondWrapTex();
     canMesh = buildCanMesh();
     crateMesh = buildCrateMesh();

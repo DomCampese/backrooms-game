@@ -159,9 +159,7 @@ void openingWall(Builder &b, const Opening &o) {
         b.edgeBox(GreySurface::Door, o.west, o.line, LEAF_T, o.a0, o.a1, o.floorY, o.headY);
         break;
     case OpeningKind::Exit:
-    case OpeningKind::CursedExit:
-        b.edgeBox(o.kind == OpeningKind::Exit ? GreySurface::Exit : GreySurface::CursedExit, o.west, o.line, LEAF_T,
-                  o.a0, o.a1, o.floorY, o.headY);
+        b.edgeBox(GreySurface::Exit, o.west, o.line, LEAF_T, o.a0, o.a1, o.floorY, o.headY);
         break;
     default: break;
     }

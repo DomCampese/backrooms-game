@@ -140,8 +140,7 @@ and with real relief:
   below the glaze. The old bump maps were the colour's brightness, which
   embossed every print and stain.
 - **Real dimensions.** Level 0's ceiling is 2 ft boards on a white T-bar grid,
-  with each light filling a 2x2 bay; the Red Halls are real-size brick (was
-  0.75 m blocks); the Poolrooms' tile is the same 6-inch tile on the walls as on
+  with each light filling a 2x2 bay; the Poolrooms' tile is the same 6-inch tile on the walls as on
   the floor, so the grout lines meet; the skirting is a 12 cm board, not a
   27 cm band.
 - **No seams, no grid of repeats.** Every texture now wraps exactly (the old
@@ -153,8 +152,7 @@ and with real relief:
   heathered loop-pile carpet, a patterned banquet carpet for LEVEL FUN.
 - **Objects.** Cartons are taped and printed like real shipping cases, with a
   barcoded label; the almond water can and tape deck are redrawn at 3-4x the
-  resolution with clean printed lettering; outlets are real duplex receptacles;
-  the pack's hounds have an actual dog's anatomy.
+  resolution with clean printed lettering; outlets are real duplex receptacles.
 - **The revolver.** Its stainless steel now reflects the room — the ceiling and
   its tubes along the top strap, the walls in the level's own colour down the
   flats, the floor underneath — instead of shading as grey plastic, and it has
@@ -209,16 +207,16 @@ reaches the sim, so traces and replays are unchanged.
 
 ## The levels
 
-Six procedurally-generated levels, each with its own palette, lighting,
-soundscape, and things that live there. Exits lead deeper — usually.
+Five procedurally-generated levels, each with its own palette, lighting,
+soundscape, and things that live there. Exits lead deeper.
 
 | | |
 |---|---|
 | ![Level 0](docs/levels/level_0.png) **LEVEL 0 · THRESHOLD** — empty rooms, mono-yellow chevron wallpaper, sodden carpet, a humming, uneven grid of tubes, stairs up to floors that look exactly like this one and railed openings down to more of them, and no way out but through a wall. Home of Pirate Clark. | ![Level 1](docs/levels/level_1.png) **LEVEL 1 · HABITABLE ZONE** — a concrete warehouse under dim, failing tube lights, fog lying on the slab, exposed rebar, supply crates that move in the blackouts, and doors marked with symbols. Where a Smiler waits in the dark. |
-| ![The Poolrooms](docs/levels/level_2.png) **THE POOLROOMS** — endless white tile and still water: colonnaded halls, flooded tunnels, staircases sinking into deep water, windows onto white light. No blackouts, no exit in a hurry. | ![The Red Halls](docs/levels/level_3.png) **THE RED HALLS** — oppressive dark-red brick, someone's abandoned bedroom furniture. |
-| ![Level Fun](docs/levels/level_4.png) **LEVEL FUN =)** — the party that never ended: deep red carpet, a ceiling gone black so the lights hang like a party hall's, bunting, balloons, party tables, and a resident who is very glad you came. | ![The Multiplex](docs/levels/level_5.png) **THE MULTIPLEX**: a cinema that does not end. Lobbies have film posters and concession counters; dark auditoriums have stepped rows of red seats facing a screen that is still showing a film. The screen is the only light in the room. Crouch between the rows to hide. It is the second level: Level 0's exits lead here. |
+| ![The Poolrooms](docs/levels/level_2.png) **THE POOLROOMS** — endless white tile and still water: colonnaded halls, flooded tunnels, staircases sinking into deep water, windows onto white light. No blackouts, no exit in a hurry. | ![Level Fun](docs/levels/level_3.png) **LEVEL FUN =)** — the party that never ended: deep red carpet, a ceiling gone black so the lights hang like a party hall's, bunting, balloons, party tables, and a resident who is very glad you came. |
+| ![The Multiplex](docs/levels/level_4.png) **THE MULTIPLEX**: a cinema that does not end. Lobbies have film posters and concession counters; dark auditoriums have stepped rows of red seats facing a screen that is still showing a film. The screen is the only light in the room. Crouch between the rows to hide. It is the second level: Level 0's exits lead here. |
 
-The wandering entity — **Pirate Clark** on Level 0, **a Smiler** on Level 1, in the Red Halls and in the multiplex, **the Partygoer =)**
+The wandering entity — **Pirate Clark** on Level 0, **a Smiler** on Level 1 and in the multiplex, **the Partygoer =)**
 in LEVEL FUN — stalks out of the fog, and gives chase if you stare too long.
 
 <p align="center"><img src="docs/partygoer.png" width="300" alt="The Partygoer"></p>
@@ -237,7 +235,7 @@ make run
 | path | what lives there |
 |---|---|
 | `shared/core/` | the infinite maze: generation, storeys, collision, line of sight, pathfinding, chunk layout. No engine |
-| `shared/sim/` | the rules (`Sim`): the player, weapons, pickups, the hunter and the pack, levels, blackouts. No engine |
+| `shared/sim/` | the rules (`Sim`): the player, weapons, pickups, the hunter, levels, blackouts. No engine |
 | `shared/port/` | what any renderer needs from the sim: the camera, the greybox, what is held and loose, sprite poses, the sound mix |
 | `web/src/` | the Web build: window, input, mesher, textures, shaders, rendering and audio on raylib |
 | `web/shell.html` | the browser page around the WebAssembly build, with the touch controls |
@@ -317,14 +315,14 @@ AGENTS.md has the module map file by file.
   the same deterministic generator and all solid.
 - **PIRATE CLARK** — Level 0's hunter: tricorn hat, one glowing eye, a hook,
   a peg leg.
-- **THE SMILER** — Level 1 and the Red Halls, true to the [Backrooms lore](https://backrooms.fandom.com/wiki/Entity_3):
+- **THE SMILER** — Level 1 and the multiplex, true to the [Backrooms lore](https://backrooms.fandom.com/wiki/Entity_3):
   no body you can pin down, just a shape of darker dark with two glowing eyes
   and a grin of teeth that carries its own light, so it shows first in an unlit
   corridor. Lights die around it. Line-of-sight is ray-marched against real
   wall geometry.
 - **All three hunters** — Clark, the Smiler and the Partygoer — share one
   brain: stare too long and they chase, slightly slower than your sprint.
-  You can survive one landed lunge (or dog bite), but a second
+  You can survive one landed lunge, but a second
   before you've recovered kills you. Health starts coming back after 6 seconds
   untouched and is full again about 10 seconds later.
 - **He walks** — a six-frame stride, generated by the same procedural code that
@@ -364,7 +362,7 @@ AGENTS.md has the module map file by file.
 
   <p align="center"><img src="docs/entity_dark_flashlight.png" width="480" alt="The hunter in its pool of dead light, found by the flashlight"></p>
 - **Hiding** — crouch (CTRL) in beside real cover — a couch, a filing cabinet,
-  an armoire, a desk, shelving, a party table — and the hunt loses you outright,
+  a desk, shelving, a party table — and the hunt loses you outright,
   however close it gets. It can walk right up and stand there not knowing;
   hold still and it gives up faster than it would out in the open. Get away
   with it and you'll know: *it stood right there, and never saw you.*
@@ -423,36 +421,23 @@ AGENTS.md has the module map file by file.
   only thing besides a can that gives any of it back, and unlike a can it
   gives it back slowly, for as long as you let the tape run.
 
-  The catch is that a running deck is *loud*. In the Red Halls, where the pack
-  hunts by sound, playing a tape in your hand makes you a beacon they can hear
-  from thirty metres. So the other thing you can do is press play, then set the
-  deck down and walk away: the noise is now over **there**, and so are they.
-  They commit to the deck, not to you, and stay on it until the tape runs out.
-  You give up the voice to do it: the further the deck is from you, and the
-  more wall between, the less it steadies you, and it does nothing at all for
-  you past about fourteen metres — which is well inside the range the pack can
-  still hear it from. Leave it close enough to keep hearing and they arrive
-  where you're standing. The record lamp pulses while it runs, and you fetch it
-  back with E.
+  You can also press play and set the deck down: the further it is from you,
+  and the more wall between, the less it steadies you, and past about fourteen
+  metres it does nothing at all. The record lamp pulses while it runs, and you
+  fetch it back with E.
 - **Terrain** — Level 0 sinks into carpeted conversation pits, Level 1 raises
   concrete loading docks, and the pools get proper steps down into the water.
   Real stair geometry, smooth step physics — and you can jump onto most of
   the furniture and walk across it.
-- **Windows** — rarely, a Red Halls wall has one, and now you can see through it: a
-  translucent glass pane, clear in the middle and catching the light at
-  grazing angles, with the next room laid out on the far side.
-
-  <p align="center"><img src="docs/window.png" width="440" alt="A see-through window"></p>
-- **Furniture** — couches, armoires, floor lamps, nightstands, party tables
-  and the occasional bare mattress, arranged by no one, for no one. All of it
+- **Furniture** — couches, filing cabinets, shelving and party tables,
+  arranged by no one, for no one. All of it
   solid, and most of it climbable. Level 0 has none: the lore's "randomly
   segmented empty rooms" hold only the odd stack of cartons and the ceiling
   tiles that have come down.
 - **Level 0, by the book** — mono-yellow chevron wallpaper (the paper in the
   2002 photograph), lay-in troffers crowded into a drop ceiling with a fifth
   of them dead and the rest uneven, clean carpet with visibly rotten patches, and a hum that gives you a migraine
-  which follows you out. Glowing white doors lead onward; red doors lead to the
-  Red Halls. Connected rooms offer routes around interrupted corridors, and
+  which follows you out. Glowing white doors lead onward. Connected rooms offer routes around interrupted corridors, and
   occasional courts have 3, 5, or 7 stacked floors overlooking the same void.
 - **Level 1, by the book** — the Habitable Zone's warehouse: bare concrete with
   a damp tide line at the foot of every wall and rebar showing where the cover
@@ -471,35 +456,14 @@ AGENTS.md has the module map file by file.
   two and a half metres below the office, with real stairs at every edge and
   the walls above reading as balconies. The warehouse stacks its loading
   docks two tiers high. There was always another floor.
-- **The Red Halls have pipework** — service runs of rusted iron and dull steel
+- **Level 1 has pipework** — service runs of rusted iron and dull steel
   follow the corridors just under the ceiling, with collars every few metres.
   Runs are decided per corridor rather than per cell, so a pipe follows a wall
   the whole way instead of appearing in patches.
-- **The pack hunts by sound, and only sound** — furniture is nothing to them in
-  either direction: standing dead still in the open loses them, and crouching
-  behind a cabinet with a tape running in your coat does not. Putting the deck
-  down somewhere else is the play.
-- **The pack** — the Red Halls have their own residents, and they don't hunt
-  the way Clark and the Smiler do. They hunt by sight: stare at it and it comes. **The
-  dogs hunt by sound.** Sprinting carries, a gunshot carries a long way, a
-  struck flare carries — crouching and standing still barely carries at all.
-  Prowling, they nose around the halls on their own business; hear you and they
-  commit, and they are faster than you are, so running is never the answer.
-  Fire turns them, a bullet puts one down, going quiet makes them lose the
-  thread — and a tape player left running somewhere else takes them there
-  instead. You hear them before you see them: barks panned to whichever one
-  spoke, and the pack calling to each other across the dark.
-- **Shutting off the pipes** — three standpipes in the Red Halls carry a
-  seized shut-off wheel. Turn all three (E at each) and the pipes go quiet and
-  the halls give up the cache they were holding — a spill of doubloons, which
-  is the currency you need to leave for good. The wheels read red while open
-  and green once shut, so you can see at a glance which ones you've found.
-- **Exits** — glowing doorways carved into wall runs. A normal one takes you
-  one level deeper (and ~1 in 6 is cursed: it glows red and drops you into the
-  Red Halls instead).
+- **Exits** — glowing doorways carved into wall runs. Each takes you one
+  level deeper.
 - **Getting out for good** — the doubloons a hunter leaves when you put it
-  down are your ticket. Bank enough of them and the honest doors start to burn
-  green: step through one and you *escape the backrooms* — a real win, timed and
+  down are your ticket. Bank enough of them and the doors start to burn green: step through one and you *escape the backrooms* — a real win, timed and
   recorded. But doubloons also buy almond water from the vending machines, so
   every coin is a choice between surviving now and leaving later, and you have
   to fight the hunters to earn your way out at all.
@@ -546,13 +510,13 @@ Details that reward paying attention:
   bunch goes at once.
 
   <p align="center"><img src="docs/confetti.png" width="440" alt="A popped balloon and its confetti"></p>
-- **Footsteps per floor** — separate synthesized clips for carpet (Levels 0
-  and 4), concrete (Levels 1 and 3), tile (Level 2) and wood (the Manila
-  Room).
+- **Footsteps per floor** — separate synthesized clips for carpet (Level 0,
+  LEVEL FUN and the multiplex), concrete (Level 1), tile (the Poolrooms) and
+  wood (the Manila Room).
 - **Distant sounds** — every 35-85 s (sooner at low sanity) a muffled one-shot
   plays from a random direction: a door closing on Level 0, a metal clang on
-  Level 1, pipe knocking on Level 3, a balloon pop on Level 4. None on
-  Level 2.
+  Level 1, a balloon pop on LEVEL FUN, a film through a wall in the
+  multiplex. None in the Poolrooms.
 - **Footsteps in the dark** — when the entity chases, you *hear* it: heavy
   footfalls, panned to its bearing and fading with distance, even around
   corners you can't see past.
@@ -562,8 +526,6 @@ Details that reward paying attention:
   shortcut. `E` / `USE` turns the key, and the door stays open.
 - **The floor is a lie** — Level 0 has rare soft, dark patches of carpet.
   Linger on one and it gives way — you drop through into Level 1.
-- **Cursed exits** — roughly one exit door in six glows red instead of warm.
-  Those don't lead deeper. They lead to the Red Halls.
 - **Wall scrawl** — earlier wanderers left messages. *NO CLIP.* *day 407.*
   *the exit lies.* *he hears the flares.* Drawn procedurally, pressed into
   the walls, rare enough to unsettle.
@@ -601,7 +563,7 @@ Details that reward paying attention:
 
 With the F3 debug HUD open, dev hotkeys are live: `B` force blackout,
 `E` spawn the level's hunter stalking ahead, `C` force a chase, `H` despawn it,
-`G` refill flares + ammo, `N` jump to the next level (including the Red Halls),
+`G` refill flares + ammo, `N` jump to the next level,
 `PageUp`/`PageDown` up or down a storey where you stand (Level 0).
 
 - `BACKROOMS_SHOT=out.png` — run headlessly, save a screenshot, exit.

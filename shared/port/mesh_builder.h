@@ -4,7 +4,6 @@
 // Web build: web/src/mesh_upload.h; Unreal: a procedural mesh section).
 #include "../core/vec.h"
 #include <cstdint>
-#include <functional>
 #include <vector>
 
 // A vertex colour, 0..255 a channel, laid out as raylib's Color. The alpha is
@@ -17,10 +16,6 @@ struct MB {
     std::vector<float> v, uv, n;
     std::vector<unsigned char> c;
     std::vector<unsigned short> idx;
-    // Optional colour field over the floor plan, multiplied into every vertex
-    // this builder emits (alpha untouched, so the shader's alpha coding holds). Per
-    // vertex, so a tint grades across a room instead of stepping per cell.
-    std::function<Rgba(float, float)> tint;
     void quad(Vec3 a, Vec3 b, Vec3 cc, Vec3 d, Vec3 nn,
               Vec2 ta, Vec2 tb, Vec2 tc, Vec2 td, Rgba col) {
         unsigned short base = (unsigned short)(v.size() / 3);
@@ -30,13 +25,7 @@ struct MB {
             v.push_back(P[i].x); v.push_back(P[i].y); v.push_back(P[i].z);
             uv.push_back(T[i].x); uv.push_back(T[i].y);
             n.push_back(nn.x); n.push_back(nn.y); n.push_back(nn.z);
-            Rgba k = col;
-            if (tint) {
-                Rgba t = tint(P[i].x, P[i].z);
-                k = { (unsigned char)(col.r * t.r / 255), (unsigned char)(col.g * t.g / 255),
-                      (unsigned char)(col.b * t.b / 255), col.a };
-            }
-            c.push_back(k.r); c.push_back(k.g); c.push_back(k.b); c.push_back(k.a);
+            c.push_back(col.r); c.push_back(col.g); c.push_back(col.b); c.push_back(col.a);
         }
         const unsigned short q[6] = { 0, 1, 2, 0, 2, 3 };
         for (int i = 0; i < 6; i++) idx.push_back(base + q[i]);

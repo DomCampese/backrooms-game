@@ -177,6 +177,39 @@ Pcm makeJumpscare() {
     return d;
 }
 
+// The player hurt: a body thud (a sine falling 110 to 50 Hz, 60 ms time
+// constant), a slap of noise through a 700 Hz band-pass, and a low-passed
+// noise breath 25 ms later. 0.32 s. It replaced the floor groan pitched up,
+// whose 1.3 s of low-passed noise sounded like rushing water.
+Pcm makeHurt() {
+    const int n = (int)(0.32f * SAMPLE_RATE);
+    std::vector<float> d(n);
+    Rng r(0x4027ULL);
+    const float w = TAU * 700.0f / SAMPLE_RATE, alpha = sinf(w) / (2.0f * 0.9f), a0 = 1.0f + alpha;
+    const float b0 = alpha / a0, a1 = -2.0f * cosf(w) / a0, a2 = (1.0f - alpha) / a0;
+    float x1 = 0, x2 = 0, y1 = 0, y2 = 0, breath = 0, phase = 0, peak = 1e-6f;
+    for (int i = 0; i < n; i++) {
+        float t = (float)i / SAMPLE_RATE;
+        float x = r.f01() * 2.0f - 1.0f;
+        float slap = b0 * x - b0 * x2 - a1 * y1 - a2 * y2;
+        x2 = x1; x1 = x; y2 = y1; y1 = slap;
+        breath += 0.05f * (x - breath);
+        phase += TAU * (50.0f + 60.0f * expf(-t * 30.0f)) / SAMPLE_RATE;
+        float thud = sinf(phase) * expf(-t * 16.0f);
+        float tb = t - 0.025f;
+        float breathEnv = tb > 0.0f ? (1.0f - expf(-tb * 60.0f)) * expf(-tb * 14.0f) : 0.0f;
+        const float onset = 1.0f - expf(-t * 2000.0f);
+        d[i] = (thud + slap * 5.0f * expf(-t * 60.0f)) * onset + breath * 6.0f * breathEnv;
+        peak = fmaxf(peak, fabsf(d[i]));
+    }
+    Pcm pcm(n);
+    for (int i = 0; i < n; i++) {
+        float fade = clampf1((float)(n - 1 - i) / (0.03f * SAMPLE_RATE));
+        pcm[i] = (short)(clampf1(d[i] / peak * 0.85f * fade) * 30000.0f);
+    }
+    return pcm;
+}
+
 Pcm makeClick() {
     int n = (int)(0.035f * SAMPLE_RATE);
     Pcm d(n);
@@ -295,33 +328,6 @@ Pcm makeTapeChime() {
                    + sinf(TAU * (277.2f + wobble * 1.3f) * t) * 0.32f;
         float hiss = lp * 1.8f * expf(-t * 2.2f);
         d[i] = (short)(clampf1((tone * env + hiss) * 0.9f) * 30000);
-    }
-    return d;
-}
-
-// Valve: a rising metallic squeal, gated at 9 Hz, then a low clunk at 0.86 s.
-Pcm makeValveTurn() {
-    int n = (int)(1.15f * SAMPLE_RATE);
-    Pcm d(n);
-    Rng r(0x7A17ULL);
-    float lp = 0;
-    for (int i = 0; i < n; i++) {
-        float t = i / (float)SAMPLE_RATE;
-        float wn = r.f01() * 2 - 1;
-        lp += 0.4f * (wn - lp);
-        // rising squeal, gated on and off
-        float phase = t * 9.0f; phase -= floorf(phase);
-        float grind = (phase > 0.35f) ? 1.0f : 0.55f;
-        float squeal = sinf(TAU * (620.0f + 260.0f * t) * t) * 0.30f
-                     + sinf(TAU * (930.0f + 380.0f * t) * t) * 0.16f;
-        squeal *= grind * expf(-t * 1.1f) * (t < 0.82f ? 1.0f : 0.0f);
-        float scrape = (wn - lp) * 0.22f * expf(-t * 1.4f) * (t < 0.82f ? 1.0f : 0.0f);
-        float clunk = 0.0f;
-        float ct = t - 0.86f;
-        if (ct > 0.0f)
-            clunk = (sinf(TAU * 96.0f * ct) * 1.1f + lp * 0.8f)
-                  * (1.0f - expf(-ct * 900.0f)) * expf(-ct * 21.0f);
-        d[i] = (short)(clampf1(tanhf((squeal + scrape + clunk) * 1.5f)) * 30000);
     }
     return d;
 }
@@ -520,36 +526,6 @@ Pcm makeFarClang(int variant)
     return farAway(d, 1500.0f, 2.6f, 0.7f, 0.22f);
 }
 
-// Knock: 3-5 knocks (3 + variant), each spacing 0.84x and gain 0.72x the
-// last; a 95-125 Hz thump plus a 600-740 Hz ring.
-Pcm makeFarKnock(int variant)
-{
-    Rng r(0x7A3E1ULL + (uint64_t)variant * 733u);
-    const int knocks = 3 + variant;
-    std::vector<float> d((int)(1.3f * SAMPLE_RATE));
-    float at[6], gain[6], gap = 0.17f + r.f01() * 0.05f, t0 = 0.0f, g0 = 1.0f;
-    for (int k = 0; k < knocks; k++) {
-        at[k] = t0; gain[k] = g0 * (0.85f + r.f01() * 0.3f);
-        t0 += gap; gap *= 0.84f; g0 *= 0.72f;
-    }
-    const float thump = 95.0f + r.f01() * 30.0f, ring = 600.0f + r.f01() * 140.0f;
-    float lp = 0;
-    for (int i = 0; i < (int)d.size(); i++) {
-        float t = (float)i / SAMPLE_RATE;
-        float x = r.f01() * 2.0f - 1.0f;
-        lp += 0.12f * (x - lp);
-        float s = 0;
-        for (int k = 0; k < knocks; k++) {
-            float u = t - at[k];
-            if (u <= 0.0f) continue;
-            float hit = (1.0f - expf(-u * 2000.0f)) * expf(-u * 45.0f);
-            s += gain[k] * (hit * (sinf(TAU * thump * u) + lp * 2.0f) + sinf(TAU * ring * u) * 0.25f * expf(-u * 22.0f));
-        }
-        d[i] = s;
-    }
-    return farAway(d, 900.0f, 1.2f, 0.5f, 0.36f);
-}
-
 // Pop: the makeBalloonPop burst, run through farAway with a high wet mix.
 Pcm makeFarPop(int variant)
 {
@@ -598,58 +574,6 @@ Pcm makeFarBoom(int variant)
         d[i] = s;
     }
     return farAway(d, 900.0f, 1.8f, 0.45f, 0.62f);
-}
-
-// Bark: a falling-pitch harmonic voice through a noise band, with a fast attack
-// and decay.
-Pcm makeDogBark(uint32_t seed, bool through = false) {
-    int n = (int)(0.42f * SAMPLE_RATE);
-    float wallA = 0, wallB = 0;
-    Pcm d(n);
-    Rng r((uint64_t)seed * 7919u + 13u);
-    float f0 = 155.0f + r.f01() * 70.0f;      // base pitch per variant
-    float lp = 0, bp = 0;
-    for (int i = 0; i < n; i++) {
-        float t = i / (float)SAMPLE_RATE;
-        float wn = r.f01() * 2 - 1;
-        lp += 0.30f * (wn - lp);
-        // pitch falls 42% over the bark
-        float f = f0 * (1.0f - 0.42f * t / 0.42f);
-        float voice = sinf(TAU * f * t) * 0.55f
-                    + sinf(TAU * f * 2.0f * t) * 0.28f
-                    + sinf(TAU * f * 3.0f * t) * 0.14f;
-        bp += 0.45f * (lp - bp);             // noise band
-        float env = (1.0f - expf(-t * 700.0f)) * expf(-t * 13.0f);
-        float s = (voice * (0.75f + 0.25f * bp) + bp * 0.8f) * env;
-        if (through) {   // through a wall: two-pole low-pass
-            wallA += 0.048f * (s - wallA);
-            wallB += 0.048f * (wallA - wallB);
-            s = wallB * 0.70f;
-        }
-        d[i] = (short)(clampf1(tanhf(s * 2.1f)) * 31000);
-    }
-    return d;
-}
-
-// Howl: a long tone with a wavering, slowly falling pitch.
-Pcm makeDogHowl() {
-    int n = (int)(1.9f * SAMPLE_RATE);
-    Pcm d(n);
-    Rng r(0xD06ULL);
-    float lp = 0;
-    for (int i = 0; i < n; i++) {
-        float t = i / (float)SAMPLE_RATE;
-        float wn = r.f01() * 2 - 1;
-        lp += 0.08f * (wn - lp);
-        float slide = 210.0f + 95.0f * sinf(t * 1.5f) - 40.0f * t;   // wavering pitch
-        float voice = sinf(TAU * slide * t) * 0.5f
-                    + sinf(TAU * slide * 1.5f * t) * 0.22f
-                    + sinf(TAU * slide * 2.0f * t) * 0.12f;
-        float env = (1.0f - expf(-t * 5.0f)) * expf(-t * 1.25f);
-        float breath = lp * 0.5f * env;
-        d[i] = (short)(clampf1(tanhf((voice * env + breath) * 1.7f)) * 29000);
-    }
-    return d;
 }
 
 // Floor groan (rotten patch): a low resonant groan with a stick-slip stutter
@@ -829,17 +753,15 @@ ClipSpec clipSpec(Sfx sfx) {
     case Sfx::EntStep: case Sfx::EntStepThrough:
     case Sfx::StepConcrete: case Sfx::StepTile: case Sfx::StepWood: return { 4, 1.0f, 1.0f };
     case Sfx::SplashIn: case Sfx::SplashOut:
-    case Sfx::Bark: case Sfx::BarkThrough:
-    case Sfx::FarDoor: case Sfx::FarClang: case Sfx::FarKnock: case Sfx::FarPop:
+    case Sfx::FarDoor: case Sfx::FarClang: case Sfx::FarPop:
     case Sfx::FarBoom: return { 3, 1.0f, 1.0f };
     case Sfx::Hit:       return { 1, 1.7f, 0.40f };
     case Sfx::Kill:      return { 1, 0.55f, 0.80f };
     case Sfx::Heartbeat: return { 1, 1.0f, 0.55f };
     case Sfx::TapeChime: return { 1, 1.0f, 0.6f };
-    case Sfx::Valve:     return { 1, 1.0f, 0.7f };
-    case Sfx::Howl:      return { 1, 1.0f, 0.5f };
     case Sfx::Gulp:      return { 1, 1.0f, 0.60f };
     case Sfx::Groan:     return { 1, 1.0f, 0.85f };
+    case Sfx::Hurt:      return { 1, 1.0f, 0.8f };
     default:             return { 1, 1.0f, 1.0f };
     }
 }
@@ -853,7 +775,7 @@ std::string clipRecording(Sfx sfx, int variant) {
 }
 
 // Each variant has its own seed. The hunter's steps use different seeds from
-// the player's, and each dog has its own bark.
+// the player's.
 Pcm clipPcm(Sfx sfx, int variant) {
     switch (sfx) {
     case Sfx::Step:           return makeFootstep(100 + variant * 17);
@@ -862,8 +784,6 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::StepConcrete:   return makeShoeStep(500 + variant * 19, Footing::Concrete);
     case Sfx::StepTile:       return makeShoeStep(600 + variant * 29, Footing::Tile);
     case Sfx::StepWood:       return makeWoodStep(700 + variant * 13);
-    case Sfx::Bark:           return makeDogBark(400 + variant * 31);
-    case Sfx::BarkThrough:    return makeDogBark(400 + variant * 31, true);
     case Sfx::SplashIn: case Sfx::SplashOut: case Sfx::SwimStroke: return {};
     case Sfx::Click:          return makeClick();
     case Sfx::Scare: case Sfx::Hit: case Sfx::Kill: return makeJumpscare();
@@ -873,13 +793,11 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::Pop:            return makeBalloonPop();
     case Sfx::Heartbeat:      return makeHeartbeat();
     case Sfx::TapeChime:      return makeTapeChime();
-    case Sfx::Valve:          return makeValveTurn();
-    case Sfx::Howl:           return makeDogHowl();
     case Sfx::Gulp:           return gulpPcm();
     case Sfx::Groan:          return makeFloorGroan();
+    case Sfx::Hurt:           return makeHurt();
     case Sfx::FarDoor:        return makeFarDoor(variant);
     case Sfx::FarClang:       return makeFarClang(variant);
-    case Sfx::FarKnock:       return makeFarKnock(variant);
     case Sfx::FarPop:         return makeFarPop(variant);
     case Sfx::FarBoom:        return makeFarBoom(variant);
     }
