@@ -428,7 +428,7 @@ struct World {
     // Can a body walk from cell (ci,ck) into the adjacent (ni,nk)? Furniture and
     // pillars fill their cell; only a doorway opens a walled edge.
     // throughShut: treat a shut door as open, for a body that can open one (the
-    // hunter). The pack cannot.
+    // hunter).
     bool canStep(int ci, int ck, int ni, int nk, bool throughShut = false);
     // BFS from (si,sk) toward (ti,tk) within 16 cells; the first cell to move to.
     // False if there is no route (fall back to a beeline).
