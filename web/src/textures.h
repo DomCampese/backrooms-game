@@ -32,9 +32,8 @@ Texture2D makeFixturesTex();       // fittings atlas: outlets, switch, grille, d
 // The fixtures atlas' layout (FIXTURES, FIX_*, the vending machine's door) is
 // port/atlas.h's: the mesher reads it too.
 Surface makeConcreteWallSurface();   // Level 1: plywood-formed walls, one tile floor to slab
-Surface makeConcreteFloorSurface();  // Level 1 (+ Red Halls): power-trowelled slab
-Surface makeConcreteCeilSurface();   // Level 1 (+ Red Halls): formed soffit
-Surface makeRedBrickSurface();       // Red Halls: real-size brick in stretcher bond
+Surface makeConcreteFloorSurface();  // Level 1: power-trowelled slab
+Surface makeConcreteCeilSurface();   // Level 1: formed soffit
 // Poolrooms: white glazed tile at one pitch everywhere. Floors and ceilings map
 // 2 m to a texture repeat and walls 3 m, so they need two textures to put the
 // grout lines at the same spacing, so they meet where wall meets floor.
@@ -50,7 +49,6 @@ Surface makeCinemaCeilSurface();     // the theater: black acoustic board
 Surface makeSurface(SurfSlot slot);
 // The tile sizes (FLOOR_TILE_M, WALL_TILE_M, wallTileV) are port/atlas.h's.
 Texture2D makeAOStripTex();        // gradient strip for baked contact-shadow decals
-Texture2D makeDogTex();            // the Red Halls dogs, side view
 Texture2D makeAlmondWrapTex();     // almond water can, unwrapped: label strip + lid + base
 Texture2D makeDeckTex();           // the tape player: top / body / front / reel, in one atlas
 

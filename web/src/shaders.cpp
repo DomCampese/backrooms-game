@@ -707,11 +707,10 @@ void main(){
         }
         aOut = max(fragC.a * texel.a, backlit);      // translucent contact shadows + scrawl decals
         if (noclip){
-            // The torn bands show a flat bright colour on an ordinary exit and
-            // dark red on a cursed one (vertex alpha 247). A faint shimmer runs
+            // The torn bands show a flat bright colour. A faint shimmer runs
             // all the time, so a player who stops and looks can spot the exit.
             float shimmer = 0.035 * sin(uTime*23.0 + fragPos.y*41.0 + fragPos.x*7.0 + fragPos.z*7.0);
-            vec3 behind = fragC.a < 0.975 ? vec3(0.55, 0.03, 0.02) : vec3(1.25, 1.18, 0.95);   // 247 cursed, 250 not
+            vec3 behind = vec3(1.25, 1.18, 0.95);
             col = mix(col * (1.0 + shimmer), behind * (0.6 + 0.4*gLightLum), tear * 0.55);
             aOut = 1.0;
         }

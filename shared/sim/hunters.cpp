@@ -1,14 +1,7 @@
-// The level's hunter (Pirate Clark, a Smiler, the Partygoer) and the Red Halls
-// pack.
+// The level's hunter: Pirate Clark, a Smiler or the Partygoer.
 #include "../core/fp_strict.h"
 #include "sim.h"
 #include <cmath>
-
-// The pack hunts by sound only. Cover does not hide the player, and a
-// carried deck that is playing gives them away even when standing still.
-bool Sim::packDeaf() const {
-    return still && !(deck.playing && deck.carried);
-}
 
 void Sim::updateEntity(float dt, double now, bool forceSpawn) {
     if (mannequin.active) {
@@ -181,8 +174,8 @@ void Sim::spawnHunter() {
 bool Sim::hunterChase(float dt, double now, float &fearT) {
     fearT = entDist < 8 ? 1.0f : 0.8f;
     // He sees the player with line of sight inside HUNTER_SIGHT, unless they
-    // are hidden or crouched more than 7 m away. He hears the same noises the
-    // pack does (packNoise). Either tells him where the player is.
+    // are hidden or crouched more than 7 m away, and hears loudestNoise. Either
+    // tells him where the player is.
     bool los = world.lineOfSight(ent.x, ent.z, px, pz);
     if (hidden && entDist < FIND_REACH && los) {   // he has walked up to the player's cover
         hidden = false;
@@ -191,7 +184,7 @@ bool Sim::hunterChase(float dt, double now, float &fearT) {
     }
     bool sees = entDist < HUNTER_SIGHT && !hidden && !(crouchCur > 0.7f && entDist > 7) && los;
     float noiseX, noiseZ;
-    float noise = packNoise(noiseX, noiseZ);
+    float noise = loudestNoise(noiseX, noiseZ);
     float hx = noiseX - ent.x, hz = noiseZ - ent.z;
     if (sees) hunterNotice(px, pz);
     else if (hx * hx + hz * hz < noise * noise) hunterNotice(noiseX, noiseZ);
@@ -266,46 +259,9 @@ bool Sim::hunterChase(float dt, double now, float &fearT) {
     return false;
 }
 
-// The pack hunts by sound and is faster than the player, so running does not
-// work. Flares turn them, a shot kills one, and silence loses them.
-void Sim::updateDogs(float dt, double now) {
-    if (level != 3) {
-        for (auto &d : dogs) d.st = DState::Gone;
-        return;
-    }
-    float nsx, nsz;
-    float noise = packNoise(nsx, nsz);
-
-    if (now > nextHowl && deathT <= 0) {
-        nextHowl = now + 26 + grng.f01() * 34;
-        int live = 0;
-        for (auto &d : dogs) if (d.st != DState::Gone) live++;
-        if (live > 0) play(Sfx::Howl).atPan(0);
-    }
-    // They arrive one at a time, not all at once.
-    if (now > nextPack) {
-        nextPack = now + 14 + grng.f01() * 16;
-        for (auto &d : dogs) {
-            if (d.st != DState::Gone) continue;
-            float a = grng.f01() * TAU, dist = 17 + grng.f01() * 9;
-            Vec2 spot = world.findOpenSpot(px + portableCos(a) * dist, pz + portableSin(a) * dist);
-            d.x = spot.x; d.z = spot.y;
-            d.st = DState::Prowl; d.life = 0; d.lost = 0; d.hp = 2;
-            d.dispY = world.groundAt(d.x, d.z, py + 1.0f);
-            d.repathT = 0; d.wpx = d.x; d.wpz = d.z;
-            d.nextBark = now + grng.f01() * 3.0;
-            break;
-        }
-    }
-    for (int i = 0; i < MAXDOGS; i++) {
-        if (dogs[i].st == DState::Gone) continue;
-        if (updateDog(i, dt, now, noise, nsx, nsz)) return;
-    }
-}
-
 // How far the loudest noise carries this tick, in metres, and where it is.
 // Usually the player; a playing deck that was set down is a separate source.
-float Sim::packNoise(float &x, float &z) const {
+float Sim::loudestNoise(float &x, float &z) const {
     float noise = 5.0f;
     x = px; z = pz;
     if (sprinting) noise = 20.0f;
@@ -322,87 +278,6 @@ float Sim::packNoise(float &x, float &z) const {
     for (const FlareProj &f : litFlares) if (f.active && f.burn > FLAREBURN - 0.6f) justStruck = true;
     if (justStruck) { noise = 30.0f; x = px; z = pz; }
     return noise;
-}
-
-bool Sim::updateDog(int i, float dt, double now, float noise, float nsx, float nsz) {
-    Dog &d = dogs[i];
-    float ddx = px - d.x, ddz = pz - d.z;
-    float dist = sqrtf(ddx * ddx + ddz * ddz) + 1e-4f;
-    d.life += dt;
-    if (d.st == DState::Yelp) {          // shot or burned: runs, then despawns
-        float rx = d.x - px, rz = d.z - pz, rl = sqrtf(rx * rx + rz * rz) + 1e-4f;
-        d.x += rx / rl * 7.5f * dt; d.z += rz / rl * 7.5f * dt;
-        d.gait += 7.5f * dt;
-        world.collideCircle(d.x, d.z, 0.3f, d.dispY);
-        if (d.life > 2.6f) d.st = DState::Gone;
-    } else {
-        const FlareProj *nearest = nearestLitFlare(d.x, d.z);
-        if (nearest) {
-            float fx = d.x - nearest->x, fz = d.z - nearest->z;
-            if (fx * fx + fz * fz < 5.5f * 5.5f) {
-                d.st = DState::Yelp; d.life = 0;
-                play(Sfx::Bark, i % 3).atPitch(1.5f);
-            }
-        }
-        float sdx = nsx - d.x, sdz = nsz - d.z;
-        bool heard = sqrtf(sdx * sdx + sdz * sdz) < noise;   // the noise source, not the player
-        if (d.st == DState::Prowl) {
-            if (heard) { d.st = DState::Charge; d.life = 0; d.lost = 0; d.repathT = 0; }
-            else if (d.life > 55) d.st = DState::Gone;
-        } else if (d.st == DState::Charge) {
-            d.lost = heard ? 0.0f : d.lost + dt;
-            if (d.lost > 6.0f) { d.st = DState::Prowl; d.life = 0; }
-        }
-        // A prowling dog wanders on its own; only a charging dog goes to the
-        // noise, or noise would have no effect on what they do.
-        float spd = (d.st == DState::Charge) ? 5.6f : 2.1f;
-        float tgx, tgz;
-        if (d.st == DState::Charge) { tgx = nsx; tgz = nsz; }
-        else {
-            float rdx = d.roamX - d.x, rdz = d.roamZ - d.z;
-            if (now > d.nextRoam || rdx * rdx + rdz * rdz < 1.4f * 1.4f) {
-                float a = grng.f01() * TAU, r = 9 + grng.f01() * 11;
-                Vec2 sp = world.findOpenSpot(d.x + portableCos(a) * r, d.z + portableSin(a) * r);
-                d.roamX = sp.x; d.roamZ = sp.y;
-                d.nextRoam = now + 9 + grng.f01() * 9;
-            }
-            tgx = d.roamX; tgz = d.roamZ;
-        }
-        d.repathT -= dt;
-        float wdx = d.wpx - d.x, wdz = d.wpz - d.z;
-        if (d.repathT <= 0 || wdx * wdx + wdz * wdz < 0.2f) {
-            d.repathT = 0.3;
-            int oi, ok;
-            float tdx = tgx - d.x, tdz = tgz - d.z;
-            if (tdx * tdx + tdz * tdz > 2.0f * 2.0f && !world.lineOfSight(d.x, d.z, tgx, tgz) &&
-                world.pathStep(cellOf(d.x), cellOf(d.z), cellOf(tgx), cellOf(tgz), oi, ok))
-                { d.wpx = oi * CELL + 1.0f; d.wpz = ok * CELL + 1.0f; }
-            else { d.wpx = tgx; d.wpz = tgz; }
-        }
-        float sx = d.wpx - d.x, sz = d.wpz - d.z, sl = sqrtf(sx * sx + sz * sz) + 1e-4f;
-        d.x += sx / sl * spd * dt; d.z += sz / sl * spd * dt;
-        d.gait += spd * dt;
-        world.collideCircle(d.x, d.z, 0.3f, d.dispY);
-
-        if (now > d.nextBark && dist < 26.0f && deathT <= 0) {
-            d.nextBark = now + (d.st == DState::Charge ? 0.7 + grng.f01() * 0.6
-                                                      : 3.5 + grng.f01() * 4.0);
-            bool dogLos = world.lineOfSight(px, pz, d.x, d.z);
-            float sd = clampf((ddx / dist) * r2x + (ddz / dist) * r2z, -1.0f, 1.0f);
-            float occ = dogLos ? 1.0f : 0.45f;
-            play(dogLos ? Sfx::Bark : Sfx::BarkThrough, i % 3)
-                .atPan(sd)
-                .atPitch(0.92f + grng.f01() * 0.2f)
-                .atVolume(clampf(1.5f * occ / (1.0f + (dogLos ? 0.05f : 0.10f) * dist * dist), 0.0f, 0.95f));
-        }
-        // Cover does not stop them; only standing still with no playing deck carried.
-        if (dist < 1.15f && deathT <= 0 && hurtT <= 0 && !packDeaf()) {
-            if (hurtPlayer(now, PACK_BITE, "THE PACK", d.x, d.z)) return true;
-        }
-    }
-    float gy = world.groundAt(d.x, d.z, d.dispY + MAX_STEP);
-    d.dispY += (gy - d.dispY) * fminf(1, 10 * dt);
-    return false;
 }
 
 void Sim::hunterNotice(float x, float z) {

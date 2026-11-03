@@ -115,7 +115,7 @@ void Game::renderScene(double now) {
         m.m12 = loose.t.x; m.m13 = loose.t.y; m.m14 = loose.t.z; m.m15 = 1;
         drawRevolver(m, 0, 0, Sim::MAXAMMO);
     }
-    // The landing tubes, the sim's scene, the pack, the flares, the hunter and
+    // The landing tubes, the sim's scene, the flares, the hunter and
     // the rest, as shared/port/draw.h decides them for both builds.
     sceneBuf.clear();
     sceneDraws(sim, light, timeF, sceneBuf);
@@ -205,7 +205,7 @@ void Game::drawScene(const SceneDraw &d, const Camera3D &cam) {
     case ShapeKind::CylinderEx: DrawCylinderEx(toRl(s.a), toRl(s.b), s.r0, s.r1, s.sides, c); break;
     case ShapeKind::Billboard: {
         const Texture2D *tex[(int)ShapeTex::Count] = { &texParticle, &texParticle, &texClark, &texEntity,
-                                                       &texEntityGlow, &texPartygoer, &texDog, &texUsher };
+                                                       &texEntityGlow, &texPartygoer, &texUsher };
         if (s.additive) BeginBlendMode(BLEND_ADDITIVE);
         if (!s.depthWrite) { rlDrawRenderBatchActive(); rlDisableDepthMask(); }
         DrawBillboardRec(cam, *tex[(int)s.tex], { s.src[0], s.src[1], s.src[2], s.src[3] }, toRl(s.a),

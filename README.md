@@ -135,8 +135,7 @@ a height field for its relief:
   the tile. The old bump maps were the colour's brightness, so every printed
   pattern and stain was embossed.
 - **Real dimensions.** Level 0's ceiling is 2 ft boards on a white grid, with
-  each light filling a 2 x 2 bay. The Red Halls' bricks are real size (they
-  were 0.75 m blocks). Pool tile is 6 inches on walls and floors, so the grout
+  each light filling a 2 x 2 bay. Pool tile is 6 inches on walls and floors, so the grout
   lines meet. The skirting is a 12 cm board (it was a 27 cm band).
 - **No visible repeats.** Every texture wraps exactly; the old ones had a
   visible seam every 2-3 m. The shader also varies tone in world space so
@@ -148,7 +147,7 @@ a height field for its relief:
   panels and a black board ceiling for the theater.
 - **Objects.** Cartons have tape and a barcoded label. The almond water can
   and tape deck are redrawn at 3-4x the resolution with printed lettering.
-  Outlets are duplex receptacles. The dogs have a dog's proportions.
+  Outlets are duplex receptacles.
 - **The revolver.** Its steel reflects an approximation of the room (the
   ceiling and its lights along the top, the walls in the level's colour, the
   floor below) instead of shading as grey plastic, and the grips are walnut.
@@ -201,15 +200,14 @@ and replays are unchanged.
 
 ## The levels
 
-Six procedurally generated levels, each with its own palette, lighting,
-sounds and hunter. Exits lead to the next level; about one in six is cursed
-and leads to the Red Halls.
+Five procedurally generated levels, each with its own palette, lighting,
+sounds and hunter. Exits lead to the next level.
 
 | | |
 |---|---|
 | ![Level 0](docs/levels/level_0.png) **LEVEL 0 · THRESHOLD**: empty rooms, yellow chevron wallpaper, damp carpet, an uneven grid of ceiling lights that hums, stairs up to more floors like this one, and railed openings down to others. The exits are walls you walk through. The hunter is Pirate Clark. | ![Level 1](docs/levels/level_1.png) **LEVEL 1 · HABITABLE ZONE**: a concrete warehouse with dim tube lights, many of them dead, low fog on the floor, exposed rebar, supply crates that move during blackouts, and exit doors marked with symbols. The hunter is a Smiler. |
-| ![The Poolrooms](docs/levels/level_2.png) **THE POOLROOMS**: white tile and water: colonnaded halls, flooded tunnels, staircases down into deep water, and windows of white light. No hunter and no blackouts. | ![The Red Halls](docs/levels/level_3.png) **THE RED HALLS**: dark red brick and bedroom furniture. A Smiler and a pack of dogs that hunt by sound. |
-| ![Level Fun](docs/levels/level_4.png) **LEVEL FUN =)**: red carpet, a black ceiling, bunting, balloons and party tables. The hunter is the Partygoer. | ![The Theater](docs/levels/level_5.png) **THE THEATER**: a cinema that does not end. Lobbies are two halls with film posters, a concession counter with a roped queue, and drink and snack machines (a snack costs two doubloons and heals you). Dark auditoriums have stepped rows of red seats facing a screen that is still showing a film; the screen is the only light in the room. Slip past either end of the screen to reach backstage, where a tape and loose doubloons lie among the cartons. The Usher, a faceless figure in a burgundy uniform, walks the aisles with a torch: if its beam holds you, it whistles and the Smiler comes running. Crouch still between the rows to hide from both. It is the second level: Level 0's exits lead here. |
+| ![The Poolrooms](docs/levels/level_2.png) **THE POOLROOMS**: white tile and water: colonnaded halls, flooded tunnels, staircases down into deep water, and windows of white light. No hunter and no blackouts. | ![Level Fun](docs/levels/level_3.png) **LEVEL FUN =)**: red carpet, a black ceiling, bunting, balloons and party tables. The hunter is the Partygoer. |
+| ![The Theater](docs/levels/level_4.png) **THE THEATER**: a cinema that does not end. Lobbies are two halls with film posters, a concession counter with a roped queue, and drink and snack machines (a snack costs two doubloons and heals you). Dark auditoriums have stepped rows of red seats facing a screen that is still showing a film; the screen is the only light in the room. Slip past either end of the screen to reach backstage, where a tape and loose doubloons lie among the cartons. The Usher, a faceless figure in a burgundy uniform, walks the aisles with a torch: if its beam holds you, it whistles and the Smiler comes running. Crouch still between the rows to hide from both. It is the second level: Level 0's exits lead here. |
 
 All hunters use the same rules: look at one for about 1.6 s, or let it get
 within 8 m of you in view, and it chases you.
@@ -231,7 +229,7 @@ make run
 | path | contents |
 |---|---|
 | `shared/core/` | the infinite maze: generation, storeys, collision, line of sight, pathfinding, chunk layout. No engine |
-| `shared/sim/` | the rules (`Sim`): the player, weapons, pickups, the hunter and the pack, levels, blackouts. No engine |
+| `shared/sim/` | the rules (`Sim`): the player, weapons, pickups, the hunter, levels, blackouts. No engine |
 | `shared/port/` | what any renderer needs from the sim: the camera, the greybox, items held and loose, sprite poses, the sound mix |
 | `web/src/` | the Web build: window, input, mesher, textures, shaders, rendering and audio on raylib |
 | `web/shell.html` | the browser page around the WebAssembly build, with the touch controls |
@@ -302,7 +300,7 @@ AGENTS.md has the module map file by file.
   [Backrooms wiki](https://backrooms.fandom.com/wiki/Entity_3): a dark shape
   with two glowing eyes and a glowing grin, drawn unlit so it shows in dark
   corridors. Lights go out around it.
-- **Health.** A landed lunge or dog bite takes 0.6 of your health, so you can
+- **Health.** A landed lunge takes 0.6 of your health, so you can
   survive one; a second before you recover kills you. Health starts coming
   back after 6 s without being hit and is full about 10 s later.
 - **Walk cycle.** The hunter's six-frame walk is generated by the same code
@@ -330,8 +328,8 @@ AGENTS.md has the module map file by file.
   within 11 m, sprinting within 20 m, the tape player, a flare being lit and a
   shot.
 - **Doors.** Face a doorway and press E (USE on touch) to shut or open it. A
-  shut door blocks the hunter's sight and the light, and the dogs in the Red
-  Halls cannot open one. The hunter can: it stops, knocks on it every 0.45 s,
+  shut door blocks the hunter's sight and the light. The hunter can open one:
+  it stops, knocks on it every 0.45 s,
   and opens it after 1.6 s. Shutting or opening a door can be heard 14 m
   away.
 - **Darkness around the hunter.** Ceiling lights go dark in a radius around
@@ -341,7 +339,7 @@ AGENTS.md has the module map file by file.
 
   <p align="center"><img src="docs/entity_dark_flashlight.png" width="480" alt="The hunter in its dark area, lit by the flashlight"></p>
 - **Hiding.** Crouch (CTRL) still next to cover (a couch, filing cabinet,
-  armoire, desk, shelving, party table, carton stack, theater seats or a
+  desk, shelving, party table, carton stack, theater seats or a
   counter) and the hunter cannot see you from a distance. If it comes within
   1.4 m with a clear line to you, which it does when it checks your cover, it
   finds you: you hear it, and you cannot hide again for 2 s. Hide away from
@@ -374,34 +372,28 @@ AGENTS.md has the module map file by file.
 - **Almond water.** Press 3 to drink. The can comes up for three swallows,
   during which you cannot use your hands. It restores about a third of your
   sanity and your stamina. Cans are found on the floor and on tables, desks,
-  cabinets and nightstands.
+  and cabinets.
 - **Cassette tapes.** Rarer pickups, each with a line of text. The tape player
   uses them.
 - **The tape player** (4). Load a tape and press play: a synthesized voice
   with tape noise plays, and while you can hear it your sanity slowly goes up
   instead of down.
 
-  A playing tape is loud: in the Red Halls the dogs hear it from 32 m. You
-  can set the deck down while it plays and walk away. The dogs then go to the
-  deck instead of you and stay there until the tape ends. The deck only
-  restores sanity within about 14 m, less through walls, which is well inside
-  the range the dogs hear it from. The record lamp blinks while it plays; pick
+  A playing tape is loud: the hunter hears it from 32 m. You can set the deck
+  down while it plays and walk away, and the hunter goes to the deck instead of
+  you. The deck only restores sanity within about 14 m, less through walls,
+  which is well inside the range the hunter hears it from. The record lamp blinks while it plays; pick
   it up again with E.
 - **Terrain.** Level 0 has sunken areas, Level 1 has raised loading docks, and
   the pools have steps down into the water. You can jump onto most furniture
   and walk across it.
-- **Windows.** Some Red Halls walls have a glass window you can see through.
-
-  <p align="center"><img src="docs/window.png" width="440" alt="A window"></p>
-- **Furniture.** Couches, armoires, floor lamps, nightstands, party tables and
-  mattresses, all solid and most of them climbable. Level 0 has none: following
+- **Furniture.** Couches, filing cabinets, shelving and party tables, all solid and most of them climbable. Level 0 has none: following
   the wiki's description of empty rooms, it has only carton stacks and fallen
   ceiling tiles.
 - **Level 0 details.** Yellow chevron wallpaper (from the 2002 photograph),
   drop-ceiling lights with a fifth of them dead and the rest uneven, carpet
   with rotten patches, and a hum that builds a migraine effect which stays
-  for a while after you leave. White doors lead on; red doors lead to the Red
-  Halls. Some areas have 3, 5 or 7 stacked floors around a shared opening.
+  for a while after you leave. White doors lead on. Some areas have 3, 5 or 7 stacked floors around a shared opening.
 - **Level 1 details.** Bare concrete with a damp line at the bottom of the
   walls and exposed rebar, low fog, and twin-tube lights with three in ten
   dead. Supply crates hold something useful or junk, and move to new places
@@ -415,23 +407,13 @@ AGENTS.md has the module map file by file.
 - **Atriums.** Level 0 sometimes has a sunken hall: the floor steps down in
   0.5 m rings to 2.5 m below the rest, with stairs at every edge. Level 1's
   loading docks can be two tiers high.
-- **Pipes in the Red Halls.** Pipes run along the corridors under the
+- **Pipes on Level 1.** Pipes run along the corridors under the
   ceiling, with collars every few metres. Each corridor either has a pipe
   along its whole length or none.
-- **The dogs.** The Red Halls have a pack of dogs that hunt by sound only, not
-  sight. Sprinting, gunshots and lighting a flare are loud; crouching and
-  standing still are nearly silent. Cover does not hide you from them, and a
-  playing tape player in your inventory gives you away. They are faster than
-  you, so you cannot outrun them. Fire turns them away, a bullet kills one,
-  staying quiet makes them lose you, and a tape player set down somewhere
-  else draws them to it. Their barks are panned to where each dog is.
-- **The pipe valves.** Three valves in the Red Halls can be turned off (E at
-  each). When all three are off, a pile of doubloons appears. The valves show
-  red while open and green once shut.
-- **Exits.** Exit doors are set into wall runs. A normal one takes you to the
-  next level; about one in six is cursed (red) and leads to the Red Halls.
+- **Exits.** Exit doors are set into wall runs. Each takes you to the next
+  level.
 - **Escaping.** Hunters drop doubloons when you put them down. With 12
-  doubloons, uncursed exit doors turn green, and walking through one ends the
+  doubloons, exit doors turn green, and walking through one ends the
   run as an escape, which is timed and recorded. Doubloons also buy almond
   water from vending machines, so spending them delays escaping.
 
@@ -468,12 +450,12 @@ AGENTS.md has the module map file by file.
   whole bunch.
 
   <p align="center"><img src="docs/confetti.png" width="440" alt="A popped balloon and its confetti"></p>
-- **Footsteps per floor.** Separate synthesized clips for carpet (Levels 0
-  and 4 and the theater), concrete (Levels 1 and 3), tile (Level 2) and wood
+- **Footsteps per floor.** Separate synthesized clips for carpet (Level 0,
+  LEVEL FUN and the theater), concrete (Level 1), tile (Level 2) and wood
   (the Manila Room).
 - **Distant sounds.** Every 35-85 s (sooner at low sanity) a muffled sound
   plays from a random direction: a door closing on Level 0, a metal clang on
-  Level 1, pipe knocking on Level 3, a balloon pop on Level 4, a low boom in
+  Level 1, a balloon pop on LEVEL FUN, a low boom in
   the theater. None on Level 2.
 - **Hunter footsteps.** In a chase you hear the hunter's footsteps, panned to
   its direction and quieter with distance, including through walls.
@@ -518,7 +500,7 @@ The Poolrooms and Manila Room remain safe.
 | 3 | drink almond water |
 | 4 | tape player (click to play a tape; click again to set it down running) |
 | M | chalk a directional floor arrow |
-| E | shut or open a door; unlock a locked door; buy from a vending machine; pick up the tape player; read the Manila Room's notes; turn a valve; open a crate |
+| E | shut or open a door; unlock a locked door; buy from a vending machine; pick up the tape player; read the Manila Room's notes; open a crate |
 | F11 | borderless fullscreen |
 | P | pause |
 | ESC / click | release / capture mouse |
@@ -528,7 +510,7 @@ The Poolrooms and Manila Room remain safe.
 
 With the F3 debug HUD open, dev hotkeys are live: `B` force blackout,
 `E` spawn the level's hunter stalking ahead, `C` force a chase, `H` despawn it,
-`G` refill flares and ammo, `N` jump to the next level by number (0 to 5),
+`G` refill flares and ammo, `N` jump to the next level by number (0 to 4),
 `PageUp`/`PageDown` up or down a storey where you stand (Level 0).
 
 - `BACKROOMS_SHOT=out.png`: run headlessly, save a screenshot, exit.

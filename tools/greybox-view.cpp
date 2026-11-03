@@ -38,7 +38,6 @@ const Color SURFACE_COLOUR[(int)GreySurface::Count] = {
     { 90, 110, 160, 255 },    // Prop
     { 110, 70, 40, 255 },     // Door
     { 60, 200, 90, 255 },     // Exit
-    { 200, 40, 40, 255 },     // CursedExit
     { 150, 200, 230, 255 },   // Glass
     { 100, 100, 110, 255 },   // Rail
     { 60, 120, 200, 255 },    // Water

@@ -180,17 +180,17 @@ bool FBackroomsSoundTest::RunTest(const FString& Parameters)
 	Mixer->render(Out.GetData(), Frames);
 	TestEqual(TEXT("silent with nothing playing"), Loudness(0) + Loudness(1), (int64)0);
 
-	std::vector<AudioEvent> Events = { Event(AudioEvent::PLAY, Sfx::Bark, 1) };
+	std::vector<AudioEvent> Events = { Event(AudioEvent::PLAY, Sfx::EntStep, 1) };
 	Events.back().atPan(-1.0f);
 	Mixer->apply(Events);
 	Mixer->render(Out.GetData(), Frames);
-	TestTrue(TEXT("a bark sounds"), Loudness(0) > 0);
-	TestEqual(TEXT("a bark hard left is silent on the right"), Loudness(1), (int64)0);
+	TestTrue(TEXT("a footstep sounds"), Loudness(0) > 0);
+	TestEqual(TEXT("a footstep hard left is silent on the right"), Loudness(1), (int64)0);
 	for (int32 I = 0; I < 10; I++)
 	{
 		Mixer->render(Out.GetData(), Frames);
 	}
-	TestFalse(TEXT("a bark ends"), Mixer->playing(Sfx::Bark, 1));
+	TestFalse(TEXT("a footstep ends"), Mixer->playing(Sfx::EntStep, 1));
 
 	Events = { Event(AudioEvent::PLAY, Sfx::SplashIn, 2) };
 	Events.back().atPitch(1.25f);

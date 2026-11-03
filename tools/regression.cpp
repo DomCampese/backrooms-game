@@ -308,9 +308,9 @@ int main() {
     // Level 0 is barren now (lore: "randomly segmented empty rooms"), so each
     // kind is looked for on a level that still furnishes it.
     sim.deck.carried=true;sim.weapon=WEAPON_REVOLVER;
-    const int kinds[]={PROP_COUCH,PROP_BOXES,PROP_ARMOIRE,PROP_CABINET};
-    const int kindLevel[]={4,0,3,1};
-    for(int ki=0;ki<4;++ki) {
+    const int kinds[]={PROP_COUCH,PROP_BOXES,PROP_CABINET};
+    const int kindLevel[]={LEVEL_FUN,0,1};
+    for(int ki=0;ki<3;++ki) {
         int kind=kinds[ki];
         sim.applyLevel(kindLevel[ki],GetTime());
         bool found=false;
@@ -440,7 +440,7 @@ int main() {
         bx=ci*CELL+1; bz=ck*CELL+1; ox=bx; oz=bz;
         sim.world.collideCircle(bx,bz,Sim::PR,sim.world.floorY(ci,ck));
         CHECK(fabsf(bx-ox)<0.001f && fabsf(bz-oz)<0.001f);
-        // and no route crosses it, so the pack has to go round rather than through
+        // and no route crosses it, so the hunter has to go round rather than through
         CHECK(!sim.world.canStep(ci,ck-1,ci,ck) && !sim.world.canStep(ci,ck,ci,ck-1));
         cd.elev[li][lk]=0;
     }
@@ -554,23 +554,22 @@ int main() {
         const float v[]={4,0,0, 4,3,2, 4,3,0, 4,0,0, 4,0,2, 4,3,2};
         memcpy(wall.vertices,v,sizeof(v));
         p.sim.px=1; p.sim.pz=1; p.sim.eyeY=0.6f; p.sim.fwd={1,0,0};
-        p.sim.dogs[0].st=DState::Prowl; p.sim.dogs[0].x=6; p.sim.dogs[0].z=1; p.sim.dogs[0].hp=3;
+        p.sim.ent.st=EState::Stalk; p.sim.ent.x=6; p.sim.ent.z=1; p.sim.ent.dispY=0; p.sim.ent.hp=3;
         p.sim.fireBullet(); p.sim.updateBullets(0.1f);
         CHECK(p.sim.bullets.size()==1 && p.sim.bullets[0].remaining==0);
         CHECK_NEAR(p.sim.bullets[0].pos.x,4,0.001f);
-        CHECK(p.sim.dogs[0].hp==3 && p.sim.bulletImpacts.size()==1);
+        CHECK(p.sim.ent.hp==3 && p.sim.bulletImpacts.size()==1);
         p.sim.updateBullets(0.3f); CHECK(p.sim.bullets.empty() && p.sim.bulletImpacts.empty());
         MemFree(wall.vertices); wall={};
-        p.sim.dogs[1]=p.sim.dogs[0]; p.sim.dogs[1].x=3;
-        p.sim.ent.st=EState::Stalk; p.sim.ent.x=8; p.sim.ent.z=1; p.sim.ent.hp=3;
+        p.sim.ent.x=3;
         p.sim.fireBullet(); p.sim.updateBullets(0.1f);
-        CHECK(p.sim.dogs[1].hp==2 && p.sim.dogs[0].hp==3 && p.sim.ent.hp==3);
+        CHECK(p.sim.ent.hp==2 && p.sim.bulletImpacts.size()==1 && p.sim.bulletImpacts[0].body);
         p.sim.bullets.clear(); p.sim.bulletImpacts.clear();
         p.sim.fwd=normalize({1,2,0}); p.sim.fireBullet(); p.sim.updateBullets(0.1f);
-        CHECK(p.sim.dogs[1].hp==2 && p.sim.dogs[0].hp==3 && p.sim.ent.hp==3);
+        CHECK(p.sim.ent.hp==2);
         p.sim.bullets.clear(); p.sim.fwd={1,0,0}; p.sim.fireBullet(); p.sim.updateBullets(0.001f);
         CHECK_NEAR(p.sim.bullets[0].pos.x,1.22f,0.001f); // finite travel, not hitscan
-        p.sim.bullets.clear(); p.sim.dogs[0].st=p.sim.dogs[1].st=DState::Gone; p.sim.ent.st=EState::Hidden;
+        p.sim.bullets.clear(); p.sim.bulletImpacts.clear(); p.sim.ent.st=EState::Hidden;
         p.sim.fireBullet(); p.sim.updateBullets(1); p.sim.updateBullets(1); CHECK(p.sim.bullets.empty());
         p.sim.world.chunks[World::key(0,0)].wallW[0][0]=WALL_SOLID;
         p.sim.px=0.30f; p.sim.py=0;
@@ -598,7 +597,7 @@ int main() {
         // hard-floor clips start and end on zero, peak below clipping, and
         // order by zero crossings: carpet < wood < concrete < tile.
         const int lv0=sim.level; const bool man0=sim.inManila;
-        const Sfx want[NLEVELS]={ Sfx::Step, Sfx::StepConcrete, Sfx::StepTile, Sfx::StepConcrete, Sfx::Step, Sfx::Step };
+        const Sfx want[NLEVELS]={ Sfx::Step, Sfx::StepConcrete, Sfx::StepTile, Sfx::Step, Sfx::Step };
         for (int lv=0;lv<NLEVELS;++lv) { sim.level=lv; sim.inManila=false; CHECK(sim.stepSfx()==want[lv]); }
         sim.level=0; sim.inManila=true; CHECK(sim.stepSfx()==Sfx::StepWood);
         sim.level=lv0; sim.inManila=man0;
@@ -624,7 +623,7 @@ int main() {
         // updateDistant: the right clip per level, none on Level 2, flags and
         // ranges as set, grng untouched.
         const int lv0=sim.level; const bool man0=sim.inManila, menu0=sim.inMenu; const float death0=sim.deathT;
-        const Sfx want[NLEVELS]={ Sfx::FarDoor, Sfx::FarClang, Sfx::Click, Sfx::FarKnock, Sfx::FarPop, Sfx::FarBoom };
+        const Sfx want[NLEVELS]={ Sfx::FarDoor, Sfx::FarClang, Sfx::Click, Sfx::FarPop, Sfx::FarBoom };
         const double now=5000;
         for (int lv=0;lv<NLEVELS;++lv) {
             sim.level=lv; sim.inManila=false; sim.inMenu=false; sim.deathT=0;
@@ -656,7 +655,7 @@ int main() {
             sim.updateDistant(now);
             CHECK(sim.audio.size()==1 && sim.distantRng.s==held);
         }
-        for (Sfx k : { Sfx::FarDoor, Sfx::FarClang, Sfx::FarKnock, Sfx::FarPop, Sfx::FarBoom }) {
+        for (Sfx k : { Sfx::FarDoor, Sfx::FarClang, Sfx::FarPop, Sfx::FarBoom }) {
             CHECK(clipSpec(k).variants==3);
             for (int v=0;v<3;++v) {
                 Pcm pcm=clipPcm(k,v);
@@ -668,6 +667,20 @@ int main() {
         sim.level=lv0; sim.inManila=man0; sim.inMenu=menu0; sim.deathT=death0;
         sim.audio.clear();
     }
+    {
+        // The hurt sound is short and starts and ends on zero. It was the floor
+        // groan, 1.3 s of low-passed noise, pitched up.
+        Pcm pcm=clipPcm(Sfx::Hurt,0);
+        int peak=0;
+        for (short x : pcm) peak=std::max(peak,std::abs((int)x));
+        CHECK(pcm.front()==0 && pcm.back()==0 && peak>8000 && peak<30000 && pcm.size()<(size_t)SAMPLE_RATE/2);
+        sim.audio.clear(); sim.hurtT=0; sim.health=1; sim.deathT=0;
+        sim.hurtPlayer(GetTime(), 0.1f, "THE FALL", sim.px, sim.pz);
+        bool hurt=false;
+        for (const AudioEvent &e : sim.audio) hurt |= e.kind==AudioEvent::PLAY && e.sfx==Sfx::Hurt;
+        CHECK(hurt);
+        sim.audio.clear(); sim.hurtT=0; sim.health=1;
+    }
 
     // ---- the theater. Every auditorium has its rows of seats facing the screen
     // on the stepped floor audElev describes; every open edge in its chunk is a
@@ -676,7 +689,7 @@ int main() {
     {
         // Second: Level 0's exits lead here and its exits to Level 1, and the
         // records rank it just below Level 0.
-        CHECK(EXIT_NEXT[0]==THEATER && EXIT_NEXT[THEATER]==1 && EXIT_NEXT[4]==0);
+        CHECK(EXIT_NEXT[0]==THEATER && EXIT_NEXT[THEATER]==1 && EXIT_NEXT[LEVEL_FUN]==0);
         CHECK(LEVEL_DEPTH[0]<LEVEL_DEPTH[THEATER] && LEVEL_DEPTH[THEATER]<LEVEL_DEPTH[1]);
         World w; w.seed=1337; w.level=THEATER; w.visit=0; w.wallH=LEVEL_RULES[THEATER].wallH; w.storeyH=0;
         int auds=0, lobbies=0;
@@ -728,7 +741,9 @@ int main() {
             CHECK(seen[ox][oz]);   // and out through a back door to the corridor
             Auditorium a; CHECK(w.auditorium(cx,cz,a));
             float mx=(a.rect[0]+a.rect[2])*0.5f, mz=(a.rect[1]+a.rect[3])*0.5f;
-            CHECK((mx-a.screen.x)*a.normal.x+(mz-a.screen.z)*a.normal.z>10.0f);   // the screen faces the seats
+            // The screen faces the seats, in front of the backstage rows: 9.84 m from
+            // the room's middle. Before the backstage it was 13.84, and this read 10.
+            CHECK((mx-a.screen.x)*a.normal.x+(mz-a.screen.z)*a.normal.z>AUD_N*CELL*0.5f-AUD_BACKSTAGE*CELL-0.5f);
             CHECK(a.lamp.x>a.rect[0] && a.lamp.x<a.rect[2] && a.lamp.z>a.rect[1] && a.lamp.z<a.rect[3]);
             ChunkGeometry geo; bakeChunkGeometry(w,cx,cz,geo);
             for (int sl=0;sl<MESH_COUNT;++sl) CHECK(geo.parts[sl].v.size()/3<=65536);
@@ -860,7 +875,7 @@ int main() {
     printf("PASS theater auditoriums, backstage, lobbies, snack machines, the Usher, seat collision and hiding\n");
 
     // ---- doors. The use key shuts a doorway the player faces; a shut door
-    // blocks bodies, the pack's router, sight and light; the hunter's router
+    // blocks bodies, the default router, sight and light; the hunter's router
     // passes it, and he opens it after DOOR_OPEN_TIME s.
     {
         sim.applyLevel(0,GetTime()); sim.beginDescent(0);
@@ -876,6 +891,9 @@ int main() {
             if (!w.canStep(a,b,a,b-1) || !w.canStep(a,b-1,a,b)) continue;
             if (w.floorY(a,b)!=0 || w.floorY(a,b-1)!=0) continue;
             if (w.propAt(a,b+1) || w.pillarAt(a,b+1) || w.propAt(a,b-2) || w.pillarAt(a,b-2)) continue;
+            // No doorway on the player's side of the cell: from 1.4 m back the
+            // player stands 0.6 m from it, and the use key would take that one.
+            if (w.wallNVal(a,b+1)==WALL_DOOR) continue;
             da=a; db=b; found=true;
         }
         CHECK(found);
@@ -894,7 +912,7 @@ int main() {
         for (const AudioEvent &e : sim.audio) heard|=e.kind==AudioEvent::PLAY && e.sfx==Sfx::DoorShut;
         CHECK(heard);
         sim.eyeY=sim.py+1.62f; sim.pitch=-0.15f; capture(g,"door-shut.png"); sim.pitch=0;
-        float nx, nz; CHECK(sim.packNoise(nx,nz)>=Sim::DOOR_NOISE);
+        float nx, nz; CHECK(sim.loudestNoise(nx,nz)>=Sim::DOOR_NOISE);
         // what a shut door does
         CHECK(!w.canStep(da,db,da,db-1) && w.canStep(da,db,da,db-1,true));
         int oi,ok; CHECK(!w.pathStep(da,db,da,db-1,oi,ok) || !(oi==da && ok==db-1));
@@ -938,7 +956,7 @@ int main() {
         sim.applyLevel(0,GetTime());
         CHECK(sim.world.shutDoors.empty());
     }
-    printf("PASS doors: shut and opened by the use key, block bodies, sight, light and the pack, opened by the hunter\n");
+    printf("PASS doors: shut and opened by the use key, block bodies, sight and light, opened by the hunter\n");
 
     // ---- the catch, only from a lunge. The old proximity test caught the
     // player as soon as they came within 1.25 m, with no warning.
@@ -1008,7 +1026,7 @@ int main() {
 
     // ---- out of sight and quiet, the hunter goes to where he last saw or
     // heard the player and searches there; he used to path to the player's
-    // cell through walls. Noise inside packNoise's radius gives him the
+    // cell through walls. Noise inside loudestNoise's radius gives him the
     // player again, and he gives up after SEARCH_TIME without contact.
     {
         sim.applyLevel(0,GetTime()); sim.beginDescent(0);
@@ -1156,7 +1174,7 @@ int main() {
           sim.health=1-Sim::ENTITY_HIT; sim.hurtT=0; capture(g,"wounded.png");
           sim.health=1; capture(g,"unwounded.png");
           sim.runStart=rs; g.cleanShot=true; }
-        // Level 0 is Pirate Clark's; the Smiler hunts Level 1 and the Red Halls.
+        // Level 0 is Pirate Clark's; a Smiler hunts Level 1.
         CHECK(strcmp(sim.hunterName(),"PIRATE CLARK")==0);
         {
             sim.applyLevel(1,GetTime());
@@ -1170,23 +1188,11 @@ int main() {
             sim.px=qx; sim.pz=qz; sim.py=0; sim.eyeY=1.62f; sim.yaw=0; sim.pitch=0;
             sim.ent.x=sim.px+7.0f; sim.ent.z=sim.pz; sim.ent.dispY=0; sim.ent.st=EState::Chase; sim.ent.lunge=0;
             capture(g,"smiler-chase.png");
-            sim.applyLevel(4,GetTime()); CHECK(strcmp(sim.hunterName(),"THE PARTYGOER")==0);
+            sim.applyLevel(LEVEL_FUN,GetTime()); CHECK(strcmp(sim.hunterName(),"THE PARTYGOER")==0);
             sim.applyLevel(0,GetTime());
             sim.px=sx; sim.pz=sz; sim.ent.x=sim.px+7.0f; sim.ent.z=sim.pz; sim.yaw=0; sim.updateLook(noInput(g));
         }
         sim.ent.st=EState::Hidden; sim.ent.lunge=0;
-        // The pack, mid-bound. Captured on Level 0 rather than in the Red Halls
-        // they actually live in: the Red Halls sit at mean luma 12 and a black
-        // dog against it is unreviewable. This shot is for the run cycle only.
-        sim.px=sx; sim.pz=sz; sim.yaw=0; sim.updateLook(noInput(g));
-        sim.dogs[0].st=DState::Charge; sim.dogs[0].x=sim.px+5.0f; sim.dogs[0].z=sim.pz;
-        sim.dogs[0].dispY=0; sim.dogs[0].hp=2; sim.dogs[0].gait=0.5f;
-        for (int i=0;i<2;++i) {
-            sim.dogs[0].gait = i * 0.5f;
-            char n[48]; snprintf(n,sizeof(n),"pack-bound-%d.png",i);
-            capture(g,n);
-        }
-        sim.dogs[0].st=DState::Gone;
     }
 
     // ---- he no longer always walks out of the fog (ENT-03). Measured, not
@@ -1218,17 +1224,6 @@ int main() {
         CHECK(nearUnseen > total/5 && near < total*9/10);
         CHECK(dmax >= Sim::SPAWN_FAR_MIN);
         sim.ent.st=EState::Hidden;
-    }
-
-    // ---- the pack hunts by sound, not by what you are standing behind (ENT-04)
-    {
-        sim.still=true;  sim.deck.playing=false; sim.deck.carried=true;
-        CHECK(sim.packDeaf());                    // dead still: they lose you, cover or not
-        sim.still=false; CHECK(!sim.packDeaf());    // moving: they have you
-        sim.still=true;  sim.deck.playing=true;      // still, but the tape is running in your coat
-        CHECK(!sim.packDeaf());
-        sim.deck.carried=false; CHECK(sim.packDeaf());   // ...set it down and it is the deck they want
-        sim.deck.playing=false; sim.deck.carried=true;
     }
 
     // ---- the building moves when you are not looking (PAC-03)
@@ -1346,7 +1341,7 @@ int main() {
     // ---- a ceiling balloon found where the renderer draws it can be shot:
     // render.cpp now places them through balloonAt, the function bullets test.
     {
-        sim.applyLevel(4,GetTime());
+        sim.applyLevel(LEVEL_FUN,GetTime());
         int ba=0,bb=0; Vec3 bp{}; bool found=false;
         for (int a=0;a<60 && !found;++a) for (int b=0;b<60 && !found;++b)
             if (sim.balloonAt(a,b,bp)) { ba=a; bb=b; found=true; }
@@ -1553,12 +1548,11 @@ int main() {
         CHECK(w.storey==0);
     }
 
-    // Both orientations and both approaches must activate white Level 0 exits.
+    // Both orientations and both approaches must activate Level 0 exits.
     // Put both orientations at one cell to catch an else-if masking the west door.
     for (int west=0; west<2; ++west) for (int side : {-1,1}) {
         sim.applyLevel(0,GetTime()); sim.escapeT=0; sim.coins=0;
-        int ci=7,ck=7;
-        while (sim.world.cursedExit(ci,ck)) ++ci;
+        const int ci=7,ck=7;
         auto &d=sim.world.data(0,0);
         d.wallN[ci][ck]=d.wallW[ci][ck]=WALL_EXIT;
         sim.px=ci*CELL+(west ? side*.5f : 1.0f);
@@ -1651,7 +1645,7 @@ int main() {
            "     animation continuity, held aim/reload gating, step-height blocking,\n"
            "     projectile travel/occlusion, squeeze clearance, drinking audio, doorway jambs and locked doors you cannot walk\n"
            "     through, the catch ending the run only out of a committed\n"
-           "     lunge, arrivals that are not all from the fog, a pack that hunts by sound,\n"
+           "     lunge, arrivals that are not all from the fog, a hit with its own sound,\n"
            "     a building that moves out of sight, the grip meter as an ending,\n"
            "     deterministic captures, storeys that agree with each other, a flight climbed\n"
            "     and descended by the real mover, Clark on the stairs behind you, a fall that hurts;\n"

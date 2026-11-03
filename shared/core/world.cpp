@@ -461,7 +461,7 @@ void World::generate(ChunkData &d, int cx, int cz) {
     bool openChunk = level != THEATER && (hash64(k ^ 0xA11CEULL ^ (uint64_t)sseed()
                              ^ ((uint64_t)visit * 0xD1B54A32D192ED03ULL)) & 15) == 0;
     int nseg = level == 0 ? 12 + rng.ri(0, 5) : level == 1 ? 7 + rng.ri(0, 4)
-             : level == 4 ? 9 + rng.ri(0, 4) : 5 + rng.ri(0, 3);
+             : level == LEVEL_FUN ? 9 + rng.ri(0, 4) : 5 + rng.ri(0, 3);
     if (openChunk) nseg = 2 + rng.ri(0, 2);
     int lenBase = level == 0 ? 5 : 6;
     for (int s = 0; s < nseg; s++) {
@@ -475,11 +475,10 @@ void World::generate(ChunkData &d, int cx, int cz) {
                 if (horiz) d.wallN[i][b] = WALL_DOOR; else d.wallW[b][i] = WALL_DOOR;
                 continue;
             }
-            // Windows only in the Red Halls. Level 0 still draws the number so the rng
-            // stream stays aligned.
-            bool win = (level == 0 || level == 3) && rng.f01() < 0.035f;
-            uint8_t v = (win && level == 3) ? WALL_WINDOW : WALL_SOLID;
-            if (horiz) d.wallN[i][b] = v; else d.wallW[b][i] = v;
+            // Level 0 draws a number it does not use, so its rng stream stays
+            // aligned with the generator that put windows in the Red Halls.
+            if (level == 0) rng.f01();
+            if (horiz) d.wallN[i][b] = WALL_SOLID; else d.wallW[b][i] = WALL_SOLID;
         }
     }
     // ---- rooms.
@@ -596,7 +595,7 @@ void World::generate(ChunkData &d, int cx, int cz) {
     memset(d.prop, 0, sizeof(d.prop));
     memset(d.propRot, 0, sizeof(d.propRot));
     int npr = level == 0 ? 10 + rng.ri(0, 8) : level == 1 ? 9 + rng.ri(0, 8)
-            : level == 3 ? 5 + rng.ri(0, 6) : level == 4 ? 9 + rng.ri(0, 7) : 0;
+            : level == LEVEL_FUN ? 9 + rng.ri(0, 7) : 0;
     for (int i = 0; i < npr; i++) {
         int a = rng.ri(0, CCELLS - 1), b = rng.ri(0, CCELLS - 1);
         if (d.pillar[a][b] || d.prop[a][b]) continue;
@@ -604,10 +603,7 @@ void World::generate(ChunkData &d, int cx, int cz) {
         if (level == 1)                                                    // warehouse stock
             d.prop[a][b] = f < 0.45f ? PROP_BOXES : f < 0.65f ? PROP_CABINET : f < 0.80f ? PROP_TABLE
                          : f < 0.96f ? PROP_SHELVING : PROP_VENDING;
-        else if (level == 3)                                               // bedroom furniture
-            d.prop[a][b] = f < 0.30f ? PROP_BED : f < 0.55f ? PROP_ARMOIRE : f < 0.80f ? PROP_NIGHTSTAND
-                         : PROP_LAMP;
-        else if (level == 4)                                               // the party
+        else if (level == LEVEL_FUN)                                       // the party
             d.prop[a][b] = f < 0.52f ? PROP_PARTY_TABLE : f < 0.70f ? PROP_BOXES : f < 0.82f ? PROP_COUCH
                          : f < 0.93f ? PROP_TABLE : PROP_VENDING;
         else   // Level 0
@@ -1389,19 +1385,6 @@ float World::softDip(float x, float z) {
     float az = (z - ck * CELL) / (CELL * 0.5f) - 1.0f;
     float r2 = ax * ax + az * az;
     return r2 >= 1.0f ? 0.0f : SOFT_DEPTH * (1.0f - r2) * (1.0f - r2);
-}
-
-bool World::cursedExit(int ci, int ck) {
-    return ih(ci, ck, (uint32_t)sseed() ^ 0xC0DEu) % 6 == 0;
-}
-
-// A standpipe with a shut-off wheel. Rare, and never in a wall, pillar or
-// furniture.
-bool World::valveAt(int ci, int ck) {
-    if (level != 3) return false;
-    if (ih(ci, ck, (uint32_t)sseed() ^ 0x7A17u) % 149 != 0) return false;
-    return !pillarAt(ci, ck) && propAt(ci, ck) == PROP_NONE &&
-           wallNVal(ci, ck) != WALL_SOLID && wallWVal(ci, ck) != WALL_SOLID;
 }
 
 // Solid boxes in one cell, appended to out[]. Collision, standing height and

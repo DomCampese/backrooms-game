@@ -4,10 +4,10 @@
 #include "sim.h"
 #include <cmath>
 
-// Full to empty in about 9 / 7.5 / 6.5 / 5 / 4 / 5.3 minutes, standing in the light
+// Full to empty in about 9 / 7.5 / 6.5 / 4 / 5.3 minutes, standing in the light
 // with nothing hunting.
 float Sim::sanityDrain(int lv) {
-    static const float R[NLEVELS] = { 1.0f / 540, 1.0f / 450, 1.0f / 390, 1.0f / 300, 1.0f / 240, 1.0f / 320 };
+    static const float R[NLEVELS] = { 1.0f / 540, 1.0f / 450, 1.0f / 390, 1.0f / 240, 1.0f / 320 };
     return R[(lv < 0 || lv >= NLEVELS) ? 0 : lv];
 }
 
@@ -173,13 +173,11 @@ void Sim::updateExits(double now) {
         float doorZ = k * CELL + (west ? CELL * 0.5f : 0.0f);
         float ddx = px - doorX, ddz = pz - doorZ;
         if (ddx * ddx + ddz * ddz < 0.72f * 0.72f) {
-            bool cursed = world.cursedExit(i, k);
-            if (wayOpen() && !cursed) { winRun(now); return; }   // the true way out
-            // Cursed doors lead to the Red Halls; the rest lead onward.
+            if (wayOpen()) { winRun(now); return; }   // the true way out
             play(Sfx::Win);
             escapeT = 6.0f; escapeCount++;
             bankRecords();
-            applyLevel(cursed ? 3 : EXIT_NEXT[level], now);
+            applyLevel(EXIT_NEXT[level], now);
             Vec2 spot = world.findOpenSpot(px, pz);
             px = spot.x; pz = spot.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
             ent.st = EState::Hidden; ent.nextSpawn = now + 30;
@@ -200,15 +198,11 @@ const char *const MANILA_NOTES[MANILA_NOTE_COUNT][4] = {
     { "do not drink what is in the carpet. it is not water.",
       "there is almond water in the cupboard under this table. take it.",
       "the lights give you a migraine that follows you out. rest in here.",
-      "" },
-    { "if the wallpaper starts turning RED, turn around.",
-      "red means the red rooms are on the other side of that wall.",
-      "the carpet goes coarse and sticky near them. nobody comes back.",
       "- left by the ones before you" },
 };
 
 // The second note says the way out is chalked, so draw that arrow: outside
-// whichever of the room's four doors best faces the nearest uncursed exit,
+// whichever of the room's four doors best faces the nearest exit,
 // searching up to three chunks away.
 void Sim::markWayOut() {
     int ci = cellOf(manilaX), ck = cellOf(manilaZ);
@@ -216,7 +210,7 @@ void Sim::markWayOut() {
     for (int dk = -48; dk <= 48; dk++) for (int di = -48; di <= 48; di++) {
         int i = ci + di, k = ck + dk;
         bool n = world.wallNVal(i, k) == WALL_EXIT, w = world.wallWVal(i, k) == WALL_EXIT;
-        if ((!n && !w) || world.cursedExit(i, k)) continue;
+        if (!n && !w) continue;
         float ex = i * CELL + (n ? 1.0f : 0.0f), ez = k * CELL + (n ? 0.0f : 1.0f);
         float d2 = (ex - manilaX) * (ex - manilaX) + (ez - manilaZ) * (ez - manilaZ);
         if (d2 < bestD2) { bestD2 = d2; tx = ex; tz = ez; }
@@ -279,7 +273,7 @@ void Sim::updateDistant(double now) {
     // above happen either way, so the sequence does not depend on them.
     if (inMenu || deathT > 0 || inManila) return;
     const Sfx sfx = kind == Distant::Door ? Sfx::FarDoor : kind == Distant::Clang ? Sfx::FarClang
-                  : kind == Distant::Knock ? Sfx::FarKnock : kind == Distant::Pop ? Sfx::FarPop : Sfx::FarBoom;
+                  : kind == Distant::Pop ? Sfx::FarPop : Sfx::FarBoom;
     play(sfx, variant)
         .atPan(clampf(portableCos(bearing) * r2x + portableSin(bearing) * r2z, -1.0f, 1.0f))
         .atPitch(rate)

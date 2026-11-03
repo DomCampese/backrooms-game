@@ -62,9 +62,8 @@ enum class FixtureKind : uint8_t {
     LiftDoor,       // shut lift doors, indicator and call button (Level 1)
     Spall,          // concrete blown off a wall, rebar showing (Level 1)
     PillarSpall,    // the same on a column
-    Pipe,           // a service pipe under the ceiling, one cell long (Levels 1, 3)
-    Valve,          // a standpipe with a shut-off wheel (Level 3)
-    Streamer,       // a crepe streamer sagging between two ceiling points (Level 4)
+    Pipe,           // a service pipe under the ceiling, one cell long (Level 1)
+    Streamer,       // a crepe streamer sagging between two ceiling points (LEVEL FUN)
     ManilaRoom,     // the Manila Room's furnishings (Level 0)
     Auditorium,     // an auditorium's fittings: screen frame, curtains, aisle lights, booth port, exit signs (the theater)
     Poster,         // a backlit film poster on a corridor wall (the theater)
@@ -81,7 +80,6 @@ enum class FixtureKind : uint8_t {
 // | LiftDoor              | the face at the edge's start, floor   |                |                    | |
 // | Spall, PillarSpall    | centre of the scar, on the face       |                | half extents       | seed: its shape |
 // | Pipe                  | centre of one end                     | the other end  | w: radius          | tone: 1 rusted; variant: 1 collar |
-// | Valve                 | foot, at the cell centre              | top, ceiling   |                    | |
 // | Streamer              | one end, under the ceiling            | the other end  | h: its lowest y    | variant: party colour |
 // | ManilaRoom            | room centre; y is its ceiling         |                |                    | seed |
 // | Auditorium            | screen centre, on its face            |                |                    | variant: dir (World::auditorium has the rest) |
@@ -124,7 +122,7 @@ struct LightFitting {
 };
 
 // ShutDoor: a doorway the player has shut, built as a locked door is.
-enum class OpeningKind : uint8_t { Doorway, LockedDoor, Exit, CursedExit, Window, Rail, ShutDoor };
+enum class OpeningKind : uint8_t { Doorway, LockedDoor, Exit, Window, Rail, ShutDoor };
 
 // An edge that is neither open floor nor plain wall. Along-edge values are
 // world x for a north edge and world z for a west one.

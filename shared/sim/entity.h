@@ -1,28 +1,10 @@
 #pragma once
 #include <cstdint>
-// The level's hunter (Clark, a Smiler or the Partygoer), the Red Halls dogs
-// and the theater's Usher. The state machines are Sim::updateEntity,
-// Sim::updateDog and Sim::updateUsher.
+// The level's hunter (Clark, a Smiler or the Partygoer) and the theater's
+// Usher. The state machines are Sim::updateEntity and Sim::updateUsher.
 
 enum class EState { Hidden, Stalk, Chase, Flee, Die };
 
-// The Red Halls pack hunts by sound. Dogs are faster than the player, so they
-// cannot be outrun; a flare, a shot or staying quiet long enough breaks off a
-// chase.
-enum class DState { Gone, Prowl, Charge, Yelp };
-struct Dog {
-    DState st = DState::Gone;
-    float x = 0, z = 0, dispY = 0;
-    float wpx = 0, wpz = 0;      // next cell on its route
-    float roamX = 0, roamZ = 0;  // wander target while it has not heard the player
-    double nextRoam = 0;
-    double repathT = 0;
-    float life = 0;              // time in the current state
-    float lost = 0;              // s since it last heard the player
-    double nextBark = 0;
-    float gait = 0;              // footfall count: +1 per DOG_STRIDE metres, drives the walk cycle
-    int hp = 2;
-};
 // The theater's Usher patrols the auditoriums with a torch. It never attacks:
 // when its beam holds the player it blows a whistle that brings the hunter
 // running. Sim::updateUsher has the rules.

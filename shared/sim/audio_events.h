@@ -9,9 +9,7 @@ enum class Sfx : uint8_t {
     SplashOut,        // 3
     SwimStroke,       // 4
     Click,            // switches, pickups, the gun's action, the pause
-    Scare, Win, FlareStrike, Shot, Hit, Kill, Pop, Heartbeat, TapeChime, Valve, Howl, Gulp, Groan,
-    Bark,             // 3: one voice per dog
-    BarkThrough,      // 3: the same voices heard through a wall
+    Scare, Win, FlareStrike, Shot, Hit, Kill, Pop, Heartbeat, TapeChime, Gulp, Groan,
     EntStep,          // 4: the hunter's footfalls
     EntStepThrough,   // 4
     StepConcrete,     // 4: player footsteps, Footing::Concrete (Step is Carpet)
@@ -19,12 +17,12 @@ enum class Sfx : uint8_t {
     StepWood,         // 4: Footing::Wood
     FarDoor,          // 3: Distant::Door (Level 0)
     FarClang,         // 3: Distant::Clang (Level 1)
-    FarKnock,         // 3: Distant::Knock (Level 3)
-    FarPop,           // 3: Distant::Pop (Level 4)
-    FarBoom,
+    FarPop,           // 3: Distant::Pop (LEVEL FUN)
+    FarBoom,          // 3: Distant::Boom (the theater)
     DoorShut,
     DoorKnock,
     MannequinStep,     // dedicated spatial footstep channel
+    Hurt,             // the player taking a hit or a fall
     Vend,             // a snack machine: its spiral motor, the drop and the wrapper
     Whistle,          // the Usher's whistle: two blasts
 };

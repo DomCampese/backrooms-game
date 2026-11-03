@@ -52,29 +52,27 @@ char cellGlyph(World &w, int a, int b) {
         case PROP_VENDING:     return 'V';
         case PROP_FALLEN_TILE: return '%';
         case PROP_PLANT:       return '*';
-        case PROP_LAMP:        return 'i';
         case PROP_COOLER:      return 'c';
         default:               return sim.hideSpotAt(a, b) ? 'H' : 'p';
         }
     }
-    if (w.valveAt(a, b)) return 'Y';
     if (w.softAt(a, b))  return '~';
     return ' ';   // coins and water are decided by the caller, which knows both
 }
 
 const char *PROP_NAME[] = {
-    "none", "boxes", "cabinet", "table", "fallen tile", "couch", "armoire", "lamp", "nightstand",
-    "bed", "vending", "party table", "desk", "shelving", "cooler", "plant", "manila table",
+    "none", "boxes", "cabinet", "table", "fallen tile", "couch", "vending", "party table", "desk",
+    "shelving", "cooler", "plant", "manila table",
     "seats", "concession", "rope",
 };
 static_assert(sizeof(PROP_NAME) / sizeof(PROP_NAME[0]) == PROP_KINDS, "a name for every PropKind");
 const char *FIXTURE_NAME[] = {
     "outlet", "broken outlet", "switch", "grille", "exit sign", "diffuser", "sprinkler", "conduit",
-    "scrawl", "lift door", "spall", "pillar spall", "pipe", "valve", "streamer", "manila room",
+    "scrawl", "lift door", "spall", "pillar spall", "pipe", "streamer", "manila room",
     "auditorium", "poster",
 };
 static_assert(sizeof(FIXTURE_NAME) / sizeof(FIXTURE_NAME[0]) == (int)FixtureKind::Poster + 1, "a name for every FixtureKind");
-const char *OPENING_NAME[] = { "doorway", "locked door", "exit", "cursed exit", "window", "rail", "shut door" };
+const char *OPENING_NAME[] = { "doorway", "locked door", "exit", "window", "rail", "shut door" };
 
 // Which way a normal points, as +x, -z, down.
 const char *facing(Vec3 n) {
@@ -102,12 +100,12 @@ void printLayout(World &w, int cx, int cz) {
         else          printf("  chunk        ");
         printf("%-13s at %7.2f %5.2f %7.2f", FIXTURE_NAME[(int)f.kind], f.pos.x, f.pos.y, f.pos.z);
         switch (f.kind) {
-        case FixtureKind::Conduit: case FixtureKind::Pipe: case FixtureKind::Valve: case FixtureKind::Streamer:
+        case FixtureKind::Conduit: case FixtureKind::Pipe: case FixtureKind::Streamer:
             printf("  to %7.2f %5.2f %7.2f", f.end.x, f.end.y, f.end.z);
             break;
         default: break;
         }
-        if (f.kind != FixtureKind::Valve && f.kind != FixtureKind::Streamer && f.kind != FixtureKind::Pipe &&
+        if (f.kind != FixtureKind::Streamer && f.kind != FixtureKind::Pipe &&
             f.kind != FixtureKind::ManilaRoom)
             printf("  facing %s", facing(f.normal));
         switch (f.kind) {
@@ -156,7 +154,7 @@ void printLayout(World &w, int cx, int cz) {
         printf("  along %7.2f..%7.2f  wall %5.2f..%5.2f  head %5.2f", o.a0, o.a1, o.base, o.top, o.headY);
         if (o.kind == OpeningKind::Window) printf("  sill %5.2f", o.sillY);
         if (o.joinLo || o.joinHi) printf("  joins%s%s", o.joinLo ? " low" : "", o.joinHi ? " high" : "");
-        if (o.kind == OpeningKind::Exit || o.kind == OpeningKind::CursedExit) {
+        if (o.kind == OpeningKind::Exit) {
             printf("  glyph");
             for (int n = 0; n < o.glyphLen; n++) printf(" %d", o.glyph[n]);
             if (o.leafRoom) printf("  leaf room");
@@ -274,7 +272,7 @@ int main(int argc, char **argv) {
         printf("\nfloorplan  x %d..%d  z %d..%d"
                "   | - wall   , doorway   L locked door   = window   E exit   # pillar\n"
                "                                 H hide spot   p prop   V vending"
-               "   Y valve   ~ soft floor   o coin   k key   w water   digits: floor height\n\n",
+               "   ~ soft floor   o coin   k key   w water   digits: floor height\n\n",
                a.px, a.px + a.pw - 1, a.pz, a.pz + a.ph - 1);
         for (int b = a.pz; b < a.pz + a.ph; b++) {
             std::string top, mid;
@@ -312,7 +310,7 @@ int main(int argc, char **argv) {
     struct Lock { float dx, dz, kx, kz; bool west; };
     std::vector<Lock> locks;
     long sides[5] = { 0, 0, 0, 0, 0 };   // cells with 0,1,2,3,4 solid sides
-    long cells = 0, pillars = 0, props = 0, hides = 0, coins = 0, soft = 0, valves = 0, pools = 0;
+    long cells = 0, pillars = 0, props = 0, hides = 0, coins = 0, soft = 0, pools = 0;
     long raised = 0, sunk = 0;
     for (int b = -half; b <= half; b++) for (int x = -half; x <= half; x++) {
         cells++;
@@ -344,7 +342,6 @@ int main(int argc, char **argv) {
         if (sim.hideSpotAt(x, b)) hides++;
         if (sim.coinAt(x, b)) coins++;
         if (w.softAt(x, b)) soft++;
-        if (w.valveAt(x, b)) valves++;
         if (w.poolAt(x, b)) pools++;
         float fy = w.floorY(x, b);
         if (fy > 0.05f) raised++;
@@ -532,7 +529,6 @@ int main(int argc, char **argv) {
     printf("  hide spot             %8.0f  (%ld)\n", per(hides), hides);
     printf("  floor doubloon        %8.0f  (%ld)\n", per(coins), coins);
     printf("  soft floor            %8.0f  (%ld)\n", per(soft), soft);
-    printf("  valve                 %8.0f  (%ld)\n", per(valves), valves);
     printf("  exit doorway          %8.0f  (%ld)\n", per(exitEdges), exitEdges);
     printf("  pool cell             %8.0f  (%ld)\n", per(pools), pools);
     printf("  raised floor          %8.0f  (%ld)\n", per(raised), raised);
@@ -571,12 +567,12 @@ int main(int argc, char **argv) {
         }
     }
     if (a.listExits) {
-        printf("\nexits (x z, world metres; * = cursed)\n");
+        printf("\nexits (x z, world metres)\n");
         for (int k = -half; k <= half; k++) for (int i = -half; i <= half; i++) {
             bool n = w.wallNVal(i, k) == WALL_EXIT, ww = w.wallWVal(i, k) == WALL_EXIT;
             if (!n && !ww) continue;
-            printf("  %7.1f %7.1f  %s%s\n", i * CELL + (n ? 1.0f : 0.0f), k * CELL + (n ? 0.0f : 1.0f),
-                   n ? "north edge" : "west edge", w.cursedExit(i, k) ? "  *" : "");
+            printf("  %7.1f %7.1f  %s\n", i * CELL + (n ? 1.0f : 0.0f), k * CELL + (n ? 0.0f : 1.0f),
+                   n ? "north edge" : "west edge");
         }
     }
     return 0;

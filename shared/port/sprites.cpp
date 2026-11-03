@@ -10,28 +10,12 @@ void gaitFrames(float phase, int frames, int &f0, int &f1, float &t) {
     t = u - floorf(u);
 }
 
-bool dogSprite(const Sim &sim, int i, ActorSprite &out) {
-    const Dog &d = sim.dogs[i];
-    if (d.st == DState::Gone) return false;
-    float ddx = d.x - sim.px, ddz = d.z - sim.pz;
-    if (sqrtf(ddx * ddx + ddz * ddz) > 42) return false;
-    out = {};
-    out.sheet = SpriteSheet::Dog;
-    // shoulder height ~0.75 m, and a long body: drawn wide, not tall
-    out.centre = { d.x, d.dispY + 0.46f, d.z };
-    out.w = 1.45f; out.h = 0.97f;
-    gaitFrames(d.gait / (Sim::DOG_STRIDE * 2.0f), DOG_FRAMES, out.frame0, out.frame1, out.blend);
-    out.fade = d.st == DState::Yelp ? clampf(1.0f - d.life / 2.6f, 0, 1) : 1.0f;
-    out.litAt = { d.x, d.dispY + 0.5f, d.z };
-    return true;
-}
-
 bool hunterSprite(const Sim &sim, ActorSprite &out) {
     const Entity &e = sim.ent;
     if (e.st == EState::Hidden || sim.entDist >= 45) return false;
     out = {};
     // LEVEL FUN has its own resident, Level 0 is Pirate Clark's, the rest are a Smiler's
-    out.sheet = sim.level == 4 ? SpriteSheet::Partygoer : sim.clarkLevel() ? SpriteSheet::Clark : SpriteSheet::Smiler;
+    out.sheet = sim.level == LEVEL_FUN ? SpriteSheet::Partygoer : sim.clarkLevel() ? SpriteSheet::Clark : SpriteSheet::Smiler;
     out.glow = out.sheet == SpriteSheet::Smiler;
     float sink = 0;
     if (e.st == EState::Die) {   // crumples into the carpet
@@ -98,8 +82,6 @@ bool usherTorch(const Sim &sim, Vec3 &at, Vec3 &dir) {
 std::vector<ActorSprite> actorSprites(const Sim &sim) {
     std::vector<ActorSprite> out;
     ActorSprite s;
-    for (int i = 0; i < Sim::MAXDOGS; i++)
-        if (dogSprite(sim, i, s)) out.push_back(s);
     if (hunterSprite(sim, s)) out.push_back(s);
     if (usherSprite(sim, s)) out.push_back(s);
     return out;

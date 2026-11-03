@@ -685,78 +685,6 @@ Surface makeConcreteCeilSurface() {
     return finishSurface(c, 1.0f);
 }
 
-// ---------------------------------------------------------------- Red Halls
-//
-// Real brick size: 215 x 65 mm with 10 mm joints, so a course is 75 mm and a
-// 3 m wall has forty. A 3 m repeat holds thirteen along the wall, 231 mm on
-// centre. The old brick was 0.75 m by 0.25 m.
-//
-// Stretcher bond, each brick with its own tone (from its index, with some dark
-// headers and darker ends), a rounded edge, a pitted face, and mortar raked
-// back 6 mm so joints cast shadows under the flashlight. Dirty grey mortar, with
-// patches of white salt and dark rot.
-Surface makeRedBrickSurface() {
-    const int N = 1024, COURSES = 40, BRICKS = 13;
-    Canvas c(N, N, 3.0f, 3.0f);
-    const float ch = (float)N / COURSES, bp = (float)N / BRICKS;
-    const float J = 0.010f / c.mx() * 0.5f;                 // half a joint, pixels
-    for (int y = 0; y < N; y++) for (int x = 0; x < N; x++) {
-        int i = y * N + x;
-        float fx = (float)x, fy = (float)y;
-        int row = (int)((y + 0.5f) / ch);
-        float by = y + 0.5f - row * ch;
-        float xb = fmodf(x + 0.5f + ((row & 1) ? bp * 0.5f : 0.0f), (float)N);
-        int bi = (int)(xb / bp);
-        float bx = xb - bi * bp;
-        float dBed = std::min(by, ch - by), dPerp = std::min(bx, bp - bx);
-        float ed = std::min(dBed, dPerp);
-        float eff = c.nz(fx, fy, 1.6f, 1.6f, 101u, 3);
-        float rot = c.nz(fx, fy, 0.9f, 0.9f, 97u, 4);
-        float r, g, b, h, gloss;
-        if (ed < J) {                                        // the joint
-            float m = 0.90f + 0.20f * c.nz(fx, fy, 200, 200, 100u, 2);
-            float t = ed / J;
-            m *= 0.72f + 0.28f * t;                          // shadowed at the back of the rake
-            r = 96 * m; g = 86 * m; b = 78 * m;
-            h = -0.006f + 0.0015f * t * t;
-            gloss = 0.15f;
-        } else {
-            float bh = lat(bi, row, 99u);
-            float v = 0.86f + (bh - 0.5f) * 0.26f;
-            float grain = c.nz(fx, fy, 140, 140, 96u, 2);   // the face's texture, in tone and relief
-            v *= 0.94f + 0.12f * grain;
-            float ends = 1.0f - dPerp / (bp * 0.5f);
-            v *= 1.0f - 0.16f * ends * ends * ends;           // flashed ends
-            r = 150 * v; g = 44 * v; b = 34 * v;
-            uint32_t bh2 = ih(bi, row, 0x9Au);
-            if ((bh2 & 15) == 0) { r *= 0.72f; g *= 0.82f; b *= 0.96f; }   // a blue-burnt header
-            else if ((bh2 & 15) == 1) { r *= 1.10f; g *= 1.18f; b *= 1.10f; }   // an underfired one, paler
-            float arr = sat((ed - J) / 2.2f);                 // the rounded arris
-            h = -0.0025f * (1.0f - arr) * (1.0f - arr);
-            if (arr < 1) { float m = 0.88f + 0.12f * arr; r *= m; g *= m; b *= m; }
-            float pit = lat(x, y, 0x9Bu);
-            if (pit < 0.015f) { r *= 0.72f; g *= 0.72f; b *= 0.72f; h -= 0.0010f; }
-            h += (grain - 0.5f) * 0.0006f;
-            gloss = 0.35f;
-        }
-        if (rot > 0.62f) { float t = std::min(1.0f, (rot - 0.62f) * 2.2f); r *= 1 - t * 0.6f; g *= 1 - t * 0.45f; b *= 1 - t * 0.45f; }
-        if (eff > 0.64f) {
-            float t = std::min(0.45f, (eff - 0.64f) * 1.8f) * (ed < J ? 1.0f : 0.55f);
-            r = lerpf(r, 158, t); g = lerpf(g, 148, t); b = lerpf(b, 138, t);
-        }
-        c.set(i, r, g, b);
-        c.ht[i] = h;
-        c.gl[i] = gloss;
-    }
-    // Matched on red alone. The Red Halls' light is (1, 0.22, 0.15) and their
-    // ambient smaller still; at these levels the tone curve's toe removes green
-    // and blue entirely, so only red is visible. Matched on luma (even luma
-    // weighted by that light), the new brick (grey mortar, more green) rendered
-    // a tenth darker than the old.
-    c.matchLuma(0.299f * 106.9f, { 1.0f, 0.0f, 0.0f });
-    return finishSurface(c, 1.0f);
-}
-
 // ---------------------------------------------------------------- Poolrooms
 //
 // Glazed white tile at 1/6 m (a 6-inch tile), 64 px each: twelve to a 2 m floor
@@ -1042,7 +970,6 @@ Surface makeSurface(SurfSlot slot) {
         case SURF_CONCWALL:  return makeConcreteWallSurface();
         case SURF_POOLFLOOR: return makeTileSurface(false);
         case SURF_POOLWALL:  return makeTileSurface(true);
-        case SURF_BRICK:     return makeRedBrickSurface();
         case SURF_BANQUET:   return makePartyCarpetSurface();
         case SURF_PARTYCEIL: return makePartyCeilSurface();
         case SURF_PARTYWALL: return makePartyWallSurface();

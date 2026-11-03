@@ -14,7 +14,7 @@
 #include <vector>
 
 enum class GreySurface : uint8_t {
-    Floor, Ceiling, Wall, Step, Stair, Pillar, Prop, Door, Exit, CursedExit, Glass, Rail, Water, Light, DeadLight,
+    Floor, Ceiling, Wall, Step, Stair, Pillar, Prop, Door, Exit, Glass, Rail, Water, Light, DeadLight,
     Count,
 };
 

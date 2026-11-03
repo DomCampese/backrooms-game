@@ -752,8 +752,7 @@ Texture2D makeScrawlTex() {
     Image img = GenImageColor(W, H, BLANK);
     Color *p = (Color *)img.data;
     // 32 phrases, so repeats are rare. Several refer to Level 0's wiki lore:
-    // the carpet fluid that "is not water", noclip walls, the Red Rooms, and
-    // the Manila Room.
+    // the carpet fluid that "is not water", noclip walls and the Manila Room.
     static const char *LINES[32] = {
         "NO CLIP",              "dont stare",           "its not water",        "the exit lies",
         "he hears the flares",  "keep walking",         "it hums at night",     "wrong door =)",
@@ -761,7 +760,7 @@ Texture2D makeScrawlTex() {
         "the lights know",      "day 1 again",          "it wears a coat",      "smells like almond",
         "i was here. was i",    "same room twice",      "find the manila room", "hold still :(",
         "water is a floor",     "dont say your name",   "fire moves it",        "watch the paper tear",
-        "421 and counting",     "my watch stopped",     "listen for dogs",      "the party never ends",
+        "421 and counting",     "my watch stopped",     "count the doors",      "the party never ends",
         "i can hear the hum",   "red = turn back",      "follow the pipes",     "help",
     };
     Rng r(0x5C12ULL);
@@ -1655,106 +1654,6 @@ Texture2D makeAOStripTex() {
     SetTextureFilter(t, TEXTURE_FILTER_BILINEAR);
     SetTextureWrap(t, TEXTURE_WRAP_CLAMP);   // v past 1 stays fully clear
     return t;
-}
-
-// The pack, seen side-on: a low, long-backed quadruped with too much leg and a
-// head that hangs. Drawn wide rather than tall — it reads as an animal from the
-// silhouette alone, which is all you get before it reaches you — four frames
-// of a run.
-//
-// Built from an actual dog's skeleton rather than a box on four sticks, because
-// the silhouette is the whole read and a box on sticks reads as a table: a deep
-// chest and a tucked waist, the neck dropping from the withers to a head
-// carried low, a muzzle, ears laid back, front legs with a wrist, and hind legs
-// with the backward-angled hock that says "dog" before anything else does.
-// Legs move in diagonal pairs (front-left with back-right), off the same
-// legPose as every other gait in the game, the far pair a shade darker so the
-// animal has two sides. The coat is ragged at the edge and thin enough over the
-// flank that the ribs show.
-Texture2D makeDogTex() {
-    const int FW = DOG_FRAME_W, H = DOG_FRAME_H, W = FW * DOG_FRAMES;
-    Image img = GenImageColor(W, H, BLANK);
-    Color *p = (Color *)img.data;
-    const float GROUND = 116.0f;
-    struct Seg { float ax, ay, bx, by, ra, rb; int part; };   // part: 0 body, 1 near leg, 2 far leg
-    auto segDist = [](const Seg &s, float x, float y) {
-        float vx = s.bx - s.ax, vy = s.by - s.ay, wx = x - s.ax, wy = y - s.ay;
-        float t = clampf((wx * vx + wy * vy) / (vx * vx + vy * vy + 1e-6f), 0.0f, 1.0f);
-        float dx = wx - vx * t, dy = wy - vy * t;
-        return sqrtf(dx * dx + dy * dy) - (s.ra + (s.rb - s.ra) * t);
-    };
-    for (int f = 0; f < DOG_FRAMES; f++) {
-        float phd = (float)f / DOG_FRAMES;
-        float ax, al, bx, bl;
-        legPose(phd, ax, al);             // front-left and back-right move together...
-        legPose(phd + 0.5f, bx, bl);      // ...against front-right and back-left
-        float gather = cosf(phd * TAU) * 1.6f;          // the back bunches as it gathers
-        std::vector<Seg> segs;
-        // the body, head to tail: withers, chest, waist, loin, croup
-        segs.push_back({ 50, 60 + gather, 76, 62 + gather, 15, 13, 0 });   // shoulders and chest
-        segs.push_back({ 76, 62 + gather, 112, 60 + gather, 12, 8.5f, 0 });   // ribs to the tucked waist
-        segs.push_back({ 112, 60 + gather, 146, 58 + gather * 0.6f, 8.5f, 12, 0 });   // loin to haunch
-        segs.push_back({ 60, 68 + gather, 90, 70 + gather, 10, 6, 0 });   // the brisket, deep
-        segs.push_back({ 48, 54 + gather, 32, 70, 8.5f, 7, 0 });          // the neck, dropping
-        segs.push_back({ 32, 71, 25, 75, 8, 7, 0 });                      // the skull
-        segs.push_back({ 25, 76, 10, 85, 5.2f, 3.6f, 0 });                // the muzzle, pointing down
-        segs.push_back({ 34, 64, 43, 58, 3.0f, 1.0f, 0 });                // an ear, laid back
-        segs.push_back({ 152, 56 + gather * 0.6f, 166, 70, 3.2f, 2.4f, 0 });   // tail, low
-        segs.push_back({ 166, 70, 174, 88, 2.4f, 1.4f, 0 });
-        // Legs. `sw` +1 is the paw reaching forward (toward the head, -x),
-        // `lift` 0 planted to 1 at the top of the swing.
-        auto frontLeg = [&](float sx, float sw, float lift, int part) {
-            float px = sx - sw * 13.0f + lift * 4.0f, py = GROUND - lift * 11.0f;
-            float ex = sx + 2.0f - sw * 5.0f, ey = 88.0f + gather * 0.5f - lift * 4.0f;   // elbow
-            float wx = px + 1.5f + lift * 5.0f, wy = py - 9.0f + lift * 2.0f;             // wrist
-            segs.push_back({ sx, 70 + gather, ex, ey, 6.0f, 3.6f, part });
-            segs.push_back({ ex, ey, wx, wy, 3.2f, 2.6f, part });
-            segs.push_back({ wx, wy, px - 3.0f, py - 1.5f, 2.6f, 2.8f, part });           // the paw
-        };
-        auto hindLeg = [&](float hx, float sw, float lift, int part) {
-            float px = hx + 2.0f - sw * 14.0f, py = GROUND - lift * 9.0f;
-            float kx = hx - 9.0f - sw * 6.0f, ky = 84.0f - lift * 4.0f;                  // stifle
-            float jx = px + 7.0f + lift * 3.0f, jy = 99.0f - lift * 7.0f;                // hock, behind the paw
-            segs.push_back({ hx, 62 + gather * 0.6f, kx, ky, 9.0f, 4.5f, part });        // the thigh
-            segs.push_back({ kx, ky, jx, jy, 3.6f, 2.8f, part });
-            segs.push_back({ jx, jy, px, py - 1.5f, 2.6f, 2.4f, part });
-            segs.push_back({ px, py - 1.5f, px - 4.0f, py - 1.0f, 2.6f, 2.6f, part });
-        };
-        frontLeg(60, bx, bl, 2);   // far front-right, with back-left
-        hindLeg(142, ax, al, 2);   // far back-left
-        frontLeg(54, ax, al, 1);   // near front-left
-        hindLeg(148, bx, bl, 1);   // near back-right
-        for (int y = 0; y < H; y++) for (int x = 0; x < FW; x++) {
-            float px = x + 0.5f, py = y + 0.5f;
-            float best = 1e9f; int part = 0;
-            for (const Seg &sg : segs) {
-                float d = segDist(sg, px, py);
-                // near legs over everything, the body over the far legs
-                float bias = sg.part == 1 ? -0.8f : sg.part == 2 ? 0.8f : 0.0f;
-                if (d + bias < best + (part == 1 ? -0.8f : part == 2 ? 0.8f : 0.0f)) { best = d; part = sg.part; }
-                else if (d < best && sg.part == part) best = d;
-            }
-            // ragged coat: the edge wanders, most along the back and belly
-            float rag = (vnoise2(x * 0.45f, y * 0.45f + f * 7.0f, 931u) - 0.5f) * (part == 0 ? 2.6f : 1.0f);
-            float a = clampf(0.5f - (best + rag), 0.0f, 1.0f);
-            if (a <= 0) continue;
-            float v = 1.0f;
-            float mange = vnoise2(x * 0.22f, y * 0.22f, 921u);
-            if (mange > 0.58f) v *= 1.30f;                              // bald, paler patches
-            if (part == 0 && x > 64 && x < 108 && y > 50 && y < 74) {   // ribs under a thin coat
-                float rib = sinf((x + (y - 62) * 0.35f) * 0.62f);
-                v *= 1.0f + 0.16f * sstepT(0.55f, 0.95f, rib);
-            }
-            v *= 1.0f + 0.22f * sstepT(62.0f, 46.0f, (float)y) * (part == 0 ? 1.0f : 0.0f);   // light along the spine
-            if (part == 2) v *= 0.72f;                                  // the far legs, in the body's shadow
-            p[y * W + f * FW + x] = { cl8(46 * v), cl8(29 * v), cl8(26 * v), cl8(255 * a) };
-        }
-        // two pale eyes
-        for (int e = 0; e < 2; e++)
-            for (int dy = 0; dy < 2; dy++) for (int dx = 0; dx < 3; dx++)
-                p[(72 + dy - e) * W + f * FW + 21 + dx + e * 6] = { 226, 216, 176, 255 };
-    }
-    return finishTexture(img, false);
 }
 
 // The almond water can, unwrapped for a real cylinder: the label as a strip

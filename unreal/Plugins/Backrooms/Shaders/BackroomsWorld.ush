@@ -483,7 +483,7 @@ float4 BRWorldFragment(FBRUniforms U, float3 FragPos, float3 FragN, float2 FragU
 	}
 	else
 	{
-		// Level 0's noclip walls (vertex alpha 250, 247 cursed)
+		// Level 0's noclip walls (vertex alpha 250)
 		bool Noclip = FragC.a > 0.965 && FragC.a < 0.990;
 		float2 UvT = FragUV;
 		float Tear = 0.0;
@@ -579,7 +579,7 @@ float4 BRWorldFragment(FBRUniforms U, float3 FragPos, float3 FragN, float2 FragU
 		if (Noclip)
 		{
 			float Shimmer = 0.035 * sin(U.Time * 23.0 + FragPos.y * 41.0 + FragPos.x * 7.0 + FragPos.z * 7.0);
-			float3 Behind = FragC.a < 0.975 ? float3(0.55, 0.03, 0.02) : float3(1.25, 1.18, 0.95);
+			float3 Behind = float3(1.25, 1.18, 0.95);
 			Col = lerp(Col * (1.0 + Shimmer), Behind * (0.6 + 0.4 * F.LightLum), Tear * 0.55);
 			AOut = 1.0;
 		}

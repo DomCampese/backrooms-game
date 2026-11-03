@@ -223,7 +223,6 @@ static int dumpForUnreal(const char *revolver) {
     exported("smiler", makeSmilerTex(false), CLAMPED);
     exported("smiler_glow", makeSmilerTex(true), CLAMPED);
     exported("partygoer", makePartygoerTex(), CLAMPED);
-    exported("dog", makeDogTex(), CLAMPED);
     exported("usher", makeUsherTex(), CLAMPED);
     const bool gun = exportRevolver(revolver);
     fprintf(gJson, "\n  ]\n}\n");
@@ -248,7 +247,6 @@ int main(int argc, char **argv) {
     if (want("concwall"))     surface("concwall", timed([] { return makeConcreteWallSurface(); }));
     if (want("concfloor"))    surface("concfloor", timed([] { return makeConcreteFloorSurface(); }));
     if (want("concceil"))     surface("concceil", timed([] { return makeConcreteCeilSurface(); }));
-    if (want("brick"))        surface("brick", timed([] { return makeRedBrickSurface(); }));
     if (want("poolfloor"))    surface("poolfloor", timed([] { return makeTileSurface(false); }));
     if (want("poolwall"))     surface("poolwall", timed([] { return makeTileSurface(true); }));
     if (want("partywall"))    surface("partywall", timed([] { return makePartyWallSurface(); }));
@@ -268,7 +266,6 @@ int main(int argc, char **argv) {
     sprite("deck", makeDeckTex);
     sprite("clark", makeClarkTex);
     sprite("partygoer", makePartygoerTex);
-    sprite("dog", makeDogTex);
     sprite("usher", makeUsherTex);
     if (wanted("smiler")) { dump("smiler", makeSmilerTex(false), false); dump("smiler_glow", makeSmilerTex(true), false); }
     return 0;
