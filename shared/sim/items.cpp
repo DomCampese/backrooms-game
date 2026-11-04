@@ -61,6 +61,16 @@ Pickup Sim::pickupAt(int a, int b) {
     if (batteryAt(a, b)) return Pickup::Battery;
     if (tapeAt(a, b))    return Pickup::Tape;
     if (revolverAt(a, b)) return Pickup::Revolver;
+    return sunkenAt(a, b);
+}
+
+// Only the Poolrooms' deep water, so the other levels' pickups are unchanged.
+Pickup Sim::sunkenAt(int a, int b) {
+    if (level != 2 || !world.poolAt(a, b) || world.pillarAt(a, b)) return Pickup::None;
+    if (world.floorY(a, b) > SUNKEN_DEPTH + 0.01f) return Pickup::None;
+    uint32_t h = ih(a, b, pickupSalt() ^ 0x5C4Eu);
+    if (h % SUNKEN_COIN_RATE == 0) return Pickup::Doubloon;
+    if ((h / SUNKEN_COIN_RATE) % SUNKEN_ALMOND_RATE == 0) return Pickup::AlmondWater;
     return Pickup::None;
 }
 
@@ -286,7 +296,10 @@ void Sim::collectPickups() {
         float gr = onShelf ? 1.35f : 0.8f;
         if (ddx * ddx + ddz * ddz >= gr * gr) continue;
         if (!world.lineOfSight(px, pz, spot.x, spot.y)) continue;
-        if (fabsf(py - (world.floorY(a, b) + (onShelf ? bottleShelfY(a, b) : 0))) > 1.5f) continue;
+        // Loot on a pool floor needs a dive: from the surface it is SUNKEN_REACH
+        // or more below the feet.
+        float reachY = sunkenAt(a, b) == kind ? SUNKEN_REACH : 1.5f;
+        if (fabsf(py - (world.floorY(a, b) + (onShelf ? bottleShelfY(a, b) : 0))) > reachY) continue;
         if (kind == Pickup::Battery && battery > 0.98f) continue;
         if (kind == Pickup::Revolver && hasRevolver) continue;
         taken.insert(ky);

@@ -10,6 +10,7 @@ void Sim::step(const InputFrame &in, float dt, double now) {
     if (chalkSeedPending) { seedStrangerChalk(); chalkSeedPending = false; }
     updateLook(in);
     updateMovement(in, dt, now);
+    updateBreath(dt, now);
     updateDevKeys(in.dev, now);
     updateWeapons(in, dt, now);
     updateBullets(dt);
@@ -128,7 +129,7 @@ void Sim::beginDescent(double now) {
     // deathCount and winCount stay: they count this session's runs, and
     // dieRun increments deathCount just before calling here.
     fear = 0; boostT = 0;
-    stamina = 1; sprintExhausted = false; aiming = false; aimBlend = 0;
+    stamina = 1; breath = 1; drownT = 0; headUnder = false; sprintExhausted = false; aiming = false; aimBlend = 0;
     health = 1; hurtT = 0; sinceHurt = 0;
     sanity = 1.0f; sanityStage = 0; sanityWarnT = 0; sanityLine = "";
     migraine = 0; migraineWarned = false; notesRead = false; manilaSeen = false; noteT = 0;

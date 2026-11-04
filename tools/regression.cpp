@@ -1140,6 +1140,71 @@ int main() {
     }
     printf("PASS searching, he checks cover near where he lost the player and finds a player hidden there\n");
 
+    // ---- breath in the Poolrooms: under water it drains over BREATH_TIME,
+    // out of air the player loses DROWN_HIT a second, surfacing gasps and
+    // refills it, and holding under ends the run. Loot on a deep floor is out
+    // of reach from the surface and in reach after a dive.
+    {
+        sim.applyLevel(2,GetTime()); sim.inMenu=false; sim.deathT=0; sim.health=1; sim.hurtT=0;
+        World &w=sim.world;
+        auto deep=[&](int a,int b){ return w.poolAt(a,b) && !w.pillarAt(a,b) && w.floorY(a,b)<=-2.75f; };
+        bool found=false; int pa=0,pb=0;
+        for (int a=-40;a<40 && !found;++a) for (int b=-40;b<40 && !found;++b) {
+            bool ok=true;
+            for (int x=-1;x<=1 && ok;++x) for (int z=-1;z<=1 && ok;++z) ok=deep(a+x,b+z);
+            if (ok) { pa=a; pb=b; found=true; }
+        }
+        CHECK(found);
+        auto place=[&]{ sim.px=pa*CELL+1; sim.pz=pb*CELL+1; sim.py=Sim::FLOAT_PY; sim.vy=0; sim.velx=sim.velz=0; };
+        place(); sim.breath=1; sim.headUnder=false; sim.drownT=0;
+        auto run=[&](bool rise,float secs,Sfx want){
+            bool heard=false;
+            for (int f=0; f<(int)(secs*30) && sim.deathT<=0; ++f) {
+                InputFrame in=noInput(g); in.playing=true; in.jumpHeld=rise;
+                sim.audio.clear();
+                sim.step(in,1.0f/30,500.0+f/30.0);
+                sim.px=pa*CELL+1; sim.pz=pb*CELL+1;
+                for (const AudioEvent &e : sim.audio) heard|=e.kind==AudioEvent::PLAY && e.sfx==want;
+            }
+            return heard;
+        };
+        // Sinking, then 9 s under: about half the breath is gone.
+        run(false,1.5f,Sfx::Gasp);
+        CHECK(sim.headUnder && sim.breath<1);
+        float b0=sim.breath;
+        run(false,9.0f,Sfx::Gasp);
+        CHECK(fabsf((b0-sim.breath)-9.0f/Sim::BREATH_TIME)<0.02f);
+        // Out of air: a choke and DROWN_HIT a second.
+        bool choked=run(false,sim.breath*Sim::BREATH_TIME+2.5f,Sfx::Choke);
+        CHECK(choked && sim.breath==0 && sim.health<1 && sim.health>0 && sim.deathT<=0);
+        // Surfacing gasps and refills the breath within BREATH_REFILL.
+        bool gasped=run(true,2.5f,Sfx::Gasp);
+        CHECK(gasped && !sim.headUnder);
+        run(true,Sim::BREATH_REFILL+0.2f,Sfx::Gasp);
+        CHECK(sim.breath==1);
+        // Held under, the run ends with the water named.
+        sim.health=1; sim.sinceHurt=0;
+        run(false,Sim::BREATH_TIME+8.0f,Sfx::Gasp);
+        CHECK(sim.deathT>0 && std::string(sim.deathBy)=="THE WATER");
+        CHECK(sim.breath==1 && !sim.headUnder);   // beginDescent refilled it
+        // A doubloon on a deep floor: not from the surface, yes from the floor.
+        sim.applyLevel(2,GetTime()); sim.inMenu=false; sim.deathT=0;
+        found=false;
+        for (int a=-60;a<60 && !found;++a) for (int b=-60;b<60 && !found;++b)
+            if (sim.sunkenAt(a,b)==Pickup::Doubloon && sim.pickupAt(a,b)==Pickup::Doubloon) { pa=a; pb=b; found=true; }
+        CHECK(found);
+        int coins=sim.coins;
+        place(); sim.collectPickups(); CHECK(sim.coins==coins);
+        sim.py=w.floorY(pa,pb); sim.collectPickups(); CHECK(sim.coins==coins+1);
+        // Only the Poolrooms have it.
+        sim.applyLevel(0,GetTime());
+        int n=0;
+        for (int a=-40;a<40;++a) for (int b=-40;b<40;++b) n+=sim.sunkenAt(a,b)!=Pickup::None;
+        CHECK(n==0);
+        sim.beginDescent(0); sim.inMenu=false; sim.deathT=0;
+    }
+    printf("PASS breath drains under water, drowning ends the run, sunken doubloons need a dive\n");
+
     // ---- the hunter's movement and walk cycle (ENT-01/ENT-02). Check the
     // captures by eye too.
     {
