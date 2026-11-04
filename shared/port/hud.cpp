@@ -243,6 +243,13 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
                        : "Keep it centred · Q for a flare · break sight and get away",
               sw/2,hud(122),hud(15),{185,179,157,255});
     }
+    if (sim.level == LEVEL_FUN && sim.deathT <= 0 && sim.winT <= 0) {   // LEVEL FUN's music stops
+        if (sim.music.heardT > 0)
+            textC("it heard you", sw / 2, sh - hud(190), hud(20), fade({ 230, 110, 100, 230 }, fminf(1.0f, sim.music.heardT)));
+        else if (!sim.music.playing)
+            textC("the music stopped · stand still", sw / 2, sh - hud(190), hud(18),
+                  fade({ 236, 214, 160, 220 }, fminf(1.0f, sim.music.stopped * 3.0f)));
+    }
     if (sim.deckNoteT > 0 && sim.winT <= 0 && sim.deathT <= 0) {   // a tape deck message
         float a = clampf(sim.deckNoteT > 2.0f ? (2.6f - sim.deckNoteT) / 0.6f : sim.deckNoteT / 1.2f, 0, 1);
         textC(sim.deckNote, sw / 2, sh - hud(150), hud(16), fade({ 196, 168, 214, 230 }, a * 0.9f));

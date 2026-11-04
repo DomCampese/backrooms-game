@@ -102,6 +102,12 @@ struct Sim {
     // Distant one-shots: first at LEAD..LEAD+SPAN s after entering a level,
     // then every GAP..GAP+SPAN s, scaled by 0.45 + 0.55 * sanity.
     static constexpr double DISTANT_LEAD = 20, DISTANT_GAP = 35, DISTANT_SPAN = 50;
+    static constexpr float MUSIC_PLAY_MIN = 20.0f, MUSIC_PLAY_SPAN = 20.0f;
+    static constexpr float MUSIC_STOP_MIN = 6.0f, MUSIC_STOP_SPAN = 3.0f;
+    static constexpr float MUSIC_FIRST = 25.0f;   // s of music on arrival before the first stop, at least
+    static constexpr float MUSIC_GRACE = 0.8f;    // s to stop moving after the music stops
+    static constexpr float MUSIC_STILL = 0.6f;    // m/s: slower than this counts as standing still
+    static constexpr float MUSIC_MASK = 0.6f;     // footstep noise radius while the music plays
     static constexpr int   MAXAMMO = 6;
     // Breath: BREATH_TIME s with the head under water empties it, and
     // BREATH_REFILL s with the head out fills it. Empty, the player loses
@@ -300,6 +306,18 @@ struct Sim {
     // spawns).
     double nextDistant = 0;
     Rng distantRng{1};
+    // LEVEL FUN's music stops for MUSIC_STOP_MIN..+SPAN s every
+    // MUSIC_PLAY_MIN..+SPAN s. Moving faster than MUSIC_STILL m/s while it is
+    // stopped, after MUSIC_GRACE s, calls the Partygoer. Its own stream, so it
+    // does not shift grng.
+    struct PartyMusic {
+        bool playing = true;
+        float next = 0;      // s until it stops or starts again
+        float stopped = 0;   // s since it stopped
+        bool heard = false;  // the Partygoer was called in this stop
+        float heardT = 0;    // s the "it heard you" line shows
+    } music;
+    Rng musicRng{1};
     float boostT = 0;                // s of almond-water speed left
     float sanity = 1.0f;
     int sanityStage = 0;             // deepest threshold crossed, so each warning fires once
@@ -374,6 +392,7 @@ struct Sim {
     Sfx stepSfx() const;
     // Plays LevelRules::distant's one-shot when nextDistant is due.
     void updateDistant(double now);
+    void updatePartyMusic(float dt);
     void updateDevKeys(const DevKeys &dev, double now);
     void updateWeapons(const InputFrame &in, float dt, double now);
     void updateBullets(float dt);

@@ -46,6 +46,7 @@ struct AmbienceMix {
 struct LoopCue {
     bool underwater = false;   // head under water in the Poolrooms
     bool party = false;        // on LEVEL FUN
+    bool partyStopped = false; // ...and its music is stopped (Sim::music)
 };
 
 // One thing for the platform to do with sound, in the order the rules did it.

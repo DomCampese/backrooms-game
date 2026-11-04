@@ -257,6 +257,36 @@ and the deep floors hold loot (`Sim::updateBreath`, shared/sim/player.cpp;
   (1.3-1.7): lit by the room it was a dark 5 px dot at 10 m.
 - walk-l0-l2.trace never puts the eye under water and plays back unchanged.
 
+# LEVEL FUN's music stops (November 2026)
+
+LEVEL FUN had nothing to play around but the Partygoer. Now its music stops
+at intervals and the player has to stand still until it starts again
+(`Sim::updatePartyMusic`, shared/sim/place.cpp; `Sim::music`).
+
+- **The schedule is sim time from `musicRng`**, seeded per visit in
+  `applyLevel`: the first stop `MUSIC_FIRST` + 0..`MUSIC_PLAY_SPAN` s after
+  arrival, then plays of `MUSIC_PLAY_MIN` + 0..20 s and stops of
+  `MUSIC_STOP_MIN` + 0..3 s. Its own stream, so `grng` is not shifted.
+  Nothing the player does moves it.
+- **Moving faster than `MUSIC_STILL` (0.6 m/s) after `MUSIC_GRACE` (0.8 s)
+  of a stop calls the Partygoer**, once per stop: the same as the Usher's
+  whistle (spawn if hidden, then chase with `hunterNotice` at the player).
+  It plays `Sfx::Scare` at pitch 0.8 and the HUD says "it heard you" for
+  2.5 s. A crouched walk (1.9 m/s) counts as moving.
+- **While the music plays, `loudestNoise`'s footstep radius is scaled by
+  `MUSIC_MASK` (0.6)** on LEVEL FUN. Shots, flares, doors and the deck are
+  not scaled.
+- **The stop is `LoopCue::partyStopped`.** `LoopLevels::step` (port/sounds.cpp)
+  winds the recording down: `partyStop` rises over 0.7 s, the pitch falls to
+  0.35 of its own and the level to zero, and it comes back over 0.4 s.
+  `party` is `partyBase * (1 - partyStop)`; scaling the smoothed `party`
+  itself compounded every frame. Both builds read `party` and `partyPitch`
+  (`GameAudio::feedLoops`, `UBackroomsSound::FeedLoop`), and both stop the
+  stream at silence, so the record restarts from its beginning.
+- `partyStopped` is not in the trace's `audioHash`: adding a byte there
+  changes every digest of the golden trace, which never reaches LEVEL FUN.
+- The HUD line "the music stopped · stand still" is in `hudDraws`.
+
 # Footstep clip per floor material (October 2026)
 
 Player footsteps and landings use a clip per floor material: carpet on

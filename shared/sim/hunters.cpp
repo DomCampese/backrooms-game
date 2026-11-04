@@ -267,6 +267,7 @@ float Sim::loudestNoise(float &x, float &z) const {
     if (sprinting) noise = 20.0f;
     else if (velx * velx + velz * velz > 1.0f) noise = 11.0f;
     if (crouchCur > 0.7f) noise *= 0.45f;
+    if (level == LEVEL_FUN && music.playing) noise *= MUSIC_MASK;   // the music covers footsteps
     if (deck.playing && TAPE_NOISE > noise) {
         noise = TAPE_NOISE;
         x = deck.carried ? px : deck.x;
