@@ -92,6 +92,15 @@ void Game::renderScene(double now) {
         if (chunk.meshes[MESH_FIXTURES].vertexCount > 0)
             DrawMesh(chunk.meshes[MESH_FIXTURES], mats[MAT_FIXTURES], xf);
     }
+    // The sim's scene. Items on a pool floor are drawn now, before the water,
+    // because the water writes depth and would hide them.
+    sceneBuf.clear();
+    sceneDraws(sim, light, timeF, sceneBuf);
+    setDrawRel(0.0f);
+    for (const SceneDraw &d : sceneBuf) if (d.sunken) drawScene(d, cam);
+    // Shapes wait in raylib's batch until a flush; unflushed, they would be
+    // drawn after the water and fail its depth.
+    rlDrawRenderBatchActive();
     // Share the frustum test with transparent geometry, and blend distant chunks
     // first. Within a chunk, the existing AO / water / glass order is retained.
     for (int i=visibleCount-1; i>=0; --i) {
@@ -117,9 +126,7 @@ void Game::renderScene(double now) {
     }
     // The landing tubes, the sim's scene, the flares, the hunter and
     // the rest, as shared/port/draw.h decides them for both builds.
-    sceneBuf.clear();
-    sceneDraws(sim, light, timeF, sceneBuf);
-    for (const SceneDraw &d : sceneBuf) drawScene(d, cam);
+    for (const SceneDraw &d : sceneBuf) if (!d.sunken) drawScene(d, cam);
     const Held held = heldItem(sim);
     if (held != Held::None) {
         // Next to a wall the held item falls in the wall's shadow and goes black.

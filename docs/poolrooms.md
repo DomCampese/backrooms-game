@@ -25,7 +25,7 @@ The level is built from the lore's own vocabulary rather than one repeated room.
 
 A dry walkway runs round every chunk, so the pieces always connect, and openings are plain gaps in the tile rather than door frames. The arrival landing is dry. No hunter or whispers spawn here, sanity slowly recovers, and there are no blackouts.
 
-Deep water uses damped buoyancy and water drag. Hold SPACE/JUMP to rise and float at the surface; release it to sink, which is the dive. SHIFT swims faster. Surface swimmers climb onto shelves with eased camera motion; submerged swimmers are stopped by risers. There is no breath timer. Underwater tint and subtle distortion distinguish diving, and slow stroke sounds replace footsteps while afloat.
+Deep water uses damped buoyancy and water drag. Hold SPACE/JUMP to rise and float at the surface; release it to sink, which is the dive. SHIFT swims faster. Surface swimmers climb onto shelves with eased camera motion; submerged swimmers are stopped by risers. Breath lasts 18 s under water and refills in 3 s at the surface; empty, the player loses about a quarter of their health a second (AGENTS.md, "Breath and sunken loot in the Poolrooms"). Doubloons and almond water lie on floors 2.4 m deep or more, in reach only after a dive. Underwater tint and subtle distortion distinguish diving, and slow stroke sounds replace footsteps while afloat.
 
 ## Verification
 

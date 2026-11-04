@@ -644,6 +644,62 @@ Pcm toPcm(const std::vector<float> &d, float level) {
     return pcm;
 }
 
+// Gasp: a sharp breath in, then out. The inhale is noise through a resonator
+// swept 1.4-2.6 kHz over 0.38 s with a 0.04 s attack; the exhale is 0.3 s
+// through a 700-500 Hz resonator at half the level.
+Pcm makeGasp()
+{
+    Rng r(0x6A5BULL);
+    std::vector<float> d((int)(0.8f * SAMPLE_RATE));
+    float y1 = 0, y2 = 0;
+    for (int i = 0; i < (int)d.size(); i++) {
+        float t = (float)i / SAMPLE_RATE;
+        float x = r.f01() * 2.0f - 1.0f;
+        float f, env;
+        if (t < 0.42f) {
+            f = 1400.0f + 1200.0f * (t / 0.42f);
+            env = fminf(1.0f, t / 0.04f) * expf(-t * 2.5f) * fminf(1.0f, (0.42f - t) * 30.0f);
+        } else {
+            float u = t - 0.48f;
+            f = 700.0f - 200.0f * fmaxf(0.0f, u) / 0.3f;
+            env = u > 0 ? 0.5f * fminf(1.0f, u / 0.03f) * expf(-u * 7.0f) : 0.0f;
+        }
+        // Two-pole resonator, radius 0.97: about 300 Hz wide.
+        float w = TAU * f / SAMPLE_RATE, rr = 0.97f;
+        float y = x * (1.0f - rr) + 2.0f * rr * cosf(w) * y1 - rr * rr * y2;
+        y2 = y1; y1 = y;
+        d[i] = y * env;
+    }
+    return toPcm(d, 0.8f);
+}
+
+// Choke: air escaping under water. Five to eight bubbles in 0.6 s, each a sine
+// chirping up from 260-520 Hz by half again over 25-45 ms, over noise
+// low-passed at about 400 Hz. Variants differ by seed.
+Pcm makeChoke(int variant)
+{
+    Rng r(0xC40CULL + (uint64_t)variant * 977u);
+    std::vector<float> d((int)(0.75f * SAMPLE_RATE));
+    int n = 5 + (int)(r.f01() * 3.99f);
+    for (int b = 0; b < n; b++) {
+        float at = 0.02f + r.f01() * 0.55f, len = 0.025f + r.f01() * 0.02f;
+        float f0 = 260.0f + r.f01() * 260.0f, amp = 0.5f + r.f01() * 0.5f, ph = 0;
+        int i0 = (int)(at * SAMPLE_RATE), i1 = i0 + (int)(len * SAMPLE_RATE);
+        for (int i = i0; i < i1 && i < (int)d.size(); i++) {
+            float u = (float)(i - i0) / SAMPLE_RATE;
+            ph += TAU * f0 * (1.0f + 0.5f * u / len) / SAMPLE_RATE;
+            d[i] += sinf(ph) * amp * fminf(1.0f, u * 400.0f) * expf(-u * 90.0f);
+        }
+    }
+    float lp = 0;
+    for (int i = 0; i < (int)d.size(); i++) {
+        float t = (float)i / SAMPLE_RATE;
+        lp += 0.055f * ((r.f01() * 2.0f - 1.0f) - lp);
+        d[i] += lp * 0.9f * fminf(1.0f, t / 0.03f) * expf(-t * 4.0f);
+    }
+    return toPcm(d, 0.7f);
+}
+
 // A door. Variant 0, shut: a latch click (noise and a 2.1 kHz ring, 12 ms)
 // then the leaf meeting the frame, a 95 Hz thud and a 210 Hz panel mode over
 // 0.18 s. Variant 1, opened: the latch, then 0.35 s of hinge creak, noise
@@ -882,7 +938,7 @@ ClipSpec clipSpec(Sfx sfx) {
     case Sfx::StepConcrete: case Sfx::StepTile: case Sfx::StepWood: return { 4, 1.0f, 1.0f };
     case Sfx::SplashIn: case Sfx::SplashOut:
     case Sfx::FarDoor: case Sfx::FarClang: case Sfx::FarPop:
-    case Sfx::FarBoom: case Sfx::DoorShut: case Sfx::DoorKnock: return { 3, 1.0f, 1.0f };
+    case Sfx::FarBoom: case Sfx::DoorShut: case Sfx::DoorKnock: case Sfx::Choke: return { 3, 1.0f, 1.0f };
     case Sfx::Hit:       return { 1, 1.7f, 0.40f };
     case Sfx::Kill:      return { 1, 0.55f, 0.80f };
     case Sfx::Heartbeat: return { 1, 1.0f, 0.55f };
@@ -934,6 +990,8 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::DoorKnock:       return makeDoorKnock(variant);
     case Sfx::Vend:           return makeVend();
     case Sfx::Whistle:        return makeWhistle();
+    case Sfx::Gasp:           return makeGasp();
+    case Sfx::Choke:          return makeChoke(variant);
     }
     return {};
 }

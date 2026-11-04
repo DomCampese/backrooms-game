@@ -367,9 +367,14 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
     };
     // Loose objects, placed by the same rules the sim uses (simScene); only the
     // look, the bob and the sway are decided here.
+    struct MarkSunken {   // flags every draw this item adds, on any way out of the loop body
+        std::vector<SceneDraw> &o; size_t first; bool on;
+        ~MarkSunken() { if (on) for (size_t i = first; i < o.size(); ++i) o[i].sunken = true; }
+    };
     for (const SceneItem &it : simScene(sim)) {
         const int a = it.gi, b = it.gk;
         const float x = it.pos.x, gy = it.pos.y, z = it.pos.z;
+        MarkSunken mark{ out, out.size(), gy < WATER_Y - 0.05f && sim.world.poolAt(a, b) };
         switch (it.kind) {
         case SceneKind::Crate:
         case SceneKind::CrateOpen: {
@@ -386,6 +391,17 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             break;
         case SceneKind::Doubloon: {
             float bob = sinf(now * 2.0f + a * 1.7f + b) * 0.03f;
+            if (mark.on) {
+                // On a pool floor the water darkens and tints it toward the
+                // floor's colour, and at 10 m a 17 cm coin drawn by the room's
+                // light was a dark 5 px dot. It is drawn at 1.6x the size and
+                // at a brightness that pulses 1.3-1.7 (a glint), so it reads as
+                // gold through 1-3 m of water.
+                float glint = 1.5f + 0.2f * sinf(now * 3.1f + a * 2.3f + b * 1.1f);
+                put(out, cylinder({ x, gy + 0.03f, z }, 0.136f, 0.136f, 0.03f, 12,
+                                  lit({ 234, 188, 74, 255 }, glint)));
+                break;
+            }
             put(out, cylinder({ x, gy + 0.06f + bob, z }, 0.085f, 0.085f, 0.024f, 12,
                               lit({ 234, 188, 74, 255 }, propLum(x, gy + 0.15f, z))));
             break;

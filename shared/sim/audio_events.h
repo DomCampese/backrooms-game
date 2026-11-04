@@ -25,6 +25,8 @@ enum class Sfx : uint8_t {
     Hurt,             // the player taking a hit or a fall
     Vend,             // a snack machine: its spiral motor, the drop and the wrapper
     Whistle,          // the Usher's whistle: two blasts
+    Gasp,             // surfacing short of breath
+    Choke,            // 3: out of breath under water, one per DROWN_TICK
 };
 
 // What the ambience synth (audio.cpp) chases. The rules write each field where

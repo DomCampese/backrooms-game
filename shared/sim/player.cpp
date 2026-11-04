@@ -358,3 +358,28 @@ Sfx Sim::stepSfx() const {
     }
     return Sfx::Step;
 }
+
+// Head under water drains breath; out of breath, the player takes DROWN_HIT
+// every DROWN_TICK s. Surfacing short of breath plays a gasp.
+void Sim::updateBreath(float dt, double now) {
+    bool under = level == 2 && !inMenu && deathT <= 0 && eyeY < WATER_Y
+              && world.poolAt(cellOf(px), cellOf(pz));
+    if (headUnder && !under && breath < GASP_BELOW && deathT <= 0)
+        play(Sfx::Gasp).atVolume(0.5f + 0.5f * (GASP_BELOW - breath) / GASP_BELOW);
+    headUnder = under;
+    if (!under) {
+        breath = fminf(1, breath + dt / BREATH_REFILL);
+        drownT = 0;
+        return;
+    }
+    breath = fmaxf(0, breath - dt / BREATH_TIME);
+    if (breath > 0) return;
+    drownT += dt;
+    if (drownT < DROWN_TICK) return;
+    drownT -= DROWN_TICK;
+    health -= DROWN_HIT;
+    hurtT = HURT_GRACE; sinceHurt = 0;
+    fear = fmaxf(fear, 0.9f);
+    play(Sfx::Choke, grng.ri(0, 2));
+    if (health <= 0.001f) { health = 0; dieRun(now, "THE WATER", "YOU DROWNED"); }
+}

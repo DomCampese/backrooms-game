@@ -103,6 +103,22 @@ struct Sim {
     // then every GAP..GAP+SPAN s, scaled by 0.45 + 0.55 * sanity.
     static constexpr double DISTANT_LEAD = 20, DISTANT_GAP = 35, DISTANT_SPAN = 50;
     static constexpr int   MAXAMMO = 6;
+    // Breath: BREATH_TIME s with the head under water empties it, and
+    // BREATH_REFILL s with the head out fills it. Empty, the player loses
+    // DROWN_HIT health every DROWN_TICK s, so drowning kills in about 4 s.
+    static constexpr float BREATH_TIME = 18.0f;
+    static constexpr float BREATH_REFILL = 3.0f;
+    static constexpr float DROWN_TICK = 1.0f;
+    static constexpr float DROWN_HIT = 0.26f;
+    static constexpr float GASP_BELOW = 0.6f;    // surfacing below this much breath gasps
+    // Loot on the floor of the Poolrooms' deep water (floor at SUNKEN_DEPTH or
+    // lower): a doubloon in SUNKEN_COIN_RATE cells, a carton of almond water in
+    // SUNKEN_ALMOND_RATE. A swimmer floating at the surface is too far above it
+    // (SUNKEN_REACH m), so it takes a dive.
+    static constexpr float SUNKEN_DEPTH = -2.4f;
+    static constexpr uint32_t SUNKEN_COIN_RATE = 23;
+    static constexpr uint32_t SUNKEN_ALMOND_RATE = 71;
+    static constexpr float SUNKEN_REACH = 0.7f;
     // One empty floor cell in this many holds the revolver: about one every
     // dozen chunks, so most runs find it on Level 0 or the theater.
     static constexpr uint32_t REVOLVER_ODDS = 2003;
@@ -223,6 +239,8 @@ struct Sim {
     float wTapT = 0; bool wSprint = false;
     float health = 1.0f, hurtT = 0, sinceHurt = 0;   // hurtT: immunity left after a hit
     float stamina = 1.0f;
+    float breath = 1.0f, drownT = 0;   // breath 0..1; drownT counts to the next DROWN_TICK
+    bool headUnder = false;
     float fov = 70.0f;               // camera fovy, deg, eased toward the window's base plus the action pulls
     float bobPhase = 0;              // counts footfalls: an integer is a foot landing
     bool flashOn = false;
@@ -375,6 +393,7 @@ struct Sim {
     // ---- movement pieces
     void updateSprint(bool requested, bool moving, bool crouched, float dt);
     bool updateSwimming(float dt, bool rise);
+    void updateBreath(float dt, double now);
     void updateSqueeze(bool held, float dt);
     void updateSoftFloor(float dt, double now);
     void updateGait(float spd, float speed, bool inWater, float dt);
@@ -417,6 +436,7 @@ struct Sim {
     bool backstageAt(int a, int b);          // behind an auditorium's screen (the theater)
     bool stageTapeAt(int a, int b);          // the tape in the middle of the walkway backstage
     bool coinAt(int a, int b);
+    Pickup sunkenAt(int a, int b);           // loot on the floor of deep water (Level 2)
     bool batteryAt(int a, int b);
     bool tapeAt(int a, int b);
     bool revolverAt(int a, int b);

@@ -365,6 +365,13 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         rect(x, y, (int)(w * sim.stamina), th, sim.sprintExhausted ? Rgba{ 190, 100, 66, 180 } : Rgba{ 200, 180, 120, 160 });
         if (sim.sprintExhausted) text("catch your breath", x + hud(48), y + hud(11), hud(12), { 195, 156, 119, 180 });
     }
+    if ((sim.headUnder || sim.breath < 0.995f) && sim.deathT <= 0) {   // breath, above the sprint bar
+        const int w = hud(220), x = sw / 2 - w / 2, y = sh - hud(60), th = hud(6);
+        bool low = sim.breath < 0.25f;
+        rect(x - hud(1), y - hud(1), w + hud(2), th + hud(2), { 0, 0, 0, 120 });
+        rect(x, y, (int)(w * sim.breath), th, low ? Rgba{ 210, 90, 70, 200 } : Rgba{ 150, 200, 225, 170 });
+        if (sim.breath <= 0) text("out of air · surface", x + hud(44), y - hud(16), hud(12), { 225, 120, 100, 210 });
+    }
     // The hiding hint, one per state. It used to say "hold still" even when
     // there was no cover.
     const char *coverLine = nullptr;
