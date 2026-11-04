@@ -246,6 +246,15 @@ and the deep floors hold loot (`Sim::updateBreath`, shared/sim/player.cpp;
   feet and the floor; a swimmer floating at the surface (`FLOAT_PY`, -1.47 m)
   is 1.33 m above a -2.8 m floor, so sunken items use `SUNKEN_REACH` (0.7 m).
 - The breath bar is in `hudDraws` (port/hud.cpp), above the sprint bar.
+- **Sunken loot is drawn before the water in the Web build.** The water
+  writes depth, so an item under it drawn after it is hidden. `sceneDraws`
+  marks every draw of an item on a pool floor `SceneDraw::sunken`; render.cpp
+  draws those after the opaque chunks and before the translucent pass, then
+  calls `rlDrawRenderBatchActive()`. Without the flush the coin's cylinder
+  stayed in raylib's batch until after the water and was still hidden.
+  Unreal's water is a translucent section that writes no depth, so it needs
+  neither. A sunken doubloon is drawn 1.6x larger at a pulsing brightness
+  (1.3-1.7): lit by the room it was a dark 5 px dot at 10 m.
 - walk-l0-l2.trace never puts the eye under water and plays back unchanged.
 
 # Footstep clip per floor material (October 2026)

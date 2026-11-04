@@ -91,6 +91,9 @@ struct SceneDraw {
     bool isMesh;
     MeshDraw mesh;
     Shape shape;
+    // Under the Poolrooms' water. The Web build draws these before the water,
+    // which writes depth and would otherwise hide them.
+    bool sunken = false;
 };
 
 // Everything render.cpp draws between the chunks and the held item: the
