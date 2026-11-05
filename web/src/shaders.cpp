@@ -540,8 +540,8 @@ void main(){
             vec2 g = floor((fragPos.xz - uLS*0.5)/uLS + 0.5);
             float st = lightState(g, storeyOffset(uStorey + float(gRel)));
             // The first term lights a dead panel by the room, so it is not black.
-            col = vec3(0.72,0.70,0.65) * roomLight(fragPos, vec3(0.0,-1.0,0.0)) + uLightCol*5.2*st;
-            col *= 0.93 + 0.07*sin(fragUV.x*33.0)*sin(fragUV.y*33.0);   // prismatic lens ribs
+            float lens = 0.93 + 0.07*sin(fragUV.x*33.0)*sin(fragUV.y*33.0);   // prismatic lens ribs
+            col = vec3(0.72,0.70,0.65) * roomLight(fragPos, vec3(0.0,-1.0,0.0)) + uLightCol*5.2*st * lens;
             gLightLum = max(gLightLum, st);
         } else if (fragC.a < 0.3){                   // raw emissive (exit glow)
             col = fragC.rgb * 3.0;
