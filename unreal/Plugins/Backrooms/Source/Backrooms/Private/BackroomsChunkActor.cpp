@@ -12,7 +12,8 @@ ABackroomsChunkActor::ABackroomsChunkActor()
 	Mesh->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
 	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	Mesh->bUseComplexAsSimpleCollision = true;
-	// Everything is lit by the world shader; nothing casts an engine shadow.
+	// The Web shader look draws its own shadows; the Unreal look turns
+	// Unreal's on in Build.
 	Mesh->SetCastShadow(false);
 	RootComponent = Mesh;
 }
@@ -20,4 +21,5 @@ ABackroomsChunkActor::ABackroomsChunkActor()
 void ABackroomsChunkActor::Build(World& W, int32 Cx, int32 Cz, const UBackroomsRender& Render)
 {
 	BackroomsChunkBuild::Build(W, Cx, Cz, Render, *Mesh, true);
+	Mesh->SetCastShadow(Render.IsLit());
 }

@@ -23,9 +23,18 @@ the reason, and the symptom if it is broken. Write new entries the same way.
   all 44 sources before and after: identical assembly.
 
 Both builds ship, so **a new feature lands in both in the same change**: its
-rules in shared/, each build's code only drawing and playing it, and a shader
-change made in the GLSL and the HLSL together. What the Mac build still lacks
-is in docs/unreal-handoff.md, "Parity".
+rules in shared/, each build's code only drawing and playing it. What the Mac
+build still lacks is in docs/unreal-handoff.md, "Parity".
+
+**The builds play the same game; they do not have to look the same.**
+Generation, collision, the rules, the hunters and the sounds are shared and
+must match (the goldens and traces check it). How the world is lit is each
+build's own. The Unreal build exists to look better than the Web build, so
+it lights the world with Unreal (unreal/README.md, "How the world is lit").
+Do not copy the Web build's lighting into it to make the pictures match.
+A new surface or effect still lands in both: in the Unreal look as material
+properties in `BackroomsSurface.ush` or as an Unreal light, and in the Web
+build's shader.
 
 # Every session makes the game better to play (October 2026)
 
@@ -394,10 +403,43 @@ Both builds play them with no platform code.
 - walk-l0-l2.trace was re-recorded. The previous code's replay of the new one
   first differs at frame 89, in the sound only.
 
+# Unreal lights the world itself (November 2026)
+
+The Unreal build has two looks (Project Settings > Game > Backrooms > Look).
+**Unreal**, the default, lights the world with Unreal: lit materials, real
+lights, Lumen and Unreal's camera (unreal/README.md, "How the world is lit").
+**WebShader** is the Web build's world shader in HLSL on unlit materials, kept
+to compare with the Web build and as the fallback when the lit materials have
+not been built. From 22 October to November 2026 the WebShader look was the
+only one: PR #162 deleted the Unreal lights the port had started with and
+copied the Web build's lighting in their place, which left the Mac build
+looking no better than the browser.
+
+- **What a surface is made of is decoded once per look from the same
+  data.** `BackroomsSurface.ush` reads the textures and the vertex colour's
+  alpha flags (panel, glow, glass, water, noclip, backlit print, the boards,
+  damp, the revolver's steel) as `BRWorldFragment` does. A new flag or
+  surface goes into both.
+- **A panel's glow and its light agree.** The glow is `BRLightState` in the
+  material; the rect light is `ABackroomsLightsActor`, from core's
+  `LightFitting` (dead, part output, faulty) and the sim's `FrameLight`
+  (blackout, flicker, the hunter's pool of dead light). A change to one is a
+  change to the other.
+- **Only the nearest working panels are real lights** (`FittingLights`, 16),
+  and only the nearest of those cast shadows (`FittingShadowsHigh`/`Medium`
+  by `LightQuality`). The rest glow but light nothing.
+- **Lumen gives screen-space bounce only.** The chunks are procedural meshes,
+  which have no distance fields, so Lumen cannot trace light off-screen. The
+  lit material adds the level's ambient floor (`LevelCfg::amb`) as glow so a
+  corner no light reaches is dark rather than black.
+- **One unit of the Web shader's light is `UBackroomsRender::WebUnitNits`**
+  in the Unreal look: the glow's scale and the fog's colour. Auto exposure
+  stays between `ExposureMinEV100` and `ExposureMaxEV100`; without the bright
+  end a blackout would be exposed back up to normal.
+
 # Unreal draws the Web build's world (October 2026)
 
-Unreal does no lighting of its own. Every material is unlit and its colour is
-the Web build's (unreal/README.md, "How the world is drawn").
+This section is about the WebShader look.
 
 - **There are two copies of each shader.** `WORLD_FS`, `POST_FS` and
   `TAPE_FS` (web/src/shaders.cpp) and unreal/Plugins/Backrooms/Shaders/*.ush
@@ -441,17 +483,18 @@ the Web build's (unreal/README.md, "How the world is drawn").
   rest are masked at 0.5.
 - **Exposure is pinned at 1** and the post material replaces the tonemapper.
   Any engine default that lights, grades or adapts (Lumen, bloom, auto
-  exposure, TSR's history) changes every pixel. Config/DefaultEngine.ini and
-  `UBackroomsRender::ShowPost` turn them off.
+  exposure, TSR's history) changes every pixel. `UBackroomsRender::PinPost`
+  turns them off in this look, and the subsystem picks FXAA.
 - **A texture parameter needs a default texture in the base material**, even
   if every instance sets it. The billboards' Sheet had none, so the billboard
   materials failed to compile and the engine drew its default material: the
   revolver's smoke was an opaque dark square. The editor's digest now covers
   backrooms_world.py itself, so changing how a material is built rebuilds the
   materials on the next `make unreal-open`.
-- **`LightQuality` is the only place Unreal's lighting may differ from the
-  Web build's** (Project Settings > Game > Backrooms > Performance; the
-  `Quality` vector, `U.Quality` in BackroomsWorld.ush).
+- **In the WebShader look, `LightQuality` is the only place Unreal's
+  lighting may differ from the Web build's** (Project Settings > Game >
+  Backrooms > Performance; the `Quality` vector, `U.Quality` in
+  BackroomsWorld.ush).
   - High is the GLSL's arithmetic: with Quality pinned at 0, DXC's DXIL for
     the world material is the same 13,656 lines as before the setting.
   - Medium traces one hard shadow tap and fades shadows by 8 m (10-15 m at

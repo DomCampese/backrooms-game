@@ -6,15 +6,28 @@
 
 class ABackroomsChunkActor;
 
-// How much of the world shader's shadow tracing runs (BackroomsWorld.ush,
-// U.Quality). High is the Web build's lighting; the others trace fewer
-// shadows, which is most of the frame, and look a little flatter.
+// How many shadows are drawn. Web shader look: how much of the world
+// shader's shadow tracing runs (BackroomsWorld.ush, U.Quality). Unreal look:
+// how many panels cast shadows, and Low also turns volumetric fog off.
 UENUM()
 enum class EBackroomsLightQuality : uint8
 {
 	High,     // the Web build's: soft shadows from every tube within 10-15 m
 	Medium,   // hard shadows, fading out by 8 m
 	Low,      // no shadows from the tubes
+};
+// Which renderer lights the world. Both draw the same chunks, props and
+// textures from shared/; they differ in what lights them.
+UENUM()
+enum class EBackroomsLook : uint8
+{
+	// Unreal's: lit materials, a rect light at each working ceiling panel near
+	// the player, the flashlight, flares and lamps as real lights with
+	// shadows, Lumen, volumetric fog, and Unreal's tonemapper and bloom.
+	Unreal,
+	// The Web build's world shader in HLSL on unlit materials, and its post
+	// pass in place of Unreal's tonemapper. For comparing with the Web build.
+	WebShader,
 };
 class UInputAction;
 class UInputMappingContext;
@@ -75,6 +88,32 @@ public:
 	// frame longer than this leaves a gap in the sound.
 	UPROPERTY(Config, EditAnywhere, Category = "Sound", meta = (ClampMin = 0.03, ClampMax = 0.5))
 	float SoundLatency = 0.1f;
+
+	// What lights the world. Read when a world starts.
+	UPROPERTY(Config, EditAnywhere, Category = "Look")
+	EBackroomsLook Look = EBackroomsLook::Unreal;
+	// Unreal look: the working ceiling panels nearest the player that get a
+	// real light. The rest still glow.
+	UPROPERTY(Config, EditAnywhere, Category = "Look", meta = (ClampMin = 0, ClampMax = 64))
+	int32 FittingLights = 16;
+	// Unreal look: how many of those, nearest first, cast shadows, by
+	// LightQuality (High, Medium, Low).
+	UPROPERTY(Config, EditAnywhere, Category = "Look", meta = (ClampMin = 0, ClampMax = 64))
+	int32 FittingShadowsHigh = 8;
+	UPROPERTY(Config, EditAnywhere, Category = "Look", meta = (ClampMin = 0, ClampMax = 64))
+	int32 FittingShadowsMedium = 3;
+	// Unreal look: one panel's output at full power, and how far its light
+	// reaches, in metres.
+	UPROPERTY(Config, EditAnywhere, Category = "Look", meta = (ClampMin = 0))
+	float FittingLumens = 3200.0f;
+	UPROPERTY(Config, EditAnywhere, Category = "Look", meta = (ClampMin = 1))
+	float FittingReach = 9.0f;
+	// Unreal look: auto exposure stays between these (EV100). The bright end
+	// stops a blackout from being exposed back up to daylight.
+	UPROPERTY(Config, EditAnywhere, Category = "Look")
+	float ExposureMinEV100 = 5.0f;
+	UPROPERTY(Config, EditAnywhere, Category = "Look")
+	float ExposureMaxEV100 = 9.0f;
 
 	// Performance. LightQuality is read every frame; the frame cap and the
 	// resolution are applied when a world starts, and the console's t.MaxFPS

@@ -27,7 +27,7 @@ UTextureRenderTarget2D* Target(UObject* Outer, int32 W, int32 H)
 }
 }
 
-void UBackroomsReel::Fit(UWorld* Where, const Camcorder& Cam)
+void UBackroomsReel::Fit(UWorld* Where, const Camcorder& Cam, bool bLit)
 {
 	Reel = Target(this, Cam.reelW(), Cam.reelH());
 	Cell = Target(this, Cam.cellWidth(), Cam.cellHeight());
@@ -44,12 +44,24 @@ void UBackroomsReel::Fit(UWorld* Where, const Camcorder& Cam)
 	USceneCaptureComponent2D* C = Capture->GetCaptureComponent2D();
 	C->bCaptureEveryFrame = false;
 	C->bCaptureOnMovement = false;
-	// The scene before the post pass, which the tape look is drawn from: the
-	// world materials tone-map as the Web build's shader does, so this is
-	// what raylib's render target holds, clamped to 8 bits by the target.
-	C->CaptureSource = SCS_SceneColorHDRNoAlpha;
 	C->TextureTarget = Cell;
-	UBackroomsRender::PinPost(C->PostProcessSettings);
+	if (bLit)
+	{
+		// Unreal's picture, tone-mapped. Lumen is left out: a capture keeps
+		// no history for it, and the tape is too coarse to show the bounce.
+		C->CaptureSource = SCS_FinalColorLDR;
+		UBackroomsRender::LitPost(C->PostProcessSettings);
+		C->PostProcessSettings.DynamicGlobalIlluminationMethod = EDynamicGlobalIlluminationMethod::None;
+		C->PostProcessSettings.ReflectionMethod = EReflectionMethod::None;
+	}
+	else
+	{
+		// The scene before the post pass, which the tape look is drawn from:
+		// the world materials tone-map as the Web build's shader does, so
+		// this is what raylib's render target holds, clamped to 8 bits.
+		C->CaptureSource = SCS_SceneColorHDRNoAlpha;
+		UBackroomsRender::PinPost(C->PostProcessSettings);
+	}
 	C->PostProcessBlendWeight = 1.0f;
 	C->ShowFlags.SetTemporalAA(false);
 	C->ShowFlags.SetAntiAliasing(false);

@@ -15,25 +15,39 @@ class UMaterialParameterCollection;
 class UTexture;
 class UTexture2D;
 
-// What the Unreal port draws the Web build's world with, and the per-frame
-// state the Web build hands its shaders. Every surface is unlit: its colour is
-// the Web build's world shader (Shaders/BackroomsWorld.ush), or raylib's
-// unlit shapes and billboards lit on the CPU (shared/port/draw.h), and the
-// post pass (Shaders/BackroomsPost.ush) replaces Unreal's tonemapper, or the
-// camcorder's tape look (Shaders/BackroomsTape.ush) does. The
-// editor builds the materials and imports the textures
-// (Content/Python/backrooms_world.py); until it has, Load says so and the
-// world is not drawn.
+// The materials the Unreal port draws the world with, and the per-frame
+// state its shaders read. Two looks (UBackroomsSettings::Look):
+//
+// - Unreal: the surfaces are lit materials (Shaders/BackroomsSurface.ush)
+//   that Unreal's lights light (ABackroomsLightsActor), with Unreal's
+//   tonemapper, exposure, bloom and Lumen.
+// - WebShader: every surface is unlit, its colour the Web build's world
+//   shader (Shaders/BackroomsWorld.ush), and the Web build's post pass
+//   (Shaders/BackroomsPost.ush) replaces Unreal's tonemapper.
+//
+// In both, raylib's shapes and billboards are unlit and lit on the CPU
+// (shared/port/draw.h), and on the death card the camcorder's tape look
+// (Shaders/BackroomsTape.ush) replaces the tonemapper. The editor builds the
+// materials and imports the textures (Content/Python/backrooms_world.py);
+// until it has, Load says so and the world is not drawn.
 UCLASS(Transient)
 class BACKROOMS_API UBackroomsRender : public UObject
 {
 	GENERATED_BODY()
 
 public:
+	// One unit of the Web shader's light in the Unreal look, in nits: the lit
+	// materials' glow (their Nits parameter) and the fog's colour. The Unreal
+	// look's exposure (UBackroomsSettings) shows this as a bright surface.
+	static constexpr float WebUnitNits = 160.0f;
+
 	// Loads the materials and textures and makes the instances. False, said
 	// once in the log, while the editor has not built them.
 	bool Load();
 	bool IsLoaded() const { return bLoaded; }
+	// The Unreal look: lit materials and Unreal's lights. False for the Web
+	// shader look, or when the lit materials have not been built.
+	bool IsLit() const { return bLit; }
 
 	// The level's surfaces on the chunk materials, the level's numbers (LEVELS)
 	// into the collection: Game::applyLevelLook.
@@ -70,9 +84,13 @@ public:
 	// tape look takes the post pass's place, as render.cpp's renderUI draws
 	// one or the other: frames off Reel on the death card.
 	void ShowPost(UWorld* Where, const CamPicture* Tape = nullptr, UTexture* Reel = nullptr);
-	// What every view of the world pins: exposure at 1, and none of Unreal's
-	// own grading, bloom or lighting. The post volume and the reel's capture.
+	// What every view of the world pins in the Web shader look: exposure at
+	// 1, and none of Unreal's own grading, bloom or lighting. The post volume
+	// and the reel's capture.
 	static void PinPost(FPostProcessSettings& S);
+	// The Unreal look's camera: Lumen, bounded auto exposure, bloom, ambient
+	// occlusion and a little grain. The post volume and the reel's capture.
+	static void LitPost(FPostProcessSettings& S);
 	// A box of the level's clear colour round Eye (Unreal space), behind
 	// everything: raylib clears its render target to that colour, which the
 	// camcorder's reel records where nothing is drawn (the Poolrooms' haze;
@@ -87,7 +105,13 @@ private:
 	UMaterialInstanceDynamic* MakeWorld(bool bBlend, UTexture2D* Tex0, UTexture2D* Tex1);
 	UTexture2D* Texture(const FString& Name) const;
 
+	// The Unreal look's per-frame camera: the fear and migraine colour split,
+	// the vignette, and the water's tint.
+	void FrameLitPost();
+
 	bool bLoaded = false;
+	bool bLit = false;
+	float PostFear = 0.0f, PostWater = 0.0f, PostMigraine = 0.0f, PostTime = 0.0f;
 	bool bTried = false;
 	int32 Level = -1;
 
@@ -97,6 +121,10 @@ private:
 	TObjectPtr<UMaterialInterface> WorldMasked;
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInterface> WorldBlend;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> LitMasked;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> LitBlend;
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInterface> ShapeOpaque;
 	UPROPERTY(Transient)
