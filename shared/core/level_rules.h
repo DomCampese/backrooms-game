@@ -48,10 +48,10 @@ constexpr int LEVEL_FUN = 3;
 // The level whose chunks World::generate fills with auditoriums.
 constexpr int THEATER = 4;
 
-// Where each level's exit door leads: Level 0, Level 1, the theater, the
+// Where each level's exit door leads: Level 0, the theater, Level 1, the
 // Poolrooms, LEVEL FUN, and back to Level 0.
-inline constexpr int EXIT_NEXT[NLEVELS] = { 1, THEATER, LEVEL_FUN, 0, 2 };
+inline constexpr int EXIT_NEXT[NLEVELS] = { THEATER, 2, LEVEL_FUN, 0, 1 };
 
 // How deep each level is, for the records' "deepest": the order the exits
 // reach them. The records file stores the level number, not this.
-inline constexpr int LEVEL_DEPTH[NLEVELS] = { 0, 1, 3, 4, 2 };
+inline constexpr int LEVEL_DEPTH[NLEVELS] = { 0, 2, 3, 4, 1 };

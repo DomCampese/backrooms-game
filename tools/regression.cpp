@@ -687,10 +687,10 @@ int main() {
     // step a body can take; every cell of it that is not a seat is reachable from
     // its back aisle; and its props mesh stays inside 16-bit indices.
     {
-        // Third: Level 1's exits lead here and its exits to the Poolrooms, and
-        // the records rank it between them.
-        CHECK(EXIT_NEXT[0]==1 && EXIT_NEXT[1]==THEATER && EXIT_NEXT[THEATER]==2 && EXIT_NEXT[LEVEL_FUN]==0);
-        CHECK(LEVEL_DEPTH[1]<LEVEL_DEPTH[THEATER] && LEVEL_DEPTH[THEATER]<LEVEL_DEPTH[2]);
+        // Second: Level 0's exits lead here and its exits to Level 1, and the
+        // records rank it just below Level 0.
+        CHECK(EXIT_NEXT[0]==THEATER && EXIT_NEXT[THEATER]==1 && EXIT_NEXT[LEVEL_FUN]==0);
+        CHECK(LEVEL_DEPTH[0]<LEVEL_DEPTH[THEATER] && LEVEL_DEPTH[THEATER]<LEVEL_DEPTH[1]);
         World w; w.seed=1337; w.level=THEATER; w.visit=0; w.wallH=LEVEL_RULES[THEATER].wallH; w.storeyH=0;
         int auds=0, lobbies=0;
         for (int cx=-3;cx<=3;++cx) for (int cz=-3;cz<=3;++cz) {
