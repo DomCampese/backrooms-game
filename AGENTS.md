@@ -44,8 +44,8 @@ messages to the user: short sentences, no jargon they would have to decode.
 
 # The theater (November 2026)
 
-Level 4 (`THEATER`, core/level_rules.h) is a cinema, and the second level
-you reach: Level 0's exits lead to it and its exits lead to Level 1. Three chunks in four are one
+Level 4 (`THEATER`, core/level_rules.h) is a cinema, and the third level
+you reach: Level 1's exits lead to it and its exits lead to the Poolrooms. Three chunks in four are one
 auditorium filling the room patch; the rest, and the spawn chunk, are lobbies
 with a concession counter (`PROP_CONCESSION`), columns, benches and plants.
 The hunter is a Smiler. It is not from the Backrooms wiki, so CREDITS.md has
