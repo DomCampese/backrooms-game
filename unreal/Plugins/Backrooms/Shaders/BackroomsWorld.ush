@@ -446,8 +446,8 @@ float4 BRWorldFragment(FBRUniforms U, float3 FragPos, float3 FragN, float2 FragU
 			// light panel (emissive, flickers)
 			float2 G = floor((FragPos.xz - U.LS * 0.5) / U.LS + 0.5);
 			float St = BRLightState(U, G, BRStoreyOffset(U.Storey + float(F.Rel)));
-			Col = float3(0.72, 0.70, 0.65) * BRRoomLight(U, F, Occ, FragPos, float3(0.0, -1.0, 0.0)) + U.LightCol * 5.2 * St;
-			Col *= 0.93 + 0.07 * sin(FragUV.x * 33.0) * sin(FragUV.y * 33.0);
+			float Lens = 0.93 + 0.07 * sin(FragUV.x * 33.0) * sin(FragUV.y * 33.0);
+			Col = float3(0.72, 0.70, 0.65) * BRRoomLight(U, F, Occ, FragPos, float3(0.0, -1.0, 0.0)) + U.LightCol * 5.2 * St * Lens;
 			F.LightLum = max(F.LightLum, St);
 		}
 		else if (FragC.a < 0.3)
