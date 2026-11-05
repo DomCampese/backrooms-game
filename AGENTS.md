@@ -45,7 +45,7 @@ messages to the user: short sentences, no jargon they would have to decode.
 # The theater (November 2026)
 
 Level 4 (`THEATER`, core/level_rules.h) is a cinema, and the second level
-you reach: Level 0's exits lead to it and its exits lead to Level 1. Three chunks in four are one
+you reach: Level 0's exits lead to it and its exits lead to the casino. Three chunks in four are one
 auditorium filling the room patch; the rest, and the spawn chunk, are lobbies
 with a concession counter (`PROP_CONCESSION`), columns, benches and plants.
 The hunter is a Smiler. It is not from the Backrooms wiki, so CREDITS.md has
@@ -1443,7 +1443,7 @@ build's, in `web/src/`.
 | `main.cpp` | `init()`, the `while (!WindowShouldClose())` loop, `shutdown()` |
 | `sim/` | game state and rules (`Sim`), stepped once a tick by `Sim::step` |
 | `sim/sim.cpp` | tick order, levels, descents, death and escape |
-| `sim/player.cpp`, `weapons.cpp`, `items.cpp`, `hunters.cpp`, `usher.cpp`, `place.cpp` | the player; held items; pickups, the deck and the use key; the hunter; the theater's Usher; blackouts, sanity, exits, the Manila Room |
+| `sim/player.cpp`, `weapons.cpp`, `items.cpp`, `hunters.cpp`, `usher.cpp`, `casino.cpp`, `place.cpp` | the player; held items; pickups, the deck and the use key; the hunter; the theater's Usher; the casino's slot machines; blackouts, sanity, exits, the Manila Room |
 | `sim/input_frame.h`, `audio_events.h` | what the platform tells the sim, and the sounds the sim requests |
 | `game.{h,cpp}` | the platform: window, assets, input into an `InputFrame`, chunk streaming, the occupancy grid; `Game::tick` |
 | `game_audio.{h,cpp}` | every `Sound`/`Music` handle and the synth; plays the sim's `AudioEvent`s in order |
@@ -1768,10 +1768,65 @@ In game, F3 shows the debug HUD. While it is up:
 | `N` | next level |
 | PageUp / PageDown | up or down a storey |
 
+# The casino (November 2026)
+
+Level 5 (`CASINO`, core/level_rules.h) is a gaming floor, and the third
+level you reach: the theater's exits lead to it and its exits lead to
+Level 1. The hunter is a Smiler. The casino is not from the Backrooms wiki,
+so CREDITS.md has no row for it.
+
+- **Every chunk's room patch is one gaming floor** (`furnishCasino`,
+  core/world.cpp). The patch is cleared inside its outer wall
+  (`clearPatch`, shared with the theater), which keeps the doors the room
+  pass cut in it. Banks of `PROP_SLOTS` stand in pairs of rows back to back
+  at chunk-local z = `CASINO_BANKS` and z + 1, split by the middle aisle at
+  x = `CASINO_AISLE`. In two chunks of three one bank is `PROP_CARD_TABLE`s
+  instead, staggered across its two rows. Columns may stand where the
+  middle aisle crosses the walkways, and one drink machine stands against
+  the north wall. The open plazas are off, as in the theater.
+- **A slot cell is two machines with one collision box** (`slotBox`, a
+  `turnedBox` from `SLOT_FRONT` to `SLOT_BACK`). Turn 0 faces -z with its
+  back on the +z edge, turn 2 the reverse, so the two rows of a bank meet
+  back to back. `seatBox` is now `turnedBox` with the seat depths; the
+  numbers are unchanged. Both props count as hide spots.
+- **A pull is decided in the sim** (`shared/sim/casino.cpp`). E within
+  `SLOT_REACH` of a slot cell's centre (`slotInReach`) costs `SLOT_COST` and
+  draws the prize from `slotRng` at once: a jackpot (`SLOT_JACKPOT`) one pull
+  in 16, two doubloons one in 5, a can one in 12, else nothing. The reels
+  then turn for `SLOT_SPIN` and the prize lands at the end. On average a
+  pull pays back 0.9 doubloons plus the cans; the regression checks that a
+  pull returns less than it costs.
+- **The machines are a noise source** (`loudestNoise`): `SLOT_NOISE` (16 m)
+  from the machine while the reels turn, and `SLOT_BELLS_NOISE` (40 m) for
+  `SLOT_BELLS` after a jackpot. A jackpot also calls `callHunter`, the step
+  the Usher's whistle and LEVEL FUN's music stop already took (spawn if
+  hidden, chase either way), now one function.
+- **`slotRng` is the casino's own stream**, reseeded in `applyLevel`, so a
+  pull does not shift `grng` and the golden trace is unchanged.
+- **The Sim field is `slotSpin`, not `slot`.** `slot` shadowed a local in
+  weapons.cpp, and the Unreal build compiles with `-Wshadow -Werror`
+  (tools/unreal-check.sh failed on it).
+- **The machines are plain boxes, handles included.** A chunk holds up to
+  120 machines. With round handles (two 16-sided `roundPart`s, 112 vertices
+  each) the worst chunk in the regression's 7x7 sample had 71,472 props
+  vertices, past the 16-bit index limit; with box handles it has 49,392.
+  The reels, the surround and the sign on top use vertex alpha 240, the
+  shader's backlit print, so the machines glow in a dark room.
+- **Floor doubloons are one cell in `CASINO_COIN_RATE` (60)**, about one
+  per 300 m2 in mapdump's 129-cell sample. At 18 it was one per 86 m2, 20
+  times Level 0's, and 12 doubloons buy the way out.
+- **New sounds, all synthesized in port/sounds.cpp**: `SlotSpin` (its
+  length is `Sim::SLOT_SPIN`), `SlotWin`, `Jackpot` and the distant
+  `FarJingle` (3 variants, `Distant::Jingle`). They are the last `Sfx`
+  values, so both builds load them with no platform code.
+- **New surfaces**: `casinocarpet` (medallions on navy, 0.5 m repeat) and
+  `casinowall` (gold flock damask on oxblood, no dado so it tiles at any
+  height). The ceiling is the theater's `cinemaceil`. The skirting is gilt.
+
 # Regression process
 
 Before pushing anything that touches rendering, the shader or world
-generation, run all five levels and the menu:
+generation, run all six levels and the menu:
 
 ```bash
 tools/sweep.sh

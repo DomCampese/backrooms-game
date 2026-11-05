@@ -44,6 +44,8 @@ Surface makePartyCeilSurface();      // LEVEL FUN =): black acoustic board on bl
 Surface makeCinemaCarpetSurface();   // the theater: dark carpet scattered with bright shapes
 Surface makeCinemaWallSurface();     // the theater: burgundy fabric over acoustic panels
 Surface makeCinemaCeilSurface();     // the theater: black acoustic board
+Surface makeCasinoCarpetSurface();   // the casino: red and gold medallions on navy
+Surface makeCasinoWallSurface();     // the casino: gold damask on oxblood above a dark dado
 
 // Every world surface, by slot (SurfSlot and LEVEL_SURFACES are port/levels.h's).
 Surface makeSurface(SurfSlot slot);

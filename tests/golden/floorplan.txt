@@ -4309,6 +4309,244 @@ cell 15,9 floor 0 y 0 ceiling 1 5 pool 0 pillar 0 N wall 1 0..5 buried 1 void 0 
 cells hash=1100ac09c8da2d5a plain=186
 ceiling 1280 -1184 .. 1312 -1152 y 5
 
+chunk L5 v0 s0 (0,0) floorplan: 0 risers, 0 lips, 1 ceiling rects, 0 soffits, 0 flights, 0 arches
+cell 0,6 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111 W wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,2 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,3 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,4 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,5 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,6 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,7 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,8 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,9 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,10 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,11 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,12 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,13 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 0 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 2,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 2,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 3,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 5 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 3,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 4,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 4,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 5,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 5,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 6,0 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 6,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 6,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111 W wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 6,15 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 7,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 7,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 8,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 8,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 9,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 9,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 0 void 0 floor 0 0 ceil 4 4 has 1111
+cell 10,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 10,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 11,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 11,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 12,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 12,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 13,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 13,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 4 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 4 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,2 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,3 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,4 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,5 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,6 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111 W wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,7 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,8 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,9 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,10 floor 0 y 0 ceiling 1 4 pool 0 pillar 1 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,11 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,12 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,13 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 15,6 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cells hash=22ebf02a99f4cf72 plain=201
+ceiling 0 0 .. 32 32 y 4
+
+chunk L5 v0 s0 (40,-37) floorplan: 0 risers, 0 lips, 1 ceiling rects, 0 soffits, 0 flights, 0 arches
+cell 0,9 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111 W wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,2 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,3 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,4 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,5 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,6 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,7 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,8 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,9 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,10 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,11 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,12 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,13 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 2,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 2,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 3,0 floor 0 y 0 ceiling 1 4 pool 0 pillar 1
+cell 3,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 3,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 4,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 4,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 5,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 5,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 6,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 5 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 6,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 7,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 7,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 8,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 8,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 9,0 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 9,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 9,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111 W wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 9,15 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 10,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 10,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 11,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 11,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 12,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 12,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 13,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 13,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,2 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,3 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,4 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,5 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,6 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,7 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,8 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,9 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111 W wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,10 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,11 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,12 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,13 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 15,9 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 15,12 floor 0 y 0 ceiling 1 4 pool 0 pillar 1
+cells hash=b5c76432bbff288b plain=199
+ceiling 1280 -1184 .. 1312 -1152 y 4
+
+chunk L5 v1 s0 (0,0) floorplan: 0 risers, 0 lips, 1 ceiling rects, 0 soffits, 0 flights, 0 arches
+cell 0,6 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 4 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111 W wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,2 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,3 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,4 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,5 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 0 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,6 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,7 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 0 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,8 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,9 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,10 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,11 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,12 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,13 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 0 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 2,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 2,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 3,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 3,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 4,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 4,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 5,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 5,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 6,0 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 6,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 6,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111 W wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 6,15 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 7,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 7,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 8,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 8,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 9,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 9,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 0 void 0 floor 0 0 ceil 4 4 has 1111
+cell 10,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 10,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 11,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 11,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 12,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 12,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 13,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 13,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 0 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,2 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,3 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 0 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,4 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,5 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,6 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,7 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,8 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,9 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,10 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,11 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,12 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,13 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 0 void 0 floor 0 0 ceil 4 4 has 1111
+cell 15,6 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cells hash=4646ef7f00260757 plain=201
+ceiling 0 0 .. 32 32 y 4
+
+chunk L5 v1 s0 (40,-37) floorplan: 0 risers, 0 lips, 1 ceiling rects, 0 soffits, 0 flights, 0 arches
+cell 0,9 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111 W wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,2 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,3 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,4 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,5 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,6 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,7 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,8 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 0 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,9 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,10 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 0 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,11 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,12 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,13 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 1,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 1 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 2,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 2,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 3,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 3,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 4,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 4,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 5,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 5,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 6,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 6,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 7,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 7,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 8,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 8,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 9,0 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 9,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 9,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111 W wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 9,15 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 10,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 10,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 11,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 11,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 12,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 12,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 13,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 4 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 13,14 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,1 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 0 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,2 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,3 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,4 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,5 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,6 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,7 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,8 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,9 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 2 void 0 floor 0 0 ceil 4 4 has 1111 W wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,10 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,11 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 4 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,12 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 1 0..4 buried 0 void 0 floor 0 0 ceil 4 4 has 1111
+cell 14,13 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 W wall 4 0..4 buried 1 void 0 floor 0 0 ceil 4 4 has 1111
+cell 15,9 floor 0 y 0 ceiling 1 4 pool 0 pillar 0 N wall 1 0..4 buried 3 void 0 floor 0 0 ceil 4 4 has 1111
+cells hash=080c98ae173cd2f6 plain=201
+ceiling 1280 -1184 .. 1312 -1152 y 4
+
 chunk L0 v1 s0 (1,0) floorplan: 0 risers, 0 lips, 1 ceiling rects, 0 soffits, 0 flights, 0 arches
 cell 0,6 floor 0 y 0 ceiling 1 3 pool 0 pillar 0 N wall 1 0..3 buried 1 void 0 floor 0 0 ceil 3 3 has 1111
 cell 1,1 floor 0 y 0 ceiling 1 3 pool 0 pillar 0 N wall 1 0..3 buried 2 void 0 floor 0 0 ceil 3 3 has 1111 W wall 4 0..3 buried 2 void 0 floor 0 0 ceil 3 3 has 1111

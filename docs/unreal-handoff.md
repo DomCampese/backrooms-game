@@ -326,6 +326,16 @@ off the Mac. In order:
     knocks on it three or four times, opens it and walks through. No Unreal code changed;
     the chunk actors rebuild from `staleChunks`. If E does nothing, check the
     Use action's binding in Project Settings > Game > Backrooms.
+14. **The casino** (5 November 2026), the third level: the theater's exits
+    lead to it. `LEVEL=5 make unreal-play` goes straight there. The editor
+    must import two new surfaces first (`casinocarpet`, `casinowall`);
+    `make unreal-play` rebuilds the materials when the surfaces change. One
+    Unreal file changed: `Shared/SimCasino.cpp` compiles
+    `shared/sim/casino.cpp`. At spawn you stand in the middle aisle between
+    banks of lit slot machines. Pick up a doubloon, face a machine and press
+    E: "E · pull the handle · one doubloon" shows first, the reels whir for
+    1.6 s, and the prize line shows. No sound points at `SFX_COUNT` in the
+    mixer; grey walls or carpet point at the surface import.
 
 A session on the Mac itself (`claude remote-control` in the repository) could
 build, run the tests and read the log directly; from the cloud each Unreal

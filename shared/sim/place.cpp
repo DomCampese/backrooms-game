@@ -4,10 +4,10 @@
 #include "sim.h"
 #include <cmath>
 
-// Full to empty in about 9 / 7.5 / 6.5 / 4 / 5.3 minutes, standing in the light
-// with nothing hunting.
+// Full to empty in about 9 / 7.5 / 6.5 / 4 / 5.3 / 6 minutes, standing in the
+// light with nothing hunting.
 float Sim::sanityDrain(int lv) {
-    static const float R[NLEVELS] = { 1.0f / 540, 1.0f / 450, 1.0f / 390, 1.0f / 240, 1.0f / 320 };
+    static const float R[NLEVELS] = { 1.0f / 540, 1.0f / 450, 1.0f / 390, 1.0f / 240, 1.0f / 320, 1.0f / 360 };
     return R[(lv < 0 || lv >= NLEVELS) ? 0 : lv];
 }
 
@@ -273,7 +273,7 @@ void Sim::updateDistant(double now) {
     // above happen either way, so the sequence does not depend on them.
     if (inMenu || deathT > 0 || inManila) return;
     const Sfx sfx = kind == Distant::Door ? Sfx::FarDoor : kind == Distant::Clang ? Sfx::FarClang
-                  : kind == Distant::Pop ? Sfx::FarPop : Sfx::FarBoom;
+                  : kind == Distant::Pop ? Sfx::FarPop : kind == Distant::Boom ? Sfx::FarBoom : Sfx::FarJingle;
     play(sfx, variant)
         .atPan(clampf(portableCos(bearing) * r2x + portableSin(bearing) * r2z, -1.0f, 1.0f))
         .atPitch(rate)
@@ -298,10 +298,5 @@ void Sim::updatePartyMusic(float dt) {
     if (portableHypot(velx, velz) <= MUSIC_STILL) return;
     music.heard = true; music.heardT = 2.5f;
     play(Sfx::Scare).atPitch(0.8f).atVolume(0.7f);
-    if (ent.st == EState::Hidden) spawnHunter();
-    if (ent.st == EState::Stalk || ent.st == EState::Chase) {
-        ent.st = EState::Chase;
-        ent.gaze = 0; ent.life = 0; ent.repathT = 0;
-        hunterNotice(px, pz);
-    }
+    callHunter();
 }

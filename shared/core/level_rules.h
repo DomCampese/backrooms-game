@@ -9,8 +9,9 @@
 enum class Footing : unsigned char { Carpet, Concrete, Tile, Wood };
 
 // Which distant one-shot a level plays (Sim::updateDistant): a door closing,
-// a metal clang, a balloon pop, a film's low boom through a wall, or none.
-enum class Distant : unsigned char { None, Door, Clang, Pop, Boom };
+// a metal clang, a balloon pop, a film's low boom through a wall, a slot
+// machine paying out somewhere on the floor, or none.
+enum class Distant : unsigned char { None, Door, Clang, Pop, Boom, Jingle };
 
 struct LevelRules {
     float wallH;        // floor to ceiling, metres
@@ -28,7 +29,7 @@ struct LevelRules {
     Distant distant;
 };
 
-constexpr int NLEVELS = 5;
+constexpr int NLEVELS = 6;
 
 // ls must match the panel mesher, the shader's uLS and the CPU light mirror,
 // which all read it from here. Level 1 stays at 12 m: at 8 m nearly all nine
@@ -41,17 +42,20 @@ inline constexpr LevelRules LEVEL_RULES[NLEVELS] = {
     { 7.5f,  8.0f, 0.0f,  "THE POOLROOMS",            0.06f, 0.0f,  0.07f, Footing::Tile,     Distant::None },
     { 3.0f,  8.0f, 0.0f,  "LEVEL FUN =)",             0.10f, 0.0f,  0.07f, Footing::Carpet,   Distant::Pop },
     { 5.0f,  8.0f, 0.0f,  "THE THEATER",              0.25f, 0.30f, 0.10f, Footing::Carpet,   Distant::Boom },
+    { 4.0f,  8.0f, 0.0f,  "THE CASINO",               0.12f, 0.20f, 0.05f, Footing::Carpet,   Distant::Jingle },
 };
 
 // The party level, with balloons, confetti and the Partygoer.
 constexpr int LEVEL_FUN = 3;
 // The level whose chunks World::generate fills with auditoriums.
 constexpr int THEATER = 4;
+// The level whose chunks World::generate fills with slot machines and card tables.
+constexpr int CASINO = 5;
 
-// Where each level's exit door leads: Level 0, the theater, Level 1, the
-// Poolrooms, LEVEL FUN, and back to Level 0.
-inline constexpr int EXIT_NEXT[NLEVELS] = { THEATER, 2, LEVEL_FUN, 0, 1 };
+// Where each level's exit door leads: Level 0, the theater, the casino,
+// Level 1, the Poolrooms, LEVEL FUN, and back to Level 0.
+inline constexpr int EXIT_NEXT[NLEVELS] = { THEATER, 2, LEVEL_FUN, 0, CASINO, 1 };
 
 // How deep each level is, for the records' "deepest": the order the exits
 // reach them. The records file stores the level number, not this.
-inline constexpr int LEVEL_DEPTH[NLEVELS] = { 0, 2, 3, 4, 1 };
+inline constexpr int LEVEL_DEPTH[NLEVELS] = { 0, 3, 4, 5, 1, 2 };

@@ -3,6 +3,7 @@
 #include "../core/hash.h"
 #include "../core/level_rules.h"
 #include "../core/vec.h"
+#include "../sim/sim.h"
 #include <cmath>
 #include <utility>
 
@@ -931,6 +932,121 @@ Pcm tapeVoicePcm() {
     return d;
 }
 
+// A slot machine's beep: a square wave softened by its third harmonic only,
+// as a cheap speaker plays it.
+static float slotBeep(float hz, float t) {
+    return sinf(TAU * hz * t) + 0.33f * sinf(3.0f * TAU * hz * t);
+}
+
+// A coin landing in a metal tray: three inharmonic partials, 2.6-5.6 kHz,
+// gone in about 60 ms.
+static float coinClink(float hz, float t) {
+    if (t < 0) return 0;
+    float env = (1.0f - expf(-t * 4000.0f)) * expf(-t * 70.0f);
+    return env * (sinf(TAU * hz * t) + 0.6f * sinf(TAU * hz * 1.47f * t) + 0.35f * sinf(TAU * hz * 2.13f * t));
+}
+
+// SlotSpin: Sim::SLOT_SPIN s. The reels tick past the window (clicks at 24 Hz) under a
+// quiet looping arpeggio, and stop one at a time with a clunk at 0.85, 1.15
+// and 1.45 s; each stop takes a third of the ticking away.
+Pcm makeSlotSpin()
+{
+    Rng r(0x5107ULL);
+    std::vector<float> d((int)(Sim::SLOT_SPIN * SAMPLE_RATE));
+    const float stops[3] = { 0.85f, 1.15f, 1.45f };
+    const float notes[4] = { 523.25f, 659.25f, 783.99f, 1046.5f };
+    float hp = 0, prev = 0;
+    for (int i = 0; i < (int)d.size(); i++) {
+        float t = (float)i / SAMPLE_RATE;
+        float x = r.f01() * 2.0f - 1.0f;
+        hp = 0.6f * (hp + x - prev); prev = x;
+        int turning = 0;
+        float s = 0;
+        for (float st : stops) {
+            if (t < st) turning++;
+            float u = t - st;
+            if (u > 0) s += (1.0f - expf(-u * 900.0f)) * expf(-u * 40.0f) * (sinf(TAU * 140.0f * u) * 0.8f + hp * 0.4f);
+        }
+        float tick = fmodf(t * 24.0f, 1.0f);
+        s += hp * expf(-tick * 30.0f) * 0.35f * turning / 3.0f;
+        float nt = t * 12.0f;
+        float note = notes[(int)nt % 4], nu = (nt - floorf(nt)) / 12.0f;
+        s += slotBeep(note, nu) * expf(-nu * 30.0f) * 0.10f * (turning > 0 ? 1.0f : 0.0f);
+        d[i] = s;
+    }
+    return toPcm(d, 0.7f);
+}
+
+// SlotWin: 1.3 s. A rising run of six beeps an octave and a fifth wide, and
+// coins dropping into the tray at about 16 a second for the first 0.9 s.
+Pcm makeSlotWin()
+{
+    Rng r(0x5108ULL);
+    std::vector<float> d((int)(1.3f * SAMPLE_RATE));
+    const float run[6] = { 523.25f, 659.25f, 783.99f, 1046.5f, 1318.5f, 1568.0f };
+    float coinT[16], coinHz[16];
+    for (int c = 0; c < 16; c++) { coinT[c] = c * 0.056f + r.f01() * 0.03f; coinHz[c] = 2600.0f + r.f01() * 3000.0f; }
+    for (int i = 0; i < (int)d.size(); i++) {
+        float t = (float)i / SAMPLE_RATE, s = 0;
+        for (int k = 0; k < 6; k++) {
+            float u = t - k * 0.09f;
+            if (u > 0) s += slotBeep(run[k], u) * (1.0f - expf(-u * 200.0f)) * expf(-u * (k == 5 ? 4.0f : 14.0f)) * 0.22f;
+        }
+        for (int c = 0; c < 16; c++) s += coinClink(coinHz[c], t - coinT[c]) * 0.30f;
+        d[i] = s;
+    }
+    return toPcm(d, 0.8f);
+}
+
+// Jackpot: 3.2 s. An electric bell (partials at 1, 2.76 and 5.4 times
+// 1.1 kHz) struck 18 times a second, a fanfare of beeps over it, and coins
+// pouring for the whole clip.
+Pcm makeJackpot()
+{
+    Rng r(0x5109ULL);
+    std::vector<float> d((int)(3.2f * SAMPLE_RATE));
+    const float fan[4] = { 783.99f, 1046.5f, 1318.5f, 1568.0f };
+    const int NCOIN = 60;
+    float coinT[NCOIN], coinHz[NCOIN];
+    for (int c = 0; c < NCOIN; c++) { coinT[c] = r.f01() * 3.0f; coinHz[c] = 2400.0f + r.f01() * 3400.0f; }
+    for (int i = 0; i < (int)d.size(); i++) {
+        float t = (float)i / SAMPLE_RATE, s = 0;
+        float strike = fmodf(t * 18.0f, 1.0f) / 18.0f;
+        float bell = sinf(TAU * 1100.0f * t) + 0.5f * sinf(TAU * 3036.0f * t) + 0.25f * sinf(TAU * 5940.0f * t);
+        s += bell * (0.35f + 0.65f * expf(-strike * 60.0f)) * fminf(1.0f, (3.2f - t) * 3.0f) * 0.30f;
+        float nt = t * 8.0f;
+        float nu = (nt - floorf(nt)) / 8.0f;
+        s += slotBeep(fan[(int)nt % 4], nu) * expf(-nu * 18.0f) * 0.18f;
+        for (int c = 0; c < NCOIN; c++) s += coinClink(coinHz[c], t - coinT[c]) * 0.22f;
+        d[i] = s;
+    }
+    return toPcm(d, 0.9f);
+}
+
+// Jingle: a slot machine paying out somewhere across the floor. Each variant
+// is a short beep tune with a few coins, through farAway.
+Pcm makeFarJingle(int variant)
+{
+    Rng r(0xF1A6ULL + (uint64_t)variant * 211u);
+    static const float TUNES[3][5] = {
+        { 523.25f, 659.25f, 783.99f, 1046.5f, 783.99f },
+        { 659.25f, 587.33f, 659.25f, 783.99f, 1046.5f },
+        { 392.0f,  523.25f, 392.0f,  523.25f, 659.25f },
+    };
+    std::vector<float> d((int)(1.0f * SAMPLE_RATE));
+    float coinT[6], coinHz[6];
+    for (int c = 0; c < 6; c++) { coinT[c] = 0.5f + r.f01() * 0.4f; coinHz[c] = 2600.0f + r.f01() * 2600.0f; }
+    for (int i = 0; i < (int)d.size(); i++) {
+        float t = (float)i / SAMPLE_RATE, s = 0;
+        int k = (int)(t / 0.11f);
+        float u = t - k * 0.11f;
+        if (k < 5) s += slotBeep(TUNES[variant % 3][k], u) * (1.0f - expf(-u * 300.0f)) * expf(-u * 12.0f) * 0.5f;
+        for (int c = 0; c < 6; c++) s += coinClink(coinHz[c], t - coinT[c]) * 0.3f;
+        d[i] = s;
+    }
+    return farAway(d, 1400.0f, 1.8f, 0.65f, 0.30f);
+}
+
 ClipSpec clipSpec(Sfx sfx) {
     switch (sfx) {
     case Sfx::Step: case Sfx::SwimStroke:
@@ -938,7 +1054,8 @@ ClipSpec clipSpec(Sfx sfx) {
     case Sfx::StepConcrete: case Sfx::StepTile: case Sfx::StepWood: return { 4, 1.0f, 1.0f };
     case Sfx::SplashIn: case Sfx::SplashOut:
     case Sfx::FarDoor: case Sfx::FarClang: case Sfx::FarPop:
-    case Sfx::FarBoom: case Sfx::DoorShut: case Sfx::DoorKnock: case Sfx::Choke: return { 3, 1.0f, 1.0f };
+    case Sfx::FarBoom: case Sfx::FarJingle:
+    case Sfx::DoorShut: case Sfx::DoorKnock: case Sfx::Choke: return { 3, 1.0f, 1.0f };
     case Sfx::Hit:       return { 1, 1.7f, 0.40f };
     case Sfx::Kill:      return { 1, 0.55f, 0.80f };
     case Sfx::Heartbeat: return { 1, 1.0f, 0.55f };
@@ -947,6 +1064,9 @@ ClipSpec clipSpec(Sfx sfx) {
     case Sfx::Groan:     return { 1, 1.0f, 0.85f };
     case Sfx::Hurt:      return { 1, 1.0f, 0.8f };
     case Sfx::Vend:      return { 1, 1.0f, 0.75f };
+    case Sfx::SlotSpin:  return { 1, 1.0f, 0.55f };
+    case Sfx::SlotWin:   return { 1, 1.0f, 0.65f };
+    case Sfx::Jackpot:   return { 1, 1.0f, 0.85f };
     default:             return { 1, 1.0f, 1.0f };
     }
 }
@@ -992,6 +1112,10 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::Whistle:        return makeWhistle();
     case Sfx::Gasp:           return makeGasp();
     case Sfx::Choke:          return makeChoke(variant);
+    case Sfx::FarJingle:      return makeFarJingle(variant);
+    case Sfx::SlotSpin:       return makeSlotSpin();
+    case Sfx::SlotWin:        return makeSlotWin();
+    case Sfx::Jackpot:        return makeJackpot();
     }
     return {};
 }

@@ -687,10 +687,10 @@ int main() {
     // step a body can take; every cell of it that is not a seat is reachable from
     // its back aisle; and its props mesh stays inside 16-bit indices.
     {
-        // Second: Level 0's exits lead here and its exits to Level 1, and the
+        // Second: Level 0's exits lead here and its exits to the casino, and the
         // records rank it just below Level 0.
-        CHECK(EXIT_NEXT[0]==THEATER && EXIT_NEXT[THEATER]==1 && EXIT_NEXT[LEVEL_FUN]==0);
-        CHECK(LEVEL_DEPTH[0]<LEVEL_DEPTH[THEATER] && LEVEL_DEPTH[THEATER]<LEVEL_DEPTH[1]);
+        CHECK(EXIT_NEXT[0]==THEATER && EXIT_NEXT[THEATER]==CASINO && EXIT_NEXT[LEVEL_FUN]==0);
+        CHECK(LEVEL_DEPTH[0]<LEVEL_DEPTH[THEATER] && LEVEL_DEPTH[THEATER]<LEVEL_DEPTH[CASINO]);
         World w; w.seed=1337; w.level=THEATER; w.visit=0; w.wallH=LEVEL_RULES[THEATER].wallH; w.storeyH=0;
         int auds=0, lobbies=0;
         for (int cx=-3;cx<=3;++cx) for (int cz=-3;cz<=3;++cz) {
@@ -873,6 +873,103 @@ int main() {
         }
     }
     printf("PASS theater auditoriums, backstage, lobbies, snack machines, the Usher, seat collision and hiding\n");
+
+    // ---- the casino. Slot machines stand back to back in banks, every floor
+    // cell of a chunk is reachable, a body is stopped by a machine and walks
+    // in front of it, a pull costs a doubloon and makes noise, and a jackpot
+    // calls the hunter.
+    {
+        // Third: the theater's exits lead here and its exits to Level 1.
+        CHECK(EXIT_NEXT[THEATER]==CASINO && EXIT_NEXT[CASINO]==1);
+        CHECK(LEVEL_DEPTH[THEATER]<LEVEL_DEPTH[CASINO] && LEVEL_DEPTH[CASINO]<LEVEL_DEPTH[1]);
+        // The house wins: a pull returns less than it costs, before the cans.
+        CHECK(Sim::SLOT_JACKPOT*Sim::SLOT_JACKPOT_ODDS+Sim::SLOT_SMALL*Sim::SLOT_SMALL_ODDS<Sim::SLOT_COST);
+        World w; w.seed=1337; w.level=CASINO; w.visit=0; w.wallH=LEVEL_RULES[CASINO].wallH; w.storeyH=0;
+        int slots=0, tables=0;
+        for (int cx=-3;cx<=3;++cx) for (int cz=-3;cz<=3;++cz) {
+            ChunkData &d=w.data(cx,cz);
+            for (int x=0;x<CCELLS;++x) for (int z=0;z<CCELLS;++z) {
+                if (d.prop[x][z]==PROP_CARD_TABLE) tables++;
+                if (d.prop[x][z]!=PROP_SLOTS) continue;
+                slots++;
+                CHECK(x!=CASINO_AISLE);
+                // the partner behind it, facing the other way
+                const int r=d.propRot[x][z]&3;
+                CHECK(r==0 || r==2);
+                const int bz=r==0 ? z+1 : z-1;
+                CHECK(bz>=0 && bz<CCELLS && d.prop[x][bz]==PROP_SLOTS && (d.propRot[x][bz]&3)==(r^2));
+            }
+            // From the patch's corner, within the chunk: every floor cell that is
+            // not a prop or a column.
+            const int gx0=cx*CCELLS, gz0=cz*CCELLS;
+            bool seen[CCELLS][CCELLS]={};
+            int qx[CCELLS*CCELLS],qz[CCELLS*CCELLS],head=0,tail=0;
+            qx[tail]=AUD_LO; qz[tail]=AUD_LO; tail++; seen[AUD_LO][AUD_LO]=true;
+            while (head<tail) {
+                int x=qx[head], z=qz[head]; head++;
+                const int D[4][2]={{1,0},{-1,0},{0,1},{0,-1}};
+                for (auto &dd : D) {
+                    int nx=x+dd[0], nz=z+dd[1];
+                    if (nx<0||nz<0||nx>=CCELLS||nz>=CCELLS||seen[nx][nz]) continue;
+                    if (!w.canStep(gx0+x,gz0+z,gx0+nx,gz0+nz)) continue;
+                    seen[nx][nz]=true; qx[tail]=nx; qz[tail]=nz; tail++;
+                }
+            }
+            for (int x=AUD_LO;x<AUD_LO+AUD_N;++x) for (int z=AUD_LO;z<AUD_LO+AUD_N;++z)
+                CHECK(seen[x][z]==(d.prop[x][z]==PROP_NONE && !d.pillar[x][z]));
+            ChunkGeometry geo; bakeChunkGeometry(w,cx,cz,geo);
+            for (int sl=0;sl<MESH_COUNT;++sl) CHECK(geo.parts[sl].v.size()/3<=65536);
+        }
+        CHECK(slots>500 && tables>0);
+        // A body in front of a machine stands free; one that walks into it stops
+        // its radius short of the machine's front.
+        {
+            const int x=AUD_LO+1, z=CASINO_BANKS[0];
+            ChunkData &d=w.data(0,0);
+            CHECK(d.prop[x][z]==PROP_SLOTS && (d.propRot[x][z]&3)==0);   // faces -z
+            float fy=w.floorY(x,z);
+            float lx=x*CELL+1.0f, lz=z*CELL+0.45f;
+            w.collideCircle(lx,lz,0.34f,fy);
+            CHECK(fabsf(lx-(x*CELL+1.0f))<1e-4f && fabsf(lz-(z*CELL+0.45f))<1e-4f);
+            float sx=x*CELL+1.0f, sz=z*CELL+1.3f;
+            w.collideCircle(sx,sz,0.34f,fy);
+            CHECK(fabsf(sz-(z*CELL+SLOT_FRONT-0.34f))<1e-3f && fabsf(sx-(x*CELL+1.0f))<1e-4f);
+        }
+        // The use key on a slot machine: no doubloon, no spin; with one, the reels
+        // turn for SLOT_SPIN s, the hunter can hear them, and the prize lands.
+        {
+            sim.applyLevel(CASINO,GetTime());
+            const int x=AUD_LO+1, z=CASINO_BANKS[0];
+            CHECK(sim.world.propAt(x,z)==PROP_SLOTS && sim.hideSpotAt(x,z));
+            sim.px=x*CELL+1.0f; sim.pz=z*CELL+0.3f; sim.velx=sim.velz=0; sim.sprinting=false; sim.crouchCur=0;
+            sim.ent.st=EState::Hidden; sim.ent.nextSpawn=GetTime()+600;
+            int a=0,b=0;
+            CHECK(sim.slotInReach(a,b) && a==x && b==z);
+            sim.coins=0; sim.pullSlot(a,b);
+            CHECK(sim.slotSpin.t==0 && sim.coins==0);
+            sim.coins=1; sim.pullSlot(a,b);
+            CHECK(sim.slotSpin.t==Sim::SLOT_SPIN && sim.coins==0);
+            sim.pullSlot(a,b);                       // the reels are still turning
+            CHECK(sim.coins==0);
+            float nx,nz;
+            CHECK(sim.loudestNoise(nx,nz)>=Sim::SLOT_NOISE && nx==x*CELL+1.0f && nz==z*CELL+1.0f);
+            sim.slotSpin.prize=Sim::SlotPrize::Small;
+            for (int i=0;i<60;++i) sim.updateSlots(1.0f/30);
+            CHECK(sim.slotSpin.t==0 && sim.coins==Sim::SLOT_SMALL && sim.ent.st==EState::Hidden);
+            // A jackpot: eight doubloons, bells heard SLOT_BELLS_NOISE m away, and
+            // the hunter on his way.
+            sim.coins=1; sim.pullSlot(a,b);
+            sim.slotSpin.prize=Sim::SlotPrize::Jackpot;
+            for (int i=0;i<60;++i) sim.updateSlots(1.0f/30);
+            CHECK(sim.coins==Sim::SLOT_JACKPOT && sim.slotSpin.bellsT>0);
+            CHECK(sim.loudestNoise(nx,nz)>=Sim::SLOT_BELLS_NOISE);
+            CHECK(sim.ent.st==EState::Stalk || sim.ent.st==EState::Chase);
+            sim.coins=0; sim.slotSpin=Sim::SlotSpin{}; sim.ent.st=EState::Hidden;
+            sim.applyLevel(0,GetTime());
+            CHECK(!sim.slotInReach(a,b));
+        }
+    }
+    printf("PASS casino banks, reachability, slot collision, the slot machines' pull, noise and jackpot\n");
 
     // ---- doors. The use key shuts a doorway the player faces; a shut door
     // blocks bodies, the default router, sight and light; the hunter's router

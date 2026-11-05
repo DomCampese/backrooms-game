@@ -401,6 +401,9 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
     if (sim.doorReach.ok) {   // the doorway the use key would shut or open
         const char *verb = sim.doorReach.shut ? "open the door" : "shut the door";
         textC(fmt("%s · %s", in.touch ? "USE" : "E", verb), sw / 2, sh / 2 + hud(46), hud(14), { 200, 190, 160, 150 });
+    } else if (sim.slotNear) {   // a slot machine the use key would play
+        textC(fmt("%s · pull the handle · one doubloon", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14),
+              { 220, 190, 120, 160 });
     }
     if (sim.paused) {
         rect(0, 0, sw, sh, fade(BLACK_RGBA, 0.55f));

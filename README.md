@@ -200,14 +200,14 @@ and replays are unchanged.
 
 ## The levels
 
-Five procedurally generated levels, each with its own palette, lighting,
+Six procedurally generated levels, each with its own palette, lighting,
 sounds and hunter. Exits lead to the next level.
 
 | | |
 |---|---|
 | ![Level 0](docs/levels/level_0.png) **LEVEL 0 · THRESHOLD**: empty rooms, yellow chevron wallpaper, damp carpet, an uneven grid of ceiling lights that hums, stairs up to more floors like this one, and railed openings down to others. The exits are walls you walk through. The hunter is Pirate Clark. | ![Level 1](docs/levels/level_1.png) **LEVEL 1 · HABITABLE ZONE**: a concrete warehouse with dim tube lights, many of them dead, low fog on the floor, exposed rebar, supply crates that move during blackouts, and exit doors marked with symbols. The hunter is a Smiler. |
 | ![The Poolrooms](docs/levels/level_2.png) **THE POOLROOMS**: white tile and water: colonnaded halls, flooded tunnels, staircases down into deep water, and windows of white light. No hunter and no blackouts, but you can drown, and doubloons lie on the floor of the deep water. | ![Level Fun](docs/levels/level_3.png) **LEVEL FUN =)**: red carpet, a black ceiling, bunting, balloons and party tables. The hunter is the Partygoer. Every 20-40 s the music stops for 6-9 s. Stand still until it starts again: if you move once the first 0.8 s are up, the Partygoer hears you and comes for you. While the music plays it covers your footsteps, so the Partygoer hears them at 60% of the usual distance. |
-| ![The Theater](docs/levels/level_4.png) **THE THEATER**: a cinema that does not end. Lobbies are two halls with film posters, a concession counter with a roped queue, and drink and snack machines (a snack costs two doubloons and heals you). Dark auditoriums have stepped rows of red seats facing a screen that is still showing a film; the screen is the only light in the room. Slip past either end of the screen to reach backstage, where a tape and loose doubloons lie among the cartons. The Usher, a faceless figure in a burgundy uniform, walks the aisles with a torch: if its beam holds you, it whistles and the Smiler comes running. Crouch still between the rows to hide from both. It is the second level: Level 0's exits lead here. |
+| ![The Theater](docs/levels/level_4.png) **THE THEATER**: a cinema that does not end. Lobbies are two halls with film posters, a concession counter with a roped queue, and drink and snack machines (a snack costs two doubloons and heals you). Dark auditoriums have stepped rows of red seats facing a screen that is still showing a film; the screen is the only light in the room. Slip past either end of the screen to reach backstage, where a tape and loose doubloons lie among the cartons. The Usher, a faceless figure in a burgundy uniform, walks the aisles with a torch: if its beam holds you, it whistles and the Smiler comes running. Crouch still between the rows to hide from both. It is the second level: Level 0's exits lead here. | ![The Casino](docs/levels/level_5.png) **THE CASINO**: a gaming floor that does not end. Gold damask walls, busy carpet, banks of lit slot machines back to back, and card tables with the chips still on them. A slot machine takes one doubloon a pull: it can pay two doubloons, a can of almond water, or an eight-doubloon jackpot, and on average it pays back a little less than you put in. The reels are loud while they turn, and the hunter can hear them. A jackpot rings bells that carry 40 m and bring the Smiler straight to you. Crouch beside a bank of machines to hide. It is the third level: the theater's exits lead here, and its exits lead to Level 1. |
 
 All hunters use the same rules: look at one for about 1.6 s, or let it get
 within 8 m of you in view, and it chases you.
@@ -415,7 +415,9 @@ AGENTS.md has the module map file by file.
 - **Escaping.** Hunters drop doubloons when you put them down. With 12
   doubloons, exit doors turn green, and walking through one ends the
   run as an escape, which is timed and recorded. Doubloons also buy almond
-  water from vending machines, so spending them delays escaping.
+  water from vending machines, so spending them delays escaping. In the
+  casino you can gamble them on the slot machines: a jackpot gets you most
+  of the way out, but the bells bring the hunter.
 
   <p align="center"><img src="docs/escape_door.png" width="420" alt="A green exit door"> <img src="docs/escape_win.png" width="420" alt="The escape screen"></p>
 - **LEVEL FUN details.** Red carpet with confetti in it, a black ceiling,
@@ -500,7 +502,7 @@ The Poolrooms and Manila Room remain safe.
 | 3 | drink almond water |
 | 4 | tape player (click to play a tape; click again to set it down running) |
 | M | chalk a directional floor arrow |
-| E | shut or open a door; unlock a locked door; buy from a vending machine; pick up the tape player; read the Manila Room's notes; open a crate |
+| E | shut or open a door; unlock a locked door; buy from a vending machine; pull a slot machine's handle; pick up the tape player; read the Manila Room's notes; open a crate |
 | F11 | borderless fullscreen |
 | P | pause |
 | ESC / click | release / capture mouse |

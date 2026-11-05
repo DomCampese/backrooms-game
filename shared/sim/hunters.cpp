@@ -274,6 +274,8 @@ float Sim::loudestNoise(float &x, float &z) const {
         z = deck.carried ? pz : deck.z;
     }
     if (doorNoiseT > 0 && DOOR_NOISE > noise) { noise = DOOR_NOISE; x = px; z = pz; }   // a door shut or opened
+    if (slotSpin.t > 0 && SLOT_NOISE > noise) { noise = SLOT_NOISE; x = slotSpin.x; z = slotSpin.z; }   // reels turning
+    if (slotSpin.bellsT > 0 && SLOT_BELLS_NOISE > noise) { noise = SLOT_BELLS_NOISE; x = slotSpin.x; z = slotSpin.z; }
     if (muzzleT > 0 || gunCd > SHOT_INTERVAL - 0.07f) { noise = 45.0f; x = px; z = pz; }   // a shot
     bool justStruck = false;   // a flare's strike, whichever flare
     for (const FlareProj &f : litFlares) if (f.active && f.burn > FLAREBURN - 0.6f) justStruck = true;

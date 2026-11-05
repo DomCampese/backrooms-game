@@ -960,6 +960,74 @@ Surface makeCinemaCeilSurface() {
     return boardCeiling(512, 4, 2.0f, 20, 18, 18, 26, 24, 24, 120, 0xC1C0u, 17.0f);
 }
 
+// Casino carpet: a 0.5 m grid of medallions on navy. Each is a gold
+// eight-petal flower inside a red ring, and teal scrolls run between them
+// along both axes. Busy on purpose, as casino carpet is.
+Surface makeCasinoCarpetSurface() {
+    const int N = 768, REP = 4, CP = N / REP;
+    Canvas c(N, N, 2.0f, 2.0f);
+    for (int y = 0; y < N; y++) for (int x = 0; x < N; x++) {
+        int i = y * N + x;
+        float fx = (float)x, fy = (float)y;
+        float u = fmodf(x + 0.5f, (float)CP) - CP * 0.5f, v = fmodf(y + 0.5f, (float)CP) - CP * 0.5f;
+        float rad = sqrtf(u * u + v * v), ang = atan2f(v, u);
+        float r = 20, g = 24, b = 52;
+        // teal scrolls along the cell edges, between the medallions
+        float su = fabsf(fabsf(u) - CP * 0.5f), sv = fabsf(fabsf(v) - CP * 0.5f);
+        float clear = sstep(62.0f, 70.0f, rad);   // none over the medallion
+        float scrollU = sstep(3.0f, 1.6f, fabsf(sv - 9.0f * sinf(u * 0.11f) - 2.0f)) * clear;
+        float scrollV = sstep(3.0f, 1.6f, fabsf(su - 9.0f * sinf(v * 0.11f) - 2.0f)) * clear;
+        float scroll = std::max(scrollU, scrollV);
+        r = lerpf(r, 30, scroll); g = lerpf(g, 128, scroll); b = lerpf(b, 120, scroll);
+        float ring = sstep(4.0f, 2.4f, fabsf(rad - 58.0f));
+        r = lerpf(r, 170, ring); g = lerpf(g, 30, ring); b = lerpf(b, 36, ring);
+        float petal = 30.0f + 16.0f * cosf(ang * 8.0f);
+        float flower = sstep(2.5f, -1.0f, rad - petal) * sstep(6.0f, 9.0f, rad);
+        r = lerpf(r, 214, flower); g = lerpf(g, 164, flower); b = lerpf(b, 62, flower);
+        float eye = sstep(7.0f, 5.0f, rad);
+        r = lerpf(r, 170, eye); g = lerpf(g, 30, eye); b = lerpf(b, 36, eye);
+        // Cut pile, worn toward the middle of the floor in soft patches.
+        float pile = 0.90f + 0.12f * lat(x, y, 0xCA50u) + 0.14f * (c.nz(fx, fy, 4, 4, 0xCA51u, 3) - 0.5f);
+        c.set(i, r * pile, g * pile, b * pile);
+        c.ht[i] = (lat(x, y, 0xCA52u) - 0.5f) * 0.0006f + (c.nz(fx, fy, 50, 50, 0xCA53u, 2) - 0.5f) * 0.0004f;
+        c.gl[i] = 0.2f;
+    }
+    c.matchLuma(42.0f);
+    return finishSurface(c, 1.0f);
+}
+
+// Casino walls: gold flock damask on oxblood. The motif repeats every 0.5 m
+// across and 0.75 m down, alternate rows shifted half a repeat: an ogee
+// lattice with a six-petal rose in each cell. The gold is raised and takes
+// more gloss. No dado in the texture, so it tiles at any wall height.
+Surface makeCasinoWallSurface() {
+    const int N = 1024;
+    Canvas c(N, N, 3.0f, 3.0f);
+    const float PW = N / 6.0f, PH = N / 4.0f;
+    for (int y = 0; y < N; y++) for (int x = 0; x < N; x++) {
+        int i = y * N + x;
+        float fx = (float)x, fy = (float)y;
+        int row = (int)((y + 0.5f) / PH);
+        float u = fmodf(x + 0.5f + (row & 1) * PW * 0.5f, PW) / PW - 0.5f;
+        float v = fmodf(y + 0.5f, PH) / PH - 0.5f;
+        // the ogee: two S-curves meeting at the cell's top and bottom
+        float ogee = fabsf(fabsf(u) - 0.42f * cosf(3.14159f * v) * cosf(3.14159f * v));
+        float line = sstep(0.030f, 0.018f, ogee);
+        float pu = u * PW, pv = v * PH * 0.75f;
+        float rad = sqrtf(pu * pu + pv * pv), ang = atan2f(pv, pu);
+        float rose = sstep(2.0f, -1.0f, rad - (24.0f + 12.0f * cosf(ang * 6.0f))) * sstep(4.0f, 7.0f, rad);
+        float bud = sstep(5.0f, 3.5f, rad);
+        float gold = std::max(line, std::max(rose, bud));
+        float nap = 0.95f + 0.05f * (lat(x, y, 0xCA60u) - 0.5f) - 0.08f * (c.nz(fx, fy, 2.0f, 2.0f, 0xCA61u, 3) - 0.5f);
+        float r = lerpf(74, 190, gold) * nap, g = lerpf(16, 146, gold) * nap, b = lerpf(20, 70, gold) * nap;
+        c.set(i, r, g, b);
+        c.ht[i] = gold * 0.0008f + (nap - 1.0f) * 0.0003f;
+        c.gl[i] = lerpf(0.15f, 0.55f, gold);
+    }
+    c.matchLuma(40.0f);
+    return finishSurface(c, 1.0f);
+}
+
 Surface makeSurface(SurfSlot slot) {
     switch (slot) {
         case SURF_CARPET:    return makeCarpetSurface();
@@ -976,6 +1044,8 @@ Surface makeSurface(SurfSlot slot) {
         case SURF_CINEMACARPET: return makeCinemaCarpetSurface();
         case SURF_CINEMACEIL:   return makeCinemaCeilSurface();
         case SURF_CINEMAWALL:   return makeCinemaWallSurface();
+        case SURF_CASINOCARPET: return makeCasinoCarpetSurface();
+        case SURF_CASINOWALL:   return makeCasinoWallSurface();
         case SURF_COUNT:     break;
     }
     return {};

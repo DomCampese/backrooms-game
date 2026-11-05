@@ -3587,6 +3587,573 @@ opening kind 0 cell 14,6 west 1 line 1308 e0 -1172 a -1171.65002..-1170.34998 wa
 opening kind 0 cell 14,7 west 1 line 1308 e0 -1170 a -1169.65002..-1168.34998 wall 0..5 head 2.29999995 sill 0 floor 0 join 10 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
 opening kind 0 cell 14,10 west 1 line 1308 e0 -1164 a -1163.65002..-1162.34998 wall 0..5 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
 
+chunk L5 v0 s0 (0,0) layout: 51 props, 55 fixtures, 16 fittings, 12 openings
+prop kind 16 cell 2,3 global 2,3 at 5 7 floor 0 turn 0 yaw 0 against 0 hash 7a4e196e 26edac9c
+prop kind 16 cell 2,4 global 2,4 at 5 9 floor 0 turn 2 yaw 3.14159989 against 0 hash 634b66b3 db85cab2
+prop kind 16 cell 2,7 global 2,7 at 5 15 floor 0 turn 0 yaw 0 against 0 hash ac8b3294 7f021890
+prop kind 16 cell 2,8 global 2,8 at 5 17 floor 0 turn 2 yaw 3.14159989 against 0 hash 9a4f9989 2e4e5693
+prop kind 16 cell 2,11 global 2,11 at 5 23 floor 0 turn 0 yaw 0 against 0 hash 56178412 8f088dfc
+prop kind 16 cell 2,12 global 2,12 at 5 25 floor 0 turn 2 yaw 3.14159989 against 0 hash 55b7a7f8 59a4be70
+prop kind 16 cell 3,3 global 3,3 at 7 7 floor 0 turn 0 yaw 0 against 0 hash 474bfc69 a89cdf89
+prop kind 16 cell 3,4 global 3,4 at 7 9 floor 0 turn 2 yaw 3.14159989 against 0 hash d35c2282 82ca01c1
+prop kind 16 cell 3,7 global 3,7 at 7 15 floor 0 turn 0 yaw 0 against 0 hash fe635de7 7233733c
+prop kind 16 cell 3,8 global 3,8 at 7 17 floor 0 turn 2 yaw 3.14159989 against 0 hash 4d18f51c b0dde4e8
+prop kind 16 cell 3,11 global 3,11 at 7 23 floor 0 turn 0 yaw 0 against 0 hash 3508f315 701fb709
+prop kind 16 cell 3,12 global 3,12 at 7 25 floor 0 turn 2 yaw 3.14159989 against 0 hash d924b527 3fc23fbc
+prop kind 16 cell 4,3 global 4,3 at 9 7 floor 0 turn 0 yaw 0 against 0 hash b520854c 390f6efa
+prop kind 16 cell 4,4 global 4,4 at 9 9 floor 0 turn 2 yaw 3.14159989 against 0 hash 5a31c8b4 d296a738
+prop kind 16 cell 4,7 global 4,7 at 9 15 floor 0 turn 0 yaw 0 against 0 hash d8d9179f 4d5b9250
+prop kind 16 cell 4,8 global 4,8 at 9 17 floor 0 turn 2 yaw 3.14159989 against 0 hash bb46d298 a4e339f2
+prop kind 16 cell 4,11 global 4,11 at 9 23 floor 0 turn 0 yaw 0 against 0 hash 8f80fef9 83e277aa
+prop kind 16 cell 4,12 global 4,12 at 9 25 floor 0 turn 2 yaw 3.14159989 against 0 hash d6458025 2c1d82ee
+prop kind 16 cell 5,3 global 5,3 at 11 7 floor 0 turn 0 yaw 0 against 0 hash 32ad49e6 531d04e5
+prop kind 16 cell 5,4 global 5,4 at 11 9 floor 0 turn 2 yaw 3.14159989 against 0 hash 058e7e8f 10e1d471
+prop kind 16 cell 5,11 global 5,11 at 11 23 floor 0 turn 0 yaw 0 against 0 hash e04d1f14 1f7456fa
+prop kind 16 cell 5,12 global 5,12 at 11 25 floor 0 turn 2 yaw 3.14159989 against 0 hash 19341056 4c206f37
+prop kind 16 cell 6,3 global 6,3 at 13 7 floor 0 turn 0 yaw 0 against 0 hash 79e9153e 650cfbd6
+prop kind 16 cell 6,4 global 6,4 at 13 9 floor 0 turn 2 yaw 3.14159989 against 0 hash ddbea57f 17ecd51a
+prop kind 16 cell 6,11 global 6,11 at 13 23 floor 0 turn 0 yaw 0 against 0 hash 55f16765 cc70aed5
+prop kind 16 cell 6,12 global 6,12 at 13 25 floor 0 turn 2 yaw 3.14159989 against 0 hash a5f856c4 c6fafe11
+prop kind 16 cell 8,3 global 8,3 at 17 7 floor 0 turn 0 yaw 0 against 0 hash fb695976 be41ef83
+prop kind 16 cell 8,4 global 8,4 at 17 9 floor 0 turn 2 yaw 3.14159989 against 0 hash 13d69530 a7afb5f6
+prop kind 16 cell 8,11 global 8,11 at 17 23 floor 0 turn 0 yaw 0 against 0 hash f08b1dbb 79d7ebf6
+prop kind 16 cell 8,12 global 8,12 at 17 25 floor 0 turn 2 yaw 3.14159989 against 0 hash ce7a1e92 130ca067
+prop kind 16 cell 9,3 global 9,3 at 19 7 floor 0 turn 0 yaw 0 against 0 hash 1dc6e016 31be8511
+prop kind 16 cell 9,4 global 9,4 at 19 9 floor 0 turn 2 yaw 3.14159989 against 0 hash 8626e49e ae3239cb
+prop kind 16 cell 9,11 global 9,11 at 19 23 floor 0 turn 0 yaw 0 against 0 hash a0e6a0b0 1397178a
+prop kind 16 cell 9,12 global 9,12 at 19 25 floor 0 turn 2 yaw 3.14159989 against 0 hash 5d838ece cef692b2
+prop kind 16 cell 10,3 global 10,3 at 21 7 floor 0 turn 0 yaw 0 against 0 hash 595e3a28 d14cf46f
+prop kind 16 cell 10,4 global 10,4 at 21 9 floor 0 turn 2 yaw 3.14159989 against 0 hash 07c676d8 73475622
+prop kind 16 cell 10,11 global 10,11 at 21 23 floor 0 turn 0 yaw 0 against 0 hash e57a6161 e571def7
+prop kind 16 cell 10,12 global 10,12 at 21 25 floor 0 turn 2 yaw 3.14159989 against 0 hash 683bc8b6 905fd35d
+prop kind 6 cell 11,1 global 11,1 at 23.0000038 2.54999995 floor 0 turn 2 yaw 3.14159989 against 1 hash 241b9b84 a5aeb73a
+prop kind 16 cell 11,3 global 11,3 at 23 7 floor 0 turn 0 yaw 0 against 0 hash f5de9512 251d8eba
+prop kind 16 cell 11,4 global 11,4 at 23 9 floor 0 turn 2 yaw 3.14159989 against 0 hash 6a7a0486 304ff422
+prop kind 16 cell 11,7 global 11,7 at 23 15 floor 0 turn 0 yaw 0 against 0 hash e2d9080c fed89bb6
+prop kind 16 cell 11,8 global 11,8 at 23 17 floor 0 turn 2 yaw 3.14159989 against 0 hash 0829de7b b44da74a
+prop kind 16 cell 11,11 global 11,11 at 23 23 floor 0 turn 0 yaw 0 against 0 hash 57b23f0d ffc83f00
+prop kind 16 cell 11,12 global 11,12 at 23 25 floor 0 turn 2 yaw 3.14159989 against 0 hash 251fb70e f2a8b968
+prop kind 16 cell 12,3 global 12,3 at 25 7 floor 0 turn 0 yaw 0 against 0 hash 55b6d9b8 b3951bce
+prop kind 16 cell 12,4 global 12,4 at 25 9 floor 0 turn 2 yaw 3.14159989 against 0 hash 0bacbbdb c71b609b
+prop kind 16 cell 12,7 global 12,7 at 25 15 floor 0 turn 0 yaw 0 against 0 hash 836b2b03 2245f50c
+prop kind 16 cell 12,8 global 12,8 at 25 17 floor 0 turn 2 yaw 3.14159989 against 0 hash 022b339b c57f4a7c
+prop kind 16 cell 12,11 global 12,11 at 25 23 floor 0 turn 0 yaw 0 against 0 hash d9924dc9 45e12f6f
+prop kind 16 cell 12,12 global 12,12 at 25 25 floor 0 turn 2 yaw 3.14159989 against 0 hash 866bba9a fcea91e8
+fixture kind 5 cell 0,5 pos 1 4 11 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 4 cell 0,6 pos 0.449999988 2.44000006 12.1099997 end 0 0 0 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 0,6 pos 1 4 13 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 0,8 pos 1 4 17 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 0,14 pos 1 4 29 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 1,0 pos 3 4 1 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 1,1 pos 3 4 3 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 1,2 pos 3 4 5 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 1 cell 1,3 pos 1.88999999 0.319999993 6.44999981 end 0 0 0 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 1,6 pos 3 4 13 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 1 cell 1,7 pos 1.88999999 0.319999993 14.915 end 0 0 0 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 1,9 pos 3 4 19 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 1,11 pos 3 4 23 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 3 cell 1,13 pos 1.88999999 2.0999999 26.9150009 end 0 0 0 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 2,11 pos 5 4 23 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 1 cell 2,14 pos 4.60500002 0.319999993 28.1100006 end 0 0 0 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 3,5 pos 7 4 11 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 3,7 pos 7 4 15 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 3,12 pos 7 4 25 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 4,5 pos 9 4 11 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 4,8 pos 9 4 17 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 1 cell 5,1 pos 11.5349998 0.319999993 1.88999999 end 0 0 0 normal 0 0 -1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 5,8 pos 11 4 17 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 5,13 pos 11 4 27 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 3 cell 6,0 pos 12.1099997 2.0999999 1.2249999 end 0 0 0 normal 1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 0 cell 6,1 pos 13.0699997 0.319999993 2.1099999 end 0 0 0 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 6,6 pos 13 4 13 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 6,8 pos 13 4 17 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 6,12 pos 13 4 25 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 1 cell 6,14 pos 11.8900003 0.319999993 28.4500008 end 0 0 0 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 4 cell 7,1 pos 14.4499998 2.44000006 1.88999999 end 0 0 0 normal 0 0 -1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 8,2 pos 17 4 5 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 8,8 pos 17 4 17 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 8,9 pos 17 4 19 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 8,15 pos 17 4 31 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 9,5 pos 19 4 11 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 9,7 pos 19 4 15 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 9,15 pos 19 4 31 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 10,1 pos 21 4 3 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 10,2 pos 21 4 5 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 10,6 pos 21 4 13 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 11,13 pos 23 4 27 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 11,15 pos 23 4 31 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 0 cell 12,1 pos 25.5349998 0.319999993 2.1099999 end 0 0 0 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 12,1 pos 25 4 3 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 0 cell 12,14 pos 25.2250004 0.319999993 27.8899994 end 0 0 0 normal 0 0 -1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 13,1 pos 27 4 3 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 13,14 pos 27 4 29 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 14,5 pos 29 4 11 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 2 cell 14,8 pos 28.1100006 1.22000003 16.9150009 end 0 0 0 normal 1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 4 cell 14,9 pos 28.1100006 2.44000006 18.4500008 end 0 0 0 normal 1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 2 cell 14,12 pos 27.8899994 1.22000003 25.0700016 end 0 0 0 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 14,12 pos 29 4 25 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 15,9 pos 31 4 19 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 15,15 pos 31 4 31 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fitting grid 0,0 pos 4 3.88000011 4 ceiling 4 gap 0 turned 0 dead 1 output 1 faulty 0 stutter 0
+fitting grid 0,1 pos 4 3.88000011 12 ceiling 4 gap 0 turned 0 dead 0 output 0.857851386 faulty 0 stutter 0.342128754
+fitting grid 0,2 pos 4 3.88000011 20 ceiling 4 gap 0 turned 1 dead 0 output 0.927656174 faulty 0 stutter 0.649139404
+fitting grid 0,3 pos 4 3.88000011 28 ceiling 4 gap 0 turned 1 dead 0 output 0.833984375 faulty 0 stutter 0.309959412
+fitting grid 1,0 pos 12 3.88000011 4 ceiling 4 gap 0 turned 0 dead 0 output 0.959843814 faulty 0 stutter 0.16960907
+fitting grid 1,1 pos 12 3.88000011 12 ceiling 4 gap 0 turned 1 dead 0 output 0.820234299 faulty 0 stutter 0.555583954
+fitting grid 1,2 pos 12 3.88000011 20 ceiling 4 gap 0 turned 1 dead 0 output 0.808300793 faulty 0 stutter 0.0395011902
+fitting grid 1,3 pos 12 3.88000011 28 ceiling 4 gap 0 turned 0 dead 0 output 0.908124924 faulty 0 stutter 0.450309753
+fitting grid 2,0 pos 20 3.88000011 4 ceiling 4 gap 0 turned 1 dead 0 output 0.920761883 faulty 0 stutter 0.323150635
+fitting grid 2,1 pos 20 3.88000011 12 ceiling 4 gap 0 turned 1 dead 0 output 0.830351233 faulty 0 stutter 0.833374023
+fitting grid 2,2 pos 20 3.88000011 20 ceiling 4 gap 0 turned 1 dead 1 output 0.938515604 faulty 0 stutter 0.181288719
+fitting grid 2,3 pos 20 3.88000011 28 ceiling 4 gap 0 turned 0 dead 0 output 0.959843814 faulty 0 stutter 0.16960907
+fitting grid 3,0 pos 28 3.88000011 4 ceiling 4 gap 0 turned 0 dead 0 output 0.973203301 faulty 0 stutter 0.848007202
+fitting grid 3,1 pos 28 3.88000011 12 ceiling 4 gap 0 turned 0 dead 0 output 0.803593457 faulty 0 stutter 0.578983307
+fitting grid 3,2 pos 28 3.88000011 20 ceiling 4 gap 0 turned 1 dead 0 output 0.912109375 faulty 0 stutter 0.105272293
+fitting grid 3,3 pos 28 3.88000011 28 ceiling 4 gap 0 turned 0 dead 0 output 0.835698307 faulty 0 stutter 0.167057037
+opening kind 0 cell 1,4 west 1 line 2 e0 8 a 8.35000038..9.64999962 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 1,8 west 1 line 2 e0 16 a 16.3500004..17.6499996 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 1,12 west 1 line 2 e0 24 a 24.3500004..25.6499996 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 1 cell 3,1 west 0 line 2 e0 6 a 6.3499999..7.6500001 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 4,14 west 0 line 28 e0 8 a 8.35000038..9.64999962 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 8,1 west 0 line 2 e0 16 a 16.3500004..17.6499996 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 8,14 west 0 line 28 e0 16 a 16.3500004..17.6499996 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 10,14 west 0 line 28 e0 20 a 20.3500004..21.6499996 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 13,14 west 0 line 28 e0 26 a 26.3500004..27.6499996 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 14,1 west 1 line 28 e0 2 a 2.3499999..3.6500001 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 14,4 west 1 line 28 e0 8 a 8.35000038..9.64999962 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 14,7 west 1 line 28 e0 14 a 14.3500004..15.6499996 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+
+chunk L5 v0 s0 (40,-37) layout: 61 props, 56 fixtures, 16 fittings, 10 openings
+prop kind 16 cell 2,3 global 642,-589 at 1285 -1177 floor 0 turn 0 yaw 0 against 0 hash b95b7096 2bce5d72
+prop kind 16 cell 2,4 global 642,-588 at 1285 -1175 floor 0 turn 2 yaw 3.14159989 against 0 hash 1b08488f 228d5241
+prop kind 16 cell 2,7 global 642,-585 at 1285 -1169 floor 0 turn 0 yaw 0 against 0 hash 0d357ce1 497011b5
+prop kind 16 cell 2,8 global 642,-584 at 1285 -1167 floor 0 turn 2 yaw 3.14159989 against 0 hash e9748569 5656adfc
+prop kind 16 cell 2,11 global 642,-581 at 1285 -1161 floor 0 turn 0 yaw 0 against 0 hash e0732881 03ed3d42
+prop kind 16 cell 2,12 global 642,-580 at 1285 -1159 floor 0 turn 2 yaw 3.14159989 against 0 hash 2db961a3 8fb9bea0
+prop kind 6 cell 3,1 global 643,-591 at 1287 -1181.44995 floor 0 turn 2 yaw 3.14159989 against 1 hash af501154 7bf39360
+prop kind 16 cell 3,3 global 643,-589 at 1287 -1177 floor 0 turn 0 yaw 0 against 0 hash 901ee24b b909d717
+prop kind 16 cell 3,4 global 643,-588 at 1287 -1175 floor 0 turn 2 yaw 3.14159989 against 0 hash a6109c5b 2140e076
+prop kind 16 cell 3,7 global 643,-585 at 1287 -1169 floor 0 turn 0 yaw 0 against 0 hash b5de4ed0 7692d653
+prop kind 16 cell 3,8 global 643,-584 at 1287 -1167 floor 0 turn 2 yaw 3.14159989 against 0 hash 9d7a8cc3 97a8d500
+prop kind 16 cell 3,11 global 643,-581 at 1287 -1161 floor 0 turn 0 yaw 0 against 0 hash 5441e691 786acb49
+prop kind 16 cell 3,12 global 643,-580 at 1287 -1159 floor 0 turn 2 yaw 3.14159989 against 0 hash 7c885370 d596e07f
+prop kind 16 cell 4,3 global 644,-589 at 1289 -1177 floor 0 turn 0 yaw 0 against 0 hash 6a928163 7450ce10
+prop kind 16 cell 4,4 global 644,-588 at 1289 -1175 floor 0 turn 2 yaw 3.14159989 against 0 hash b5f650de df173a6c
+prop kind 16 cell 4,7 global 644,-585 at 1289 -1169 floor 0 turn 0 yaw 0 against 0 hash f70c76df 99b93fa7
+prop kind 16 cell 4,8 global 644,-584 at 1289 -1167 floor 0 turn 2 yaw 3.14159989 against 0 hash ab706159 0ced9687
+prop kind 16 cell 4,11 global 644,-581 at 1289 -1161 floor 0 turn 0 yaw 0 against 0 hash 4c55f767 4429998e
+prop kind 16 cell 4,12 global 644,-580 at 1289 -1159 floor 0 turn 2 yaw 3.14159989 against 0 hash ccd5facf 2b73721e
+prop kind 16 cell 5,3 global 645,-589 at 1291 -1177 floor 0 turn 0 yaw 0 against 0 hash d837efc9 67ec5349
+prop kind 16 cell 5,4 global 645,-588 at 1291 -1175 floor 0 turn 2 yaw 3.14159989 against 0 hash d4557aff ba31b06e
+prop kind 16 cell 5,7 global 645,-585 at 1291 -1169 floor 0 turn 0 yaw 0 against 0 hash b85768a0 5d3b1c87
+prop kind 16 cell 5,8 global 645,-584 at 1291 -1167 floor 0 turn 2 yaw 3.14159989 against 0 hash 5177905a 788508e1
+prop kind 16 cell 5,11 global 645,-581 at 1291 -1161 floor 0 turn 0 yaw 0 against 0 hash aa600a2c 04176c2c
+prop kind 16 cell 5,12 global 645,-580 at 1291 -1159 floor 0 turn 2 yaw 3.14159989 against 0 hash 45d23685 867b7039
+prop kind 16 cell 6,3 global 646,-589 at 1293 -1177 floor 0 turn 0 yaw 0 against 0 hash 2ada60c6 be1a0637
+prop kind 16 cell 6,4 global 646,-588 at 1293 -1175 floor 0 turn 2 yaw 3.14159989 against 0 hash ff745480 4200d3e3
+prop kind 16 cell 6,7 global 646,-585 at 1293 -1169 floor 0 turn 0 yaw 0 against 0 hash bb30f52b ea901cf6
+prop kind 16 cell 6,8 global 646,-584 at 1293 -1167 floor 0 turn 2 yaw 3.14159989 against 0 hash 97de804c 97b86a79
+prop kind 16 cell 6,11 global 646,-581 at 1293 -1161 floor 0 turn 0 yaw 0 against 0 hash cd994b30 f013c9eb
+prop kind 16 cell 6,12 global 646,-580 at 1293 -1159 floor 0 turn 2 yaw 3.14159989 against 0 hash c47e738d b8e79067
+prop kind 16 cell 8,3 global 648,-589 at 1297 -1177 floor 0 turn 0 yaw 0 against 0 hash 4e06048e 1bd03af9
+prop kind 16 cell 8,4 global 648,-588 at 1297 -1175 floor 0 turn 2 yaw 3.14159989 against 0 hash 074d64dc b7c7da45
+prop kind 16 cell 8,7 global 648,-585 at 1297 -1169 floor 0 turn 0 yaw 0 against 0 hash 8bd718ad 2d01520e
+prop kind 16 cell 8,8 global 648,-584 at 1297 -1167 floor 0 turn 2 yaw 3.14159989 against 0 hash 1916c404 186450e1
+prop kind 16 cell 8,11 global 648,-581 at 1297 -1161 floor 0 turn 0 yaw 0 against 0 hash 74af7012 f44c7df8
+prop kind 16 cell 8,12 global 648,-580 at 1297 -1159 floor 0 turn 2 yaw 3.14159989 against 0 hash 0c520341 0683009f
+prop kind 16 cell 9,3 global 649,-589 at 1299 -1177 floor 0 turn 0 yaw 0 against 0 hash 7313d23c b74687b2
+prop kind 16 cell 9,4 global 649,-588 at 1299 -1175 floor 0 turn 2 yaw 3.14159989 against 0 hash a50bc0fe 5999ba55
+prop kind 16 cell 9,7 global 649,-585 at 1299 -1169 floor 0 turn 0 yaw 0 against 0 hash 6062d346 37ce633d
+prop kind 16 cell 9,8 global 649,-584 at 1299 -1167 floor 0 turn 2 yaw 3.14159989 against 0 hash a8ca26b6 2ece6d4b
+prop kind 16 cell 9,11 global 649,-581 at 1299 -1161 floor 0 turn 0 yaw 0 against 0 hash 72683535 4d7b66a9
+prop kind 16 cell 9,12 global 649,-580 at 1299 -1159 floor 0 turn 2 yaw 3.14159989 against 0 hash 495ebcc8 003b2d20
+prop kind 16 cell 10,3 global 650,-589 at 1301 -1177 floor 0 turn 0 yaw 0 against 0 hash 3bc9096a bc297d37
+prop kind 16 cell 10,4 global 650,-588 at 1301 -1175 floor 0 turn 2 yaw 3.14159989 against 0 hash ad8db258 adf1c7fb
+prop kind 16 cell 10,7 global 650,-585 at 1301 -1169 floor 0 turn 0 yaw 0 against 0 hash 516f044d 155bda8c
+prop kind 16 cell 10,8 global 650,-584 at 1301 -1167 floor 0 turn 2 yaw 3.14159989 against 0 hash d1cd7cb6 bc05354c
+prop kind 16 cell 10,11 global 650,-581 at 1301 -1161 floor 0 turn 0 yaw 0 against 0 hash ce2d25ed 94a681d7
+prop kind 16 cell 10,12 global 650,-580 at 1301 -1159 floor 0 turn 2 yaw 3.14159989 against 0 hash 6e42f4fa 6f1f9a28
+prop kind 16 cell 11,3 global 651,-589 at 1303 -1177 floor 0 turn 0 yaw 0 against 0 hash 7daf2688 1e957d25
+prop kind 16 cell 11,4 global 651,-588 at 1303 -1175 floor 0 turn 2 yaw 3.14159989 against 0 hash 34b78bde 05d8a500
+prop kind 16 cell 11,7 global 651,-585 at 1303 -1169 floor 0 turn 0 yaw 0 against 0 hash 07f07d10 b94ca83f
+prop kind 16 cell 11,8 global 651,-584 at 1303 -1167 floor 0 turn 2 yaw 3.14159989 against 0 hash e519e3de 6cb4919e
+prop kind 16 cell 11,11 global 651,-581 at 1303 -1161 floor 0 turn 0 yaw 0 against 0 hash edb3f9b1 8d156ec0
+prop kind 16 cell 11,12 global 651,-580 at 1303 -1159 floor 0 turn 2 yaw 3.14159989 against 0 hash 1b496657 8d5922f2
+prop kind 16 cell 12,3 global 652,-589 at 1305 -1177 floor 0 turn 0 yaw 0 against 0 hash 831f30bc 016751f1
+prop kind 16 cell 12,4 global 652,-588 at 1305 -1175 floor 0 turn 2 yaw 3.14159989 against 0 hash bc03b7c9 509d34c0
+prop kind 16 cell 12,7 global 652,-585 at 1305 -1169 floor 0 turn 0 yaw 0 against 0 hash 6f33aeb6 bfcd6db1
+prop kind 16 cell 12,8 global 652,-584 at 1305 -1167 floor 0 turn 2 yaw 3.14159989 against 0 hash fac6138d e697a7c3
+prop kind 16 cell 12,11 global 652,-581 at 1305 -1161 floor 0 turn 0 yaw 0 against 0 hash b076f6ba a64deeb8
+prop kind 16 cell 12,12 global 652,-580 at 1305 -1159 floor 0 turn 2 yaw 3.14159989 against 0 hash 0ea6e162 8bfd6ed2
+fixture kind 6 cell 0,5 pos 1281 4 -1173 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 0,7 pos 1281 4 -1169 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 0,11 pos 1281 4 -1161 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 0,13 pos 1281 4 -1157 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 2 cell 1,2 pos 1281.89001 1.22000003 -1178.46509 end 0 0 0 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 1,2 pos 1283 4 -1179 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 0 cell 1,13 pos 1282.10999 0.319999993 -1156.77502 end 0 0 0 normal 1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 1 cell 1,14 pos 1282.76001 0.319999993 -1156.10999 end 0 0 0 normal 0 0 -1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 2,3 pos 1285 4 -1177 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 2,9 pos 1285 4 -1165 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 2,10 pos 1285 4 -1163 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 2,12 pos 1285 4 -1159 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 2,13 pos 1285 4 -1157 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 0 cell 2,14 pos 1285.22498 0.319999993 -1156.10999 end 0 0 0 normal 0 0 -1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 3,0 pos 1287 4 -1183 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 0 cell 3,1 pos 1286.91492 0.319999993 -1181.89001 end 0 0 0 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 3,14 pos 1287 4 -1155 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 4,8 pos 1289 4 -1167 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 4,9 pos 1289 4 -1165 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 5,8 pos 1291 4 -1167 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 5,12 pos 1291 4 -1159 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 5,13 pos 1291 4 -1157 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 6,3 pos 1293 4 -1177 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 6,13 pos 1293 4 -1157 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 7,7 pos 1295 4 -1169 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 8,0 pos 1297 4 -1183 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 8,13 pos 1297 4 -1157 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 8,14 pos 1297 4 -1155 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 8,15 pos 1297 4 -1153 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 7 cell 9,0 pos 1298.10999 3.84500003 -1184.10999 end 1298.10999 3.84500003 -1181.89001 normal 1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 9,11 pos 1299 4 -1161 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 9,15 pos 1299 4 -1153 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 10,1 pos 1301 4 -1181 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 10,3 pos 1301 4 -1177 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 10,6 pos 1301 4 -1171 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 10,7 pos 1301 4 -1169 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 0 cell 11,1 pos 1302.44995 0.319999993 -1181.89001 end 0 0 0 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 11,3 pos 1303 4 -1177 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 11,9 pos 1303 4 -1165 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 12,4 pos 1305 4 -1175 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 12,9 pos 1305 4 -1165 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 0 cell 12,14 pos 1305.22498 0.319999993 -1155.89001 end 0 0 0 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 13,5 pos 1307 4 -1173 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 13,10 pos 1307 4 -1163 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 0 cell 13,14 pos 1307.38 0.319999993 -1156.10999 end 0 0 0 normal 0 0 -1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 14,0 pos 1309 4 -1183 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 1 cell 14,3 pos 1307.89001 0.319999993 -1177.39502 end 0 0 0 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 0 cell 14,6 pos 1307.89001 0.319999993 -1171.39502 end 0 0 0 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 14,6 pos 1309 4 -1171 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 7 cell 14,6 pos 1307.89001 3.84500003 -1172.10999 end 1307.89001 3.84500003 -1169.89001 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 7 cell 14,8 pos 1307.89001 3.84500003 -1168.10999 end 1307.89001 3.84500003 -1165.89001 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 7 cell 14,9 pos 1307.89001 3.84500003 -1166.10999 end 1307.89001 3.84500003 -1163.89001 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 7 cell 14,11 pos 1307.89001 3.84500003 -1162.10999 end 1307.89001 3.84500003 -1159.89001 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 2 cell 14,13 pos 1308.10999 1.22000003 -1157.23999 end 0 0 0 normal 1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 0 cell 15,9 pos 1310.60498 0.319999993 -1165.89001 end 0 0 0 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 15,15 pos 1311 4 -1153 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fitting grid 160,-148 pos 1284 3.88000011 -1180 ceiling 4 gap 0 turned 1 dead 0 output 0.832606137 faulty 0 stutter 0.510343552
+fitting grid 160,-147 pos 1284 3.88000011 -1172 ceiling 4 gap 0 turned 0 dead 0 output 0.853515625 faulty 0 stutter 0.508789062
+fitting grid 160,-146 pos 1284 3.88000011 -1164 ceiling 4 gap 0 turned 1 dead 0 output 0.901250064 faulty 0 stutter 0.573123932
+fitting grid 160,-145 pos 1284 3.88000011 -1156 ceiling 4 gap 0 turned 0 dead 1 output 0.864374995 faulty 0 stutter 0.0409374237
+fitting grid 161,-148 pos 1292 3.88000011 -1180 ceiling 4 gap 0 turned 1 dead 0 output 0.980078101 faulty 0 stutter 0.725196838
+fitting grid 161,-147 pos 1292 3.88000011 -1172 ceiling 4 gap 0 turned 0 dead 0 output 0.839765549 faulty 0 stutter 0.754413605
+fitting grid 161,-146 pos 1292 3.88000011 -1164 ceiling 4 gap 0 turned 0 dead 0 output 0.936328113 faulty 0 stutter 0.315818787
+fitting grid 161,-145 pos 1292 3.88000011 -1156 ceiling 4 gap 0 turned 0 dead 0 output 0.946816266 faulty 0 stutter 0.220790863
+fitting grid 162,-148 pos 1300 3.88000011 -1180 ceiling 4 gap 0 turned 0 dead 0 output 0.945370853 faulty 0 stutter 0.609676361
+fitting grid 162,-147 pos 1300 3.88000011 -1172 ceiling 4 gap 0 turned 1 dead 0 output 0.904492199 faulty 0 stutter 0.973731995
+fitting grid 162,-146 pos 1300 3.88000011 -1164 ceiling 4 gap 0 turned 0 dead 0 output 0.827109158 faulty 0 stutter 0.43277359
+fitting grid 162,-145 pos 1300 3.88000011 -1156 ceiling 4 gap 0 turned 1 dead 0 output 0.800703049 faulty 0 stutter 0.356758118
+fitting grid 163,-148 pos 1308 3.88000011 -1180 ceiling 4 gap 0 turned 0 dead 0 output 0.90882796 faulty 0 stutter 0.807067871
+fitting grid 163,-147 pos 1308 3.88000011 -1172 ceiling 4 gap 0 turned 1 dead 1 output 0.951171875 faulty 0 stutter 0.502929688
+fitting grid 163,-146 pos 1308 3.88000011 -1164 ceiling 4 gap 0 turned 1 dead 0 output 0.901250064 faulty 0 stutter 0.573123932
+fitting grid 163,-145 pos 1308 3.88000011 -1156 ceiling 4 gap 0 turned 1 dead 0 output 0.90719682 faulty 1 stutter 0.882362366
+opening kind 0 cell 1,7 west 1 line 1282 e0 -1170 a -1169.65002..-1168.34998 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 1,11 west 1 line 1282 e0 -1162 a -1161.65002..-1160.34998 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 4,1 west 0 line -1182 e0 1288 a 1288.34998..1289.65002 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 4,14 west 0 line -1156 e0 1288 a 1288.34998..1289.65002 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 1 cell 6,1 west 0 line -1182 e0 1292 a 1292.34998..1293.65002 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 7,14 west 0 line -1156 e0 1294 a 1294.34998..1295.65002 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 10,1 west 0 line -1182 e0 1300 a 1300.34998..1301.65002 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 11,14 west 0 line -1156 e0 1302 a 1302.34998..1303.65002 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 14,7 west 1 line 1308 e0 -1170 a -1169.65002..-1168.34998 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 14,10 west 1 line 1308 e0 -1164 a -1163.65002..-1162.34998 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+
+chunk L5 v1 s0 (0,0) layout: 51 props, 56 fixtures, 16 fittings, 15 openings
+prop kind 16 cell 2,3 global 2,3 at 5 7 floor 0 turn 0 yaw 0 against 0 hash 7a4e196e 26edac9c
+prop kind 16 cell 2,4 global 2,4 at 5 9 floor 0 turn 2 yaw 3.14159989 against 0 hash 634b66b3 db85cab2
+prop kind 16 cell 2,7 global 2,7 at 5 15 floor 0 turn 0 yaw 0 against 0 hash ac8b3294 7f021890
+prop kind 16 cell 2,8 global 2,8 at 5 17 floor 0 turn 2 yaw 3.14159989 against 0 hash 9a4f9989 2e4e5693
+prop kind 16 cell 2,11 global 2,11 at 5 23 floor 0 turn 0 yaw 0 against 0 hash 56178412 8f088dfc
+prop kind 16 cell 2,12 global 2,12 at 5 25 floor 0 turn 2 yaw 3.14159989 against 0 hash 55b7a7f8 59a4be70
+prop kind 16 cell 3,3 global 3,3 at 7 7 floor 0 turn 0 yaw 0 against 0 hash 474bfc69 a89cdf89
+prop kind 16 cell 3,4 global 3,4 at 7 9 floor 0 turn 2 yaw 3.14159989 against 0 hash d35c2282 82ca01c1
+prop kind 16 cell 3,7 global 3,7 at 7 15 floor 0 turn 0 yaw 0 against 0 hash fe635de7 7233733c
+prop kind 16 cell 3,8 global 3,8 at 7 17 floor 0 turn 2 yaw 3.14159989 against 0 hash 4d18f51c b0dde4e8
+prop kind 16 cell 3,11 global 3,11 at 7 23 floor 0 turn 0 yaw 0 against 0 hash 3508f315 701fb709
+prop kind 16 cell 3,12 global 3,12 at 7 25 floor 0 turn 2 yaw 3.14159989 against 0 hash d924b527 3fc23fbc
+prop kind 16 cell 4,3 global 4,3 at 9 7 floor 0 turn 0 yaw 0 against 0 hash b520854c 390f6efa
+prop kind 16 cell 4,4 global 4,4 at 9 9 floor 0 turn 2 yaw 3.14159989 against 0 hash 5a31c8b4 d296a738
+prop kind 16 cell 4,7 global 4,7 at 9 15 floor 0 turn 0 yaw 0 against 0 hash d8d9179f 4d5b9250
+prop kind 16 cell 4,8 global 4,8 at 9 17 floor 0 turn 2 yaw 3.14159989 against 0 hash bb46d298 a4e339f2
+prop kind 16 cell 4,11 global 4,11 at 9 23 floor 0 turn 0 yaw 0 against 0 hash 8f80fef9 83e277aa
+prop kind 16 cell 4,12 global 4,12 at 9 25 floor 0 turn 2 yaw 3.14159989 against 0 hash d6458025 2c1d82ee
+prop kind 16 cell 5,3 global 5,3 at 11 7 floor 0 turn 0 yaw 0 against 0 hash 32ad49e6 531d04e5
+prop kind 16 cell 5,4 global 5,4 at 11 9 floor 0 turn 2 yaw 3.14159989 against 0 hash 058e7e8f 10e1d471
+prop kind 16 cell 5,11 global 5,11 at 11 23 floor 0 turn 0 yaw 0 against 0 hash e04d1f14 1f7456fa
+prop kind 16 cell 5,12 global 5,12 at 11 25 floor 0 turn 2 yaw 3.14159989 against 0 hash 19341056 4c206f37
+prop kind 6 cell 6,1 global 6,1 at 13.0000029 2.54999995 floor 0 turn 2 yaw 3.14159989 against 1 hash 303645fe 2e4fe226
+prop kind 16 cell 6,3 global 6,3 at 13 7 floor 0 turn 0 yaw 0 against 0 hash 79e9153e 650cfbd6
+prop kind 16 cell 6,4 global 6,4 at 13 9 floor 0 turn 2 yaw 3.14159989 against 0 hash ddbea57f 17ecd51a
+prop kind 16 cell 6,11 global 6,11 at 13 23 floor 0 turn 0 yaw 0 against 0 hash 55f16765 cc70aed5
+prop kind 16 cell 6,12 global 6,12 at 13 25 floor 0 turn 2 yaw 3.14159989 against 0 hash a5f856c4 c6fafe11
+prop kind 16 cell 8,3 global 8,3 at 17 7 floor 0 turn 0 yaw 0 against 0 hash fb695976 be41ef83
+prop kind 16 cell 8,4 global 8,4 at 17 9 floor 0 turn 2 yaw 3.14159989 against 0 hash 13d69530 a7afb5f6
+prop kind 16 cell 8,11 global 8,11 at 17 23 floor 0 turn 0 yaw 0 against 0 hash f08b1dbb 79d7ebf6
+prop kind 16 cell 8,12 global 8,12 at 17 25 floor 0 turn 2 yaw 3.14159989 against 0 hash ce7a1e92 130ca067
+prop kind 16 cell 9,3 global 9,3 at 19 7 floor 0 turn 0 yaw 0 against 0 hash 1dc6e016 31be8511
+prop kind 16 cell 9,4 global 9,4 at 19 9 floor 0 turn 2 yaw 3.14159989 against 0 hash 8626e49e ae3239cb
+prop kind 16 cell 9,11 global 9,11 at 19 23 floor 0 turn 0 yaw 0 against 0 hash a0e6a0b0 1397178a
+prop kind 16 cell 9,12 global 9,12 at 19 25 floor 0 turn 2 yaw 3.14159989 against 0 hash 5d838ece cef692b2
+prop kind 16 cell 10,3 global 10,3 at 21 7 floor 0 turn 0 yaw 0 against 0 hash 595e3a28 d14cf46f
+prop kind 16 cell 10,4 global 10,4 at 21 9 floor 0 turn 2 yaw 3.14159989 against 0 hash 07c676d8 73475622
+prop kind 16 cell 10,11 global 10,11 at 21 23 floor 0 turn 0 yaw 0 against 0 hash e57a6161 e571def7
+prop kind 16 cell 10,12 global 10,12 at 21 25 floor 0 turn 2 yaw 3.14159989 against 0 hash 683bc8b6 905fd35d
+prop kind 16 cell 11,3 global 11,3 at 23 7 floor 0 turn 0 yaw 0 against 0 hash f5de9512 251d8eba
+prop kind 16 cell 11,4 global 11,4 at 23 9 floor 0 turn 2 yaw 3.14159989 against 0 hash 6a7a0486 304ff422
+prop kind 16 cell 11,7 global 11,7 at 23 15 floor 0 turn 0 yaw 0 against 0 hash e2d9080c fed89bb6
+prop kind 16 cell 11,8 global 11,8 at 23 17 floor 0 turn 2 yaw 3.14159989 against 0 hash 0829de7b b44da74a
+prop kind 16 cell 11,11 global 11,11 at 23 23 floor 0 turn 0 yaw 0 against 0 hash 57b23f0d ffc83f00
+prop kind 16 cell 11,12 global 11,12 at 23 25 floor 0 turn 2 yaw 3.14159989 against 0 hash 251fb70e f2a8b968
+prop kind 16 cell 12,3 global 12,3 at 25 7 floor 0 turn 0 yaw 0 against 0 hash 55b6d9b8 b3951bce
+prop kind 16 cell 12,4 global 12,4 at 25 9 floor 0 turn 2 yaw 3.14159989 against 0 hash 0bacbbdb c71b609b
+prop kind 16 cell 12,7 global 12,7 at 25 15 floor 0 turn 0 yaw 0 against 0 hash 836b2b03 2245f50c
+prop kind 16 cell 12,8 global 12,8 at 25 17 floor 0 turn 2 yaw 3.14159989 against 0 hash 022b339b c57f4a7c
+prop kind 16 cell 12,11 global 12,11 at 25 23 floor 0 turn 0 yaw 0 against 0 hash d9924dc9 45e12f6f
+prop kind 16 cell 12,12 global 12,12 at 25 25 floor 0 turn 2 yaw 3.14159989 against 0 hash 866bba9a fcea91e8
+fixture kind 5 cell 0,5 pos 1 4 11 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 4 cell 0,6 pos 0.449999988 2.44000006 12.1099997 end 0 0 0 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 0,6 pos 1 4 13 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 0,8 pos 1 4 17 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 0,14 pos 1 4 29 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 1,0 pos 3 4 1 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 1,1 pos 3 4 3 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 1,2 pos 3 4 5 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 1 cell 1,3 pos 1.88999999 0.319999993 6.44999981 end 0 0 0 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 1,6 pos 3 4 13 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 1 cell 1,7 pos 1.88999999 0.319999993 14.915 end 0 0 0 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 1,9 pos 3 4 19 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 1,11 pos 3 4 23 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 3 cell 1,13 pos 1.88999999 2.0999999 26.9150009 end 0 0 0 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 2,11 pos 5 4 23 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 1 cell 2,14 pos 4.60500002 0.319999993 28.1100006 end 0 0 0 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 0 cell 3,1 pos 6.60500002 0.319999993 1.88999999 end 0 0 0 normal 0 0 -1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 3,5 pos 7 4 11 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 3,7 pos 7 4 15 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 3,12 pos 7 4 25 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 4,5 pos 9 4 11 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 4,8 pos 9 4 17 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 1 cell 5,1 pos 11.5349998 0.319999993 1.88999999 end 0 0 0 normal 0 0 -1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 5,8 pos 11 4 17 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 5,13 pos 11 4 27 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 3 cell 6,0 pos 12.1099997 2.0999999 1.2249999 end 0 0 0 normal 1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 0 cell 6,1 pos 13.0699997 0.319999993 2.1099999 end 0 0 0 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 6,6 pos 13 4 13 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 6,8 pos 13 4 17 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 6,12 pos 13 4 25 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 1 cell 6,14 pos 11.8900003 0.319999993 28.4500008 end 0 0 0 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 3 cell 8,1 pos 17.0700016 2.0999999 2.1099999 end 0 0 0 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 8,2 pos 17 4 5 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 8,8 pos 17 4 17 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 8,9 pos 17 4 19 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 8,15 pos 17 4 31 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 9,5 pos 19 4 11 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 9,7 pos 19 4 15 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 9,15 pos 19 4 31 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 10,1 pos 21 4 3 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 10,2 pos 21 4 5 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 10,6 pos 21 4 13 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 11,13 pos 23 4 27 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 11,15 pos 23 4 31 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 0 cell 12,1 pos 25.5349998 0.319999993 2.1099999 end 0 0 0 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 12,1 pos 25 4 3 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 0 cell 12,14 pos 25.2250004 0.319999993 27.8899994 end 0 0 0 normal 0 0 -1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 13,1 pos 27 4 3 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 0 cell 13,14 pos 26.9150009 0.319999993 27.8899994 end 0 0 0 normal 0 0 -1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 13,14 pos 27 4 29 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 14,5 pos 29 4 11 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 1 cell 14,7 pos 27.8899994 0.319999993 14.6049995 end 0 0 0 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 4 cell 14,9 pos 28.1100006 2.44000006 18.4500008 end 0 0 0 normal 1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 14,12 pos 29 4 25 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 15,9 pos 31 4 19 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 15,15 pos 31 4 31 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fitting grid 0,0 pos 4 3.88000011 4 ceiling 4 gap 0 turned 0 dead 1 output 1 faulty 0 stutter 0
+fitting grid 0,1 pos 4 3.88000011 12 ceiling 4 gap 0 turned 0 dead 0 output 0.857851386 faulty 0 stutter 0.342128754
+fitting grid 0,2 pos 4 3.88000011 20 ceiling 4 gap 0 turned 1 dead 0 output 0.927656174 faulty 0 stutter 0.649139404
+fitting grid 0,3 pos 4 3.88000011 28 ceiling 4 gap 0 turned 1 dead 0 output 0.833984375 faulty 0 stutter 0.309959412
+fitting grid 1,0 pos 12 3.88000011 4 ceiling 4 gap 0 turned 0 dead 0 output 0.959843814 faulty 0 stutter 0.16960907
+fitting grid 1,1 pos 12 3.88000011 12 ceiling 4 gap 0 turned 1 dead 0 output 0.820234299 faulty 0 stutter 0.555583954
+fitting grid 1,2 pos 12 3.88000011 20 ceiling 4 gap 0 turned 1 dead 0 output 0.808300793 faulty 0 stutter 0.0395011902
+fitting grid 1,3 pos 12 3.88000011 28 ceiling 4 gap 0 turned 0 dead 0 output 0.908124924 faulty 0 stutter 0.450309753
+fitting grid 2,0 pos 20 3.88000011 4 ceiling 4 gap 0 turned 1 dead 0 output 0.920761883 faulty 0 stutter 0.323150635
+fitting grid 2,1 pos 20 3.88000011 12 ceiling 4 gap 0 turned 1 dead 0 output 0.830351233 faulty 0 stutter 0.833374023
+fitting grid 2,2 pos 20 3.88000011 20 ceiling 4 gap 0 turned 1 dead 1 output 0.938515604 faulty 0 stutter 0.181288719
+fitting grid 2,3 pos 20 3.88000011 28 ceiling 4 gap 0 turned 0 dead 0 output 0.959843814 faulty 0 stutter 0.16960907
+fitting grid 3,0 pos 28 3.88000011 4 ceiling 4 gap 0 turned 0 dead 0 output 0.973203301 faulty 0 stutter 0.848007202
+fitting grid 3,1 pos 28 3.88000011 12 ceiling 4 gap 0 turned 0 dead 0 output 0.803593457 faulty 0 stutter 0.578983307
+fitting grid 3,2 pos 28 3.88000011 20 ceiling 4 gap 0 turned 1 dead 0 output 0.912109375 faulty 0 stutter 0.105272293
+fitting grid 3,3 pos 28 3.88000011 28 ceiling 4 gap 0 turned 0 dead 0 output 0.835698307 faulty 0 stutter 0.167057037
+opening kind 0 cell 1,1 west 0 line 2 e0 2 a 2.3499999..3.6500001 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 1,4 west 1 line 2 e0 8 a 8.35000038..9.64999962 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 1,6 west 1 line 2 e0 12 a 12.3500004..13.6499996 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 1,8 west 1 line 2 e0 16 a 16.3500004..17.6499996 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 1,12 west 1 line 2 e0 24 a 24.3500004..25.6499996 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 4,1 west 0 line 2 e0 8 a 8.35000038..9.64999962 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 4,14 west 0 line 28 e0 8 a 8.35000038..9.64999962 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 7,1 west 0 line 2 e0 14 a 14.3500004..15.6499996 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 8,14 west 0 line 28 e0 16 a 16.3500004..17.6499996 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 10,14 west 0 line 28 e0 20 a 20.3500004..21.6499996 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 11,1 west 0 line 2 e0 22 a 22.3500004..23.6499996 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 14,2 west 1 line 28 e0 4 a 4.3499999..5.6500001 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 14,4 west 1 line 28 e0 8 a 8.35000038..9.64999962 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 14,8 west 1 line 28 e0 16 a 16.3500004..17.6499996 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 14,12 west 1 line 28 e0 24 a 24.3500004..25.6499996 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+
+chunk L5 v1 s0 (40,-37) layout: 61 props, 54 fixtures, 16 fittings, 13 openings
+prop kind 16 cell 2,3 global 642,-589 at 1285 -1177 floor 0 turn 0 yaw 0 against 0 hash b95b7096 2bce5d72
+prop kind 16 cell 2,4 global 642,-588 at 1285 -1175 floor 0 turn 2 yaw 3.14159989 against 0 hash 1b08488f 228d5241
+prop kind 16 cell 2,7 global 642,-585 at 1285 -1169 floor 0 turn 0 yaw 0 against 0 hash 0d357ce1 497011b5
+prop kind 16 cell 2,8 global 642,-584 at 1285 -1167 floor 0 turn 2 yaw 3.14159989 against 0 hash e9748569 5656adfc
+prop kind 16 cell 2,11 global 642,-581 at 1285 -1161 floor 0 turn 0 yaw 0 against 0 hash e0732881 03ed3d42
+prop kind 16 cell 2,12 global 642,-580 at 1285 -1159 floor 0 turn 2 yaw 3.14159989 against 0 hash 2db961a3 8fb9bea0
+prop kind 16 cell 3,3 global 643,-589 at 1287 -1177 floor 0 turn 0 yaw 0 against 0 hash 901ee24b b909d717
+prop kind 16 cell 3,4 global 643,-588 at 1287 -1175 floor 0 turn 2 yaw 3.14159989 against 0 hash a6109c5b 2140e076
+prop kind 16 cell 3,7 global 643,-585 at 1287 -1169 floor 0 turn 0 yaw 0 against 0 hash b5de4ed0 7692d653
+prop kind 16 cell 3,8 global 643,-584 at 1287 -1167 floor 0 turn 2 yaw 3.14159989 against 0 hash 9d7a8cc3 97a8d500
+prop kind 16 cell 3,11 global 643,-581 at 1287 -1161 floor 0 turn 0 yaw 0 against 0 hash 5441e691 786acb49
+prop kind 16 cell 3,12 global 643,-580 at 1287 -1159 floor 0 turn 2 yaw 3.14159989 against 0 hash 7c885370 d596e07f
+prop kind 16 cell 4,3 global 644,-589 at 1289 -1177 floor 0 turn 0 yaw 0 against 0 hash 6a928163 7450ce10
+prop kind 16 cell 4,4 global 644,-588 at 1289 -1175 floor 0 turn 2 yaw 3.14159989 against 0 hash b5f650de df173a6c
+prop kind 16 cell 4,7 global 644,-585 at 1289 -1169 floor 0 turn 0 yaw 0 against 0 hash f70c76df 99b93fa7
+prop kind 16 cell 4,8 global 644,-584 at 1289 -1167 floor 0 turn 2 yaw 3.14159989 against 0 hash ab706159 0ced9687
+prop kind 16 cell 4,11 global 644,-581 at 1289 -1161 floor 0 turn 0 yaw 0 against 0 hash 4c55f767 4429998e
+prop kind 16 cell 4,12 global 644,-580 at 1289 -1159 floor 0 turn 2 yaw 3.14159989 against 0 hash ccd5facf 2b73721e
+prop kind 16 cell 5,3 global 645,-589 at 1291 -1177 floor 0 turn 0 yaw 0 against 0 hash d837efc9 67ec5349
+prop kind 16 cell 5,4 global 645,-588 at 1291 -1175 floor 0 turn 2 yaw 3.14159989 against 0 hash d4557aff ba31b06e
+prop kind 16 cell 5,7 global 645,-585 at 1291 -1169 floor 0 turn 0 yaw 0 against 0 hash b85768a0 5d3b1c87
+prop kind 16 cell 5,8 global 645,-584 at 1291 -1167 floor 0 turn 2 yaw 3.14159989 against 0 hash 5177905a 788508e1
+prop kind 16 cell 5,11 global 645,-581 at 1291 -1161 floor 0 turn 0 yaw 0 against 0 hash aa600a2c 04176c2c
+prop kind 16 cell 5,12 global 645,-580 at 1291 -1159 floor 0 turn 2 yaw 3.14159989 against 0 hash 45d23685 867b7039
+prop kind 16 cell 6,3 global 646,-589 at 1293 -1177 floor 0 turn 0 yaw 0 against 0 hash 2ada60c6 be1a0637
+prop kind 16 cell 6,4 global 646,-588 at 1293 -1175 floor 0 turn 2 yaw 3.14159989 against 0 hash ff745480 4200d3e3
+prop kind 16 cell 6,7 global 646,-585 at 1293 -1169 floor 0 turn 0 yaw 0 against 0 hash bb30f52b ea901cf6
+prop kind 16 cell 6,8 global 646,-584 at 1293 -1167 floor 0 turn 2 yaw 3.14159989 against 0 hash 97de804c 97b86a79
+prop kind 16 cell 6,11 global 646,-581 at 1293 -1161 floor 0 turn 0 yaw 0 against 0 hash cd994b30 f013c9eb
+prop kind 16 cell 6,12 global 646,-580 at 1293 -1159 floor 0 turn 2 yaw 3.14159989 against 0 hash c47e738d b8e79067
+prop kind 16 cell 8,3 global 648,-589 at 1297 -1177 floor 0 turn 0 yaw 0 against 0 hash 4e06048e 1bd03af9
+prop kind 16 cell 8,4 global 648,-588 at 1297 -1175 floor 0 turn 2 yaw 3.14159989 against 0 hash 074d64dc b7c7da45
+prop kind 16 cell 8,7 global 648,-585 at 1297 -1169 floor 0 turn 0 yaw 0 against 0 hash 8bd718ad 2d01520e
+prop kind 16 cell 8,8 global 648,-584 at 1297 -1167 floor 0 turn 2 yaw 3.14159989 against 0 hash 1916c404 186450e1
+prop kind 16 cell 8,11 global 648,-581 at 1297 -1161 floor 0 turn 0 yaw 0 against 0 hash 74af7012 f44c7df8
+prop kind 16 cell 8,12 global 648,-580 at 1297 -1159 floor 0 turn 2 yaw 3.14159989 against 0 hash 0c520341 0683009f
+prop kind 16 cell 9,3 global 649,-589 at 1299 -1177 floor 0 turn 0 yaw 0 against 0 hash 7313d23c b74687b2
+prop kind 16 cell 9,4 global 649,-588 at 1299 -1175 floor 0 turn 2 yaw 3.14159989 against 0 hash a50bc0fe 5999ba55
+prop kind 16 cell 9,7 global 649,-585 at 1299 -1169 floor 0 turn 0 yaw 0 against 0 hash 6062d346 37ce633d
+prop kind 16 cell 9,8 global 649,-584 at 1299 -1167 floor 0 turn 2 yaw 3.14159989 against 0 hash a8ca26b6 2ece6d4b
+prop kind 16 cell 9,11 global 649,-581 at 1299 -1161 floor 0 turn 0 yaw 0 against 0 hash 72683535 4d7b66a9
+prop kind 16 cell 9,12 global 649,-580 at 1299 -1159 floor 0 turn 2 yaw 3.14159989 against 0 hash 495ebcc8 003b2d20
+prop kind 6 cell 10,1 global 650,-591 at 1301 -1181 floor 0 turn 2 yaw 3.14159989 against 0 hash 074e12ba 287a1bf7
+prop kind 16 cell 10,3 global 650,-589 at 1301 -1177 floor 0 turn 0 yaw 0 against 0 hash 3bc9096a bc297d37
+prop kind 16 cell 10,4 global 650,-588 at 1301 -1175 floor 0 turn 2 yaw 3.14159989 against 0 hash ad8db258 adf1c7fb
+prop kind 16 cell 10,7 global 650,-585 at 1301 -1169 floor 0 turn 0 yaw 0 against 0 hash 516f044d 155bda8c
+prop kind 16 cell 10,8 global 650,-584 at 1301 -1167 floor 0 turn 2 yaw 3.14159989 against 0 hash d1cd7cb6 bc05354c
+prop kind 16 cell 10,11 global 650,-581 at 1301 -1161 floor 0 turn 0 yaw 0 against 0 hash ce2d25ed 94a681d7
+prop kind 16 cell 10,12 global 650,-580 at 1301 -1159 floor 0 turn 2 yaw 3.14159989 against 0 hash 6e42f4fa 6f1f9a28
+prop kind 16 cell 11,3 global 651,-589 at 1303 -1177 floor 0 turn 0 yaw 0 against 0 hash 7daf2688 1e957d25
+prop kind 16 cell 11,4 global 651,-588 at 1303 -1175 floor 0 turn 2 yaw 3.14159989 against 0 hash 34b78bde 05d8a500
+prop kind 16 cell 11,7 global 651,-585 at 1303 -1169 floor 0 turn 0 yaw 0 against 0 hash 07f07d10 b94ca83f
+prop kind 16 cell 11,8 global 651,-584 at 1303 -1167 floor 0 turn 2 yaw 3.14159989 against 0 hash e519e3de 6cb4919e
+prop kind 16 cell 11,11 global 651,-581 at 1303 -1161 floor 0 turn 0 yaw 0 against 0 hash edb3f9b1 8d156ec0
+prop kind 16 cell 11,12 global 651,-580 at 1303 -1159 floor 0 turn 2 yaw 3.14159989 against 0 hash 1b496657 8d5922f2
+prop kind 16 cell 12,3 global 652,-589 at 1305 -1177 floor 0 turn 0 yaw 0 against 0 hash 831f30bc 016751f1
+prop kind 16 cell 12,4 global 652,-588 at 1305 -1175 floor 0 turn 2 yaw 3.14159989 against 0 hash bc03b7c9 509d34c0
+prop kind 16 cell 12,7 global 652,-585 at 1305 -1169 floor 0 turn 0 yaw 0 against 0 hash 6f33aeb6 bfcd6db1
+prop kind 16 cell 12,8 global 652,-584 at 1305 -1167 floor 0 turn 2 yaw 3.14159989 against 0 hash fac6138d e697a7c3
+prop kind 16 cell 12,11 global 652,-581 at 1305 -1161 floor 0 turn 0 yaw 0 against 0 hash b076f6ba a64deeb8
+prop kind 16 cell 12,12 global 652,-580 at 1305 -1159 floor 0 turn 2 yaw 3.14159989 against 0 hash 0ea6e162 8bfd6ed2
+fixture kind 6 cell 0,5 pos 1281 4 -1173 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 0,7 pos 1281 4 -1169 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 0,11 pos 1281 4 -1161 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 0,13 pos 1281 4 -1157 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 2 cell 1,2 pos 1281.89001 1.22000003 -1178.46509 end 0 0 0 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 1,2 pos 1283 4 -1179 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 0 cell 1,13 pos 1282.10999 0.319999993 -1156.77502 end 0 0 0 normal 1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 1 cell 1,14 pos 1282.76001 0.319999993 -1156.10999 end 0 0 0 normal 0 0 -1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 2,3 pos 1285 4 -1177 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 2,9 pos 1285 4 -1165 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 2,10 pos 1285 4 -1163 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 2,12 pos 1285 4 -1159 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 2,13 pos 1285 4 -1157 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 0 cell 2,14 pos 1285.22498 0.319999993 -1156.10999 end 0 0 0 normal 0 0 -1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 3,0 pos 1287 4 -1183 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 0 cell 3,1 pos 1286.91492 0.319999993 -1181.89001 end 0 0 0 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 3,14 pos 1287 4 -1155 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 4,8 pos 1289 4 -1167 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 4,9 pos 1289 4 -1165 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 5,8 pos 1291 4 -1167 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 5,12 pos 1291 4 -1159 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 5,13 pos 1291 4 -1157 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 6,3 pos 1293 4 -1177 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 6,13 pos 1293 4 -1157 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 7,7 pos 1295 4 -1169 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 8,0 pos 1297 4 -1183 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 8,13 pos 1297 4 -1157 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 8,14 pos 1297 4 -1155 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 8,15 pos 1297 4 -1153 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 7 cell 9,0 pos 1298.10999 3.84500003 -1184.10999 end 1298.10999 3.84500003 -1181.89001 normal 1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 9,11 pos 1299 4 -1161 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 9,15 pos 1299 4 -1153 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 10,1 pos 1301 4 -1181 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 10,3 pos 1301 4 -1177 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 10,6 pos 1301 4 -1171 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 10,7 pos 1301 4 -1169 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 0 cell 11,1 pos 1302.44995 0.319999993 -1181.89001 end 0 0 0 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 11,3 pos 1303 4 -1177 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 11,9 pos 1303 4 -1165 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 12,4 pos 1305 4 -1175 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 12,9 pos 1305 4 -1165 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 0 cell 12,14 pos 1305.22498 0.319999993 -1155.89001 end 0 0 0 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 13,5 pos 1307 4 -1173 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 13,10 pos 1307 4 -1163 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 0 cell 13,14 pos 1307.38 0.319999993 -1156.10999 end 0 0 0 normal 0 0 -1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 14,0 pos 1309 4 -1183 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 1 cell 14,3 pos 1307.89001 0.319999993 -1177.39502 end 0 0 0 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 6 cell 14,6 pos 1309 4 -1171 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 7 cell 14,7 pos 1307.89001 3.84500003 -1170.10999 end 1307.89001 3.84500003 -1167.89001 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 7 cell 14,8 pos 1307.89001 3.84500003 -1168.10999 end 1307.89001 3.84500003 -1165.89001 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 7 cell 14,9 pos 1307.89001 3.84500003 -1166.10999 end 1307.89001 3.84500003 -1163.89001 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 7 cell 14,10 pos 1307.89001 3.84500003 -1164.10999 end 1307.89001 3.84500003 -1161.89001 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 0 cell 15,9 pos 1310.60498 0.319999993 -1165.89001 end 0 0 0 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 5 cell 15,15 pos 1311 4 -1153 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fitting grid 160,-148 pos 1284 3.88000011 -1180 ceiling 4 gap 0 turned 1 dead 0 output 0.832606137 faulty 0 stutter 0.510343552
+fitting grid 160,-147 pos 1284 3.88000011 -1172 ceiling 4 gap 0 turned 0 dead 0 output 0.853515625 faulty 0 stutter 0.508789062
+fitting grid 160,-146 pos 1284 3.88000011 -1164 ceiling 4 gap 0 turned 1 dead 0 output 0.901250064 faulty 0 stutter 0.573123932
+fitting grid 160,-145 pos 1284 3.88000011 -1156 ceiling 4 gap 0 turned 0 dead 1 output 0.864374995 faulty 0 stutter 0.0409374237
+fitting grid 161,-148 pos 1292 3.88000011 -1180 ceiling 4 gap 0 turned 1 dead 0 output 0.980078101 faulty 0 stutter 0.725196838
+fitting grid 161,-147 pos 1292 3.88000011 -1172 ceiling 4 gap 0 turned 0 dead 0 output 0.839765549 faulty 0 stutter 0.754413605
+fitting grid 161,-146 pos 1292 3.88000011 -1164 ceiling 4 gap 0 turned 0 dead 0 output 0.936328113 faulty 0 stutter 0.315818787
+fitting grid 161,-145 pos 1292 3.88000011 -1156 ceiling 4 gap 0 turned 0 dead 0 output 0.946816266 faulty 0 stutter 0.220790863
+fitting grid 162,-148 pos 1300 3.88000011 -1180 ceiling 4 gap 0 turned 0 dead 0 output 0.945370853 faulty 0 stutter 0.609676361
+fitting grid 162,-147 pos 1300 3.88000011 -1172 ceiling 4 gap 0 turned 1 dead 0 output 0.904492199 faulty 0 stutter 0.973731995
+fitting grid 162,-146 pos 1300 3.88000011 -1164 ceiling 4 gap 0 turned 0 dead 0 output 0.827109158 faulty 0 stutter 0.43277359
+fitting grid 162,-145 pos 1300 3.88000011 -1156 ceiling 4 gap 0 turned 1 dead 0 output 0.800703049 faulty 0 stutter 0.356758118
+fitting grid 163,-148 pos 1308 3.88000011 -1180 ceiling 4 gap 0 turned 0 dead 0 output 0.90882796 faulty 0 stutter 0.807067871
+fitting grid 163,-147 pos 1308 3.88000011 -1172 ceiling 4 gap 0 turned 1 dead 1 output 0.951171875 faulty 0 stutter 0.502929688
+fitting grid 163,-146 pos 1308 3.88000011 -1164 ceiling 4 gap 0 turned 1 dead 0 output 0.901250064 faulty 0 stutter 0.573123932
+fitting grid 163,-145 pos 1308 3.88000011 -1156 ceiling 4 gap 0 turned 1 dead 0 output 0.90719682 faulty 1 stutter 0.882362366
+opening kind 0 cell 1,7 west 1 line 1282 e0 -1170 a -1169.65002..-1168.34998 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 1,9 west 1 line 1282 e0 -1166 a -1165.65002..-1164.34998 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 1,11 west 1 line 1282 e0 -1162 a -1161.65002..-1160.34998 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 4,14 west 0 line -1156 e0 1288 a 1288.34998..1289.65002 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 6,1 west 0 line -1182 e0 1292 a 1292.34998..1293.65002 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 7,14 west 0 line -1156 e0 1294 a 1294.34998..1295.65002 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 10,1 west 0 line -1182 e0 1300 a 1300.34998..1301.65002 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 11,14 west 0 line -1156 e0 1302 a 1302.34998..1303.65002 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 13,1 west 0 line -1182 e0 1306 a 1306.34998..1307.65002 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 14,2 west 1 line 1308 e0 -1180 a -1179.65002..-1178.34998 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 14,6 west 1 line 1308 e0 -1172 a -1171.65002..-1170.34998 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 14,11 west 1 line 1308 e0 -1162 a -1161.65002..-1160.34998 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+opening kind 0 cell 14,13 west 1 line 1308 e0 -1158 a -1157.65002..-1156.34998 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
+
 chunk L0 v1 s0 (1,0) layout: 4 props, 68 fixtures, 64 fittings, 40 openings
 prop kind 1 cell 7,0 global 23,0 at 47 1 floor 0 turn 1 yaw 1.57079995 against 0 hash c26fbbb5 deb87eaf
 prop kind 12 cell 7,7 global 23,7 at 47 15 floor 0 turn 0 yaw 0 against 0 hash 9d8075b0 fed15af2
