@@ -49,6 +49,8 @@ constexpr float CENTRE_GAIN = 0.6875f;   // panGains(0), each side
 struct LoopLevels {
     float underwater = 0, party = 0;
     float partyPitch = 1;   // slow pitch wander
+    float partyStop = 0;    // 0 playing .. 1 stopped: the music winds down and back up
+    float partyBase = 0;    // party before the stop's wind-down
     float t = 0;
     void step(const LoopCue &cue, float dt, float hum);
 };

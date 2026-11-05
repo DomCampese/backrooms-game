@@ -28,6 +28,7 @@ void Sim::step(const InputFrame &in, float dt, double now) {
     observation.observing = in.playing;
     observation.observationCos = portableCos(in.screenFov * 0.00872664626f);
     updateMannequin(observation, dt, now);
+    updatePartyMusic(dt);
     updateEntity(dt, now, in.forceSpawn);
     updateUsher(dt, now);
     updateExits(now);
@@ -188,6 +189,9 @@ void Sim::applyLevel(int lv, double now) {
     usherRng = Rng(hash64((uint64_t)world.seed ^ ((uint64_t)world.visit << 32) ^ 0x05E4ULL));
     usher = Usher{};
     usher.nextSpawn = now + 20.0 + usherRng.f01() * 20.0;
+    musicRng = Rng(hash64((uint64_t)world.seed ^ ((uint64_t)world.visit << 32) ^ 0x9A27ULL));
+    music = PartyMusic{};
+    music.next = MUSIC_FIRST + musicRng.f01() * MUSIC_PLAY_SPAN;
     distantRng = Rng(hash64((uint64_t)world.seed ^ ((uint64_t)lv << 40) ^ ((uint64_t)world.visit << 48) ^ 0xD157A47ULL));
     nextDistant = now + DISTANT_LEAD + distantRng.f01() * DISTANT_SPAN;
     taken.clear(); coinsWorld.clear();
@@ -254,7 +258,8 @@ void Sim::bankRecords() {
 
 LoopCue Sim::loopCue() {
     return { level == 2 && !inMenu && eyeY < WATER_Y && world.poolAt(cellOf(px), cellOf(pz)),
-             level == LEVEL_FUN && !inMenu };
+             level == LEVEL_FUN && !inMenu,
+             level == LEVEL_FUN && !inMenu && !music.playing };
 }
 
 AudioEvent &Sim::audioEvent(AudioEvent::Kind kind) {

@@ -1006,7 +1006,13 @@ void LoopLevels::step(const LoopCue &cue, float dt, float hum) {
     underwater += ((cue.underwater ? 0.5f : 0.0f) - underwater) * (1 - expf(-8.0f * dt));
     // LEVEL FUN: the music plays slowed and flat, with a slowly wandering
     // pitch, and is quieter during a blackout.
-    party += ((cue.party ? 0.32f * hum : 0.0f) - party) * k;
+    // A stop (Sim::music) winds it down like a turntable losing power: pitch
+    // to 0.35 of its own and level to nothing over 0.7 s. It comes back up
+    // over 0.4 s.
+    partyStop = fminf(1.0f, fmaxf(0.0f, partyStop + (cue.partyStopped ? dt / 0.7f : -dt / 0.4f)));
+    float spin = 1.0f - partyStop;
+    partyBase += ((cue.party ? 0.32f * hum : 0.0f) - partyBase) * k;
+    party = partyBase * spin;
     t += dt;
-    partyPitch = 0.84f + 0.025f * sinf(t * 0.41f) + 0.008f * sinf(t * 1.9f);
+    partyPitch = (0.84f + 0.025f * sinf(t * 0.41f) + 0.008f * sinf(t * 1.9f)) * (0.35f + 0.65f * spin);
 }

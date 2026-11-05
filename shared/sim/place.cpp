@@ -279,3 +279,29 @@ void Sim::updateDistant(double now) {
         .atPitch(rate)
         .atVolume(volume);
 }
+
+// LEVEL FUN only. The stop and its length are decided on arrival and at each
+// switch from musicRng, so they do not depend on what the player does.
+void Sim::updatePartyMusic(float dt) {
+    music.heardT = fmaxf(0, music.heardT - dt);
+    if (level != LEVEL_FUN || inMenu || deathT > 0) return;
+    music.next -= dt;
+    if (music.next <= 0) {
+        music.playing = !music.playing;
+        music.stopped = 0; music.heard = false;
+        music.next = music.playing ? MUSIC_PLAY_MIN + musicRng.f01() * MUSIC_PLAY_SPAN
+                                   : MUSIC_STOP_MIN + musicRng.f01() * MUSIC_STOP_SPAN;
+    }
+    if (music.playing) return;
+    music.stopped += dt;
+    if (music.heard || music.stopped < MUSIC_GRACE) return;
+    if (portableHypot(velx, velz) <= MUSIC_STILL) return;
+    music.heard = true; music.heardT = 2.5f;
+    play(Sfx::Scare).atPitch(0.8f).atVolume(0.7f);
+    if (ent.st == EState::Hidden) spawnHunter();
+    if (ent.st == EState::Stalk || ent.st == EState::Chase) {
+        ent.st = EState::Chase;
+        ent.gaze = 0; ent.life = 0; ent.repathT = 0;
+        hunterNotice(px, pz);
+    }
+}

@@ -1205,6 +1205,57 @@ int main() {
     }
     printf("PASS breath drains under water, drowning ends the run, sunken doubloons need a dive\n");
 
+    // ---- LEVEL FUN's music stops. Standing still through a stop calls
+    // nothing; moving after the grace calls the Partygoer to the player. The
+    // music covers footsteps while it plays, and the mix winds it down.
+    {
+        sim.applyLevel(LEVEL_FUN,GetTime()); sim.inMenu=false; sim.deathT=0; sim.health=1;
+        CHECK(sim.music.playing && sim.music.next>=Sim::MUSIC_FIRST && sim.music.next<=Sim::MUSIC_FIRST+Sim::MUSIC_PLAY_SPAN);
+        Vec2 o=sim.world.findOpenSpot(15,15); sim.px=o.x; sim.pz=o.y; sim.py=0;
+        sim.ent.st=EState::Hidden; sim.velx=sim.velz=0;
+        float d0; sim.velx=3.0f; float walkNoise=sim.loudestNoise(d0,d0); sim.velx=0;
+        int f=0;
+        while (sim.music.playing && f<60*30) { sim.updatePartyMusic(1.0f/30); f++; }
+        CHECK(!sim.music.playing && sim.music.next>=Sim::MUSIC_STOP_MIN && sim.music.next<=Sim::MUSIC_STOP_MIN+Sim::MUSIC_STOP_SPAN);
+        sim.velx=3.0f; float stopNoise=sim.loudestNoise(d0,d0); sim.velx=0;
+        CHECK(fabsf(walkNoise-stopNoise*Sim::MUSIC_MASK)<0.01f);
+        CHECK(sim.loopCue().partyStopped);
+        // Moving inside the grace is allowed.
+        sim.velx=3.0f;
+        for (int i=0;i<(int)(Sim::MUSIC_GRACE*30)-3;i++) sim.updatePartyMusic(1.0f/30);
+        CHECK(!sim.music.heard && sim.ent.st==EState::Hidden);
+        // Standing still through the rest of it calls nothing.
+        sim.velx=0;
+        while (!sim.music.playing) sim.updatePartyMusic(1.0f/30);
+        CHECK(!sim.music.heard && sim.ent.st==EState::Hidden && !sim.loopCue().partyStopped);
+        // The next stop: walking after the grace calls the Partygoer, which chases.
+        while (sim.music.playing) sim.updatePartyMusic(1.0f/30);
+        for (int i=0;i<(int)(Sim::MUSIC_GRACE*30)+2;i++) sim.updatePartyMusic(1.0f/30);
+        sim.velx=3.0f; sim.audio.clear();
+        sim.updatePartyMusic(1.0f/30);
+        CHECK(sim.music.heard && sim.music.heardT>0 && sim.ent.st==EState::Chase);
+        CHECK(sim.ent.lastX==sim.px && sim.ent.lastZ==sim.pz);
+        sim.velx=0; sim.ent.st=EState::Hidden;
+        // The mix: stopped, the music is silent and slowed within 0.7 s; it is
+        // back to full within 0.4 s of starting again.
+        LoopLevels mix;
+        LoopCue cue; cue.party=true;
+        for (int i=0;i<90;i++) mix.step(cue,1.0f/30,1.0f);
+        float full=mix.party;
+        cue.partyStopped=true;
+        for (int i=0;i<22;i++) mix.step(cue,1.0f/30,1.0f);
+        CHECK(mix.party<0.005f && mix.partyPitch<0.35f*0.88f);
+        cue.partyStopped=false;
+        for (int i=0;i<13;i++) mix.step(cue,1.0f/30,1.0f);
+        CHECK(fabsf(mix.party-full)<0.01f && mix.partyPitch>0.8f);
+        // Off LEVEL FUN nothing stops.
+        sim.applyLevel(0,GetTime());
+        for (int i=0;i<60*30;i++) sim.updatePartyMusic(1.0f/30);
+        CHECK(sim.music.playing && !sim.loopCue().partyStopped);
+        sim.beginDescent(0); sim.inMenu=false;
+    }
+    printf("PASS LEVEL FUN's music stops; moving during a stop calls the Partygoer\n");
+
     // ---- the hunter's movement and walk cycle (ENT-01/ENT-02). Check the
     // captures by eye too.
     {
