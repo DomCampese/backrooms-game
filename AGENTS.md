@@ -42,6 +42,15 @@ easy to prove. A PR states what a player will notice and why it was chosen.
 Write all of it plainly (docs/readability.md, "Register"). That includes
 messages to the user: short sentences, no jargon they would have to decode.
 
+# Open a pull request when the work is pushed (November 2026)
+
+When a session's change is committed and pushed, open a pull request for
+its branch against `main` in the same turn, without being asked. The PR
+says what a player will notice, how it was checked and what to check by
+hand. If the branch already has an open PR, update that one instead.
+Reason: the owner reviews and merges from GitHub. A pushed branch with no
+PR is easy to lose track of, and asking for one each time is a wasted turn.
+
 # The theater (November 2026)
 
 Level 4 (`THEATER`, core/level_rules.h) is a cinema, and the second level
