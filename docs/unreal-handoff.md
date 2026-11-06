@@ -352,8 +352,8 @@ fallback while the lit look is unproven.
     mixer; grey walls or carpet point at the surface import.
 15. **The casino's cigarettes** (6 November 2026). One Unreal change: the
     `PickCigs` control on key 6 (`BackroomsTypes.h`,
-    `BackroomsPlayerController.cpp`). In the casino at seed 1337, walk
-    about 11 m north of spawn to a gold pack in a column of light. Walk
+    `BackroomsPlayerController.cpp`). In the casino at seed 1337 a gold
+    pack hangs in a column of light at x 1, z -11, about 30 m from spawn. Walk
     into it: "A GOLD PACK OF CIGARETTES" shows and a cigarette is in hand.
     Click to light it (lighter sound, an orange ember), click again for a
     drag (the cigarette rises to the mouth, then a breath of smoke or a
