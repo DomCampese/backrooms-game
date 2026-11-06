@@ -202,6 +202,9 @@ constexpr float TUBE_HASH_SCALE = 43758.5453f;
 constexpr float TUBE_STOREY_SKEW = 1.7f;
 constexpr float TUBE_OUTPUT_SPREAD = 53.7f;
 constexpr float TUBE_STUTTER_SPREAD = 97.31f;
+// The fitting at grid index (gx, gz) on the storey World::qs reads, as
+// chunkLayout lists it: the same gap, dead flag and output.
+LightFitting fittingAt(World &w, int gx, int gz);
 float tubeHash(float gx, float gz);
 // Each storey's tubes fail in their own places: the tube hash is offset per
 // storey, fract(s * STOREY_HASH_STEP) * STOREY_HASH_SPAN. Bounded, because the

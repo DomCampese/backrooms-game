@@ -150,6 +150,11 @@ struct Sim {
     // heard them, then to spots SEARCH_STEP_MIN..MAX m around it, and gives up
     // after SEARCH_TIME s without contact.
     static constexpr float HUNTER_SIGHT = 30.0f;
+    // In shadow (no working fitting lighting the spot, lightAtPlayer under
+    // SHADOW_LIT) with the flashlight off, a chasing hunter sees the player
+    // only within DARK_SIGHT m.
+    static constexpr float DARK_SIGHT = 9.0f;
+    static constexpr float SHADOW_LIT = 0.3f;
     static constexpr float SEARCH_SPEED = 2.6f;
     static constexpr float SEARCH_STEP_MIN = 3.0f, SEARCH_STEP_MAX = 7.0f;
     static constexpr float SEARCH_TIME = 10.0f;
@@ -297,6 +302,7 @@ struct Sim {
     Rng usherRng{1};                 // its own stream, so it does not shift grng on other levels
     float entDist = 1e9f;            // to the hunter, this tick
     float entPrevX = 0, entPrevZ = 0;   // his position last tick, for his velocity
+    float playerLight = 1;           // lightAtPlayer, smoothed; kept up only while a hunter is out
     float entDarkCur = 0;            // how much the hunter dims nearby lights
     double nextBlackout = 0, blackoutEnd = -1;
     float blackoutCur = 1.0f, fear = 0.0f;
@@ -482,6 +488,8 @@ struct Sim {
     const char *hunterName() const { return level == LEVEL_FUN ? "THE PARTYGOER" : level == 0 ? "PIRATE CLARK" : "A SMILER"; }
     bool wayOpen() const { return coins >= ESCAPE_COST; }
     void spawnHunter();
+    float lightAtPlayer();   // 0 dark .. 1 under a working fitting
+    bool inShadow() const { return ent.st != EState::Hidden && playerLight < SHADOW_LIT && flashCur < 0.5f; }
     float loudestNoise(float &x, float &z) const;   // how far the loudest noise carries, and where
     bool hunterChase(float dt, double now, float &fearT);   // true if it ended the run
     bool findDoor(DoorReach &d);            // the doorway in reach and in front, if any

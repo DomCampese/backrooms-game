@@ -1,5 +1,6 @@
 // Native integration checks and reproducible viewmodel captures.
 #include "game.h"
+#include "core/layout.h"
 #include "raymath.h"
 #include "sfx.h"
 struct EmbeddedAsset { const char *path; const unsigned char *data; size_t size; };
@@ -1255,6 +1256,68 @@ int main() {
         sim.beginDescent(0); sim.inMenu=false;
     }
     printf("PASS LEVEL FUN's music stops; moving during a stop calls the Partygoer\n");
+
+    // ---- in shadow, a chasing hunter sees the player only within DARK_SIGHT.
+    // A lit spot is seen from 15 m; a dark one is not, unless the flashlight
+    // is on or he is within DARK_SIGHT. The layout and the sim agree on which
+    // fittings work.
+    {
+        sim.applyLevel(0,GetTime()); sim.beginDescent(0); sim.inMenu=false; sim.deathT=0;
+        World &w=sim.world;
+        // fittingAt matches chunkLayout's fittings.
+        {
+            ChunkLayout L=chunkLayout(w,0,0);
+            CHECK(!L.fittings.empty());
+            for (const LightFitting &f : L.fittings) {
+                LightFitting g=fittingAt(w,f.gx,f.gz);
+                CHECK(g.dead==f.dead && g.gap==f.gap && g.output==f.output && g.pos.x==f.pos.x && g.pos.z==f.pos.z);
+            }
+        }
+        auto open=[&](int a,int b){ return !w.pillarAt(a,b) && !w.propAt(a,b) && w.floorY(a,b)==0; };
+        auto lightAt=[&](int a,int b){ sim.px=a*CELL+1; sim.pz=b*CELL+1; return sim.lightAtPlayer(); };
+        // A cell, and one 7-8 cells (14-16 m) along a clear line from it.
+        auto findPair=[&](bool dark,int &pa,int &pb,int &ha,int &hb){
+            for (int a=-40;a<40;++a) for (int b=-40;b<40;++b) {
+                if (!open(a,b)) continue;
+                float l=lightAt(a,b);
+                if (dark ? l>=0.05f : l<0.8f) continue;
+                for (int d=7; d<=8; ++d) for (int dir=0; dir<4; ++dir) {
+                    int x=a+(dir==0?d:dir==1?-d:0), z=b+(dir==2?d:dir==3?-d:0);
+                    if (!open(x,z) || !w.lineOfSight(a*CELL+1,b*CELL+1,x*CELL+1,z*CELL+1)) continue;
+                    pa=a; pb=b; ha=x; hb=z; return true;
+                }
+            }
+            return false;
+        };
+        auto chaseFrom=[&](int pa,int pb,float hx,float hz,bool torch){
+            sim.px=pa*CELL+1; sim.pz=pb*CELL+1; sim.py=0; sim.velx=sim.velz=0; sim.crouchCur=0;
+            sim.hidden=false; sim.sprinting=false; sim.deck.playing=false; sim.doorNoiseT=0; sim.muzzleT=0; sim.gunCd=0;
+            for (auto &f : sim.litFlares) f.active=false;
+            sim.flashOn=torch; sim.flashCur=torch?1.0f:0.0f;
+            sim.ent.st=EState::Chase; sim.ent.x=hx; sim.ent.z=hz; sim.ent.dispY=0; sim.ent.lunge=0; sim.ent.lungeCd=5;
+            sim.ent.lastX=-999; sim.ent.lastZ=-999; sim.entDarkCur=0;
+            float d=hypotf(hx-sim.px,hz-sim.pz); sim.entDist=d;
+            sim.playerLight=sim.lightAtPlayer();
+            float fearT=0; sim.hunterChase(1.0f/30,600.0,fearT);
+            return sim.ent.lastX==sim.px && sim.ent.lastZ==sim.pz;
+        };
+        int pa,pb,ha,hb;
+        CHECK(findPair(false,pa,pb,ha,hb));
+        CHECK(chaseFrom(pa,pb,ha*CELL+1,hb*CELL+1,false));             // lit: seen from 14-16 m
+        CHECK(findPair(true,pa,pb,ha,hb));
+        CHECK(!sim.inShadow());                                         // still the lit spot
+        CHECK(!chaseFrom(pa,pb,ha*CELL+1,hb*CELL+1,false));            // dark: not seen
+        CHECK(sim.inShadow());
+        CHECK(chaseFrom(pa,pb,ha*CELL+1,hb*CELL+1,true));              // torch on: seen
+        float hx=(pa*CELL+1)+((ha-pa)*CELL)*0.4f, hz=(pb*CELL+1)+((hb-pb)*CELL)*0.4f;
+        CHECK(chaseFrom(pa,pb,hx,hz,false));                            // within DARK_SIGHT: seen
+        // A blackout puts every spot in shadow.
+        CHECK(findPair(false,pa,pb,ha,hb));
+        sim.blackoutCur=0.02f; CHECK(lightAt(pa,pb)<Sim::SHADOW_LIT); sim.blackoutCur=1.0f;
+        sim.ent.st=EState::Hidden; sim.flashOn=false; sim.flashCur=0;
+        sim.beginDescent(0); sim.inMenu=false;
+    }
+    printf("PASS in shadow a chasing hunter sees the player only within DARK_SIGHT; the torch gives them away\n");
 
     // ---- the hunter's movement and walk cycle (ENT-01/ENT-02). Check the
     // captures by eye too.
