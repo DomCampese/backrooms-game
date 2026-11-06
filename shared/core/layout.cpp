@@ -383,48 +383,63 @@ void streamers(World &w, int cx, int cz, std::vector<Fixture> &out) {
     }
 }
 
+// One fitting: where it is, whether it is missing (FittingGap) and whether its
+// tube works. The chunk is the one its centre falls in.
+LightFitting fittingFor(World &w, const ChunkData &d, int cx, int cz, int gx, int gz) {
+    const LevelRules &rules = LEVEL_RULES[w.level];
+    float wx = cx * CHUNK, wz = cz * CHUNK, ls = rules.ls;
+    float so = storeyHashOffset(w.qs);
+    float lx = gx * ls + ls * 0.5f, lz = gz * ls + ls * 0.5f;
+    LightFitting f;
+    f.gx = gx;
+    f.gz = gz;
+    f.gap = FittingGap::None;
+    if (d.manila) {
+        float mx = wx + MANILA_MID * CELL, mz = wz + MANILA_MID * CELL;
+        if (fabsf(lx - mx) < 4.0f && fabsf(lz - mz) < 4.0f) f.gap = FittingGap::ManilaRoom;
+    }
+    if (d.audDir >= 0) {
+        float a0 = AUD_LO * CELL, a1 = (AUD_LO + AUD_N) * CELL;
+        if (lx > wx + a0 && lx < wx + a1 && lz > wz + a0 && lz < wz + a1) f.gap = FittingGap::Auditorium;
+    }
+    if (f.gap == FittingGap::None && w.storeyH > 0.0f) {
+        int ci = (int)floorf(lx / CELL + 0.5f), ck = (int)floorf(lz / CELL + 0.5f);   // the corner it is centred on
+        if ((w.vflagAt(ci, ck) | w.vflagAt(ci - 1, ck) | w.vflagAt(ci, ck - 1) | w.vflagAt(ci - 1, ck - 1))
+            & VF_OPENUP)
+            f.gap = FittingGap::UnderOpening;
+    }
+    f.ceilingY = w.ceilY((int)floorf(lx / CELL), (int)floorf(lz / CELL));
+    f.pos = { lx, f.ceilingY - LIGHT_DROP, lz };
+    f.turned = (ih((int)floorf(lx / ls), (int)floorf(lz / ls), w.sseed() ^ 0xBA77u) & 1) != 0;
+    float h = tubeHash((float)gx + so, (float)gz + so * TUBE_STOREY_SKEW);
+    f.dead = h < rules.dead;
+    f.output = 1.0f - rules.vary * (h * TUBE_OUTPUT_SPREAD - floorf(h * TUBE_OUTPUT_SPREAD));
+    f.faulty = h > 1.0f - rules.faulty;
+    f.stutterSeed = h * TUBE_STUTTER_SPREAD - floorf(h * TUBE_STUTTER_SPREAD);
+    return f;
+}
+
 // The fittings whose centres fall in this chunk, in grid order.
 void fittings(World &w, const ChunkData &d, int cx, int cz, std::vector<LightFitting> &out) {
     const LevelRules &rules = LEVEL_RULES[w.level];
     float wx = cx * CHUNK, wz = cz * CHUNK, ls = rules.ls;
-    float so = storeyHashOffset(w.qs);
     int g0x = (int)floorf(wx / ls), g1x = (int)floorf((wx + CHUNK) / ls);
     int g0z = (int)floorf(wz / ls), g1z = (int)floorf((wz + CHUNK) / ls);
     for (int gx = g0x; gx <= g1x; gx++)
         for (int gz = g0z; gz <= g1z; gz++) {
             float lx = gx * ls + ls * 0.5f, lz = gz * ls + ls * 0.5f;
             if (lx < wx || lx >= wx + CHUNK || lz < wz || lz >= wz + CHUNK) continue;
-            LightFitting f;
-            f.gx = gx;
-            f.gz = gz;
-            f.gap = FittingGap::None;
-            if (d.manila) {
-                float mx = wx + MANILA_MID * CELL, mz = wz + MANILA_MID * CELL;
-                if (fabsf(lx - mx) < 4.0f && fabsf(lz - mz) < 4.0f) f.gap = FittingGap::ManilaRoom;
-            }
-            if (d.audDir >= 0) {
-                float a0 = AUD_LO * CELL, a1 = (AUD_LO + AUD_N) * CELL;
-                if (lx > wx + a0 && lx < wx + a1 && lz > wz + a0 && lz < wz + a1) f.gap = FittingGap::Auditorium;
-            }
-            if (f.gap == FittingGap::None && w.storeyH > 0.0f) {
-                int ci = (int)floorf(lx / CELL + 0.5f), ck = (int)floorf(lz / CELL + 0.5f);   // the corner it is centred on
-                if ((w.vflagAt(ci, ck) | w.vflagAt(ci - 1, ck) | w.vflagAt(ci, ck - 1) | w.vflagAt(ci - 1, ck - 1))
-                    & VF_OPENUP)
-                    f.gap = FittingGap::UnderOpening;
-            }
-            f.ceilingY = w.ceilY((int)floorf(lx / CELL), (int)floorf(lz / CELL));
-            f.pos = { lx, f.ceilingY - LIGHT_DROP, lz };
-            f.turned = (ih((int)floorf(lx / ls), (int)floorf(lz / ls), w.sseed() ^ 0xBA77u) & 1) != 0;
-            float h = tubeHash((float)gx + so, (float)gz + so * TUBE_STOREY_SKEW);
-            f.dead = h < rules.dead;
-            f.output = 1.0f - rules.vary * (h * TUBE_OUTPUT_SPREAD - floorf(h * TUBE_OUTPUT_SPREAD));
-            f.faulty = h > 1.0f - rules.faulty;
-            f.stutterSeed = h * TUBE_STUTTER_SPREAD - floorf(h * TUBE_STUTTER_SPREAD);
-            out.push_back(f);
+            out.push_back(fittingFor(w, d, cx, cz, gx, gz));
         }
 }
 
 }  // namespace
+
+LightFitting fittingAt(World &w, int gx, int gz) {
+    float ls = LEVEL_RULES[w.level].ls;
+    int cx = (int)floorf((gx * ls + ls * 0.5f) / CHUNK), cz = (int)floorf((gz * ls + ls * 0.5f) / CHUNK);
+    return fittingFor(w, w.data(cx, cz), cx, cz, gx, gz);
+}
 
 bool cellHasFloor(World &w, int gi, int gk) {
     return w.storeyH <= 0.0f || !(w.vflagAt(gi, gk) & (VF_HOLE | VF_STAIR));

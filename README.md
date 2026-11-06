@@ -324,7 +324,13 @@ AGENTS.md has the module map file by file.
   can see you. Once a wall is between you, it does not know where you are. It
   walks to the last place it saw or heard you, then checks each piece of
   cover within 8 m of it, nearest first, stopping 1 s at each. It gives up
-  after 10 s without seeing or hearing you. It hears walking
+  after 10 s without seeing or hearing you.
+- **Shadow.** In a chase the hunter sees you from 30 m in a lit spot, but only
+  from 9 m where no working ceiling light reaches you, unless your flashlight
+  is on. The HUD says "[ in shadow ]" while a hunter is out and you are in
+  such a spot. About a fifth of Level 0 is in shadow, around dead tubes, and
+  most of Level 1 and the theater's auditoriums. A blackout puts everything in
+  shadow. It hears walking
   within 11 m, sprinting within 20 m, the tape player, a flare being lit and a
   shot.
 - **Doors.** Face a doorway and press E (USE on touch) to shut or open it. A

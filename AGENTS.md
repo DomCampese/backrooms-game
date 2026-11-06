@@ -384,6 +384,30 @@ the random spots it used to try.
 - No new `Sfx` and no platform code, so both builds get it. walk-l0-l2.trace
   has no chase and plays back unchanged.
 
+# Shadow hides the player from a chasing hunter (November 2026)
+
+In a chase the hunter saw the player from `HUNTER_SIGHT` (30 m) anywhere. Now
+dark spots matter: `Sim::inShadow()` cuts his sight to `DARK_SIGHT` (9 m)
+(`hunterChase`, shared/sim/hunters.cpp).
+
+- **Which fittings work is core's `fittingAt(world, gx, gz)`** (core/layout.h),
+  the same function `chunkLayout`'s fittings loop now calls (`fittingFor`), so
+  the sim and the mesher agree on dead tubes and gaps. The extraction left the
+  contract goldens unchanged.
+- **`Sim::lightAtPlayer`** sums the working fittings of the 3 x 3 nearest the
+  player with no wall in between, each its `output` falling linearly to zero
+  at 0.55 x the grid pitch + 1.5 m, times 1.6, times `blackoutCur`, clamped to
+  0..1. The hunter's dark area dims each fitting as the shader's `uEntDark`
+  does (smoothstep 2-9 m). Faulty tubes count as on. Gaps (the Manila Room,
+  auditoriums, openings) count as off.
+- **`playerLight` is that value smoothed (4/s), updated in `updateEntity` only
+  while the hunter is out**, so a run with no hunter calls none of it.
+- **In shadow is `playerLight < SHADOW_LIT` (0.3) with `flashCur < 0.5`.**
+  Measured over 120 x 120 cells, seed 1337: 20% of Level 0, 68% of Level 1,
+  46% of LEVEL FUN and 61% of the theater.
+- The HUD's cover line says "[ in shadow ]" (or "crouched · in shadow").
+- walk-l0-l2.trace has no chase and plays back unchanged.
+
 # Distant one-shots (October 2026)
 
 Levels 0, 1, 3 and 4 play a muffled one-shot at intervals from a random

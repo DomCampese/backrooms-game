@@ -1,6 +1,7 @@
 // The level's hunter: Pirate Clark, a Smiler or the Partygoer.
 #include "../core/fp_strict.h"
 #include "sim.h"
+#include "../core/layout.h"
 #include <cmath>
 
 void Sim::updateEntity(float dt, double now, bool forceSpawn) {
@@ -31,6 +32,7 @@ void Sim::updateEntity(float dt, double now, bool forceSpawn) {
         if (now > ent.nextSpawn) spawnHunter();
     } else {
         float gaitFromX = ent.x, gaitFromZ = ent.z;
+        playerLight += (lightAtPlayer() - playerLight) * fminf(1, 4 * dt);
         float ex = ent.x - px, ez = ent.z - pz;
         entDist = sqrtf(ex * ex + ez * ez);
         float dirDot = (entDist > 0.01f) ? (fwd.x * ex + fwd.z * ez) / entDist : 1;
@@ -182,7 +184,7 @@ bool Sim::hunterChase(float dt, double now, float &fearT) {
         foundT = FOUND_TIME;
         play(Sfx::Scare).atPitch(0.7f).atVolume(0.8f);
     }
-    bool sees = entDist < HUNTER_SIGHT && !hidden && !(crouchCur > 0.7f && entDist > 7) && los;
+    bool sees = entDist < (inShadow() ? DARK_SIGHT : HUNTER_SIGHT) && !hidden && !(crouchCur > 0.7f && entDist > 7) && los;
     float noiseX, noiseZ;
     float noise = loudestNoise(noiseX, noiseZ);
     float hx = noiseX - ent.x, hz = noiseZ - ent.z;
@@ -358,4 +360,28 @@ bool Sim::hunterOpensDoor(float dt) {
     }
     ent.doorT = 0;
     return false;
+}
+
+// The working fittings of the 3 x 3 nearest the player that light the spot:
+// each gives its output, falling to nothing at 0.55 of the grid pitch plus
+// 1.5 m, if no wall is in between. The hunter's dark area and a blackout dim
+// them as the shader does (shaders.cpp, uEntDark). Faulty tubes count as on.
+float Sim::lightAtPlayer() {
+    float ls = LEVEL_RULES[level].ls, reach = 0.55f * ls + 1.5f;
+    int gx0 = (int)floorf(px / ls), gz0 = (int)floorf(pz / ls);
+    float lit = 0;
+    for (int dx = -1; dx <= 1; dx++)
+        for (int dz = -1; dz <= 1; dz++) {
+            LightFitting f = fittingAt(world, gx0 + dx, gz0 + dz);
+            if (f.gap != FittingGap::None || f.dead) continue;
+            float d = portableHypot(f.pos.x - px, f.pos.z - pz);
+            if (d >= reach || !world.lineOfSight(px, pz, f.pos.x, f.pos.z)) continue;
+            float k = f.output * (1.0f - d / reach);
+            if (ent.st != EState::Hidden && entDarkCur > 0.01f) {
+                float t = clampf((portableHypot(f.pos.x - ent.x, f.pos.z - ent.z) - 2.0f) / 7.0f, 0.0f, 1.0f);
+                k *= 1.0f + (t * t * (3.0f - 2.0f * t) - 1.0f) * entDarkCur;
+            }
+            lit += k;
+        }
+    return clampf(lit * 1.6f * blackoutCur, 0.0f, 1.0f);
 }

@@ -393,6 +393,9 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         coverCol = { 190, 180, 150, 140 };
     } else if (sim.squeezing) {
         coverLine = "[ squeezing ]";
+    } else if (sim.inShadow()) {   // a hunter is out and cannot see this spot from far
+        coverLine = sim.crouchCur > 0.5f ? "[ crouched · in shadow ]" : "[ in shadow ]";
+        coverCol = { 150, 170, 200, 150 };
     } else if (sim.crouchCur > 0.5f) {
         coverLine = "[ crouched ]";
         coverCol = { 180, 170, 140, 120 };
