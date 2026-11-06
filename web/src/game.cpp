@@ -422,6 +422,7 @@ InputFrame Game::readInput(bool captureClick) {
     in.pickRevolver = inKeyPressed(KEY_FIVE);
     in.pickFlare = inKeyPressed(KEY_TWO);
     in.pickDeck = inKeyPressed(KEY_FOUR);
+    in.pickCigs = inKeyPressed(KEY_SIX);
     in.fire = inMousePressed(MOUSE_BUTTON_LEFT) && !captureClick;
     in.aim = inMouseDown(MOUSE_BUTTON_RIGHT);
     in.reload = inKeyPressed(KEY_R);

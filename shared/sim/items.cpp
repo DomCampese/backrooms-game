@@ -61,6 +61,7 @@ Pickup Sim::pickupAt(int a, int b) {
     if (batteryAt(a, b)) return Pickup::Battery;
     if (tapeAt(a, b))    return Pickup::Tape;
     if (revolverAt(a, b)) return Pickup::Revolver;
+    if (cigsAt(a, b))     return Pickup::Cigarettes;
     return sunkenAt(a, b);
 }
 
@@ -305,6 +306,7 @@ void Sim::collectPickups() {
         if (fabsf(py - (world.floorY(a, b) + (onShelf ? bottleShelfY(a, b) : 0))) > reachY) continue;
         if (kind == Pickup::Battery && battery > 0.98f) continue;
         if (kind == Pickup::Revolver && hasRevolver) continue;
+        if (kind == Pickup::Cigarettes && hasCigs) continue;
         taken.insert(ky);
         switch (kind) {
         case Pickup::AlmondWater:
@@ -337,6 +339,14 @@ void Sim::collectPickups() {
             revolverFoundT = REVOLVER_FOUND;
             play(Sfx::TapeChime).atPitch(0.75f);
             play(Sfx::Click).atPitch(1.15f);
+            break;
+        case Pickup::Cigarettes:
+            hasCigs = true;
+            cigs = CIGS_PER_PACK;
+            weapon = WEAPON_CIGS;
+            cigsFoundT = CIGS_FOUND;
+            play(Sfx::TapeChime).atPitch(0.9f);
+            play(Sfx::Click).atPitch(1.3f);
             break;
         case Pickup::None:
             break;

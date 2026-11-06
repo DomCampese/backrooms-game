@@ -350,6 +350,14 @@ fallback while the lit look is unproven.
     E: "E · pull the handle · one doubloon" shows first, the reels whir for
     1.6 s, and the prize line shows. No sound points at `SFX_COUNT` in the
     mixer; grey walls or carpet point at the surface import.
+15. **The casino's cigarettes** (6 November 2026). One Unreal change: the
+    `PickCigs` control on key 6 (`BackroomsTypes.h`,
+    `BackroomsPlayerController.cpp`). In the casino at seed 1337, walk
+    about 11 m north of spawn to a gold pack in a column of light. Walk
+    into it: "A GOLD PACK OF CIGARETTES" shows and a cigarette is in hand.
+    Click to light it (lighter sound, an orange ember), click again for a
+    drag (the cigarette rises to the mouth, then a breath of smoke or a
+    cough). If 6 does nothing, check the new action's binding.
 
 A session on the Mac itself (`claude remote-control` in the repository) could
 build, run the tests and read the log directly; from the cloud each Unreal

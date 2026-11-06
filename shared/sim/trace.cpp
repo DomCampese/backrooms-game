@@ -20,7 +20,7 @@ template <class F> void inputFields(InputFrame &in, F &&f) {
     f("jumpHeld", in.jumpHeld); f("jumpPressed", in.jumpPressed);
     f("lookX", in.look.x); f("lookY", in.look.y);
     f("wheel", in.wheel);
-    f("pickHands", in.pickHands); f("pickRevolver", in.pickRevolver); f("pickFlare", in.pickFlare); f("pickDeck", in.pickDeck);
+    f("pickHands", in.pickHands); f("pickRevolver", in.pickRevolver); f("pickFlare", in.pickFlare); f("pickDeck", in.pickDeck); f("pickCigs", in.pickCigs);
     f("fire", in.fire); f("aim", in.aim);
     f("reload", in.reload); f("throwFlare", in.throwFlare); f("flashlight", in.flashlight);
     f("observing", in.observing); f("observationCos", in.observationCos);
