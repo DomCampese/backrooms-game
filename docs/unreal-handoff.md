@@ -235,8 +235,22 @@ session's main item is a step forward for the game that a player would notice
 (AGENTS.md, "Every session makes the game better to play"), not more port
 plumbing.
 
-As of 22 October 2026 the world is drawn as the Web build draws it, written
-off the Mac. In order:
+As of November 2026 the world is lit by Unreal (unreal/README.md, "How the
+world is lit"), written off the Mac. To check on the Mac, in order:
+
+1. `make unreal-open`: the editor builds `M_BackroomsLit` (Output Log:
+   "built the world's materials"). A shader error names
+   `BackroomsSurface.ush`.
+2. `make unreal-play`: the log says "the world draws with Unreal's
+   lighting". Look at Level 0 lit, in a blackout, with the torch on, and in
+   the Poolrooms.
+3. If the picture is too dark or too bright, change `WebUnitNits`
+   (BackroomsRender.h) and the exposure range before the lights' lumens:
+   they set where the panels' glow and the fog sit against the lights.
+4. Measure the frame time at `LightQuality` High, Medium and Low.
+
+The WebShader look (Project Settings > Game > Backrooms > Look) is the
+fallback while the lit look is unproven.
 
 0. **Build and open.** `make unreal`, then `make unreal-open`. The Output Log
    should say "imported 12 sounds" and "built the world's materials". A
@@ -344,9 +358,10 @@ What the Web build does that the Mac build does not yet. As of 28 October
 - the reel's frames: both builds tape the scene's colour, translucent
   surfaces included, over the level's clear colour.
 
-Everything else (the world, its lighting, the sim, the HUD, the revolver,
-sound, the camcorder and its tape) is the same code or a port proved against
-it. What remains:
+Everything else (the world, the sim, the HUD, the revolver, sound, the
+camcorder and its tape) is the same code or a port proved against it. The
+lighting is Unreal's own on purpose (AGENTS.md, "Two builds, one
+repository"); it is not a parity gap. What remains:
 
 | gap | Web build | Mac build |
 |---|---|---|

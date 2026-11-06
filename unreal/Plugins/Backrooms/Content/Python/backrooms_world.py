@@ -8,9 +8,13 @@ and builds:
 
 - MPC_Backrooms, the world shader's per-frame uniforms, which
   UBackroomsRender sets every frame;
-- M_BackroomsWorld (masked) and M_BackroomsWorldBlend (translucent): unlit,
-  two-sided, their colour the Web build's world shader, ported to HLSL in
-  Plugins/Backrooms/Shaders/BackroomsWorld.ush;
+- M_BackroomsLit (masked) and M_BackroomsLitBlend (translucent): the Unreal
+  look's surfaces, lit by Unreal. Their base colour, normal, roughness, metal
+  and glow come from Plugins/Backrooms/Shaders/BackroomsSurface.ush, which
+  reads the textures and vertex colours as the Web build's shader does;
+- M_BackroomsWorld (masked) and M_BackroomsWorldBlend (translucent): the Web
+  shader look's surfaces, unlit, two-sided, their colour the Web build's world
+  shader, ported to HLSL in Plugins/Backrooms/Shaders/BackroomsWorld.ush;
 - M_BackroomsShape, M_BackroomsShapeBlend, M_BackroomsBillboard and
   M_BackroomsBillboardAdd: raylib's unlit shapes and billboards, their colour
   the vertex colour (times the texture);
@@ -38,6 +42,7 @@ WORLD_DIR = "/Game/Backrooms/World"
 TEXTURE_DIR = WORLD_DIR + "/Textures"
 MPC_NAME = "MPC_Backrooms"
 WORLD_INCLUDE = "/BackroomsShaders/BackroomsWorld.ush"
+SURFACE_INCLUDE = "/BackroomsShaders/BackroomsSurface.ush"
 POST_INCLUDE = "/BackroomsShaders/BackroomsPost.ush"
 TAPE_INCLUDE = "/BackroomsShaders/BackroomsTape.ush"
 # Recorded on M_BackroomsWorld: the digest of the files it was built from.
@@ -54,8 +59,7 @@ MPC_VECTORS = [
 # The world material's Custom node: the material's inputs into the HLSL's
 # uniforms, Unreal's position and normal into core's frame (metres, y up),
 # and the fragment.
-WORLD_CODE = """
-#if PIXELSHADER
+UNIFORMS_CODE = """
 FBRUniforms U;
 U.Time = Frame.x; U.Blackout = Frame.y; U.Flash = Frame.z; U.FlareInt = Frame.w;
 U.ViewPos = ViewPos.xyz; U.FlashDir = FlashDir.xyz; U.FlarePos = FlarePos.xyz; U.EntPos = EntPos.xyz;
@@ -69,6 +73,11 @@ U.WetFrom = Grid.x; U.OccN = Grid.y; U.OccOrigin = Grid.zw;
 U.RoomMask = RoomMask; U.Lamp = Lamp; U.ObjRefl = ObjRefl;
 U.DrawRel = HasStorey * (ChunkStorey - Ent.w);
 U.Quality = Quality.x;
+"""
+
+WORLD_CODE = """
+#if PIXELSHADER
+""" + UNIFORMS_CODE + """
 // What render.cpp sets round a viewmodel: no shadow grid, an ambient floor.
 if (Viewmodel > 0.5)
 {
@@ -83,6 +92,36 @@ return float4(C.rgb * Tint, C.a);
 return float4(0.0, 0.0, 0.0, 1.0);
 #endif
 """
+
+# The lit material's Custom node: the same inputs as WORLD_CODE's, out as the
+# surface's properties. The return is the base colour and opacity; the other
+# properties are additional outputs, which the code assigns by name. The
+# normal goes out in Unreal's frame (the same swap as BackroomsCoords.h), and
+# the glow from the Web shader's units to nits by Nits.
+LIT_CODE = """
+#if PIXELSHADER
+""" + UNIFORMS_CODE + """
+float3 P = U.ViewPos + float3(CamRel.x, CamRel.z, CamRel.y) * 0.01;
+float3 N = float3(Normal.x, Normal.z, Normal.y);
+FBRSurface S = BRSurfaceFragment(U, P, N, UV, float4(VertexRGB, VertexA), Tex0, Tex0Sampler, Tex1, Tex1Sampler);
+NormalOut = float3(S.N.x, S.N.z, S.N.y);
+RoughOut = S.Roughness;
+MetalOut = S.Metallic;
+GlowOut = S.Emissive * Nits * Tint;
+return float4(S.BaseColor * Tint, S.Opacity);
+#else
+NormalOut = float3(0.0, 0.0, 1.0);
+RoughOut = 1.0;
+MetalOut = 0.0;
+GlowOut = float3(0.0, 0.0, 0.0);
+return float4(0.0, 0.0, 0.0, 1.0);
+#endif
+"""
+# The lit material's additional outputs, by type.
+LIT_OUTPUTS = [("NormalOut", "CMOT_FLOAT3"), ("RoughOut", "CMOT_FLOAT1"), ("MetalOut", "CMOT_FLOAT1"),
+               ("GlowOut", "CMOT_FLOAT3")]
+# Nits' default. UBackroomsRender sets the value (WebUnitNits) on every instance.
+WEB_UNIT_NITS = 160.0
 
 # The post material's Custom node: raylib's render target is clamped, 8-bit
 # and cleared to the level's colour where nothing was drawn, and the scene
@@ -266,7 +305,7 @@ def build_collection():
     return mpc
 
 
-def _custom(mat, code, include, defines, inputs, x, y):
+def _custom(mat, code, include, defines, inputs, x, y, outputs=()):
     custom = mel().create_material_expression(mat, unreal.MaterialExpressionCustom, x, y)
     custom.set_editor_property("code", code)
     custom.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT4)
@@ -285,6 +324,16 @@ def _custom(mat, code, include, defines, inputs, x, y):
         pin.set_editor_property("input_name", name)
         pins.append(pin)
     custom.set_editor_property("inputs", pins)
+    if outputs:
+        made = []
+        for name, kind in outputs:
+            o = unreal.CustomOutput()
+            o.set_editor_property("output_name", name)
+            o.set_editor_property("output_type", getattr(unreal.CustomMaterialOutputType, kind))
+            made.append(o)
+        # set_editor_property runs the node's post-edit change, which makes
+        # the output pins the links below need.
+        custom.set_editor_property("additional_outputs", made)
     return custom
 
 
@@ -335,10 +384,59 @@ def build_world_material(name, blend, mpc, defines, neutral):
     data, give uDrawRel."""
     mat = _fresh_material(name)
     _unlit(mat, blend)
-    inputs = ["CamRel", "Normal", "UV", "VertexRGB", "VertexA", "Tex0", "Tex1", "Occ", "ObjRefl", "GlossOverride",
-              "Viewmodel", "Tint", "HasStorey", "ChunkStorey"] + MPC_VECTORS[:16] + ["Quality"]
-    custom = _custom(mat, WORLD_CODE, WORLD_INCLUDE, defines, inputs, -300, 0)
+    custom = _custom(mat, WORLD_CODE, WORLD_INCLUDE, defines, WORLD_INPUTS, -300, 0)
+    _wire_world_inputs(mat, custom, mpc, neutral)
 
+    rgb = _mask(mat, custom, "rgb", 0, -100)
+    alpha = _mask(mat, custom, "a", 0, 100)
+    mel().connect_material_property(rgb, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    target = unreal.MaterialProperty.MP_OPACITY_MASK if blend == unreal.BlendMode.BLEND_MASKED \
+        else unreal.MaterialProperty.MP_OPACITY
+    mel().connect_material_property(alpha, "", target)
+    mel().recompile_material(mat)
+    return mat
+
+
+def build_lit_material(name, blend, mpc, defines, neutral):
+    """The Unreal look's surface: the same parameters as the world material,
+    lit by Unreal (default lit, two-sided). Its normal is in world space.
+    Translucent surfaces (water, glass) are lit per pixel."""
+    mat = _fresh_material(name)
+    mat.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_DEFAULT_LIT)
+    mat.set_editor_property("blend_mode", blend)
+    mat.set_editor_property("two_sided", True)
+    mat.set_editor_property("tangent_space_normal", False)
+    if blend == unreal.BlendMode.BLEND_MASKED:
+        mat.set_editor_property("opacity_mask_clip_value", 0.5)
+    else:
+        mat.set_editor_property("translucency_lighting_mode",
+                                unreal.TranslucencyLightingMode.TLM_SURFACE_PER_PIXEL_LIGHTING)
+    custom = _custom(mat, LIT_CODE, SURFACE_INCLUDE, defines, WORLD_INPUTS + ["Nits"], -300, 0, LIT_OUTPUTS)
+    _wire_world_inputs(mat, custom, mpc, neutral)
+    _link(_scalar(mat, "Nits", WEB_UNIT_NITS, -900, 600), "", custom, "Nits")
+
+    rgb = _mask(mat, custom, "rgb", 0, -200)
+    alpha = _mask(mat, custom, "a", 0, -100)
+    mel().connect_material_property(rgb, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    target = unreal.MaterialProperty.MP_OPACITY_MASK if blend == unreal.BlendMode.BLEND_MASKED \
+        else unreal.MaterialProperty.MP_OPACITY
+    mel().connect_material_property(alpha, "", target)
+    for pin, prop in (("NormalOut", unreal.MaterialProperty.MP_NORMAL),
+                      ("RoughOut", unreal.MaterialProperty.MP_ROUGHNESS),
+                      ("MetalOut", unreal.MaterialProperty.MP_METALLIC),
+                      ("GlowOut", unreal.MaterialProperty.MP_EMISSIVE_COLOR)):
+        if not mel().connect_material_property(custom, pin, prop):
+            raise RuntimeError("cannot connect %s.%s to %s" % (name, pin, prop))
+    mel().recompile_material(mat)
+    return mat
+
+
+# The world and lit materials' Custom node inputs, wired by _wire_world_inputs.
+WORLD_INPUTS = ["CamRel", "Normal", "UV", "VertexRGB", "VertexA", "Tex0", "Tex1", "Occ", "ObjRefl", "GlossOverride",
+                "Viewmodel", "Tint", "HasStorey", "ChunkStorey"] + MPC_VECTORS[:16] + ["Quality"]
+
+
+def _wire_world_inputs(mat, custom, mpc, neutral):
     position = mel().create_material_expression(mat, unreal.MaterialExpressionWorldPosition, -900, -600)
     position.set_editor_property("world_position_shader_offset",
                                  unreal.WorldPositionIncludedOffsets.WPT_CAMERA_RELATIVE)
@@ -356,15 +454,6 @@ def build_world_material(name, blend, mpc, defines, neutral):
         _link(_scalar(mat, pname, value, -900, 100 + 80 * i, index), "", custom, pname)
     for i, vname in enumerate(MPC_VECTORS[:16] + ["Quality"]):
         _link(_collection(mat, mpc, vname, -1200, -600 + 80 * i), "", custom, vname)
-
-    rgb = _mask(mat, custom, "rgb", 0, -100)
-    alpha = _mask(mat, custom, "a", 0, 100)
-    mel().connect_material_property(rgb, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
-    target = unreal.MaterialProperty.MP_OPACITY_MASK if blend == unreal.BlendMode.BLEND_MASKED \
-        else unreal.MaterialProperty.MP_OPACITY
-    mel().connect_material_property(alpha, "", target)
-    mel().recompile_material(mat)
-    return mat
 
 
 def build_shape_material(name, blend, textured, default_sheet=None):
@@ -481,6 +570,8 @@ def build():
     defines.update({k: str(int(v)) for k, v in world.get("bits", {}).items()})
     mat = build_world_material("M_BackroomsWorld", unreal.BlendMode.BLEND_MASKED, mpc, defines, neutral)
     build_world_material("M_BackroomsWorldBlend", unreal.BlendMode.BLEND_TRANSLUCENT, mpc, defines, neutral)
+    build_lit_material("M_BackroomsLit", unreal.BlendMode.BLEND_MASKED, mpc, defines, neutral)
+    build_lit_material("M_BackroomsLitBlend", unreal.BlendMode.BLEND_TRANSLUCENT, mpc, defines, neutral)
     build_shape_material("M_BackroomsShape", unreal.BlendMode.BLEND_OPAQUE, False)
     build_shape_material("M_BackroomsShapeBlend", unreal.BlendMode.BLEND_TRANSLUCENT, False)
     for name, blend in (("M_BackroomsBillboard", unreal.BlendMode.BLEND_TRANSLUCENT),
@@ -500,7 +591,7 @@ def stale():
     """Why the world's materials need building, or None."""
     if not os.path.exists(os.path.join(surfaces_dir(), "world.json")):
         return None   # nothing to build from; read_world says so when asked
-    for name in ("M_BackroomsWorld", "M_BackroomsWorldBlend", "M_BackroomsShape", "M_BackroomsShapeBlend",
+    for name in ("M_BackroomsWorld", "M_BackroomsWorldBlend", "M_BackroomsLit", "M_BackroomsLitBlend", "M_BackroomsShape", "M_BackroomsShapeBlend",
                  "M_BackroomsBillboard", "M_BackroomsBillboardAdd", "M_BackroomsPost", "M_BackroomsTape", "M_BackroomsClear",
                  MPC_NAME):
         if not eal().does_asset_exist(WORLD_DIR + "/" + name):

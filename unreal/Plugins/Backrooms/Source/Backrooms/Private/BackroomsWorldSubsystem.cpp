@@ -2,6 +2,7 @@
 #include "BackroomsChunkActor.h"
 #include "BackroomsCoords.h"
 #include "BackroomsHeldActor.h"
+#include "BackroomsLightsActor.h"
 #include "BackroomsReel.h"
 #include "BackroomsRender.h"
 #include "BackroomsSceneActor.h"
@@ -316,6 +317,10 @@ void UBackroomsWorldSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	};
 	Put(TEXT("t.MaxFPS"), Settings->MaxFPS);
 	Put(TEXT("r.ScreenPercentage"), Settings->ScreenPercentage);
+	// Lumen needs a temporal upscaler's history (4, TSR). The Web shader
+	// look keeps FXAA (1): it has no history, and its flickering tubes and
+	// film grain smear under TSR.
+	Put(TEXT("r.AntiAliasingMethod"), Settings->Look == EBackroomsLook::Unreal ? 4 : 1);
 }
 
 void UBackroomsWorldSubsystem::Deinitialize()
@@ -537,6 +542,10 @@ void UBackroomsWorldSubsystem::DropChunk(const FIntVector& Key)
 	{
 		Actor->Destroy();
 	}
+	if (Lights)
+	{
+		Lights->Forget(Key);
+	}
 }
 
 void UBackroomsWorldSubsystem::DropAll()
@@ -549,6 +558,10 @@ void UBackroomsWorldSubsystem::DropAll()
 		}
 	}
 	Chunks.Reset();
+	if (Lights)
+	{
+		Lights->ForgetAll();
+	}
 }
 
 void UBackroomsWorldSubsystem::ShowFrame(const Vec3& Eye)
@@ -565,9 +578,11 @@ void UBackroomsWorldSubsystem::ShowFrame(const Vec3& Eye)
 		Still.time = T;
 		Render->Frame(GetWorld(), Still, Eye, 0.0f, 0.0f, 0.0f);
 		Render->ShowPost(GetWorld());
+		ShowLights(Eye, Still);
 		return;
 	}
 	const FrameLight Light = frameLight(S, T);
+	ShowLights(Eye, Light);
 	const float Water = S.level == 2 && Maze.poolAt(cellOf(S.px), cellOf(S.pz))
 		? FMath::Clamp((WATER_Y - S.eyeY) * 8.0f, 0.0f, 1.0f) : 0.0f;
 	Render->Frame(GetWorld(), Light, Eye, S.fear, Water, S.migraine);
@@ -615,6 +630,25 @@ void UBackroomsWorldSubsystem::ShowFrame(const Vec3& Eye)
 	PendingSlot = -1;
 }
 
+void UBackroomsWorldSubsystem::ShowLights(const Vec3& Eye, const FrameLight& Light)
+{
+	if (!Render->IsLit())
+	{
+		return;
+	}
+	if (!Lights)
+	{
+		FActorSpawnParameters Params;
+		Params.ObjectFlags |= RF_Transient;
+		Lights = GetWorld()->SpawnActor<ABackroomsLightsActor>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
+		if (!Lights)
+		{
+			return;
+		}
+	}
+	Lights->Show(Game->world, Game->world.level, Eye, Light, StoreyOrigin());
+}
+
 void UBackroomsWorldSubsystem::FitReel()
 {
 	FVector2D Size(0.0, 0.0);
@@ -636,5 +670,5 @@ void UBackroomsWorldSubsystem::FitReel()
 	{
 		Reel = NewObject<UBackroomsReel>(this);
 	}
-	Reel->Fit(GetWorld(), *Cam);
+	Reel->Fit(GetWorld(), *Cam, Render && Render->IsLit());
 }

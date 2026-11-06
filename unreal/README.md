@@ -5,11 +5,10 @@ this repository stays the reference until the port reaches M5; nothing here
 replaces it, and nothing in the Web build depends on this folder.
 
 It builds and runs on an M4 Mac with Unreal Engine 5.8.3 (29 September 2026).
-Since 22 October 2026 it draws the world as the Web build does: the Web
-build's chunk meshes, its textures and its world shader (ported to HLSL), its
-flashlight, flares and post pass, and the revolver posed by the Web build's
-own arithmetic. That pass was written off the Mac and has not been built
-there yet. It was written where no engine was
+It plays the Web build's game: the same generation, rules, hunters, sounds,
+chunk meshes and textures, from shared/. It lights that world with Unreal
+(below, "How the world is lit"). The lit look was written off the Mac in
+November 2026 and has not been built there yet. Each pass was written where no engine was
 available, so each Mac build so far has turned up a fix or two on the Unreal
 side; the shared code compiled first time. `tools/unreal-check.sh` checks what
 can be checked without Unreal (below). docs/unreal-handoff.md, "Status", has
@@ -32,7 +31,7 @@ tools/unreal.sh log # the "Backrooms:" lines from the last run
 | `BackroomsGame.uproject` | the project; its only module is a stub, the game lives in the plugin |
 | `Plugins/Backrooms/` | the `Backrooms` Runtime module, and `BackroomsShaders`, which only maps `Shaders/` to `/BackroomsShaders` (PostConfigInit) |
 | `.../Private/Shared/*.cpp` | one file per source in `shared/core`, `shared/sim`, `shared/port` and `tools/contract_lib.cpp`, each a single `#include`: the module compiles the repository's files, not copies |
-| `Plugins/Backrooms/Shaders` | `BackroomsWorld.ush`, `BackroomsPost.ush` and `BackroomsTape.ush`: the Web build's world, post and tape shaders (web/src/shaders.cpp) in HLSL, line for line |
+| `Plugins/Backrooms/Shaders` | `BackroomsSurface.ush`: the Unreal look's surfaces. `BackroomsWorld.ush`, `BackroomsPost.ush` and `BackroomsTape.ush`: the Web build's world, post and tape shaders (web/src/shaders.cpp) in HLSL, line for line |
 | `.../Public/BackroomsCoords.h` | the one conversion between core (metres, y up) and Unreal (centimetres, z up) |
 | `.../BackroomsWorldSubsystem` | owns the `Sim` (and core's `World` in it); steps a run, streams chunk actors round the player, sets each frame's light, `GetHud` for a HUD |
 | `.../BackroomsRender` | the world's materials, textures and parameter collection, the shadow grid (`World::buildOccupancy`), the post volume |
@@ -118,11 +117,26 @@ Level 1 straight away (any of `?level=`, `?seed=` or `?notitle` skips the
 title); `open /Engine/Maps/Entry?mode=free?level=2` flies a free camera over
 the Poolrooms (WASD, Space up, Ctrl down, Shift faster).
 
-## How the world is drawn
+## How the world is lit
 
-As the Web build draws it, from the same code where the code is shared and
-from a line-for-line port where it is not. Nothing is lit by Unreal: every
-material is unlit, and its colour is the Web build's.
+Two looks, chosen in Project Settings > Game > Backrooms > Look and read when
+a world starts. The log says which one is drawing ("the world draws with").
+
+| | Unreal (default) | WebShader |
+|---|---|---|
+| surfaces | `M_BackroomsLit` and `M_BackroomsLitBlend`: default lit, two-sided; base colour, normal, roughness, metal and glow from `Shaders/BackroomsSurface.ush` | `M_BackroomsWorld` and `M_BackroomsWorldBlend`: unlit, coloured by the Web build's shader (below) |
+| ceiling panels | glow in the material, plus a rect light at each of the 16 nearest working panels (`ABackroomsLightsActor`), the 8 nearest with shadows; dead, dim and faulty tubes, blackouts and the hunter's dead light from core and the sim | the Web shader's 3x3 panel sum |
+| torch, flare or muzzle flash, chandelier or landing lamp | a spot light and two point lights with shadows, from `frameLight` | in the shader |
+| shadows | the chunks cast Unreal's shadows (virtual shadow maps) | marched over the occupancy grid |
+| bounce light | Lumen, screen traces only (procedural meshes have no distance fields), and the level's ambient floor as glow | the Web shader's ambient term |
+| fog | exponential height fog with volumetric fog (off at `LightQuality` Low): the torch's beam shows in the air | in the shader |
+| camera | Unreal's tonemapper, auto exposure between EV100 5 and 9, bloom, ambient occlusion, grain, vignette; fear and migraine as chromatic aberration; a teal tint under water; TSR | the Web build's post pass in place of the tonemapper; exposure pinned at 1; FXAA |
+| the tape on the death card | the same tape material over frames captured after the tonemapper | the same, over frames captured before the post pass |
+
+The rest of this section describes the WebShader look, which draws as the
+Web build draws, from the same code where the code is shared and from a
+line-for-line port where it is not: every material is unlit, and its colour
+is the Web build's.
 
 | part | Web build | here |
 |---|---|---|

@@ -7,21 +7,23 @@
 struct Sim;
 struct Camcorder;
 struct Vec3;
+struct FrameLight;
 struct InputFrame;
 struct TraceWriter;
 struct SolidTracer;
 class ABackroomsChunkActor;
 class ABackroomsSceneActor;
 class ABackroomsHeldActor;
+class ABackroomsLightsActor;
 class UBackroomsReel;
 class UBackroomsRender;
 class UBackroomsSound;
 
 // Owns the game: one Sim (the rules, and core's World inside it) for this
 // Unreal world. Streams the world's chunks round the player, each storey at
-// its own height, and draws them and what the sim puts among them as the Web
-// build draws them (UBackroomsRender); in a run steps the sim once a frame
-// from the controller's input.
+// its own height, and draws them and what the sim puts among them
+// (UBackroomsRender), lit in the look the settings ask for; in a run steps
+// the sim once a frame from the controller's input.
 //
 // Two modes. A run is the game: the sim moves the player and the camera
 // follows it. A free camera only streams a level round wherever the camera
@@ -94,6 +96,9 @@ private:
 	// shader's uniforms for an eye at Eye (metres, the current storey's
 	// frame), then in a run the scene and the revolver.
 	void ShowFrame(const Vec3& Eye);
+	// The Unreal look's lights for the frame: the fittings round Eye, and
+	// what Light says burns.
+	void ShowLights(const Vec3& Eye, const FrameLight& Light);
 	// Hides the chunk actors the sim's view cannot see: those outside the
 	// frustum, and other storeys' outside the openings in view
 	// (port/visible.h), as the Web build leaves them undrawn.
@@ -121,6 +126,9 @@ private:
 	TObjectPtr<ABackroomsSceneActor> Scene;
 	UPROPERTY()
 	TObjectPtr<ABackroomsHeldActor> Hand;
+	// The Unreal look's lights; none in the Web shader look.
+	UPROPERTY()
+	TObjectPtr<ABackroomsLightsActor> Lights;
 	// A run's sound; none in a free camera.
 	UPROPERTY()
 	TObjectPtr<UBackroomsSound> Sound;

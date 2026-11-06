@@ -1,0 +1,185 @@
+// The Unreal look's surfaces: what each world surface is made of, for
+// Unreal's lighting to light. It decodes the same textures and vertex colour
+// flags as BRWorldFragment (BackroomsWorld.ush), which has the Web build's
+// meaning of each, and returns material properties in place of a lit colour.
+// Fog, the tonemap and every light are Unreal's (UBackroomsRender,
+// ABackroomsLightsActor), except the level's ambient floor, which no Unreal
+// light gives: the chunks are procedural meshes, and Lumen's off-screen
+// bounce needs distance fields they do not have.
+//
+// The textures and vertex colours hold display values, as raylib shows them;
+// Unreal's base colour is linear, hence BRLinear.
+#pragma once
+#include "/BackroomsShaders/BackroomsWorld.ush"
+
+#if PIXELSHADER
+
+struct FBRSurface
+{
+	float3 BaseColor;
+	float3 N;           // core's frame
+	float Roughness;
+	float Metallic;
+	float3 Emissive;    // in the Web shader's units; the material scales it to nits
+	float Opacity;
+};
+
+float3 BRLinear(float3 C) { return pow(max(C, 0.0), 2.2); }
+
+// The Web shader's gloss (0 matte .. 1 polished) as Unreal's roughness.
+float BRRoughness(float Gloss) { return clamp(1.0 - 0.85 * Gloss, 0.08, 1.0); }
+
+FBRSurface BRSurfaceFragment(FBRUniforms U, float3 FragPos, float3 FragN, float2 FragUV, float4 FragC,
+	Texture2D Tex0, SamplerState Tex0Sampler, Texture2D Tex1, SamplerState Tex1Sampler)
+{
+	float3 Dpdx = ddx(FragPos), Dpdy = BR_DFDY(FragPos);
+	float2 Duvdx = ddx(FragUV), Duvdy = BR_DFDY(FragUV);
+	int Rel = U.StoreyH > 0.0 ? int(floor(U.DrawRel + 0.5)) : 0;
+	float So = BRStoreyOffset(U.Storey + float(Rel));
+	float3 Ng = normalize(FragN);
+
+	FBRSurface S;
+	S.BaseColor = BRLinear(FragC.rgb);
+	S.N = Ng;
+	S.Roughness = BRRoughness(U.Gloss);
+	S.Metallic = 0.0;
+	S.Emissive = float3(0.0, 0.0, 0.0);
+	S.Opacity = 1.0;
+
+	if (FragC.a < 0.62)
+	{
+		float3 V = normalize(U.ViewPos - FragPos);
+		if (FragC.a < 0.1)
+		{
+			// light panel: a diffuser, glowing as its tube's state says. The
+			// rect light at the same fitting (ABackroomsLightsActor) follows
+			// the same state.
+			float2 G = floor((FragPos.xz - U.LS * 0.5) / U.LS + 0.5);
+			float St = BRLightState(U, G, So);
+			float Lens = 0.93 + 0.07 * sin(FragUV.x * 33.0) * sin(FragUV.y * 33.0);
+			S.BaseColor = BRLinear(float3(0.72, 0.70, 0.65));
+			S.Roughness = 0.6;
+			S.Emissive = U.LightCol * 5.2 * St * Lens;
+		}
+		else if (FragC.a < 0.3)
+		{
+			// raw emissive (exit glow)
+			S.BaseColor = float3(0.0, 0.0, 0.0);
+			S.Emissive = FragC.rgb * 3.0;
+		}
+		else if (FragC.a < 0.45)
+		{
+			// window glass
+			float Fres = pow(1.0 - abs(dot(V, Ng)), 3.0);
+			S.Roughness = 0.05;
+			S.Opacity = 0.10 + Fres * 0.55;
+		}
+		else
+		{
+			// water surface
+			float W1 = sin(FragPos.x * 2.3 + U.Time * 1.4) * sin(FragPos.z * 1.9 - U.Time * 1.1);
+			float W2 = sin(FragPos.x * 5.1 - U.Time * 2.2 + FragPos.z * 1.3);
+			S.N = normalize(Ng + float3(0.055 * W2 + 0.03 * W1, 0.0, 0.045 * W1 - 0.025 * W2));
+			float Fres = 0.03 + 0.97 * pow(1.0 - abs(dot(V, S.N)), 5.0);
+			S.BaseColor *= 0.85 + 0.15 * W1;
+			S.Roughness = 0.04;
+			S.Opacity = 0.30 + 0.55 * Fres;
+		}
+		return S;
+	}
+
+	// Level 0's noclip walls (vertex alpha 250)
+	bool Noclip = FragC.a > 0.965 && FragC.a < 0.990;
+	float2 UvT = FragUV;
+	float Tear = 0.0;
+	if (Noclip)
+	{
+		float Tick = floor(U.Time * 11.0);
+		float Band = floor(FragPos.y * 9.0 + frac(Tick * 0.37) * 4.0);
+		float Rr = frac(sin(Band * 91.7 + Tick * 7.31) * 43758.5453);
+		float Burst = step(0.62, frac(sin(floor(U.Time * 1.3) * 3.7) * 151.3));
+		float Seg = floor((FragPos.x + FragPos.z) * 3.3);
+		float Keep = step(0.30, frac(sin(Seg * 47.1 + Band * 13.7 + Tick * 3.9) * 43758.5453));
+		Tear = step(0.58, Rr) * Burst * Keep;
+		UvT.x += (Rr - 0.5) * 0.09 * Tear;
+	}
+	float4 Texel = Noclip ? Tex0.SampleGrad(Tex0Sampler, UvT, Duvdx, Duvdy) : Tex0.Sample(Tex0Sampler, FragUV);
+	float4 Detail = Tex1.Sample(Tex1Sampler, FragUV);
+	float Gloss = Detail.a < 0.75 ? Detail.b : U.Gloss * Detail.b;
+	float World = step(0.99, FragC.a) * step(0.99, Detail.a);
+	float2 Mp = lerp(float2(FragPos.x + FragPos.z, FragPos.y), FragPos.xz, step(0.7, abs(Ng.y)));
+	float Wander = BRNoise(Mp * 0.45 + 11.3);
+	Texel.rgb *= 1.0 + (Wander - 0.5) * 2.0 * U.Macro * World;
+	if (U.Board > 0.0)
+	{
+		// a suspended ceiling's boards, each its own shade, the odd one stained
+		float2 Bq = FragPos.xz / U.Board;
+		float2 Bc = floor(Bq), Bf = frac(Bq);
+		float Hb = BRHash(Bc + float2(So * 3.7, 17.0));
+		float Edge = min(min(Bf.x, 1.0 - Bf.x), min(Bf.y, 1.0 - Bf.y)) * U.Board;
+		float OnBoard = smoothstep(0.016, 0.024, Edge) * step(Ng.y, -0.7) * World;
+		float3 Age = lerp(float3(1.0, 1.0, 1.0), float3(1.015, 0.995, 0.93), frac(Hb * 7.13));
+		float3 Board = Age * (1.0 + (Hb - 0.5) * 0.07);
+		float2 Sc = (Bf - float2(0.3 + 0.4 * frac(Hb * 5.3), 0.3 + 0.4 * frac(Hb * 9.1))) * U.Board;
+		float Blot = length(Sc * float2(1.0, 1.25)) + BRNoise(FragPos.xz * 8.0) * 0.085
+			- (0.07 + 0.12 * frac(Hb * 13.3));
+		float Inside = 1.0 - smoothstep(-0.004, 0.004, Blot);
+		float Ring = exp(-Blot * Blot * 12000.0) + 0.45 * exp(-(Blot + 0.032) * (Blot + 0.032) * 16000.0);
+		float Stained = step(frac(Hb * 31.7), 0.05);
+		float3 Stain = lerp(float3(1.0, 1.0, 1.0), float3(0.93, 0.88, 0.76), Inside * 0.8)
+			* lerp(float3(1.0, 1.0, 1.0), float3(0.74, 0.65, 0.52), min(Ring, 1.0) * 0.7);
+		Board *= lerp(float3(1.0, 1.0, 1.0), Stain, Stained);
+		Texel.rgb *= lerp(float3(1.0, 1.0, 1.0), Board, OnBoard);
+	}
+	float3 Nb = Ng;
+	if (FragC.a > 0.998)
+	{
+		float2 Slope = (Detail.rg * 255.0 - 128.0) / 127.0;
+		Nb = BRDetailNormal(Nb, Slope, Dpdx, Dpdy, Duvdx, Duvdy);
+	}
+	if (U.Wet > 0.0 && FragN.y > 0.7 && FragPos.y - float(Rel) * U.StoreyH < 0.3)
+	{
+		// Level 0's damp patches
+		float Wn = BRNoise(FragPos.xz * 0.42) * 0.62 + BRNoise(FragPos.xz * 1.35 + 17.0) * 0.38;
+		float Wet = smoothstep(U.WetFrom, U.WetFrom + 0.12, Wn) * U.Wet;
+		Texel.rgb *= lerp(float3(1.0, 1.0, 1.0), float3(0.60, 0.56, 0.48), Wet);
+		Gloss = max(Gloss, 0.62 * Wet);
+		Nb = normalize(lerp(Nb, Ng, Wet));
+	}
+	float3 Albedo = Texel.rgb * FragC.rgb;
+	if (U.ObjRefl > 0.5)
+	{
+		// the revolver's steel
+		float IsObj = step(Detail.a, 0.75);
+		S.Metallic = clamp((Detail.a - 0.502) / 0.235, 0.0, 1.0) * IsObj;
+		Albedo = lerp(Albedo, min(Albedo * 2.6, float3(0.95, 0.95, 0.95)), S.Metallic);
+	}
+	S.BaseColor = BRLinear(Albedo);
+	S.N = Nb;
+	S.Roughness = BRRoughness(Gloss);
+	// backlit print (vertex alpha 240)
+	float Backlit = step(0.93, FragC.a) * step(FragC.a, 0.955);
+	// The level's ambient floor, as the Web shader adds it, so a corner no
+	// light reaches is dark and not black. It sags with a blackout.
+	float3 Ambient = U.Amb * (0.35 + 0.65 * U.Blackout);
+	S.Emissive = Albedo * (0.62 * Backlit + Ambient);
+	if (U.Gloss > 0.5 && FragPos.y < -0.13)
+	{
+		// underwater tile: the water's colour, and caustics where it is lit
+		float Depth = -0.12 - FragPos.y;
+		float C1 = sin(FragPos.x * 4.1 + sin(FragPos.z * 2.7 + U.Time) * 1.4 + U.Time * 0.8);
+		float C2 = sin(FragPos.z * 4.6 + sin(FragPos.x * 3.2 - U.Time * 0.7) - U.Time * 0.6);
+		float Caustic = pow(max(0.0, 1.0 - abs(C1 + C2) * 0.7), 12.0);
+		S.BaseColor *= BRLinear(lerp(float3(1.0, 1.0, 1.0), float3(0.32, 0.77, 0.68), 1.0 - exp(-Depth * 0.32)));
+		S.Emissive += float3(0.12, 0.24, 0.19) * Caustic * exp(-Depth * 0.22) * U.Blackout;
+	}
+	S.Opacity = max(FragC.a * Texel.a, Backlit);
+	if (Noclip)
+	{
+		S.Emissive += float3(1.25, 1.18, 0.95) * 0.6 * Tear * 0.55;
+		S.Opacity = 1.0;
+	}
+	return S;
+}
+
+#endif // PIXELSHADER

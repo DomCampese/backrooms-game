@@ -16,6 +16,7 @@
 #include "port/camcorder.h"
 #include "port/chunk_mesh.h"
 #include "port/levels.h"
+#include "port/view.h"
 
 namespace
 {
@@ -54,6 +55,16 @@ FLinearColor ClearColour(int32 Level)
 
 FLinearColor V(const Vec3& A, float W = 0.0f) { return FLinearColor(A.x, A.y, A.z, W); }
 
+// The Unreal look's camera. Fringe is Unreal's chromatic aberration in
+// percent of the screen; the post pass's split is a fraction.
+constexpr float FringePerSplit = 100.0f;
+constexpr float FearVignette = 0.6f;
+constexpr float BaseVignette = 0.25f;
+// Under the Poolrooms' water: the tint the Web build's post pass takes the
+// picture toward (BackroomsPost.ush), and how far.
+const FLinearColor WaterTint(0.32f, 0.77f, 0.68f, 1.0f);
+constexpr float WaterTintShare = 0.75f;
+
 template <class T>
 T* LoadAt(const FString& Name)
 {
@@ -70,10 +81,12 @@ UTexture2D* UBackroomsRender::Texture(const FString& Name) const
 
 UMaterialInstanceDynamic* UBackroomsRender::MakeWorld(bool bBlend, UTexture2D* Tex0, UTexture2D* Tex1)
 {
-	UMaterialInstanceDynamic* M = UMaterialInstanceDynamic::Create(bBlend ? WorldBlend : WorldMasked, this);
+	UMaterialInterface* Base = bLit ? (bBlend ? LitBlend : LitMasked) : (bBlend ? WorldBlend : WorldMasked);
+	UMaterialInstanceDynamic* M = UMaterialInstanceDynamic::Create(Base, this);
 	M->SetTextureParameterValue(TEXT("Tex0"), Tex0);
 	M->SetTextureParameterValue(TEXT("Tex1"), Tex1);
 	M->SetTextureParameterValue(TEXT("Occ"), Occupancy);
+	M->SetScalarParameterValue(TEXT("Nits"), WebUnitNits);
 	return M;
 }
 
@@ -87,6 +100,8 @@ bool UBackroomsRender::Load()
 	Collection = LoadAt<UMaterialParameterCollection>(TEXT("MPC_Backrooms"));
 	WorldMasked = LoadAt<UMaterialInterface>(TEXT("M_BackroomsWorld"));
 	WorldBlend = LoadAt<UMaterialInterface>(TEXT("M_BackroomsWorldBlend"));
+	LitMasked = LoadAt<UMaterialInterface>(TEXT("M_BackroomsLit"));
+	LitBlend = LoadAt<UMaterialInterface>(TEXT("M_BackroomsLitBlend"));
 	ShapeOpaque = LoadAt<UMaterialInterface>(TEXT("M_BackroomsShape"));
 	ShapeBlend = LoadAt<UMaterialInterface>(TEXT("M_BackroomsShapeBlend"));
 	PostMaterial = LoadAt<UMaterialInterface>(TEXT("M_BackroomsPost"));
@@ -128,6 +143,16 @@ bool UBackroomsRender::Load()
 		UE_LOG(LogTemp, Error, TEXT("Backrooms: the world is not drawn: %s has not got %s yet. Run make unreal-open and let the editor build them (Output Log: \"built the world's materials\")"),
 			WorldDir, *Missing);
 		return false;
+	}
+
+	bLit = GetDefault<UBackroomsSettings>()->Look == EBackroomsLook::Unreal;
+	if (bLit && (!LitMasked || !LitBlend))
+	{
+		// A project the editor built before the lit materials existed: draw
+		// the Web shader look rather than nothing.
+		UE_LOG(LogTemp, Warning, TEXT("Backrooms: %s has no M_BackroomsLit yet, so the world draws with the Web build's shader. Run make unreal-open and let the editor build it"),
+			WorldDir);
+		bLit = false;
 	}
 
 	Occupancy = UTexture2D::CreateTransient(OCC_CELLS, OCC_CELLS * 2, PF_R8G8B8A8);
@@ -212,8 +237,8 @@ bool UBackroomsRender::Load()
 		}
 	}
 	bLoaded = true;
-	UE_LOG(LogTemp, Display, TEXT("Backrooms: the world draws with the Web build's shader (%d textures, %d revolver materials)"),
-		Textures.Num(), RevolverMaterials.Num());
+	UE_LOG(LogTemp, Display, TEXT("Backrooms: the world draws with %s (%d textures, %d revolver materials)"),
+		bLit ? TEXT("Unreal's lighting") : TEXT("the Web build's shader"), Textures.Num(), RevolverMaterials.Num());
 	return true;
 }
 
@@ -346,6 +371,10 @@ void UBackroomsRender::Frame(UWorld* Where, const FrameLight& L, const Vec3& Vie
 	P->SetVectorParameterValue(TEXT("RoomMask"), FLinearColor(L.roomMask[0], L.roomMask[1], L.roomMask[2], L.roomMask[3]));
 	P->SetVectorParameterValue(TEXT("Lamp"), FLinearColor(L.lamp[0], L.lamp[1], L.lamp[2], L.lamp[3]));
 	P->SetVectorParameterValue(TEXT("Post"), FLinearColor(L.time, Fear, Water, Migraine));
+	PostFear = Fear;
+	PostWater = Water;
+	PostMigraine = Migraine;
+	PostTime = L.time;
 	P->SetVectorParameterValue(TEXT("Clear"), ClearColour(Level));
 	P->SetVectorParameterValue(TEXT("Quality"),
 		FLinearColor((float)(int32)GetDefault<UBackroomsSettings>()->LightQuality, 0.0f, 0.0f, 0.0f));
@@ -427,6 +456,46 @@ void UBackroomsRender::PinPost(FPostProcessSettings& S)
 	S.ReflectionMethod = EReflectionMethod::None;
 }
 
+void UBackroomsRender::LitPost(FPostProcessSettings& S)
+{
+	const UBackroomsSettings* Settings = GetDefault<UBackroomsSettings>();
+	S.bOverride_DynamicGlobalIlluminationMethod = true;
+	S.DynamicGlobalIlluminationMethod = EDynamicGlobalIlluminationMethod::Lumen;
+	S.bOverride_ReflectionMethod = true;
+	S.ReflectionMethod = EReflectionMethod::Lumen;
+	S.bOverride_AutoExposureMethod = true;
+	S.AutoExposureMethod = AEM_Histogram;
+	// The project extends the luminance range, so these are EV100.
+	S.bOverride_AutoExposureMinBrightness = true;
+	S.AutoExposureMinBrightness = Settings->ExposureMinEV100;
+	S.bOverride_AutoExposureMaxBrightness = true;
+	S.AutoExposureMaxBrightness = Settings->ExposureMaxEV100;
+	S.bOverride_AutoExposureSpeedUp = true;
+	S.AutoExposureSpeedUp = 1.5f;
+	S.bOverride_AutoExposureSpeedDown = true;
+	S.AutoExposureSpeedDown = 0.8f;
+	S.bOverride_BloomIntensity = true;
+	S.BloomIntensity = 0.6f;
+	S.bOverride_AmbientOcclusionIntensity = true;
+	S.AmbientOcclusionIntensity = 0.6f;
+	S.bOverride_FilmGrainIntensity = true;
+	S.FilmGrainIntensity = 0.15f;
+	S.bOverride_VignetteIntensity = true;
+	S.VignetteIntensity = BaseVignette;
+	S.bOverride_MotionBlurAmount = true;
+	S.MotionBlurAmount = 0.0f;
+}
+
+void UBackroomsRender::FrameLitPost()
+{
+	FPostProcessSettings& S = Post->Settings;
+	S.bOverride_SceneFringeIntensity = true;
+	S.SceneFringeIntensity = colourSplit(PostFear, migraineThrob(PostMigraine, PostTime)) * FringePerSplit;
+	S.VignetteIntensity = BaseVignette + FearVignette * FMath::Clamp(PostFear, 0.0f, 1.0f);
+	S.bOverride_SceneColorTint = true;
+	S.SceneColorTint = FMath::Lerp(FLinearColor::White, WaterTint, WaterTintShare * FMath::Clamp(PostWater, 0.0f, 1.0f));
+}
+
 void UBackroomsRender::ShowPost(UWorld* Where, const CamPicture* Tape, UTexture* Reel)
 {
 	if (bLoaded && !Post)
@@ -438,22 +507,37 @@ void UBackroomsRender::ShowPost(UWorld* Where, const CamPicture* Tape, UTexture*
 		{
 			Post->bUnbound = true;
 			Post->Priority = 1000.0f;
-			// The post material replaces the tonemapper; the world materials
-			// tone-map as the Web build's shader does. Exposure is pinned at 1,
-			// and nothing of Unreal's own grading, bloom or lighting runs.
-			Post->Settings.WeightedBlendables.Array.Add(FWeightedBlendable(1.0f, PostMaterial));
-			PinPost(Post->Settings);
+			// Web shader look: the post material replaces the tonemapper; the
+			// world materials tone-map as the Web build's shader does.
+			// Exposure is pinned at 1, and nothing of Unreal's own grading,
+			// bloom or lighting runs. Unreal look: Unreal's camera, and the
+			// blendable is only the tape's.
+			Post->Settings.WeightedBlendables.Array.Add(FWeightedBlendable(bLit ? 0.0f : 1.0f, PostMaterial));
+			if (bLit)
+			{
+				LitPost(Post->Settings);
+			}
+			else
+			{
+				PinPost(Post->Settings);
+			}
 		}
 	}
 	if (!Post)
 	{
 		return;
 	}
+	if (bLit)
+	{
+		FrameLitPost();
+	}
 	// Both replace the tonemapper, so one is in the volume at a time.
 	UMaterialInterface* Want = PostMaterial;
+	bool bTapeShown = false;
 	if (Tape && TapeMaterial)
 	{
 		Want = TapeMaterial.Get();
+		bTapeShown = true;
 		if (UMaterialParameterCollectionInstance* P = Where->GetParameterCollectionInstance(Collection))
 		{
 			P->SetVectorParameterValue(TEXT("TapeA"), FLinearColor(Tape->a.u0, Tape->a.v0, Tape->a.u1, Tape->a.v1));
@@ -471,4 +555,6 @@ void UBackroomsRender::ShowPost(UWorld* Where, const CamPicture* Tape, UTexture*
 	{
 		Blendable.Object = Want;
 	}
+	// The Unreal look shows the tape and nothing else of the Web build's post.
+	Blendable.Weight = (!bLit || bTapeShown) ? 1.0f : 0.0f;
 }
