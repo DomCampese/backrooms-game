@@ -92,10 +92,12 @@ bool Sim::stageTapeAt(int a, int b) {
     return world.audAt(a, b, u, v) && v == AUD_BACKSTAGE - 1 && u == AUD_N / 2;
 }
 
-// Backstage, a doubloon on one floor cell in BACKSTAGE_COIN_RATE.
+// Backstage, a doubloon on one floor cell in BACKSTAGE_COIN_RATE; in the
+// casino, one in CASINO_COIN_RATE, dropped between the machines.
 bool Sim::coinAt(int a, int b) {
     if (world.pillarAt(a, b) || world.propAt(a, b) || world.poolAt(a, b)) return false;
     if (backstageAt(a, b)) return ih(a, b, pickupSalt() ^ 0xC01Eu) % BACKSTAGE_COIN_RATE == 0;
+    if (level == CASINO) return ih(a, b, pickupSalt() ^ 0xC01Fu) % CASINO_COIN_RATE == 0;
     return ih(a, b, pickupSalt() ^ 0xC01Du) % 449 == 0;
 }
 
@@ -121,6 +123,7 @@ bool Sim::hideSpotAt(int a, int b) {
     switch (world.propAt(a, b)) {
     case PROP_BOXES: case PROP_CABINET: case PROP_COUCH: case PROP_PARTY_TABLE:
     case PROP_DESK: case PROP_SHELVING: case PROP_SEATS: case PROP_CONCESSION:
+    case PROP_SLOTS: case PROP_CARD_TABLE:
         return true;
     default:
         return false;
@@ -365,7 +368,7 @@ void Sim::buySnack() {
     play(Sfx::Vend);
 }
 
-// E uses a crate, the Manila notes, a vending machine, a locked
+// E uses a crate, the Manila notes, a slot machine, a vending machine, a locked
 // door, or a deck that was set down. They never share a cell.
 void Sim::useWhatIsNear() {
     int pci = cellOf(px), pck = cellOf(pz);
@@ -387,6 +390,8 @@ void Sim::useWhatIsNear() {
             if (!notesRead) { notesRead = true; markWayOut(); }
         }
     }
+    int sa, sb;
+    if (slotInReach(sa, sb)) pullSlot(sa, sb);
     for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {   // vending: three doubloons a can
         int a = pci + dx, b = pck + dz;
         if (world.propAt(a, b) != PROP_VENDING) continue;

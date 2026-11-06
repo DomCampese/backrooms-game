@@ -82,6 +82,10 @@ void Sim::usherWhistle() {
     float sd = clampf(((usher.x - px) * inv) * r2x + ((usher.z - pz) * inv) * r2z, -1.0f, 1.0f);
     play(Sfx::Whistle).atPan(sd).atVolume(clampf(1.6f / (1.0f + 0.012f * usherDist * usherDist), 0.3f, 1.0f));
     deckNoteT = 2.6f; deckNote = "a whistle. something heard it.";
+    callHunter();
+}
+
+void Sim::callHunter() {
     if (ent.st == EState::Hidden) spawnHunter();
     if (ent.st == EState::Stalk || ent.st == EState::Chase) {
         ent.st = EState::Chase;

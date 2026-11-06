@@ -27,6 +27,10 @@ enum class Sfx : uint8_t {
     Whistle,          // the Usher's whistle: two blasts
     Gasp,             // surfacing short of breath
     Choke,            // 3: out of breath under water, one per DROWN_TICK
+    FarJingle,        // 3: Distant::Jingle (the casino)
+    SlotSpin,         // a slot machine's reels turning and stopping one by one
+    SlotWin,          // coins rattling into a slot machine's tray
+    Jackpot,          // a slot machine's jackpot bells
 };
 
 // What the ambience synth (audio.cpp) chases. The rules write each field where

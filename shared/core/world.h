@@ -77,9 +77,11 @@ enum PropKind : uint8_t {
     PROP_SEATS,          // 13 a row of four cinema seats facing the screen (the theater)
     PROP_CONCESSION,     // 14 a concession counter, run along x (the theater)
     PROP_ROPE,           // 15 a queue rope between two brass posts, run along x (the theater)
+    PROP_SLOTS,          // 16 two slot machines side by side, backs to the cell's back edge (the casino)
+    PROP_CARD_TABLE,     // 17 a blackjack table with its dealer's chip tray (the casino)
 };
 
-constexpr int PROP_KINDS = PROP_ROPE + 1;
+constexpr int PROP_KINDS = PROP_CARD_TABLE + 1;
 
 // A prop's collision box, as offsets from its cell's min corner, and its top
 // above the floor it stands on. The mesher builds each piece to this top and
@@ -109,6 +111,8 @@ constexpr PropShape PROP_SHAPES[PROP_KINDS] = {
     {},                                                    // PROP_SEATS: turned, so gatherCellAABBs boxes it (seatBox)
     { true, 0.00f, 0.55f, 2.00f, 1.45f, 1.05f, true },    // PROP_CONCESSION: full length, so a run is one counter
     { true, 0.00f, 0.92f, 2.00f, 1.08f, 0.95f, false },   // PROP_ROPE: full length, so a run is one barrier
+    {},                                                    // PROP_SLOTS: turned, so gatherCellAABBs boxes it (slotBox)
+    { true, 0.22f, 0.40f, 1.78f, 1.60f, 0.92f, false },   // PROP_CARD_TABLE: the felt
 };
 // Where things lie on the Manila Room's table: its notes and its can, 2 mm
 // over the top (0.785) so they do not fight it for depth.
@@ -211,9 +215,33 @@ inline uint8_t audFacing(int dir) { return (uint8_t)(dir == 0 ? 0 : dir == 1 ? 2
 // The collision box of a seat row in cell (x0, z0)'s min corner: the seats
 // fill the back of the cell (away from the screen), and the front is legroom
 // a body can walk along.
-void seatBox(uint8_t rotByte, float x0, float z0, float &bx0, float &bz0, float &bx1, float &bz1);
 constexpr float SEAT_TOP = 1.0f;             // the seat backs
 constexpr float SEAT_FRONT = 0.95f, SEAT_BACK = 1.90f;   // seat depth, metres from the cell's front edge
+// The box of a turned prop in cell (x0, z0)'s min corner that spans the cell
+// across and runs from `front` to `back` metres behind its front edge. Turn r
+// faces -z, +x, +z, -x.
+void turnedBox(uint8_t rotByte, float x0, float z0, float front, float back,
+               float &bx0, float &bz0, float &bx1, float &bz1);
+inline void seatBox(uint8_t rotByte, float x0, float z0, float &bx0, float &bz0, float &bx1, float &bz1) {
+    turnedBox(rotByte, x0, z0, SEAT_FRONT, SEAT_BACK, bx0, bz0, bx1, bz1);
+}
+
+// The casino (level CASINO). Every chunk's room patch, AUD_LO..AUD_LO +
+// AUD_N - 1 on both axes, is one gaming floor. Banks of slot machines stand
+// back to back in pairs of rows (CASINO_BANKS: the chunk-local z of each
+// pair's first row), broken by aisles at the patch's sides and middle
+// (CASINO_AISLE). In most chunks one bank is card tables instead.
+constexpr int CASINO_BANKS[3] = { 3, 7, 11 };
+constexpr int CASINO_AISLE = AUD_LO + AUD_N / 2;
+// One chunk in CASINO_TABLE_RATE has no table bank.
+constexpr uint32_t CASINO_TABLE_RATE = 3;
+// A slot machine's depth: the pair fills the back of its cell, so two rows
+// back to back stand as one bank.
+constexpr float SLOT_FRONT = 1.20f, SLOT_BACK = CELL - 0.02f;
+constexpr float SLOT_TOP = 1.92f;            // the lit sign on top
+inline void slotBox(uint8_t rotByte, float x0, float z0, float &bx0, float &bz0, float &bx1, float &bz1) {
+    turnedBox(rotByte, x0, z0, SLOT_FRONT, SLOT_BACK, bx0, bz0, bx1, bz1);
+}
 
 // What a renderer needs of one auditorium: its screen and the light it throws.
 struct Auditorium {

@@ -63,7 +63,7 @@ char cellGlyph(World &w, int a, int b) {
 const char *PROP_NAME[] = {
     "none", "boxes", "cabinet", "table", "fallen tile", "couch", "vending", "party table", "desk",
     "shelving", "cooler", "plant", "manila table",
-    "seats", "concession", "rope",
+    "seats", "concession", "rope", "slots", "card table",
 };
 static_assert(sizeof(PROP_NAME) / sizeof(PROP_NAME[0]) == PROP_KINDS, "a name for every PropKind");
 const char *FIXTURE_NAME[] = {

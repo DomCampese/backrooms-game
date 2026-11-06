@@ -255,6 +255,8 @@ int main(int argc, char **argv) {
     if (want("cinemacarpet")) surface("cinemacarpet", timed([] { return makeCinemaCarpetSurface(); }));
     if (want("cinemaceil"))   surface("cinemaceil", timed([] { return makeCinemaCeilSurface(); }));
     if (want("cinemawall"))   surface("cinemawall", timed([] { return makeCinemaWallSurface(); }));
+    if (want("casinocarpet")) surface("casinocarpet", timed([] { return makeCasinoCarpetSurface(); }));
+    if (want("casinowall"))   surface("casinowall", timed([] { return makeCasinoWallSurface(); }));
     if (wanted("props")) {
         Texture2D props = makePropsTex();
         dump("props", props, false);

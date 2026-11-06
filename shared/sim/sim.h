@@ -199,6 +199,20 @@ struct Sim {
     static constexpr int   MAXCHALK = 128;      // marks per level
     static constexpr float DRINK_TIME = 1.75f;  // s the can is up
     static constexpr uint32_t BACKSTAGE_COIN_RATE = 12;
+    static constexpr uint32_t CASINO_COIN_RATE = 60;
+    // The casino's slot machines (casino.cpp). A spin costs SLOT_COST, the
+    // reels run SLOT_SPIN s, and the hunter hears them SLOT_NOISE m from the
+    // machine while they do. The prize is drawn at the pull from slotRng. A
+    // jackpot rings bells heard SLOT_BELLS_NOISE m away for SLOT_BELLS s and
+    // calls the hunter. On average a spin returns a little less than it costs.
+    static constexpr int   SLOT_COST = 1;
+    static constexpr float SLOT_SPIN = 1.6f;
+    static constexpr float SLOT_NOISE = 16.0f;
+    static constexpr float SLOT_REACH = 1.6f;      // m from the cell centre to pull the handle
+    static constexpr int   SLOT_JACKPOT = 8, SLOT_SMALL = 2;    // doubloons
+    static constexpr float SLOT_JACKPOT_ODDS = 1.0f / 16, SLOT_SMALL_ODDS = 0.2f, SLOT_CAN_ODDS = 1.0f / 12;
+    static constexpr float SLOT_BELLS_NOISE = 40.0f, SLOT_BELLS = 3.0f;
+    static constexpr float SLOT_JACKPOT_SANITY = 0.15f;
     static constexpr int   SNACK_COST = 2;      // doubloons
     static constexpr float SNACK_SANITY = 0.12f;
     // The Usher's torch: it sees the player inside USHER_BEAM_HALF radians of
@@ -318,6 +332,15 @@ struct Sim {
         float heardT = 0;    // s the "it heard you" line shows
     } music;
     Rng musicRng{1};
+    enum class SlotPrize : uint8_t { None, Small, Can, Jackpot };
+    struct SlotSpin {
+        float t = 0;          // s left of the reels turning
+        float x = 0, z = 0;   // the machine's cell centre, where the noise comes from
+        SlotPrize prize = SlotPrize::None;
+        float bellsT = 0;     // s left of a jackpot's bells
+    } slotSpin;
+    Rng slotRng{1};                  // its own stream, so the casino does not shift grng
+    bool slotNear = false;           // a slot machine is in reach of the use key, for the HUD
     float boostT = 0;                // s of almond-water speed left
     float sanity = 1.0f;
     int sanityStage = 0;             // deepest threshold crossed, so each warning fires once
@@ -405,6 +428,7 @@ struct Sim {
     void updateCrates(double now);
     void updateEntity(float dt, double now, bool forceSpawn = false);
     void updateUsher(float dt, double now);
+    void updateSlots(float dt);
     void updateExits(double now);
     void updateTimers(float dt);
     void updateHealth(float dt);
@@ -493,7 +517,10 @@ struct Sim {
     void spawnUsher(double now);
     void usherRoamTarget(double now);
     bool inUsherBeam();        // the player is lit by its torch and it can see them
-    void usherWhistle();             // brings the hunter: spawned if hidden, chasing either way
+    void usherWhistle();
+    void callHunter();               // spawned if hidden, chasing the player either way
+    bool slotInReach(int &a, int &b);   // the slot machine cell the use key would pull
+    void pullSlot(int a, int b);
     void bulletHitsUsher();
 
     // ---- the run's shape

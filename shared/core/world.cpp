@@ -332,8 +332,9 @@ void vendFootprint(uint8_t rotByte, float cx, float cz, float &px, float &pz,
     }
 }
 
-void seatBox(uint8_t rotByte, float x0, float z0, float &bx0, float &bz0, float &bx1, float &bz1) {
-    const float a = SEAT_FRONT, b = SEAT_BACK, s0 = 0.04f, s1 = CELL - 0.04f;
+void turnedBox(uint8_t rotByte, float x0, float z0, float front, float back,
+               float &bx0, float &bz0, float &bx1, float &bz1) {
+    const float a = front, b = back, s0 = 0.04f, s1 = CELL - 0.04f;
     switch (rotByte & 3) {
     case 0:  bx0 = x0 + s0;       bx1 = x0 + s1;       bz0 = z0 + a;        bz1 = z0 + b;        break;   // faces -z
     case 2:  bx0 = x0 + s0;       bx1 = x0 + s1;       bz0 = z0 + CELL - b; bz1 = z0 + CELL - a; break;   // faces +z
@@ -406,6 +407,46 @@ static void furnishLobby(ChunkData &d, Rng &rng) {
     }
 }
 
+// Clears the room patch to one room inside its outer wall, keeping the doors
+// the room pass cut in that wall.
+static void clearPatch(ChunkData &d) {
+    for (int x = AUD_LO; x < AUD_LO + AUD_N; x++) for (int z = AUD_LO; z < AUD_LO + AUD_N; z++) {
+        d.pillar[x][z] = 0; d.prop[x][z] = PROP_NONE; d.propRot[x][z] = 0;
+        if (z > AUD_LO) d.wallN[x][z] = WALL_NONE;
+        if (x > AUD_LO) d.wallW[x][z] = WALL_NONE;
+    }
+}
+
+// A gaming floor. Each bank is two rows of slot machines back to back (the
+// first row faces -z, the second +z), split by the middle aisle. One bank in
+// most chunks is card tables instead, staggered across its two rows. A
+// column may stand where the middle aisle crosses the space between banks,
+// and a drink machine stands against the patch's north wall.
+static void furnishCasino(ChunkData &d, uint32_t h, Rng &rng) {
+    clearPatch(d);
+    const int x0 = AUD_LO, x1 = AUD_LO + AUD_N - 1;
+    const int tableBank = h % CASINO_TABLE_RATE == 0 ? -1 : (int)((h >> 4) % 3);
+    for (int b = 0; b < 3; b++) {
+        const int z = CASINO_BANKS[b];
+        for (int x = x0 + 1; x < x1; x++) {
+            if (x == CASINO_AISLE) continue;
+            if (b == tableBank) {
+                if ((x - x0) % 2 == 0) continue;
+                int tz = z + ((x - x0) / 2) % 2;
+                d.prop[x][tz] = PROP_CARD_TABLE;
+                d.propRot[x][tz] = (uint8_t)(rng.ri(0, 1) * 2);
+                continue;
+            }
+            d.prop[x][z] = PROP_SLOTS;     d.propRot[x][z] = 0;
+            d.prop[x][z + 1] = PROP_SLOTS; d.propRot[x][z + 1] = 2;
+        }
+    }
+    for (int z : { CASINO_BANKS[0] + 2, CASINO_BANKS[2] - 1 })
+        if (rng.f01() < 0.6f) d.pillar[CASINO_AISLE][z] = 1;
+    int vx = x0 + 1 + rng.ri(0, AUD_N - 3);
+    if (vx != CASINO_AISLE) { d.prop[vx][AUD_LO] = PROP_VENDING; d.propRot[vx][AUD_LO] = 2; }
+}
+
 bool World::auditorium(int cx, int cz, Auditorium &a) {
     if (level != THEATER) return false;
     const ChunkData &d = data(cx, cz);
@@ -457,8 +498,8 @@ void World::generate(ChunkData &d, int cx, int cz) {
                         + (uint64_t)visit * 0x2545F4914F6CDD1DULL) * 0x9E3779B97F4A7C15ULL));
     // Open plazas: one chunk in sixteen. More dominate the enclosure average.
     // Hashed with the visit so a revisit moves them.
-    // The theater has none: its chunks are auditoriums and lobbies.
-    bool openChunk = level != THEATER && (hash64(k ^ 0xA11CEULL ^ (uint64_t)sseed()
+    // The theater and the casino have none: their chunks fill the room patch.
+    bool openChunk = level != THEATER && level != CASINO && (hash64(k ^ 0xA11CEULL ^ (uint64_t)sseed()
                              ^ ((uint64_t)visit * 0xD1B54A32D192ED03ULL)) & 15) == 0;
     int nseg = level == 0 ? 12 + rng.ri(0, 5) : level == 1 ? 7 + rng.ri(0, 4)
              : level == LEVEL_FUN ? 9 + rng.ri(0, 4) : 5 + rng.ri(0, 3);
@@ -746,13 +787,9 @@ void World::generate(ChunkData &d, int cx, int cz) {
             }
         }
     }
+    if (level == CASINO) furnishCasino(d, ih(cx, cz, sseed() ^ 0xCA51u), rng);
     if (level == THEATER) {
-        // The patch is one room: clear everything inside its outer wall.
-        for (int x = AUD_LO; x < AUD_LO + AUD_N; x++) for (int z = AUD_LO; z < AUD_LO + AUD_N; z++) {
-            d.pillar[x][z] = 0; d.prop[x][z] = PROP_NONE; d.propRot[x][z] = 0;
-            if (z > AUD_LO) d.wallN[x][z] = WALL_NONE;
-            if (x > AUD_LO) d.wallW[x][z] = WALL_NONE;
-        }
+        clearPatch(d);
         // The edge between two neighbouring cells.
         auto edge = [&](int ax, int az, int bx, int bz) -> uint8_t & {
             if (bz == az - 1) return d.wallN[ax][az];
@@ -1460,6 +1497,12 @@ int World::gatherCellAABBs(int ci, int ck, AABB *out, int cap, int cnt, bool inc
                 float bx0, bz0, bx1, bz1;
                 seatBox(propRotAt(ci, ck), x0, z0, bx0, bz0, bx1, bz1);
                 out[cnt++] = { bx0, bz0, bx1, bz1, ey + SEAT_TOP };
+                break;
+            }
+            case PROP_SLOTS: {
+                float bx0, bz0, bx1, bz1;
+                slotBox(propRotAt(ci, ck), x0, z0, bx0, bz0, bx1, bz1);
+                out[cnt++] = { bx0, bz0, bx1, bz1, ey + SLOT_TOP };
                 break;
             }
             case PROP_VENDING: {   // wherever vendFootprint stood it

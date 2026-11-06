@@ -31,6 +31,7 @@ void Sim::step(const InputFrame &in, float dt, double now) {
     updatePartyMusic(dt);
     updateEntity(dt, now, in.forceSpawn);
     updateUsher(dt, now);
+    updateSlots(dt);
     updateExits(now);
     updateTimers(dt);
 }
@@ -192,6 +193,8 @@ void Sim::applyLevel(int lv, double now) {
     musicRng = Rng(hash64((uint64_t)world.seed ^ ((uint64_t)world.visit << 32) ^ 0x9A27ULL));
     music = PartyMusic{};
     music.next = MUSIC_FIRST + musicRng.f01() * MUSIC_PLAY_SPAN;
+    slotRng = Rng(hash64((uint64_t)world.seed ^ ((uint64_t)world.visit << 32) ^ 0x5107ULL));
+    slotSpin = SlotSpin{};
     distantRng = Rng(hash64((uint64_t)world.seed ^ ((uint64_t)lv << 40) ^ ((uint64_t)world.visit << 48) ^ 0xD157A47ULL));
     nextDistant = now + DISTANT_LEAD + distantRng.f01() * DISTANT_SPAN;
     taken.clear(); coinsWorld.clear();

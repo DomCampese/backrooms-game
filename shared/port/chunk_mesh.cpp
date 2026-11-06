@@ -591,6 +591,62 @@ static void addProp(const PropPlacement &site, int level, MB &pr, MB &ce, MB &ao
         }
         break;
     }
+    case PROP_SLOTS: {   // two machines facing local -z, backs to the cell's back edge (slotBox)
+        // Plain boxes, no bevels: a chunk holds up to 120 machines, and the props
+        // builder's indices are 16 bits.
+        // Vertex alpha 240 is the shader's backlit print: the reels, the screen
+        // surround and the sign on top glow in the dark.
+        static const Rgba BODY[4] = { { 120, 18, 26, 255 }, { 26, 40, 112, 255 }, { 30, 26, 32, 255 }, { 78, 24, 96, 255 } };
+        static const Rgba SIGN[4] = { { 255, 92, 70, 240 }, { 90, 170, 255, 240 }, { 255, 206, 90, 240 }, { 220, 110, 255, 240 } };
+        static const Rgba SYMBOL[3] = { { 220, 30, 40, 240 }, { 230, 170, 30, 240 }, { 40, 80, 220, 240 } };
+        const Rgba gilt = { 196, 152, 70, 254 }, reel = { 255, 244, 214, 240 }, dark = { 22, 20, 24, 254 };
+        const float front = SLOT_FRONT - CELL * 0.5f, back = SLOT_BACK - CELL * 0.5f;   // local z
+        for (int m = 0; m < 2; m++) {
+            const uint32_t hm = h >> (m * 6);
+            const float sx = m ? 0.5f : -0.5f, hw = 0.42f;
+            const Rgba body = BODY[hm % 4];
+            auto box = [&](float ox, float z0, float z1, float hx2, float y0, float y1, Rgba tint) {
+                part(sx + ox, (z0 + z1) * 0.5f, hx2, (z1 - z0) * 0.5f, ey + y0, ey + y1, Surface::Metal, tint);
+            };
+            box(0, front + 0.10f, back, hw, 0.0f, 0.78f, body);                  // base cabinet
+            box(0, front, front + 0.22f, hw, 0.78f, 0.86f, gilt);                // the ledge with the buttons
+            box(0, front + 0.06f, front + 0.12f, 0.22f, 0.36f, 0.46f, dark);      // coin tray
+            box(0, front + 0.22f, back, hw, 0.86f, 1.62f, body);                 // upper cabinet
+            box(0, front + 0.215f, front + 0.22f, 0.36f, 1.00f, 1.48f, SIGN[(hm >> 2) % 4]);   // lit surround
+            for (int r = 0; r < 3; r++) {
+                const float rx = (r - 1) * 0.21f;
+                box(rx, front + 0.21f, front + 0.215f, 0.09f, 1.06f, 1.40f, reel);
+                box(rx, front + 0.205f, front + 0.21f, 0.05f, 1.19f, 1.27f, SYMBOL[(hm >> (r + 2)) % 3]);
+            }
+            box(0, front + 0.20f, back, hw + 0.01f, 1.62f, 1.66f, gilt);
+            box(0, front + 0.26f, back - 0.04f, hw - 0.02f, 1.66f, SLOT_TOP, SIGN[(hm >> 2) % 4]);   // the sign on top
+            for (int b2 = 0; b2 < 3; b2++)                                        // buttons on the ledge
+                box((b2 - 1) * 0.12f, front + 0.04f, front + 0.10f, 0.04f, 0.86f, 0.885f, SYMBOL[b2]);
+            // The handle, as boxes: a round one is 112 vertices, and a bank of 120
+            // machines with round handles passed the 16-bit index limit.
+            box(hw + 0.03f, front + 0.53f, front + 0.57f, 0.02f, 0.95f, 1.34f, gilt);
+            box(hw + 0.03f, front + 0.51f, front + 0.59f, 0.045f, 1.34f, 1.42f, { 200, 24, 30, 254 });
+        }
+        break;
+    }
+    case PROP_CARD_TABLE: {   // felt over a wooden rim, the dealer's tray on local +z
+        blob(0.80f, 0.62f);
+        const PropShape &ps = PROP_SHAPES[PROP_CARD_TABLE];
+        const float hx = (ps.x1 - ps.x0) * 0.5f, hz = (ps.z1 - ps.z0) * 0.5f;
+        const Rgba wood = { 70, 36, 22, 255 }, felt = { 24, 92, 52, 255 };
+        static const Rgba CHIP[4] = { { 200, 30, 36, 254 }, { 30, 60, 170, 254 }, { 30, 30, 34, 254 }, { 228, 222, 206, 254 } };
+        part(0, 0, 0.18f, 0.14f, ey, ey + top - 0.12f, Surface::Wood, wood);           // pedestal
+        part(0, 0, hx, hz, ey + top - 0.12f, ey + top - 0.01f, Surface::Wood, wood);   // the padded rim
+        part(0, 0, hx - 0.07f, hz - 0.07f, ey + top - 0.01f, ey + top, Surface::Fabric, felt);
+        part(0, hz - 0.17f, 0.26f, 0.06f, ey + top, ey + top + 0.04f, Surface::Metal, { 40, 36, 34, 254 });   // chip tray
+        for (int s2 = 0; s2 < 4; s2++) {   // chips left at the players' places
+            const float px2 = -0.55f + s2 * 0.36f, pz2 = -hz + 0.22f + ((h >> (s2 * 3)) & 3) * 0.04f;
+            const float stack = 0.012f * (2 + ((h >> (s2 * 2 + 9)) & 7));
+            roundPart(px2, pz2, 0.02f, 0.02f, ey + top, ey + top + stack, CHIP[(h >> (s2 + 20)) % 4]);
+            part(px2 + 0.08f, pz2 + 0.10f, 0.03f, 0.045f, ey + top, ey + top + 0.002f, Surface::Metal, { 236, 234, 226, 254 });   // a card
+        }
+        break;
+    }
     case PROP_NONE:
     case PROP_MANILA_TABLE:   // addManilaRoom builds the room's furniture
         break;
@@ -1619,10 +1675,11 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
                             xf + TRIM_T, fy0 + 1.07f, gz + 1.50f, LOCK_COL);
             }
         }
-        if (w.level == 0 || w.level == LEVEL_FUN || w.level == THEATER) {
-            // Skirting on Level 0, LEVEL FUN and the theater: thin timber within the
-            // collision clearance, no separate obstacle.
-            Rgba trim = w.level == 0 ? Rgba{91, 71, 39, 254} : w.level == LEVEL_FUN ? Rgba{67, 41, 34, 254} : Rgba{28, 22, 20, 254};
+        if (w.level == 0 || w.level == LEVEL_FUN || w.level == THEATER || w.level == CASINO) {
+            // Skirting on Level 0, LEVEL FUN, the theater and the casino: thin timber
+            // within the collision clearance, no separate obstacle. The casino's is gilt.
+            Rgba trim = w.level == 0 ? Rgba{91, 71, 39, 254} : w.level == LEVEL_FUN ? Rgba{67, 41, 34, 254}
+                      : w.level == CASINO ? Rgba{150, 112, 48, 254} : Rgba{28, 22, 20, 254};
             if (nv == WALL_SOLID) {
                 float tS = en.floorLo, tN = en.floorHi;
                 if (flS) addSolidBox(pr, gx, tS, gz-WT-0.025f, gx+CELL, tS + 0.13f, gz-WT, trim);
