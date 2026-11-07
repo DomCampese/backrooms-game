@@ -213,6 +213,49 @@ for (const size of SIZES) {
   for (const k of ['button', 'lookDrag', 'cancelled'])
     if (gestures[k]) note(size, `${k} starts the game and must not`);
 
+  // ---- three taps on REC open the dev panel, and its buttons pick a level --
+  // Two taps, or three slow ones, must not: a player tapping the corner by
+  // accident should never see it. A level button sets touch.gotoLevel to the
+  // level + 1 (input_web.cpp reads it) and closes the panel.
+  const dev = await page.evaluate(async () => {
+    const panel = document.getElementById('dev');
+    const t = Module.__touch;
+    const c = document.getElementById('canvas').getBoundingClientRect();
+    const x = c.left + 20, y = c.top + 18;     // on the REC mark
+    let id = 1000;
+    const tap = () => {
+      const el = document.elementFromPoint(x, y);
+      const pid = id++;
+      for (const type of ['pointerdown', 'pointerup'])
+        el.dispatchEvent(new PointerEvent(type, {
+          pointerId: pid, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+    };
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const out = {};
+    tap(); tap(); out.two = !panel.hidden;
+    await wait(600);
+    tap(); await wait(500); tap(); await wait(500); tap(); out.slow = !panel.hidden;
+    await wait(600);
+    tap(); tap(); tap(); out.three = !panel.hidden;
+    // the panel is on screen, inside the stage, and its buttons are tappable
+    const pr = panel.getBoundingClientRect(), sr = document.getElementById('stage').getBoundingClientRect();
+    out.inside = pr.top >= sr.top - 1 && pr.left >= sr.left - 1 && pr.bottom <= sr.bottom + 1;
+    const btns = [...panel.querySelectorAll('button')];
+    out.small = btns.filter(b => b.getBoundingClientRect().height < 40).length;
+    t.gotoLevel = 0;
+    btns[4].dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
+    out.goto = t.gotoLevel;
+    out.closed = panel.hidden;
+    return out;
+  });
+  if (dev.two) note(size, 'two taps on REC open the dev panel');
+  if (dev.slow) note(size, 'three slow taps on REC open the dev panel');
+  if (!dev.three) note(size, 'three taps on REC do not open the dev panel');
+  if (dev.three && !dev.inside) note(size, 'the dev panel runs off the stage');
+  if (dev.three && dev.small) note(size, `${dev.small} dev panel buttons are under 40 px`);
+  if (dev.goto !== 5) note(size, `the theater button sets gotoLevel ${dev.goto}, not 5`);
+  if (!dev.closed) note(size, 'the dev panel stays open after picking a level');
+
   // ---- one drag has to turn you a useful amount ---------------------------
   // The shell reports a look drag in the same pixels a mouse delta is, and
   // Game::updateLook multiplies by 0.0030 rad/px. So how far one thumb drag

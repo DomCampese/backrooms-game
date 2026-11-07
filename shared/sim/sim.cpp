@@ -325,8 +325,10 @@ void Sim::updateDevKeys(const DevKeys &dev, double now) {
         Vec2 spot = world.findOpenSpot(px, pz);
         px = spot.x; pz = spot.y; py = 0; vy = 0; grounded = true; fallFrom = 0;
     }
-    if (dev.nextLevel) {
-        applyLevel((level + 1) % NLEVELS, now);
+    int target = dev.nextLevel ? (level + 1) % NLEVELS
+               : dev.gotoLevel >= 0 && dev.gotoLevel < NLEVELS ? dev.gotoLevel : -1;
+    if (target >= 0) {
+        applyLevel(target, now);
         Vec2 spot = world.findOpenSpot(px, pz);
         px = spot.x; pz = spot.y; velx = velz = 0; py = 0; vy = 0; grounded = true;
         ent.st = EState::Hidden; ent.nextSpawn = now + 30;

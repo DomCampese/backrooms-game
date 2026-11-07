@@ -11,6 +11,10 @@ struct DevKeys {
     bool refill = false;       // G: flares and ammo
     bool storeyUp = false, storeyDown = false;   // PageUp / PageDown
     bool nextLevel = false;    // N
+    // The touch dev panel's level buttons (web/shell.html, opened by three taps
+    // on REC): go straight to this level. -1 is none. Not gated by F3, because
+    // a phone has no F3.
+    int gotoLevel = -1;
 };
 
 // What the player asked for on one tick. The platform fills it once from
