@@ -1548,7 +1548,7 @@ build's, in `web/src/`.
 | `main.cpp` | `init()`, the `while (!WindowShouldClose())` loop, `shutdown()` |
 | `sim/` | game state and rules (`Sim`), stepped once a tick by `Sim::step` |
 | `sim/sim.cpp` | tick order, levels, descents, death and escape |
-| `sim/player.cpp`, `weapons.cpp`, `items.cpp`, `hunters.cpp`, `usher.cpp`, `casino.cpp`, `place.cpp` | the player; held items; pickups, the deck and the use key; the hunter; the theater's Usher; the casino's slot machines; blackouts, sanity, exits, the Manila Room |
+| `sim/player.cpp`, `weapons.cpp`, `items.cpp`, `hunters.cpp`, `usher.cpp`, `casino.cpp`, `place.cpp` | the player; held items; pickups, the deck and the use key; the hunter; the theater's Usher; the casino's slot machines and cigarettes; blackouts, sanity, exits, the Manila Room |
 | `sim/input_frame.h`, `audio_events.h` | what the platform tells the sim, and the sounds the sim requests |
 | `game.{h,cpp}` | the platform: window, assets, input into an `InputFrame`, chunk streaming, the occupancy grid; `Game::tick` |
 | `game_audio.{h,cpp}` | every `Sound`/`Music` handle and the synth; plays the sim's `AudioEvent`s in order |
@@ -1927,6 +1927,41 @@ so CREDITS.md has no row for it.
 - **New surfaces**: `casinocarpet` (medallions on navy, 0.5 m repeat) and
   `casinowall` (gold flock damask on oxblood, no dado so it tiles at any
   height). The ceiling is the theater's `cinemaceil`. The skirting is gilt.
+
+# The casino's cigarettes (November 2026)
+
+A gold pack of cigarettes is the casino's find, placed and drawn like the
+revolver. They only work in the casino.
+
+- **The pack is a pickup** (`Pickup::Cigarettes`, `Sim::cigsAt`): one empty
+  floor cell in `CIGS_ODDS` (607), casino only, about one every three
+  chunks (20-25 in 64 chunks at seeds 1337, 7 and 99). It holds
+  `CIGS_PER_PACK` (10). Like the revolver it stays placed once found, and
+  `collectPickups` and the scene skip it.
+- **It is a held item, `WEAPON_CIGS`**, after the deck so no other weapon's
+  number changes. Key 6 (`InputFrame::pickCigs`) and the wheel reach it only
+  when `weaponAvailable` says so: found, and in the casino. `applyLevel`
+  puts out a lit one and drops to hands outside the casino; the pack is kept.
+  The wheel loops `weaponAvailable`, which replaced the revolver's one skip.
+- **The fire button lights one, then takes drags** (`updateSmoking`,
+  casino.cpp). Lit, it burns `SMOKE_TIME` (45 s) and each drag `DRAG_BURN`
+  (4 s) more. A drag is `DRAG_TIME` (2.4 s): an inhale of `DRAG_IN`, then a
+  breath out or, one drag in `COUGH_ODDS` (4, from `smokeRng`), a cough.
+  A drag gives `DRAG_SANITY` (0.03) and cuts fear. A cough is a noise
+  (`COUGH_NOISE`, 14 m, for `COUGH_TIME`). Switching away stubs it out.
+- **A lit ember means the player is never in shadow** (`inShadow`), so a
+  chasing hunter sees them at full range in the dark.
+- **`smokeRng` is its own stream**, and the trace digest does not include
+  the new fields, so the golden trace is unchanged. `pickCigs` is a new
+  input field; old traces omit it and replay with it false.
+- **Drawing is shared** (port/draw.cpp): the loose pack is shapes
+  (`cigarettePackDraws`) under the revolver's glow (`findGlowDraws`, renamed
+  from `revolverGlowDraws`), and the cigarette in hand is `Held::Cigarette`,
+  shapes in `heldDraws`: filter, paper shortening as it burns, an ember
+  that flares on the inhale, a thread of smoke, and a cloud after each
+  breath out. Both builds draw it with no platform code.
+- **Sounds, synthesized in port/sounds.cpp**: `Lighter`, `Drag` (its length
+  is `Sim::DRAG_IN`), `Exhale`, `Cough` (3 variants).
 
 # Regression process
 

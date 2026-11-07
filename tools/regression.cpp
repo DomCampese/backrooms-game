@@ -973,6 +973,57 @@ int main() {
     }
     printf("PASS casino banks, reachability, slot collision, the slot machines' pull, noise and jackpot\n");
 
+    // ---- the casino's cigarettes. A gold pack lies only in the casino; once
+    // found, key 6 and the wheel reach it there. Click lights one, then takes
+    // drags: each steadies the nerves, some end in a cough the hunter hears,
+    // and a lit ember means the player is never in shadow.
+    {
+        sim.applyLevel(CASINO,GetTime());
+        int packs=0, pa=0, pb=0;
+        for (int ci=-48;ci<48;++ci) for (int ck=-48;ck<48;++ck)
+            if (sim.cigsAt(ci,ck) && sim.pickupAt(ci,ck)==Pickup::Cigarettes) { if (!packs) { pa=ci; pb=ck; } packs++; }
+        CHECK(packs>=4);   // 96 x 96 cells is 36 chunks: about one every three
+        CHECK(!sim.weaponAvailable(WEAPON_CIGS));
+        InputFrame in; in.playing=true;
+        in.pickCigs=true; sim.updateWeapons(in,1.0f/30,GetTime()); in.pickCigs=false;
+        CHECK(sim.weapon!=WEAPON_CIGS);
+        // Walk onto it.
+        Vec2 spot=sim.pickupSpot(pa,pb);
+        sim.px=spot.x; sim.pz=spot.y; sim.py=sim.world.floorY(pa,pb);
+        sim.collectPickups();
+        CHECK(sim.hasCigs && sim.cigs==Sim::CIGS_PER_PACK && sim.weapon==WEAPON_CIGS && sim.cigsFoundT>0);
+        // Light one, then a drag.
+        sim.ent.st=EState::Stalk; sim.playerLight=0; sim.flashCur=0;
+        CHECK(sim.inShadow());
+        in.fire=true; sim.updateSmoking(in,1.0f/30); in.fire=false;
+        CHECK(sim.cigs==Sim::CIGS_PER_PACK-1 && sim.smoke.burnT==Sim::SMOKE_TIME && !sim.inShadow());
+        sim.sanity=0.5f;
+        in.fire=true; sim.updateSmoking(in,1.0f/30); in.fire=false;
+        CHECK(sim.smoke.dragT==Sim::DRAG_TIME && fabsf(sim.sanity-(0.5f+Sim::DRAG_SANITY))<1e-6f);
+        CHECK(sim.smoke.burnT<Sim::SMOKE_TIME-Sim::DRAG_BURN);
+        // This one ends in a cough, which the hunter hears.
+        sim.smoke.cough=true;
+        sim.velx=sim.velz=0; sim.sprinting=false; sim.crouchCur=0; sim.deck.playing=false; sim.doorNoiseT=0;
+        for (int i=0;i<45;++i) sim.updateSmoking(in,1.0f/30);
+        float nx,nz;
+        CHECK(sim.smoke.coughT>0 && sim.loudestNoise(nx,nz)>=Sim::COUGH_NOISE);
+        for (int i=0;i<60;++i) sim.updateSmoking(in,1.0f/30);
+        CHECK(sim.smoke.dragT==0 && sim.smoke.coughT==0);
+        // Putting it away stubs it out.
+        in.pickHands=true; sim.updateWeapons(in,1.0f/30,GetTime()); in.pickHands=false;
+        sim.updateSmoking(in,1.0f/30);
+        CHECK(sim.weapon==WEAPON_HANDS && sim.smoke.burnT==0 && sim.inShadow());
+        in.pickCigs=true; sim.updateWeapons(in,1.0f/30,GetTime()); in.pickCigs=false;
+        CHECK(sim.weapon==WEAPON_CIGS);
+        // Only in the casino: elsewhere the pack is kept but cannot be taken out.
+        sim.applyLevel(0,GetTime());
+        CHECK(sim.hasCigs && sim.weapon==WEAPON_HANDS && !sim.weaponAvailable(WEAPON_CIGS));
+        for (int ci=-24;ci<24;++ci) for (int ck=-24;ck<24;++ck) CHECK(!sim.cigsAt(ci,ck));
+        sim.hasCigs=false; sim.cigs=0; sim.cigsFoundT=0; sim.ent.st=EState::Hidden;
+        sim.taken.clear();
+    }
+    printf("PASS casino cigarettes: the gold pack, lighting, drags, the cough and the ember\n");
+
     // ---- doors. The use key shuts a doorway the player faces; a shut door
     // blocks bodies, the default router, sight and light; the hunter's router
     // passes it, and he opens it after DOOR_OPEN_TIME s.

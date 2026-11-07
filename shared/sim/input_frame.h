@@ -33,7 +33,7 @@ struct InputFrame {
     Vec2 look{};               // mouse or touch-drag delta, px
 
     float wheel = 0;              // weapon-cycle steps
-    bool pickHands = false, pickRevolver = false, pickFlare = false, pickDeck = false;
+    bool pickHands = false, pickRevolver = false, pickFlare = false, pickDeck = false, pickCigs = false;
     bool fire = false;            // primary press, less a click that captured the mouse
     bool aim = false;             // secondary held (touch latches it)
     bool reload = false, throwFlare = false, flashlight = false;

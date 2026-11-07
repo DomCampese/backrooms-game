@@ -35,20 +35,22 @@ struct TapeDeck {
     float reel = 0;           // hub rotation, radians
 };
 
-// The held item. Keys 1/2/4/5 pick one; the wheel cycles in this order. A
-// run starts empty-handed, and the revolver is skipped until it is found.
+// The held item. Keys 1/2/4/5/6 pick one; the wheel cycles in this order. A
+// run starts empty-handed, the revolver is skipped until it is found, and the
+// cigarettes until they are found and everywhere but the casino.
 enum Weapon {
     WEAPON_HANDS = 0,
     WEAPON_REVOLVER,
     WEAPON_FLARE,
     WEAPON_DECK,
+    WEAPON_CIGS,
     WEAPON_COUNT,
 };
 
 // A loose item lying in a cell. Which one a cell holds is a pure function of
 // the cell and the seed (Sim::pickupAt), so drawing and collecting agree
 // without storing anything.
-enum class Pickup { None, AlmondWater, Doubloon, Battery, Tape, Key, Revolver };
+enum class Pickup { None, AlmondWater, Doubloon, Battery, Tape, Key, Revolver, Cigarettes };
 
 // Balloon and confetti colours are indices into LEVEL FUN's palette, which the
 // platform draws with (PARTY, web/src/util.h, must have this many entries).
@@ -135,6 +137,22 @@ struct Sim {
     // dozen chunks, so most runs find it on Level 0 or the theater.
     static constexpr uint32_t REVOLVER_ODDS = 2003;
     static constexpr float REVOLVER_FOUND = 3.2f;   // s the "revolver" banner shows
+    // The casino's gold pack of cigarettes (casino.cpp): one empty floor cell
+    // in CIGS_ODDS, in the casino only, about one every three chunks. It holds
+    // CIGS_PER_PACK. A lit one burns SMOKE_TIME s, and each drag burns
+    // DRAG_BURN s more. A drag takes DRAG_TIME s, inhaling for the first
+    // DRAG_IN, and gives DRAG_SANITY. One drag in COUGH_ODDS ends in a cough
+    // the hunter hears COUGH_NOISE m away. While it is lit, the ember means the
+    // player is never in shadow (inShadow).
+    static constexpr uint32_t CIGS_ODDS = 607;
+    static constexpr int   CIGS_PER_PACK = 10;
+    static constexpr float CIGS_FOUND = 3.2f;      // s the banner shows
+    static constexpr float SMOKE_TIME = 45.0f;
+    static constexpr float DRAG_BURN = 4.0f;
+    static constexpr float DRAG_TIME = 2.4f, DRAG_IN = 1.1f;
+    static constexpr float DRAG_SANITY = 0.03f;
+    static constexpr uint32_t COUGH_ODDS = 4;
+    static constexpr float COUGH_NOISE = 14.0f, COUGH_TIME = 0.7f;
     static constexpr float MUZZLE_FLASH = 0.09f;   // s the muzzle flash lights the room
     // Hiding stops the hunter seeing the player and blocks the catch, so it
     // requires standing still. Two thresholds, so hiding does not flicker on and
@@ -298,6 +316,16 @@ struct Sim {
     // ---- hands
     int weapon = WEAPON_HANDS;
     bool hasRevolver = false;        // found this run; until then key 5 and the wheel skip it
+    bool hasCigs = false;            // the casino's pack, found this run
+    int cigs = 0;                    // left in it
+    struct Smoke {
+        float burnT = 0;             // s the lit one has left; 0: none lit
+        float dragT = 0;             // s left of the drag being taken
+        bool cough = false;          // this drag ends in a cough
+        float coughT = 0;            // s left of the cough's noise
+        float exhaleT = 0;           // s since the last breath out, for the cloud; large: none
+    } smoke;
+    Rng smokeRng{1};                 // its own stream, like slotRng
     int ammo = MAXAMMO;
     bool aiming = false;
     float aimBlend = 0;
@@ -399,7 +427,7 @@ struct Sim {
     float winTime = 0; int winM = 0, winKills = 0;
     // Overlay timers, seconds left.
     float deathT = 0, escapeT = 0, killT = 0, fellT = 0, winT = 0;
-    float closeCallT = 0, tapeFoundT = 0, revolverFoundT = 0, sanityWarnT = 0;
+    float closeCallT = 0, tapeFoundT = 0, revolverFoundT = 0, cigsFoundT = 0, sanityWarnT = 0;
     float noteT = 0, manilaCardT = 0, deckNoteT = 0;
     const char *tapeLine = "";       // the recovered tape's line
     const char *sanityLine = "";     // the last sanity (or migraine) warning
@@ -519,7 +547,9 @@ struct Sim {
     bool wayOpen() const { return coins >= ESCAPE_COST; }
     void spawnHunter();
     float lightAtPlayer();   // 0 dark .. 1 under a working fitting
-    bool inShadow() const { return ent.st != EState::Hidden && playerLight < SHADOW_LIT && flashCur < 0.5f; }
+    bool inShadow() const {
+        return ent.st != EState::Hidden && playerLight < SHADOW_LIT && flashCur < 0.5f && smoke.burnT <= 0;
+    }
     float loudestNoise(float &x, float &z) const;   // how far the loudest noise carries, and where
     bool hunterChase(float dt, double now, float &fearT);   // true if it ended the run
     bool findDoor(DoorReach &d);            // the doorway in reach and in front, if any
@@ -535,6 +565,10 @@ struct Sim {
     void callHunter();               // spawned if hidden, chasing the player either way
     bool slotInReach(int &a, int &b);   // the slot machine cell the use key would pull
     void pullSlot(int a, int b);
+    bool cigsAt(int a, int b);
+    bool weaponAvailable(int w) const;   // the wheel and the number keys skip what is not
+    void updateSmoking(const InputFrame &in, float dt);
+    void putOutCigarette();
     void bulletHitsUsher();
 
     // ---- the run's shape

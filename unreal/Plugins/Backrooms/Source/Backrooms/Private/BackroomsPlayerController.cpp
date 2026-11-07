@@ -47,6 +47,7 @@ TArray<FControlKeys> ControlKeys()
 		{ EControl::PickRevolver, V::Boolean, { EKeys::Five } },
 		{ EControl::PickFlare, V::Boolean, { EKeys::Two } },
 		{ EControl::PickDeck, V::Boolean, { EKeys::Four } },
+		{ EControl::PickCigs, V::Boolean, { EKeys::Six } },
 		{ EControl::Fire, V::Boolean, { EKeys::LeftMouseButton } },
 		{ EControl::Aim, V::Boolean, { EKeys::RightMouseButton } },
 		{ EControl::Reload, V::Boolean, { EKeys::R } },
@@ -230,6 +231,7 @@ void ABackroomsPlayerController::PlayerTick(float DeltaTime)
 	In.pickRevolver = Pressed(EControl::PickRevolver);
 	In.pickFlare = Pressed(EControl::PickFlare);
 	In.pickDeck = Pressed(EControl::PickDeck);
+	In.pickCigs = Pressed(EControl::PickCigs);
 	In.fire = Pressed(EControl::Fire);
 	In.aim = Down(EControl::Aim);
 	In.reload = Pressed(EControl::Reload);

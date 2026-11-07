@@ -6,7 +6,7 @@
 #include "../sim/sim.h"
 #include "view.h"
 
-enum class Held { None, Can, Deck, Revolver, Flare };
+enum class Held { None, Can, Deck, Revolver, Flare, Cigarette };
 
 // Which viewmodel render.cpp draws: the can while drinking, else the weapon in
 // hand (the deck only while carried, a flare only while any are left).

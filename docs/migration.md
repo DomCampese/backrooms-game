@@ -331,7 +331,7 @@ input, assets, audio and rendering.
 | items.cpp | pickups, drinking, the tape deck, the use key, chalk, supply crates |
 | hunters.cpp | the hunter (Clark, the Smiler, the Partygoer) |
 | usher.cpp | the theater's Usher, which patrols with a torch and whistles for the hunter |
-| casino.cpp | the casino's slot machines: the pull, the prize, the reels' noise and the jackpot's bells |
+| casino.cpp | the casino's slot machines (the pull, the prize, the reels' noise and the jackpot's bells) and its gold pack of cigarettes (lighting, drags, coughs) |
 | place.cpp | blackouts, whispers, sanity and the slide, shifting walls, exits, the Manila Room |
 
 **Entry points.** A run starts from a `SimStart` (shared/sim/start.h): what the

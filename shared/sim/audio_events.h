@@ -31,6 +31,10 @@ enum class Sfx : uint8_t {
     SlotSpin,         // a slot machine's reels turning and stopping one by one
     SlotWin,          // coins rattling into a slot machine's tray
     Jackpot,          // a slot machine's jackpot bells
+    Lighter,          // a lighter's wheel and flame, lighting a cigarette
+    Drag,             // a drag on a cigarette: the paper crackling as it draws
+    Exhale,           // breathing the smoke out
+    Cough,            // 3: a smoker's cough, which the hunter hears (Sim::COUGH_NOISE)
 };
 
 // What the ambience synth (audio.cpp) chases. The rules write each field where

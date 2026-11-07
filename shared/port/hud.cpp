@@ -265,6 +265,12 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         textC(in.touch ? "six rounds, loaded.  ITEM to put it away" : "six rounds, loaded.  1 to put it away  ·  5 to draw it",
               sw / 2, sh - hud(122), hud(15), fade({ 190, 164, 104, 230 }, a * 0.9f));
     }
+    if (sim.cigsFoundT > 0) {   // the casino's pack was found, faded like the revolver's banner
+        float t = sim.cigsFoundT, a = clampf(t > 2.6f ? (Sim::CIGS_FOUND - t) / 0.6f : t / 1.6f, 0, 1);
+        textC("A GOLD PACK OF CIGARETTES", sw / 2, sh - hud(150), hud(22), fade({ 236, 196, 98, 255 }, a));
+        textC(in.touch ? "ten left.  tap to light one" : "ten left.  click to light one  ·  6 to take one out",
+              sw / 2, sh - hud(122), hud(15), fade({ 190, 164, 104, 230 }, a * 0.9f));
+    }
     if (in.captureHint) textC("click to capture mouse", sw / 2, sh / 2 + hud(80), hud(20), { 200, 190, 150, 200 });
     textR(fmt("%d", in.fps), sw - hud(14), hud(12), hud(16), { 190, 180, 140, 150 });
     // The flashlight hint until it is first used, then its state.
@@ -339,6 +345,11 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
                                       in.touch ? "tap AIM" : "hold RMB aim"),
                 16, sh - 50, 16, sim.weapon == WEAPON_REVOLVER ? selc : dimc);
         raw(fmt("2  flare  ×%d", sim.flares), 16, sh - 72, 16, sim.weapon == WEAPON_FLARE ? selc : dimc);
+        if (sim.hasCigs)   // not listed until found; only lit in the casino
+            text(sim.level != CASINO ? fmt("6  cigarettes  ×%d  · casino only", sim.cigs)
+                 : sim.smoke.burnT > 0 ? fmt("6  cigarettes  ×%d  · lit  · %s a drag", sim.cigs, in.touch ? "tap" : "click")
+                 : fmt("6  cigarettes  ×%d  · %s to light", sim.cigs, in.touch ? "tap" : "click"),
+                 hud(16), sh - hud(182), hud(16), sim.weapon == WEAPON_CIGS ? selc : dimc);
         raw(!sim.deck.carried
                 ? (sim.deck.playing ? "4  tape player  [running · left behind]"
                    : in.touch       ? "4  tape player  [left behind · USE]"

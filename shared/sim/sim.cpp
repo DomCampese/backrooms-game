@@ -18,6 +18,7 @@ void Sim::step(const InputFrame &in, float dt, double now) {
     updateTapeDeck(in, dt, now);
     updateInteraction(in);
     updateDrink(dt);
+    updateSmoking(in, dt);
     updateAmbience(dt, now);
     updateManila(dt, now);
     updateCrates(now);
@@ -47,6 +48,7 @@ void Sim::updateTimers(float dt) {
     doorNoiseT = fmaxf(0, doorNoiseT - dt);
     tapeFoundT = fmaxf(0, tapeFoundT - dt);
     revolverFoundT = fmaxf(0, revolverFoundT - dt);
+    cigsFoundT = fmaxf(0, cigsFoundT - dt);
 }
 
 void Sim::updateHealth(float dt) {
@@ -123,6 +125,7 @@ void Sim::beginDescent(double now) {
     yaw = 0.8f; pitch = 0.0f;
     coins = 0; almond = 0; tapes = 0; keys = 0; flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; battery = 1.0f;
     weapon = WEAPON_HANDS; hasRevolver = false; revolverFoundT = 0;
+    hasCigs = false; cigs = 0; cigsFoundT = 0; smoke = Smoke{};
     deck = TapeDeck{}; stopVoice();
     escapeCount = 0; killCount = 0; distWalked = 0;
     deepest = level;
@@ -196,6 +199,9 @@ void Sim::applyLevel(int lv, double now) {
     music.next = MUSIC_FIRST + musicRng.f01() * MUSIC_PLAY_SPAN;
     slotRng = Rng(hash64((uint64_t)world.seed ^ ((uint64_t)world.visit << 32) ^ 0x5107ULL));
     slotSpin = SlotSpin{};
+    smokeRng = Rng(hash64((uint64_t)world.seed ^ ((uint64_t)world.visit << 32) ^ 0xC16AULL));
+    putOutCigarette();   // the cigarettes are the casino's alone
+    if (!weaponAvailable(weapon)) weapon = WEAPON_HANDS;
     distantRng = Rng(hash64((uint64_t)world.seed ^ ((uint64_t)lv << 40) ^ ((uint64_t)world.visit << 48) ^ 0xD157A47ULL));
     nextDistant = now + DISTANT_LEAD + distantRng.f01() * DISTANT_SPAN;
     taken.clear(); coinsWorld.clear();

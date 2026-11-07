@@ -41,6 +41,10 @@ void pickups(Sim &sim, int ci, int ck, std::vector<SceneItem> &out) {
                 if (sim.hasRevolver) continue;
                 it.kind = SceneKind::Revolver;
                 break;
+            case Pickup::Cigarettes:
+                if (sim.hasCigs) continue;
+                it.kind = SceneKind::Cigarettes;
+                break;
             case Pickup::None:     continue;
             }
             out.push_back(it);

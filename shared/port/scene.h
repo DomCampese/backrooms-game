@@ -16,6 +16,7 @@
 enum class SceneKind : uint8_t {
     AlmondWater, Doubloon, Battery, Tape, Key,   // loose pickups, on the floor or a shelf
     Revolver,                                    // the revolver, until the player has one
+    Cigarettes,                                  // the casino's gold pack, until the player has it
     Crate, CrateOpen,                            // Level 1's supply crates
     Deck,                                        // the tape deck, set down (variant 1: playing)
     Coin,                                        // a doubloon spilled by the hunter

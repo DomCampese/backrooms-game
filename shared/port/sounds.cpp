@@ -1047,6 +1047,100 @@ Pcm makeFarJingle(int variant)
     return farAway(d, 1400.0f, 1.8f, 0.65f, 0.30f);
 }
 
+// Lighter: 0.9 s. The flint wheel (a dozen sharp clicks over 60 ms, a
+// spark of high noise), then the flame catching as low rushing noise that
+// swells and settles.
+Pcm makeLighter()
+{
+    Rng r(0x11A7ULL);
+    std::vector<float> d((int)(0.9f * SAMPLE_RATE));
+    float lp = 0, hp = 0, prev = 0;
+    for (int i = 0; i < (int)d.size(); i++) {
+        float t = (float)i / SAMPLE_RATE;
+        float x = r.f01() * 2.0f - 1.0f;
+        lp += 0.04f * (x - lp);
+        hp = 0.5f * (hp + x - prev); prev = x;
+        float s = 0;
+        if (t < 0.06f) {
+            float click = fmodf(t * 200.0f, 1.0f);
+            s += hp * expf(-click * 12.0f) * 0.9f;
+        }
+        float u = t - 0.07f;
+        if (u > 0) s += lp * 6.0f * (1.0f - expf(-u * 30.0f)) * (0.55f + 0.45f * expf(-u * 6.0f)) * fminf(1.0f, (0.9f - t) * 8.0f);
+        d[i] = s;
+    }
+    return toPcm(d, 0.55f);
+}
+
+// Drag: 1.1 s, Sim::DRAG_IN. Air drawn in (band noise rising slowly) and the
+// paper crackling as the ember brightens: sparse clicks, denser midway.
+Pcm makeDrag()
+{
+    Rng r(0x11A8ULL);
+    std::vector<float> d((int)(Sim::DRAG_IN * SAMPLE_RATE));
+    float lp = 0, lp2 = 0, hp = 0, prev = 0;
+    for (int i = 0; i < (int)d.size(); i++) {
+        float t = (float)i / SAMPLE_RATE, u = t / Sim::DRAG_IN;
+        float x = r.f01() * 2.0f - 1.0f;
+        lp += 0.25f * (x - lp); lp2 += 0.08f * (lp - lp2);
+        hp = 0.6f * (hp + x - prev); prev = x;
+        float breath = (lp - lp2) * sinf(u * 3.14159f) * 0.8f;
+        float crackle = r.f01() < 0.004f + 0.012f * sinf(u * 3.14159f) ? hp * 0.9f : 0.0f;
+        d[i] = breath + crackle;
+    }
+    return toPcm(d, 0.45f);
+}
+
+// Exhale: 1.2 s of breath out through the lips: band noise falling in
+// pitch and level.
+Pcm makeExhale()
+{
+    Rng r(0x11A9ULL);
+    std::vector<float> d((int)(1.2f * SAMPLE_RATE));
+    float lp = 0, lp2 = 0;
+    for (int i = 0; i < (int)d.size(); i++) {
+        float t = (float)i / SAMPLE_RATE;
+        float x = r.f01() * 2.0f - 1.0f;
+        float k = 0.30f - 0.18f * (t / 1.2f);
+        lp += k * (x - lp); lp2 += 0.05f * (lp - lp2);
+        float env = (1.0f - expf(-t * 25.0f)) * expf(-t * 1.8f);
+        d[i] = (lp - lp2) * env;
+    }
+    return toPcm(d, 0.5f);
+}
+
+// Cough: two or three barks. Each is a burst of noise through a 400-700 Hz
+// resonance with a voiced 140-180 Hz buzz under it, sharp at the start and
+// gone in about 0.15 s.
+Pcm makeCough(int variant)
+{
+    Rng r(0xC0C0ULL + (uint64_t)variant * 97u);
+    const int barks = 2 + variant % 2;
+    std::vector<float> d((int)(0.25f * barks * SAMPLE_RATE + 0.2f * SAMPLE_RATE));
+    float starts[3], f0[3], res[3];
+    for (int b = 0; b < barks; b++) {
+        starts[b] = b * (0.20f + r.f01() * 0.06f);
+        f0[b] = 140.0f + r.f01() * 40.0f;
+        res[b] = 400.0f + r.f01() * 300.0f;
+    }
+    float y1 = 0, y2 = 0;
+    for (int i = 0; i < (int)d.size(); i++) {
+        float t = (float)i / SAMPLE_RATE, s = 0;
+        float x = r.f01() * 2.0f - 1.0f;
+        for (int b = 0; b < barks; b++) {
+            float u = t - starts[b];
+            if (u < 0 || u > 0.25f) continue;
+            float env = (1.0f - expf(-u * 400.0f)) * expf(-u * (b == 0 ? 16.0f : 20.0f));
+            float rr = 0.97f, w = TAU * res[b] / SAMPLE_RATE;   // a two-pole resonator on the noise
+            float y = x * 0.3f + 2.0f * rr * cosf(w) * y1 - rr * rr * y2;
+            y2 = y1; y1 = y;
+            s += env * (y * 0.5f + sinf(TAU * f0[b] * u) * 0.35f * expf(-u * 10.0f));
+        }
+        d[i] = s;
+    }
+    return toPcm(d, 0.75f);
+}
+
 ClipSpec clipSpec(Sfx sfx) {
     switch (sfx) {
     case Sfx::Step: case Sfx::SwimStroke:
@@ -1055,7 +1149,7 @@ ClipSpec clipSpec(Sfx sfx) {
     case Sfx::SplashIn: case Sfx::SplashOut:
     case Sfx::FarDoor: case Sfx::FarClang: case Sfx::FarPop:
     case Sfx::FarBoom: case Sfx::FarJingle:
-    case Sfx::DoorShut: case Sfx::DoorKnock: case Sfx::Choke: return { 3, 1.0f, 1.0f };
+    case Sfx::DoorShut: case Sfx::DoorKnock: case Sfx::Choke: case Sfx::Cough: return { 3, 1.0f, 1.0f };
     case Sfx::Hit:       return { 1, 1.7f, 0.40f };
     case Sfx::Kill:      return { 1, 0.55f, 0.80f };
     case Sfx::Heartbeat: return { 1, 1.0f, 0.55f };
@@ -1067,6 +1161,9 @@ ClipSpec clipSpec(Sfx sfx) {
     case Sfx::SlotSpin:  return { 1, 1.0f, 0.55f };
     case Sfx::SlotWin:   return { 1, 1.0f, 0.65f };
     case Sfx::Jackpot:   return { 1, 1.0f, 0.85f };
+    case Sfx::Lighter:   return { 1, 1.0f, 0.6f };
+    case Sfx::Drag:      return { 1, 1.0f, 0.5f };
+    case Sfx::Exhale:    return { 1, 1.0f, 0.5f };
     default:             return { 1, 1.0f, 1.0f };
     }
 }
@@ -1116,6 +1213,10 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::SlotSpin:       return makeSlotSpin();
     case Sfx::SlotWin:        return makeSlotWin();
     case Sfx::Jackpot:        return makeJackpot();
+    case Sfx::Lighter:        return makeLighter();
+    case Sfx::Drag:           return makeDrag();
+    case Sfx::Exhale:         return makeExhale();
+    case Sfx::Cough:          return makeCough(variant);
     }
     return {};
 }
