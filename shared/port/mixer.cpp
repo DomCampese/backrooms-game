@@ -52,6 +52,7 @@ void SoundMixer::apply(const std::vector<AudioEvent> &events) {
             break;
         case AudioEvent::LOOPS:
             loops.step(e.loops, e.dt, bed.hum);
+            bed.exitCue(e.loops);
             break;
         case AudioEvent::AMBIENCE:
             bed.mix = e.mix;

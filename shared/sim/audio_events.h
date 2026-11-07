@@ -51,6 +51,7 @@ struct LoopCue {
     bool underwater = false;   // head under water in the Poolrooms
     bool party = false;        // on LEVEL FUN
     bool partyStopped = false; // ...and its music is stopped (Sim::music)
+    float exit = 0, exitPan = 0;   // the nearest exit's tone: level 0..1, bearing -1 left .. +1 right
 };
 
 // One thing for the platform to do with sound, in the order the rules did it.

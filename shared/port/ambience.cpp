@@ -14,6 +14,8 @@ void Ambience::render(int16_t *stereo, int frames) {
         wDrone += (mix.droneLevel - wDrone) * 1.5e-5f;
         panel += (mix.panel - panel) * 3e-5f;
         space += (mix.space - space) * 1.2e-5f;   // slow, because a stepped reverb change is audible
+        exitLvl += (exitMix - exitLvl) * 4e-5f;
+        exitPan += (exitPanMix - exitPan) * 4e-5f;
         float wn = frand();
         lp1 += 0.035f * (wn - lp1);
         // L0: the fluorescent hum. The wiki describes it as louder than
@@ -59,8 +61,15 @@ void Ambience::render(int16_t *stereo, int frames) {
         float rl = allpass(ap1, RV_A1, ai1, allpass(ap0, RV_A0, ai0, combSum));
         float rr = allpass(ap3, RV_A3, ai3, allpass(ap2, RV_A2, ai2, combSum));
         float wetMix = 0.18f + 0.42f * space;    // bigger rooms are also wetter
+        // The exit tone: 311 and 314.2 Hz, so the pair beats at 3.2 Hz, with
+        // the octave below at a third. Dry, and panned equal-power, so its
+        // direction stays clear.
+        float tone = (osc(11, 311.0f) + osc(12, 314.2f) + osc(15, 155.5f) * 0.33f) * 0.045f * exitLvl;
+        float panA = (exitPan + 1.0f) * 0.7853982f;   // 0 .. pi/2
         float dryL = wet * (1.0f - wetMix * 0.5f) + growlOut + hissOut + ring;
         float dryR = dryL;
+        dryL += tone * cosf(panA);
+        dryR += tone * sinf(panA);
         short vL = (short)(tanhf((dryL + rl * wetMix) * 1.3f) * 30000);
         short vR = (short)(tanhf((dryR + rr * wetMix) * 1.3f) * 30000);
         stereo[i * 2] = vL; stereo[i * 2 + 1] = vR;
