@@ -1507,10 +1507,10 @@ int main() {
         float full=mix.party;
         cue.partyStopped=true;
         for (int i=0;i<22;i++) mix.step(cue,1.0f/30,1.0f);
-        CHECK(mix.party<0.005f && mix.partyPitch<0.35f*0.88f);
+        CHECK(mix.party<0.005f && mix.partyPitch<0.35f*0.99f);
         cue.partyStopped=false;
         for (int i=0;i<13;i++) mix.step(cue,1.0f/30,1.0f);
-        CHECK(fabsf(mix.party-full)<0.01f && mix.partyPitch>0.8f);
+        CHECK(fabsf(mix.party-full)<0.01f && mix.partyPitch>0.95f);
         // Off LEVEL FUN nothing stops.
         sim.applyLevel(0,GetTime());
         for (int i=0;i<60*30;i++) sim.updatePartyMusic(1.0f/30);

@@ -305,6 +305,28 @@ at intervals and the player has to stand still until it starts again
   changes every digest of the golden trace, which never reaches LEVEL FUN.
 - The HUD line "the music stopped · stand still" is in `hudDraws`.
 
+# LEVEL FUN's play rug and song (November 2026)
+
+LEVEL FUN's floor is a children's city play rug, and its music is an original
+toy-band tune.
+
+- **The rug is `makePartyCarpetSurface`** (web/src/surfaces.cpp, slot
+  `partycarpet`, so Unreal imports it under the same name). Roads run along
+  every whole metre, so the 2 m tile makes one road grid with four different
+  1 m blocks: houses, a park, shops with a car park, and a hospital beside a
+  fire station, with a roundabout at (1, 1). Every shape is a distance in
+  metres on wrapped coordinates (`playrug::box`, `circle`), so a car on a road
+  at the tile edge is drawn whole on both sides. Anything placed near (1, 1)
+  must stay outside the roundabout's 0.225 m, or the roundabout paints over it.
+- **The song is `tools/compose-fun.py`**, which writes
+  `assets/sounds/music/level_fun.ogg`. The notes are text in the script.
+  Every note's tail is added modulo the loop length, so the end runs into the
+  start without a click. `LoopLevels::step` plays it at 0.97 with a small
+  wander; the previous recording was slowed to 0.84 and dragged.
+- **texdump does not build against raylib 6.2** (the sandbox wheel since
+  November 2026): `ImageDraw` is gone. Check a surface with an in-game
+  capture instead, pitched down at the floor (`BACKROOMS_POS=x,z,yaw,-0.6`).
+
 # Footstep clip per floor material (October 2026)
 
 Player footsteps and landings use a clip per floor material: carpet on
@@ -2819,7 +2841,8 @@ three rules:
 
 - **Water sounds and LEVEL FUN's music are recordings.** Water one-shots and
   loops are in `assets/sounds/water` (Red Eclipse, CC BY-SA); the music is
-  `assets/sounds/music/level_fun.ogg` (Abstraction, CC0). Synthesized water
+  `assets/sounds/music/level_fun.ogg`, an original tune rendered by
+  `tools/compose-fun.py` (see "LEVEL FUN's play rug and song"). Synthesized water
   (noise, then bubble sines) sounded fake.
 - `tools/embed-materials.py sounds` embeds every `.ogg` under `assets/sounds`
   into `web/src/sounds.generated.h`. Load them by path with

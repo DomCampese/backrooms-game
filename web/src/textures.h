@@ -40,7 +40,7 @@ Surface makeConcreteCeilSurface();   // Level 1: formed soffit
 // grout lines at the same spacing, so they meet where wall meets floor.
 Surface makeTileSurface(bool wall);
 Surface makePartyWallSurface();      // LEVEL FUN =): party-print vinyl, bunting, smileys
-Surface makePartyCarpetSurface();    // LEVEL FUN =): patterned banquet-hall carpet
+Surface makePartyCarpetSurface();    // LEVEL FUN =): a city play rug: roads, cars, houses
 Surface makePartyCeilSurface();      // LEVEL FUN =): black acoustic board on black grid
 Surface makeCinemaCarpetSurface();   // the theater: dark carpet scattered with bright shapes
 Surface makeCinemaWallSurface();     // the theater: burgundy fabric over acoustic panels

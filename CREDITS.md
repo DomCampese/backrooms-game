@@ -38,7 +38,7 @@ are not permission to copy those assets.
 | --- | --- | --- |
 | [Entity 3 — Smilers](https://backrooms-wiki.wikidot.com/entity-3) | Original by **Palico22**; rewritten by **Stretchsterz**, as cited for the page. | The hunter on Level 1 and in the theater (Level 0 keeps the game's own Pirate Clark): a procedurally drawn shadow body with glowing eyes and a toothed grin that shows in the dark. Its stalking, lunging, doubloon drops and weaknesses are the game's own. |
 | [Entity 67 — Partygoers =)](https://backrooms-wiki.wikidot.com/entity-67) | Original by **1000dumplings**; current rewrite by **Robert Goerman** and **MC_Crafter_24_7**, as credited on the page. | A procedurally drawn yellow, smiling party-themed enemy. The game changes its appearance and uses its own stalking/chase behavior. |
-| [Level Fun / Level 26 — The SS Fun =)](https://backrooms-wiki.wikidot.com/level-26) | Original Level Fun by **1000dumplings**; current rewrite by **Robert Goerman** and **MC_Crafter_24_7**. | The game uses the older party-room motif and name, with generated banquet rooms, balloons and confetti; it does not reproduce the current cruise-ship setting. |
+| [Level Fun / Level 26 — The SS Fun =)](https://backrooms-wiki.wikidot.com/level-26) | Original Level Fun by **1000dumplings**; current rewrite by **Robert Goerman** and **MC_Crafter_24_7**. | The game uses the older party-room motif and name, with generated banquet rooms, a city play rug for a floor, balloons and confetti; it does not reproduce the current cruise-ship setting. |
 | [Object 1 — Almond Water](https://backrooms-wiki.wikidot.com/object-1) | Original by **1000dumplings**; rewritten by **Natedagreat563** and **Poliacci**. | Adapted into a canned consumable with game-specific recovery effects, placement, artwork and drinking animation; the cartons on Level 0 are printed as cases of it, and the vending machines on Levels 1 and 4 sell it (three doubloons a can) from spirals behind the glass. |
 | [Level 0 — "Threshold"](https://backrooms-wiki.wikidot.com/level-0) | Adapted by Reddit user **u/Deveyerr**; rewritten by **DivineAtlas**, **Robert Goerman** and **DrAkimoto**, as cited for the page. | The basis of Level 0: worn mono-yellow wallpaper over "old moist carpet", scattered outlets and "inconsistently placed fluorescent lighting" (the uneven 4 m tube grid, dead and dim tubes), the hum that brings on migraines that last after you leave, empty rooms with no windows, the carpet fluid that "is not water", falling ceiling tiles, isolation from other wanderers, and leaving only by noclipping into Level 1 (the glitching noclip walls). Its wanderers stumbling "through mile after mile of randomly segmented rooms, hallways, and stairs" is why Level 0 has storeys: identical floors stacked 4.32 m apart and joined by stairwells, flights through the ceiling and railed double-height halls. The title card uses the "Threshold" name. Layouts, the stair and storey geometry, the Pirate Clark hunter, doubloons and combat are the game's own. |
 | [(Archived) Level 0 — Tutorial Level](https://backrooms-wiki.wikidot.com/archived:level-0-2020) | Adapted by **u/Deveyerr**; rewritten by **etoisle**, per the archived page's citation. | The older article's version of the same level. Its "exiting Level 0 is only possible by noclipping, which will always result in entry to Level 1", and the fact that nobody has ever met another wanderer there, shaped the noclip exits and the Manila Room's notes. |
@@ -111,10 +111,8 @@ is the other half of why Level 0 has storeys.
 - **Water sounds** — splashes, swim strokes and the underwater loop by the
   **Red Eclipse Team**, CC BY-SA 4.0 or later.
   [Source files, commit and per-file licenses](assets/sounds/water/README.md).
-- **LEVEL FUN music** — "Sketchbook 2024-02-21_02" by **Abstraction / Tallbeard
-  Studios (Ben Burnes)**, CC0 1.0, from the
-  [Music Loop Bundle](https://tallbeard.itch.io/music-loop-bundle).
-  [Provenance and the creator's notice](assets/sounds/music/README.md).
+- **LEVEL FUN music** is original to this project, rendered by
+  `tools/compose-fun.py` ([notes](assets/sounds/music/README.md)).
 
 These assets retain their original licenses (CC0, or CC BY-SA for the water
 sounds). The project's MIT License does not replace their original terms. The

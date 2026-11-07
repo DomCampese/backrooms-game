@@ -795,62 +795,210 @@ Surface makePartyWallSurface() {
     return finishSurface(c, 1.0f);
 }
 
-// Banquet-hall carpet: a burgundy ground under a gold trellis, a rosette in each
-// diamond, navy sprigs and quatrefoils, on a 2/3 m repeat. Muted, because bright
-// gold on a regular grid looked like floor tiles at a distance. The old floor
-// was flat red with confetti. Cut pile, so the shade varies in soft patches.
-// Some flattened confetti is still in it.
+// A children's city play rug: grey roads with white dashes on green grass,
+// a roundabout, zebra crossings, and a block each of houses, park, shops with
+// a car park, and a hospital beside a fire station, all seen from above, with
+// toy cars on the roads. Roads run along the tile's edges and middle, so the
+// floor is one road grid with 1 m blocks. Printed low pile. Some flattened
+// confetti is still in it. It replaced a burgundy banquet carpet.
+namespace playrug {
+
+constexpr float TILE = 2.0f;                 // metres per repeat
+constexpr float ROAD = 0.08f;                // half-width of a road: two 8 cm lanes
+constexpr float WALK = 0.025f;               // pavement either side
+constexpr float ISLE = 0.20f;                // roundabout radius, at (1, 1)
+
+struct Rgb { float r, g, b; };
+constexpr Rgb GRASS{ 92, 164, 66 }, ASPHALT{ 80, 82, 90 }, PAVEMENT{ 178, 172, 160 },
+              PAINT{ 238, 236, 224 }, WATER{ 62, 132, 204 }, TREE{ 38, 112, 48 },
+              LEAF{ 78, 156, 62 }, TARMAC{ 104, 106, 112 }, SAND{ 222, 196, 132 },
+              GLASS{ 54, 70, 96 }, TYRE{ 26, 26, 30 }, PATH{ 206, 180, 128 };
+
+struct Pen {
+    float r, g, b, aa;                       // aa: one pixel in metres, for edges
+    void paint(float cov, Rgb c) { r = lerpf(r, c.r, cov); g = lerpf(g, c.g, cov); b = lerpf(b, c.b, cov); }
+    float cov(float d) const { return sat(0.5f - d / aa); }
+};
+
+// Rounded box and circle distances, in metres, on wrapped coordinates.
+float box(float x, float y, float cx, float cy, float hx, float hy, float rad = 0) {
+    float qx = fabsf(wrapd(x, cx, TILE)) - hx + rad, qy = fabsf(wrapd(y, cy, TILE)) - hy + rad;
+    float ox = std::max(qx, 0.0f), oy = std::max(qy, 0.0f);
+    return sqrtf(ox * ox + oy * oy) + std::min(std::max(qx, qy), 0.0f) - rad;
+}
+float circle(float x, float y, float cx, float cy, float rad) {
+    float dx = wrapd(x, cx, TILE), dy = wrapd(y, cy, TILE);
+    return sqrtf(dx * dx + dy * dy) - rad;
+}
+
+// A toy car from above, centred at (cx, cy), heading along +x (dir 1) or -x
+// (-1), or +y (2) or -y (-2).
+struct Car { float x, y; int dir; Rgb body; };
+void car(Pen &p, float x, float y, const Car &c) {
+    float u = wrapd(x, c.x, TILE), v = wrapd(y, c.y, TILE);
+    if (fabsf(u) > 0.08f || fabsf(v) > 0.08f) return;
+    if (c.dir == 2 || c.dir == -2) std::swap(u, v);
+    if (c.dir < 0) { u = -u; v = -v; }
+    for (float wu : { -0.032f, 0.032f }) for (float wv : { -0.028f, 0.028f })
+        p.paint(p.cov(box(u, v, wu, wv, 0.011f, 0.006f, 0.002f)), TYRE);
+    p.paint(p.cov(box(u, v, 0, 0, 0.054f, 0.027f, 0.010f)), c.body);
+    p.paint(p.cov(box(u, v, 0.016f, 0, 0.008f, 0.021f, 0.004f)), GLASS);           // windscreen
+    p.paint(p.cov(box(u, v, -0.030f, 0, 0.005f, 0.019f, 0.003f)), GLASS);          // rear window
+    Rgb roof{ c.body.r * 1.12f, c.body.g * 1.12f, c.body.b * 1.12f };
+    p.paint(p.cov(box(u, v, -0.008f, 0, 0.014f, 0.020f, 0.004f)) * 0.8f, roof);
+    p.paint(p.cov(box(u, v, 0.050f, 0.018f, 0.003f, 0.005f, 0.002f)), Rgb{ 250, 236, 150 });
+    p.paint(p.cov(box(u, v, 0.050f, -0.018f, 0.003f, 0.005f, 0.002f)), Rgb{ 250, 236, 150 });
+}
+
+void tree(Pen &p, float x, float y, float cx, float cy, float rad) {
+    p.paint(p.cov(circle(x, y, cx + 0.006f, cy + 0.008f, rad)) * 0.35f, Rgb{ 20, 50, 20 });   // shadow
+    p.paint(p.cov(circle(x, y, cx, cy, rad)), TREE);
+    p.paint(p.cov(circle(x, y, cx - rad * 0.3f, cy - rad * 0.3f, rad * 0.45f)), LEAF);
+}
+
+// A house from above: a pitched roof, one slope lit and one in shade, with a
+// ridge, and a chimney.
+void house(Pen &p, float x, float y, float cx, float cy, float hx, float hy, Rgb roofC) {
+    p.paint(p.cov(box(x, y, cx + 0.008f, cy + 0.010f, hx, hy)) * 0.35f, Rgb{ 20, 50, 20 });
+    float d = box(x, y, cx, cy, hx, hy, 0.003f);
+    bool lit = wrapd(y, cy, TILE) < 0;
+    float k = lit ? 1.1f : 0.78f;
+    p.paint(p.cov(d), Rgb{ roofC.r * k, roofC.g * k, roofC.b * k });
+    p.paint(p.cov(fabsf(wrapd(y, cy, TILE)) - 0.003f) * p.cov(d), Rgb{ roofC.r * 0.55f, roofC.g * 0.55f, roofC.b * 0.55f });
+    p.paint(p.cov(box(x, y, cx + hx * 0.55f, cy - hy * 0.45f, 0.010f, 0.010f)), Rgb{ 150, 70, 56 });
+}
+
+void blockHouses(Pen &p, float x, float y) {          // block at (0, 0)
+    const Rgb roofs[4] = { { 196, 58, 46 }, { 58, 96, 176 }, { 224, 144, 40 }, { 150, 88, 56 } };
+    for (int k = 0; k < 4; k++) {
+        float cx = k & 1 ? 0.70f : 0.30f, cy = k & 2 ? 0.66f : 0.30f;
+        float driveY = k & 2 ? cy + 0.08f : cy - 0.08f, edge = k & 2 ? 0.92f : 0.08f;
+        p.paint(p.cov(box(x, y, cx + 0.03f, (driveY + edge) * 0.5f, 0.022f, fabsf(edge - driveY) * 0.5f)), PAVEMENT);
+        p.paint(p.cov(box(x, y, cx - 0.06f, k & 2 ? cy - 0.12f : cy + 0.12f, 0.07f, 0.05f, 0.01f)) * 0.5f, Rgb{ 118, 182, 80 });   // garden
+        house(p, x, y, cx, cy, 0.10f, 0.07f, roofs[k]);
+    }
+    tree(p, x, y, 0.50f, 0.50f, 0.05f);
+    tree(p, x, y, 0.16f, 0.50f, 0.035f);
+    tree(p, x, y, 0.84f, 0.48f, 0.04f);
+}
+
+void blockPark(Pen &p, float x, float y) {            // block at (1, 0)
+    float ring = circle(x, y, 1.48f, 0.48f, 0.28f);
+    p.paint(p.cov(fabsf(ring) - 0.016f), PATH);
+    float ex = wrapd(x, 1.46f, TILE) / 0.19f, ey = wrapd(y, 0.50f, TILE) / 0.12f;
+    float pond = (sqrtf(ex * ex + ey * ey) - 1.0f) * 0.12f;
+    p.paint(p.cov(pond - 0.008f), Rgb{ 120, 110, 90 });
+    p.paint(p.cov(pond), WATER);
+    p.paint(p.cov(pond + 0.03f) * 0.4f, Rgb{ 110, 176, 228 });
+    p.paint(p.cov(circle(x, y, 1.40f, 0.47f, 0.012f)), Rgb{ 250, 214, 40 });         // a duck
+    p.paint(p.cov(circle(x, y, 1.39f, 0.47f, 0.004f)), Rgb{ 230, 120, 30 });
+    p.paint(p.cov(box(x, y, 1.80f, 0.82f, 0.07f, 0.07f, 0.01f)), SAND);               // sandpit
+    p.paint(p.cov(box(x, y, 1.80f, 0.82f, 0.012f, 0.06f, 0.004f)), Rgb{ 214, 50, 50 }); // slide
+    const float trees[][3] = { { 1.15f, 0.15f, 0.05f }, { 1.30f, 0.12f, 0.04f }, { 1.85f, 0.16f, 0.055f },
+                               { 1.86f, 0.42f, 0.04f }, { 1.14f, 0.70f, 0.05f }, { 1.30f, 0.86f, 0.035f },
+                               { 1.60f, 0.86f, 0.04f } };
+    for (const auto &t : trees) tree(p, x, y, t[0], t[1], t[2]);
+}
+
+void blockShops(Pen &p, float x, float y) {           // block at (0, 1)
+    p.paint(p.cov(box(x, y, 0.46f, 1.31f, 0.34f, 0.16f, 0.01f)), Rgb{ 196, 192, 186 });  // shop roof
+    p.paint(p.cov(box(x, y, 0.46f, 1.31f, 0.32f, 0.14f)) * 0.25f, Rgb{ 150, 150, 150 });
+    for (int k = 0; k < 3; k++)                                                          // roof vents
+        p.paint(p.cov(circle(x, y, 0.26f + 0.20f * k, 1.28f, 0.025f)), Rgb{ 120, 124, 130 });
+    float awn = box(x, y, 0.46f, 1.485f, 0.34f, 0.022f);                               // striped awning
+    bool stripe = fmodf(x + 2.0f, 0.06f) < 0.03f;
+    p.paint(p.cov(awn), stripe ? Rgb{ 214, 44, 44 } : Rgb{ 240, 236, 228 });
+    p.paint(p.cov(box(x, y, 0.50f, 1.72f, 0.38f, 0.17f, 0.01f)), TARMAC);              // car park
+    for (int k = 0; k <= 6; k++)
+        p.paint(p.cov(box(x, y, 0.17f + 0.11f * k, 1.64f, 0.003f, 0.07f)), PAINT);
+    const Car parked[] = { { 0.225f, 1.65f, 2, { 222, 196, 40 } }, { 0.445f, 1.65f, -2, { 46, 120, 196 } },
+                           { 0.665f, 1.65f, 2, { 236, 236, 236 } }, { 0.775f, 1.65f, 2, { 40, 160, 90 } } };
+    for (const Car &c : parked) car(p, x, y, c);
+}
+
+void blockServices(Pen &p, float x, float y) {        // block at (1, 1)
+    // Hospital: a white roof, a red cross, and an H on the helipad.
+    p.paint(p.cov(box(x, y, 1.62f, 1.38f, 0.26f, 0.20f, 0.01f)), Rgb{ 236, 234, 228 });
+    p.paint(p.cov(std::min(box(x, y, 1.50f, 1.34f, 0.065f, 0.022f), box(x, y, 1.50f, 1.34f, 0.022f, 0.065f))),
+            Rgb{ 216, 36, 40 });
+    p.paint(p.cov(fabsf(circle(x, y, 1.74f, 1.40f, 0.085f)) - 0.006f), Rgb{ 220, 180, 40 });
+    float hh = std::min({ box(x, y, 1.715f, 1.40f, 0.008f, 0.045f), box(x, y, 1.765f, 1.40f, 0.008f, 0.045f),
+                          box(x, y, 1.74f, 1.40f, 0.025f, 0.007f) });
+    p.paint(p.cov(hh), Rgb{ 220, 180, 40 });
+    // Fire station: a red roof, three doors onto the road, and an engine out.
+    p.paint(p.cov(box(x, y, 1.62f, 1.76f, 0.26f, 0.12f, 0.01f)), Rgb{ 186, 40, 36 });
+    for (int k = 0; k < 3; k++)
+        p.paint(p.cov(box(x, y, 1.48f + 0.14f * k, 1.885f, 0.05f, 0.008f)), Rgb{ 60, 60, 66 });
+    car(p, x, y, { 1.24f, 1.70f, 2, { 214, 30, 30 } });
+    car(p, x, y, { 1.24f, 1.78f, 2, { 214, 30, 30 } });                                  // the engine is long
+    p.paint(p.cov(box(x, y, 1.24f, 1.74f, 0.006f, 0.05f)), Rgb{ 200, 200, 200 });       // its ladder
+    tree(p, x, y, 1.22f, 1.45f, 0.04f);
+}
+
+// A dashed centre line, and zebra crossings by each junction, for one road.
+// `along` is the coordinate along the road, `across` the offset from its centre.
+void markings(Pen &p, float along, float across) {
+    float fromJunction = fabsf(along - floorf(along + 0.5f));                           // to the nearest whole metre
+    float clear = ROAD + WALK;
+    if (fromJunction > clear + 0.02f) {
+        bool dash = fmodf(along + 4.0f, 0.08f) < 0.045f;
+        if (dash) p.paint(p.cov(fabsf(across) - 0.004f), PAINT);
+    }
+    float z = fromJunction - clear - 0.006f;                                           // zebra: 4 cm deep
+    if (z > 0 && z < 0.04f && fabsf(across) < ROAD - 0.008f && fmodf(across + 1.0f, 0.024f) < 0.013f)
+        p.paint(1.0f, PAINT);
+}
+
+}  // namespace playrug
+
 Surface makePartyCarpetSurface() {
-    const int N = 768, REP = 256;                        // three repeats of 2/3 m to the 2 m tile
-    Canvas c(N, N, 2.0f, 2.0f);
-    const float px = 1.0f / REP;                         // one pixel in motif units
+    using namespace playrug;
+    const int N = 1024;
+    Canvas c(N, N, TILE, TILE);
+    const float aa = TILE / N;
+    const Car traffic[] = { { 0.40f, 0.04f, 1, { 46, 110, 200 } }, { 1.62f, 1.96f, -1, { 222, 196, 40 } },
+                            { 1.04f, 0.70f, 2, { 236, 120, 30 } }, { 1.96f, 1.30f, -2, { 140, 60, 170 } },
+                            { 0.62f, 0.96f, -1, { 214, 40, 40 } }, { 0.04f, 1.50f, 2, { 40, 160, 90 } },
+                            { 1.30f, 1.04f, 1, { 236, 236, 236 } } };
     for (int y = 0; y < N; y++) for (int x = 0; x < N; x++) {
         int i = y * N + x;
-        float fx = (float)x, fy = (float)y;
-        float u = (x % REP + 0.5f) / REP - 0.5f, v = (y % REP + 0.5f) / REP - 0.5f;
-        float r = 124, g = 26, b = 34;                   // burgundy ground
-        auto paint = [&](float cov, float cr, float cg, float cb) {
-            r = lerpf(r, cr, cov); g = lerpf(g, cg, cov); b = lerpf(b, cb, cov);
-        };
-        // a darker damask ground-figure: the woven shadow of a leaf scroll
-        float ang = atan2f(v, u), rad = sqrtf(u * u + v * v);
-        float scroll = sinf(ang * 4.0f + rad * 22.0f) * sinf(ang * 2.0f - rad * 9.0f);
-        paint(sstep(0.35f, 0.70f, scroll) * sstep(0.14f, 0.22f, rad) * 0.55f, 88, 15, 25);
-        // the trellis: a diamond joining the cell's edge midpoints, old gold
-        float dia = fabsf(fabsf(u) + fabsf(v) - 0.5f);
-        paint(sstep(0.010f + px, 0.010f - px, dia) * 0.8f, 150, 108, 50);
-        // sprigs on the diagonals, navy leaves pointing at the trellis corners
-        for (int q = 0; q < 4; q++) {
-            float ca = q & 1 ? 0.7071f : -0.7071f, sa = q & 2 ? 0.7071f : -0.7071f;
-            float lu = u * ca + v * sa - 0.255f, lv = -u * sa + v * ca;
-            float leaf = sqrtf(lu * lu / 0.0022f + lv * lv / 0.00035f);
-            paint(sstep(1.0f + 8 * px, 1.0f - 8 * px, leaf) * 0.85f, 34, 36, 64);
+        float X = (x + 0.5f) * aa, Y = (y + 0.5f) * aa;
+        Pen p{ GRASS.r, GRASS.g, GRASS.b, aa };
+        p.paint(sat((c.nz((float)x, (float)y, 3, 3, 0xC17Au, 2) - 0.5f) * 1.5f), Rgb{ 104, 176, 72 });
+        int bx = (int)X, by = (int)Y;
+        if (bx == 0 && by == 0) blockHouses(p, X, Y);
+        else if (bx == 1 && by == 0) blockPark(p, X, Y);
+        else if (bx == 0) blockShops(p, X, Y);
+        else blockServices(p, X, Y);
+        // roads on every whole metre, with a pavement either side
+        float dx = fabsf(X - floorf(X + 0.5f)), dy = fabsf(Y - floorf(Y + 0.5f));
+        float road = std::min(dx, dy) - ROAD;
+        p.paint(p.cov(road - WALK), PAVEMENT);
+        p.paint(p.cov(road), ASPHALT);
+        float ring = circle(X, Y, 1.0f, 1.0f, ISLE);
+        if (ring < WALK + aa) {
+            p.paint(p.cov(ring - WALK), PAVEMENT);
+            p.paint(p.cov(ring), ASPHALT);
+            float r = ring + ISLE;
+            p.paint(p.cov(fabsf(r - 0.14f) - 0.003f) * (fmodf(fastAtan2(Y - 1, X - 1) + 7.0f, 0.4f) < 0.22f), PAINT);
+            p.paint(p.cov(r - 0.085f), PAINT);
+            p.paint(p.cov(r - 0.075f), GRASS);
+            tree(p, X, Y, 1.0f, 1.0f, 0.04f);
+        } else {
+            if (dy < ROAD) markings(p, X, Y - floorf(Y + 0.5f));
+            if (dx < ROAD) markings(p, Y, X - floorf(X + 0.5f));
         }
-        // the rosette: eight petals in dull gold round a dark ring and a gold heart
-        float petal = 0.115f + 0.032f * cosf(ang * 8.0f);
-        paint(sstep(petal + px, petal - px, rad) * 0.9f, 140, 96, 44);
-        paint(sstep(petal - 0.018f + px, petal - 0.018f - px, rad) * 0.5f, 120, 30, 32);
-        paint(sstep(0.010f, 0.0f, fabsf(rad - 0.058f) - 0.005f), 64, 12, 20);
-        paint(sstep(0.024f + px, 0.024f - px, rad) * 0.9f, 164, 120, 56);
-        // quatrefoils where the trellis meets the cell edge
-        for (int q = 0; q < 4; q++) {
-            float qu = u - (q == 0 ? 0.5f : q == 1 ? -0.5f : 0.0f), qv = v - (q == 2 ? 0.5f : q == 3 ? -0.5f : 0.0f);
-            float qr = sqrtf(qu * qu + qv * qv), qa = atan2f(qv, qu);
-            float foil = 0.042f + 0.016f * cosf(qa * 4.0f);
-            paint(sstep(foil + px, foil - px, qr) * 0.9f, 36, 38, 70);
-            paint(sstep(0.012f + px, 0.012f - px, qr) * 0.8f, 150, 108, 50);
-        }
-        // cut pile: the tufts' own fleck, and the pile lying different ways
-        float pile = 0.93f + 0.10f * lat(x, y, 205u) + 0.10f * (c.nz(fx, fy, 6, 6, 233u, 3) - 0.5f);
-        r *= pile; g *= pile; b *= pile;
-        float h = (lat(x, y, 206u) - 0.5f) * 0.0005f + (c.nz(fx, fy, 40, 40, 207u, 2) - 0.5f) * 0.0005f;
+        for (const Car &t : traffic) car(p, X, Y, t);
+        // printed low pile: fleck, and the pile lying different ways
+        float pile = 0.95f + 0.07f * lat(x, y, 205u) + 0.08f * (c.nz((float)x, (float)y, 6, 6, 233u, 3) - 0.5f);
+        float r = p.r * pile, g = p.g * pile, b = p.b * pile;
+        float h = (lat(x, y, 206u) - 0.5f) * 0.0004f + (c.nz((float)x, (float)y, 40, 40, 207u, 2) - 0.5f) * 0.0004f;
         float gloss = 0.3f;
         // confetti trodden in: paper, flat and a little shiny
         uint32_t fh = ih((x >> 2) % (N >> 2), (y >> 2) % (N >> 2), 231u);
-        if (fh % 70 == 0) {
+        if (fh % 160 == 0) {
             Color pc = PARTY[(fh >> 7) % 5];
-            float cv = 0.78f;
-            r = pc.r * cv; g = pc.g * cv; b = pc.b * cv;
+            r = pc.r * 0.78f; g = pc.g * 0.78f; b = pc.b * 0.78f;
             h = 0.0004f; gloss = 1.0f;
         }
         c.set(i, r, g, b);
