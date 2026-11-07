@@ -713,9 +713,10 @@
   // is the phone's F3 for level testing. The mark is drawn by the game
   // (Camcorder::recMark) at 16-60 px across and 12-28 down, in HUD pixels that
   // scale with the window's height over 850, so the zone is measured off the
-  // canvas the same way, and never smaller than a fingertip.
+  // canvas the same way, and never smaller than a fingertip. LEVELS is in
+  // level-number order: a button's index is the level it goes to.
   var LEVELS = ['Level 0 · Threshold', 'Level 1 · Habitable Zone', 'The Poolrooms',
-                'LEVEL FUN', 'The Theater', 'The Casino'];
+                'LEVEL FUN', 'The Theater', 'The Casino', 'Level 94 · Motion'];
   var REC_TAPS = 3, REC_GAP = 450;   // taps, and ms allowed between two of them
   var devPanel = document.getElementById('dev');
   var recTaps = 0, recLast = 0;

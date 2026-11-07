@@ -1844,6 +1844,9 @@ web/shell.html); a button there takes the player straight to that level.
   field, at `HEAPU32[p + 9]`.
 - **The REC zone is measured off the canvas** (`onRecMark`), at the HUD's
   scale of height / 850, and never smaller than 72 x 52 px.
+- **`LEVELS` in the shell is in level-number order** (Level 94 is index 6,
+  last): the button's index is the level it sends. A new level gets a row
+  at its number, or every later button goes to the wrong level.
 - **Its buttons act on `pointerup`, not `click`.** The double-tap guard cancels
   the touchend of a tap within 350 ms of the last, which also drops its click.
 - `mobile-check` checks that two taps or three slow ones do not open it,
