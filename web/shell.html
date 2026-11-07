@@ -175,6 +175,25 @@
     letter-spacing: .04em; text-align: center; padding: 0;
   }
   .tbtn.held { background: rgba(201,180,88,.55); color: #14130f; }
+
+  /* The dev panel: three taps on the REC mark open it (touch only). It sits
+     above #touch so its buttons never reach the controls' handlers. */
+  #dev {
+    position: absolute; left: 10px; top: 44px; z-index: 18;
+    display: flex; flex-direction: column; gap: 6px; padding: 8px;
+    max-height: calc(100% - 56px); overflow-y: auto;
+    background: rgba(12,11,8,.86); border: 1px solid rgba(201,180,88,.45);
+    font: 600 13px/1 ui-monospace, Menlo, Consolas, monospace; color: #e8dfb8;
+    touch-action: manipulation;
+  }
+  #dev[hidden] { display: none; }
+  #dev p { margin: 2px 4px 4px; letter-spacing: .08em; opacity: .7; }
+  #dev button {
+    min-height: 40px; min-width: 180px; padding: 0 12px; text-align: left;
+    font: inherit; color: inherit; background: rgba(201,180,88,.12);
+    border: 1px solid rgba(201,180,88,.34);
+  }
+  #dev button:active { background: rgba(201,180,88,.55); color: #14130f; }
 </style>
 </head>
 <body>
@@ -185,6 +204,8 @@
     <div id="touch" aria-hidden="true">
       <div id="stick"><div id="knob"></div></div>
     </div>
+
+    <div id="dev" hidden></div>
 
     <div id="gate">
      <div id="gate-in">
@@ -383,7 +404,9 @@
                 // pushes of the stick, accumulated as edges and drained by the
                 // C++ side exactly as `pressed` is. Buttons are not counted —
                 // they have their own jobs, and FIRE already starts a run.
-                startGesture: 0 };
+                startGesture: 0,
+                // the dev panel's level button: level + 1, drained like `pressed`
+                gotoLevel: 0 };
   Module.__touch = touch;
 
   var layer = document.getElementById('touch');
@@ -677,10 +700,54 @@
     // pointercancel is the browser taking the gesture away (a scroll, a call
     // coming in), and its coordinates are wherever the finger was abandoned.
     if (released && r.kind !== 'btn' &&
-        Math.hypot(e.clientX - r.x0, e.clientY - r.y0) <= TAP_SLOP)
+        Math.hypot(e.clientX - r.x0, e.clientY - r.y0) <= TAP_SLOP) {
       touch.startGesture++;
+      if (onRecMark(e.clientX, e.clientY)) recTap();
+    }
     delete roles[e.pointerId];
   }
+
+  // ---- the dev panel ------------------------------------------------------
+  // Three quick taps on the REC mark in the top left open a list of levels; a
+  // button there takes you straight to that level (DevKeys::gotoLevel). This
+  // is the phone's F3 for level testing. The mark is drawn by the game
+  // (Camcorder::recMark) at 16-60 px across and 12-28 down, in HUD pixels that
+  // scale with the window's height over 850, so the zone is measured off the
+  // canvas the same way, and never smaller than a fingertip.
+  var LEVELS = ['Level 0 · Threshold', 'Level 1 · Habitable Zone', 'The Poolrooms',
+                'LEVEL FUN', 'The Theater', 'The Casino'];
+  var REC_TAPS = 3, REC_GAP = 450;   // taps, and ms allowed between two of them
+  var devPanel = document.getElementById('dev');
+  var recTaps = 0, recLast = 0;
+
+  function onRecMark(x, y) {
+    var c = canvas.getBoundingClientRect();
+    var s = c.height / 850;
+    return x - c.left < Math.max(110 * s, 72) && y - c.top < Math.max(60 * s, 52);
+  }
+  function recTap() {
+    var now = Date.now();
+    recTaps = now - recLast <= REC_GAP ? recTaps + 1 : 1;
+    recLast = now;
+    if (recTaps >= REC_TAPS) { recTaps = 0; devPanel.hidden = !devPanel.hidden; }
+  }
+  (function () {
+    var title = document.createElement('p');
+    title.textContent = 'GO TO LEVEL';
+    devPanel.appendChild(title);
+    LEVELS.forEach(function (name, lv) {
+      var b = document.createElement('button');
+      b.textContent = name;
+      // pointerup, not click: the double-tap guard above cancels the touchend
+      // (and so the click) of a tap that lands within 350 ms of the last one.
+      b.addEventListener('pointerup', function () { touch.gotoLevel = lv + 1; devPanel.hidden = true; });
+      devPanel.appendChild(b);
+    });
+    var close = document.createElement('button');
+    close.textContent = 'Close';
+    close.addEventListener('pointerup', function () { devPanel.hidden = true; });
+    devPanel.appendChild(close);
+  })();
   layer.addEventListener('pointerup', function (e) { lift(e, true); });
   layer.addEventListener('pointercancel', function (e) { lift(e, false); });
   layer.addEventListener('contextmenu', function (e) { e.preventDefault(); });

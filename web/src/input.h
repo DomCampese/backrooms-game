@@ -36,6 +36,8 @@ bool    inTouchActive();
 // A tap on open screen or a push of the stick: starts a run from the title
 // screen on touch.
 bool    webStartGesture();
+// A level button in the touch dev panel (three taps on REC): that level, or -1.
+int     webGotoLevel();
 
 #else
 
@@ -44,6 +46,7 @@ inline float   webMoveScale() { return 1.0f; }
 inline void    webReleaseAim() {}
 inline bool    inTouchActive() { return false; }
 inline bool    webStartGesture() { return false; }
+inline int     webGotoLevel() { return -1; }
 
 inline bool    inKeyDown(int key)       { return IsKeyDown(key); }
 inline bool    inKeyPressed(int key)    { return IsKeyPressed(key); }

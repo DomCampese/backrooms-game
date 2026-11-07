@@ -44,6 +44,7 @@ struct TouchFrame {
     float    moveY;
     float    wheel;     // weapon cycle steps
     uint32_t startGesture;  // taps on open screen + pushes of the stick (edges)
+    uint32_t gotoLevel;     // dev panel: level + 1, or 0 for none (an edge)
 };
 TouchFrame g{};
 
@@ -93,6 +94,7 @@ void webInputPoll() {
         // dismissed by an edge, and a tap that begins and ends between two of
         // this sandbox's 4 fps frames still has to be seen exactly once.
         HEAPU32[p + 8] = t.startGesture; t.startGesture = 0;
+        HEAPU32[p + 9] = t.gotoLevel | 0; t.gotoLevel = 0;
     }, &g);
 
     if (!touchOn()) { setAimLatch(false); return; }
@@ -191,5 +193,7 @@ bool inTouchActive() { return touchOn(); }
 // instant its read-it-first hold expires, which is the one thing that hold is
 // for. A finger already down when the card appears has to lift and act again.
 bool webStartGesture() { return touchOn() && g.startGesture != 0; }
+
+int webGotoLevel() { return touchOn() && g.gotoLevel ? (int)g.gotoLevel - 1 : -1; }
 
 #endif

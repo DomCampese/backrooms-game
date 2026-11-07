@@ -29,6 +29,7 @@ template <class F> void inputFields(InputFrame &in, F &&f) {
     f("devBlackout", in.dev.blackout); f("devSpawnAhead", in.dev.spawnAhead); f("devChase", in.dev.chase);
     f("devBanish", in.dev.banish); f("devRefill", in.dev.refill);
     f("devStoreyUp", in.dev.storeyUp); f("devStoreyDown", in.dev.storeyDown); f("devNextLevel", in.dev.nextLevel);
+    f("devGotoLevel", in.dev.gotoLevel);
     f("screenFov", in.screenFov);
     f("forceSpawn", in.forceSpawn);
 }
