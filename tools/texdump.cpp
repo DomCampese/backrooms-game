@@ -224,6 +224,7 @@ static int dumpForUnreal(const char *revolver) {
     exported("smiler_glow", makeSmilerTex(true), CLAMPED);
     exported("partygoer", makePartygoerTex(), CLAMPED);
     exported("usher", makeUsherTex(), CLAMPED);
+    exported("animation", makeAnimationTex(), CLAMPED);
     const bool gun = exportRevolver(revolver);
     fprintf(gJson, "\n  ]\n}\n");
     fclose(gJson);
@@ -257,6 +258,8 @@ int main(int argc, char **argv) {
     if (want("cinemawall"))   surface("cinemawall", timed([] { return makeCinemaWallSurface(); }));
     if (want("casinocarpet")) surface("casinocarpet", timed([] { return makeCasinoCarpetSurface(); }));
     if (want("casinowall"))   surface("casinowall", timed([] { return makeCasinoWallSurface(); }));
+    if (want("claygrass"))    surface("claygrass", timed([] { return makeClayGrassSurface(); }));
+    if (want("claywall"))     surface("claywall", timed([] { return makeClayWallSurface(); }));
     if (wanted("props")) {
         Texture2D props = makePropsTex();
         dump("props", props, false);
@@ -269,6 +272,7 @@ int main(int argc, char **argv) {
     sprite("clark", makeClarkTex);
     sprite("partygoer", makePartygoerTex);
     sprite("usher", makeUsherTex);
+    sprite("animation", makeAnimationTex);
     if (wanted("smiler")) { dump("smiler", makeSmilerTex(false), false); dump("smiler_glow", makeSmilerTex(true), false); }
     return 0;
 }

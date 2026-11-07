@@ -30,6 +30,10 @@ extern const LevelCfg LEVELS[NLEVELS];
 // pitch surfaces.cpp draws the grid at, or the stains straddle the T-bars.
 extern const float SURF_MACRO[NLEVELS];
 extern const float CEIL_BOARD[NLEVELS];
+// The colour a frame is cleared to, 0..1, where nothing is drawn: the
+// Poolrooms' haze, Level 94's sky (dimmed at night as the shader dims its fog,
+// by mix(0.10, 1, blackout)), and black elsewhere.
+Vec3 clearColour(int level, float blackout);
 
 // CPU-side estimate of the shader's room lighting, for tinting billboards.
 // entX/entZ/entDark reproduce the dimming around the hunter (0 = none).
@@ -64,7 +68,8 @@ void setStoreyLightCPU(const StoreyLightCPU &s);
 // generated once.
 enum SurfSlot { SURF_CARPET, SURF_BOARDS, SURF_PAPER, SURF_SLAB, SURF_SOFFIT, SURF_CONCWALL,
                 SURF_POOLFLOOR, SURF_POOLWALL, SURF_BANQUET, SURF_PARTYCEIL,
-                SURF_PARTYWALL, SURF_CINEMACARPET, SURF_CINEMACEIL, SURF_CINEMAWALL, SURF_CASINOCARPET, SURF_CASINOWALL, SURF_COUNT };
+                SURF_PARTYWALL, SURF_CINEMACARPET, SURF_CINEMACEIL, SURF_CINEMAWALL, SURF_CASINOCARPET, SURF_CASINOWALL,
+                SURF_CLAYGRASS, SURF_CLAYWALL, SURF_COUNT };
 // texdump's file names, and the Unreal import's.
 extern const char *const SURF_NAMES[SURF_COUNT];
 // What each level puts on its floors, ceilings and walls.

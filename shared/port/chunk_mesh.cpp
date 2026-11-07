@@ -758,6 +758,36 @@ static void addSymbolDoor(MB &pr, MB &fx, const Opening &op) {
     }
 }
 
+// Floorboards over x0..x1, z0..z1 at floor 0: 145 mm strips east-west, random
+// lengths, staggered, over a dark underlay that shows as the gaps. Alpha 255
+// so the wood takes its relief and gloss. `tone` scales the wood's colour.
+static void addPlanks(MB &pr, Rng &r, float x0, float z0, float x1, float z1, float tone) {
+    const float WU0 = 0.51f, WV0 = 0.02f, WU1 = 0.99f, WV1 = 0.48f;   // props atlas: wood
+    const Vec3 up = { 0, 1, 0 };
+    const Vec2 u = PLAIN_UV;
+    pr.quad({x0,0.002f,z0},{x0,0.002f,z1},{x1,0.002f,z1},{x1,0.002f,z0}, up,
+            u, u, u, u, Rgba{ 34, 24, 18, 254 });
+    const float PW = 0.145f;
+    for (float z = z0; z < z1 - 0.01f; z += PW) {
+        float zb = std::min(z + PW, z1);
+        float x = x0 - r.f01() * 1.2f;
+        while (x < x1) {
+            float len = 0.9f + r.f01() * 1.6f;
+            float xa = std::max(x, x0), xb = std::min(x + len, x1);
+            if (xb - xa > 0.05f) {
+                float ou = WU0 + r.f01() * (WU1 - WU0 - 0.26f), ov = WV0 + r.f01() * (WV1 - WV0 - 0.05f);
+                float k = (0.80f + 0.34f * r.f01()) * tone;
+                Rgba t = { cl8(150 * k), cl8(104 * k), cl8(70 * k), 255 };
+                float ua = ou, ub = ou + (xb - xa) * 0.11f, va = ov, vb = ov + 0.03f;
+                pr.quad({xa+0.003f,0.005f,z+0.003f},{xa+0.003f,0.005f,zb-0.003f},
+                        {xb-0.003f,0.005f,zb-0.003f},{xb-0.003f,0.005f,z+0.003f}, up,
+                        {ua,va},{ua,vb},{ub,vb},{ub,va}, t);
+            }
+            x += len;
+        }
+    }
+}
+
 // ---- the Manila Room: floorboards, manila paper, an octagonal table with a
 // cupboard, two chairs, notes, a chandelier, and an open wooden door in each
 // wall. rx/rz is the room's centre (a cell corner), cy its ceiling; the floor is
@@ -770,34 +800,7 @@ static void addManilaRoom(MB &pr, MB &fx, MB &ao, float rx, float rz, float cy, 
     };
     Rng r(((uint64_t)h << 1) ^ 0x3A11AULL);
 
-    // Floorboards: 145 mm strips east-west, random lengths, staggered, over a dark
-    // underlay that shows as the gaps. Alpha 255 so the wood takes its relief and
-    // gloss.
-    {
-        const Vec3 up = { 0, 1, 0 };
-        const Vec2 u = PLAIN_UV;
-        pr.quad({rx-R,0.002f,rz-R},{rx-R,0.002f,rz+R},{rx+R,0.002f,rz+R},{rx+R,0.002f,rz-R}, up,
-                u, u, u, u, Rgba{ 34, 24, 18, 254 });
-        const float PW = 0.145f;
-        for (float z = rz - R; z < rz + R - 0.01f; z += PW) {
-            float z1 = std::min(z + PW, rz + R);
-            float x = rx - R - r.f01() * 1.2f;
-            while (x < rx + R) {
-                float len = 0.9f + r.f01() * 1.6f;
-                float xa = std::max(x, rx - R), xb = std::min(x + len, rx + R);
-                if (xb - xa > 0.05f) {
-                    float ou = WU0 + r.f01() * (WU1 - WU0 - 0.26f), ov = WV0 + r.f01() * (WV1 - WV0 - 0.05f);
-                    float k = 0.80f + 0.34f * r.f01();
-                    Rgba t = { cl8(150 * k), cl8(104 * k), cl8(70 * k), 255 };
-                    float ua = ou, ub = ou + (xb - xa) * 0.11f, va = ov, vb = ov + 0.03f;
-                    pr.quad({xa+0.003f,0.005f,z+0.003f},{xa+0.003f,0.005f,z1-0.003f},
-                            {xb-0.003f,0.005f,z1-0.003f},{xb-0.003f,0.005f,z+0.003f}, up,
-                            {ua,va},{ua,vb},{ub,vb},{ub,va}, t);
-                }
-                x += len;
-            }
-        }
-    }
+    addPlanks(pr, r, rx - R, rz - R, rx + R, rz + R, 1.0f);
 
     // Manila paper on the four inside faces: 500 mm tiles 1.5 mm off the plaster,
     // from the skirting to the ceiling and round each doorway, anchored to the world
@@ -1200,6 +1203,69 @@ static void addPoster(MB &pr, const Fixture &p) {
     box(-w, -h, w, -h + 0.22f, 0.0f, d, Rgba{ (uint8_t)(g.r / 2), (uint8_t)(g.g / 2), (uint8_t)(g.b / 2), 240 });
 }
 
+// One flat face in a solid colour, wound so its front faces `out`.
+static void outwardFace(MB &mb, const Vec3 *p, int n, Vec3 out, Rgba col) {
+    const Vec3 e1 = { p[1].x - p[0].x, p[1].y - p[0].y, p[1].z - p[0].z };
+    const Vec3 e2 = { p[2].x - p[0].x, p[2].y - p[0].y, p[2].z - p[0].z };
+    Vec3 nn = { e1.y * e2.z - e1.z * e2.y, e1.z * e2.x - e1.x * e2.z, e1.x * e2.y - e1.y * e2.x };
+    const float len = sqrtf(nn.x * nn.x + nn.y * nn.y + nn.z * nn.z);
+    nn = { nn.x / len, nn.y / len, nn.z / len };
+    const bool flip = nn.x * out.x + nn.y * out.y + nn.z * out.z < 0;
+    if (flip) nn = { -nn.x, -nn.y, -nn.z };
+    const Vec2 u = PLAIN_UV;
+    if (n == 3) {
+        if (flip) mb.tri(p[0], p[2], p[1], nn, u, u, u, col);
+        else      mb.tri(p[0], p[1], p[2], nn, u, u, u, col);
+    } else {
+        if (flip) mb.quad(p[0], p[3], p[2], p[1], nn, u, u, u, u, col);
+        else      mb.quad(p[0], p[1], p[2], p[3], nn, u, u, u, u, col);
+    }
+}
+
+// Level 94's house: planks inside its walls, and a pitched roof whose slopes
+// pass through the top of the walls (pos.y) and run MOTION_ROOF_RISE up to a
+// ridge along the long side, with eaves overhanging the walls, gables over the
+// end walls, and a chimney. Flat clay colours at alpha 254: no relief.
+static void addHouse(MB &pr, const Fixture &f) {
+    Rng r(((uint64_t)f.seed << 1) ^ 0x94ULL);
+    addPlanks(pr, r, f.pos.x - f.w, f.pos.z - f.h, f.pos.x + f.w, f.pos.z + f.h, 0.85f + 0.3f * r.f01());
+    static const Rgba ROOF[4] = { { 168, 64, 46, 254 }, { 72, 96, 150, 254 }, { 70, 120, 72, 254 }, { 120, 78, 132, 254 } };
+    const Rgba roof = ROOF[f.seed % 4];
+    const Rgba under = { (uint8_t)(roof.r / 2), (uint8_t)(roof.g / 2), (uint8_t)(roof.b / 2), 254 };
+    const Rgba gable = { 236, 222, 196, 254 }, brick = { 150, 84, 62, 254 };
+    // a runs along the ridge, b across it; `at` puts (a, y, b) in the world.
+    const bool alongZ = f.variant == 1;
+    const float ha = alongZ ? f.h : f.w, hb = alongZ ? f.w : f.h;
+    auto at = [&](float a, float y, float b) {
+        return alongZ ? Vec3{ f.pos.x + b, y, f.pos.z + a } : Vec3{ f.pos.x + a, y, f.pos.z + b };
+    };
+    auto dir = [&](float a, float y, float b) { return alongZ ? Vec3{ b, y, a } : Vec3{ a, y, b }; };
+    const float eave = f.pos.y, ridge = eave + MOTION_ROOF_RISE, slope = MOTION_ROOF_RISE / hb;
+    const float O = 0.45f, T = 0.12f;   // overhang, and the roof's thickness
+    const float edge = eave - O * slope;
+    for (int side = -1; side <= 1; side += 2) {
+        const float s = (float)side;
+        const Vec3 top[4] = { at(-ha - O, edge + T, s * (hb + O)), at(ha + O, edge + T, s * (hb + O)),
+                              at(ha + O, ridge + T, 0), at(-ha - O, ridge + T, 0) };
+        outwardFace(pr, top, 4, dir(0, 1, s * slope), roof);
+        const Vec3 bot[4] = { at(-ha - O, edge, s * (hb + O)), at(ha + O, edge, s * (hb + O)),
+                              at(ha + O, ridge, 0), at(-ha - O, ridge, 0) };
+        outwardFace(pr, bot, 4, dir(0, -1, -s * slope), under);
+        const Vec3 rim[4] = { at(-ha - O, edge, s * (hb + O)), at(ha + O, edge, s * (hb + O)),
+                              at(ha + O, edge + T, s * (hb + O)), at(-ha - O, edge + T, s * (hb + O)) };
+        outwardFace(pr, rim, 4, dir(0, 0, s), under);
+        // The gable over the end wall at a = s * ha, flush with the wall's face.
+        const float ga = s * (ha + WT);
+        const Vec3 tri[3] = { at(ga, eave, -hb), at(ga, eave, hb), at(ga, ridge, 0) };
+        outwardFace(pr, tri, 3, dir(s, 0, 0), gable);
+    }
+    // A chimney through one slope, a third of the way along.
+    const float ca = ha * (r.f01() < 0.5f ? -0.45f : 0.45f), cb = hb * 0.45f;
+    // Its foot stays above the ceiling: at the ceiling's height it fights it for depth.
+    const Vec3 c0 = at(ca - 0.28f, eave + 0.05f, cb - 0.28f), c1 = at(ca + 0.28f, ridge + 0.75f, cb + 0.28f);
+    addSolidBox(pr, std::min(c0.x, c1.x), c0.y, std::min(c0.z, c1.z), std::max(c0.x, c1.x), c1.y, std::max(c0.z, c1.z), brick);
+}
+
 struct FixtureMeshes { MB &pr, &fx, &scr, &ao; };
 
 // Build one fixture. bakeChunk calls this at the point in its cell walk where
@@ -1221,6 +1287,7 @@ static void addFixture(const FixtureMeshes &m, const Fixture &f) {
     case FixtureKind::ManilaRoom:  addManilaRoom(m.pr, m.fx, m.ao, f.pos.x, f.pos.z, f.pos.y, f.seed); break;
     case FixtureKind::Auditorium:  addAuditorium(m.pr, m.fx, f); break;
     case FixtureKind::Poster:      addPoster(m.pr, f); break;
+    case FixtureKind::House:       addHouse(m.pr, f); break;
     }
 }
 

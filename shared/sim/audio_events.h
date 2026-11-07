@@ -35,6 +35,7 @@ enum class Sfx : uint8_t {
     Drag,             // a drag on a cigarette: the paper crackling as it draws
     Exhale,           // breathing the smoke out
     Cough,            // 3: a smoker's cough, which the hunter hears (Sim::COUGH_NOISE)
+    StepGrass,        // 4: Footing::Grass (Level 94)
 };
 
 // What the ambience synth (audio.cpp) chases. The rules write each field where

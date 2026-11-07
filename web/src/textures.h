@@ -24,6 +24,7 @@ Surface makeCeilingSurface();      // Level 0: 600 mm fissured mineral board on 
 Texture2D makeClarkTex();          // Pirate Clark, Level 0's hunter, ENT_FRAMES wide
 Texture2D makeSmilerTex(bool glow);   // the Smiler: fog body, or its unlit eyes and grin; ENT_FRAMES wide
 Texture2D makeUsherTex();          // the Usher, the theater's torch-bearer, ENT_FRAMES wide
+Texture2D makeAnimationTex();      // the Animation, Level 94's clay figure, ENT_FRAMES wide
 Texture2D makePartygoerTex();      // the Partygoer, LEVEL FUN's hunter
 Texture2D makeScrawlTex();         // graffiti atlas: 4 x 8 phrases
 Texture2D makePropsTex();          // prop atlas: cardboard / cabinet / metal
@@ -46,6 +47,8 @@ Surface makeCinemaWallSurface();     // the theater: burgundy fabric over acoust
 Surface makeCinemaCeilSurface();     // the theater: black acoustic board
 Surface makeCasinoCarpetSurface();   // the casino: red and gold medallions on navy
 Surface makeCasinoWallSurface();     // the casino: gold damask on oxblood above a dark dado
+Surface makeClayGrassSurface();      // Level 94: green modelling clay, thumb dents and grass strokes
+Surface makeClayWallSurface();       // Level 94: cream clay smoothed on with a spatula
 
 // Every world surface, by slot (SurfSlot and LEVEL_SURFACES are port/levels.h's).
 Surface makeSurface(SurfSlot slot);

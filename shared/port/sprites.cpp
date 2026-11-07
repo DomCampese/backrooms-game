@@ -14,8 +14,10 @@ bool hunterSprite(const Sim &sim, ActorSprite &out) {
     const Entity &e = sim.ent;
     if (e.st == EState::Hidden || sim.entDist >= 45) return false;
     out = {};
-    // LEVEL FUN has its own resident, Level 0 is Pirate Clark's, the rest are a Smiler's
-    out.sheet = sim.level == LEVEL_FUN ? SpriteSheet::Partygoer : sim.clarkLevel() ? SpriteSheet::Clark : SpriteSheet::Smiler;
+    // LEVEL FUN has its own resident, Level 0 is Pirate Clark's, Level 94 the
+    // Animation's, the rest are a Smiler's
+    out.sheet = sim.level == LEVEL_FUN ? SpriteSheet::Partygoer : sim.clarkLevel() ? SpriteSheet::Clark
+              : sim.level == MOTION ? SpriteSheet::Animation : SpriteSheet::Smiler;
     out.glow = out.sheet == SpriteSheet::Smiler;
     float sink = 0;
     if (e.st == EState::Die) {   // crumples into the carpet
@@ -25,8 +27,13 @@ bool hunterSprite(const Sim &sim, ActorSprite &out) {
     // ent.gait counts strides (an integer is a foot landing) and a walk cycle
     // is two of them, hence the halving. It is also what fires his footfalls,
     // so the foot plants on the sound.
-    float gph = e.gait * 0.5f;
+    // The Animation is drawn in its last stop-motion pose (Sim::stopPose):
+    // where it was, and one frame of the sheet with no cross-fade.
+    const bool stop = out.sheet == SpriteSheet::Animation;
+    const float ex = stop ? sim.stopPose.x : e.x, ez = stop ? sim.stopPose.z : e.z, ey = stop ? sim.stopPose.y : e.dispY;
+    float gph = (stop ? sim.stopPose.gait : e.gait) * 0.5f;
     gaitFrames(gph, ENT_FRAMES, out.frame0, out.frame1, out.blend);
+    if (stop) { out.frame1 = out.frame0; out.blend = 0; }
     // A walk rises and falls once per step, lowest as a foot lands: |sin| of
     // the phase the legs run on.
     float bob = 0.032f * fabsf(sinf(gph * TAU));
@@ -41,9 +48,9 @@ bool hunterSprite(const Sim &sim, ActorSprite &out) {
     float side = e.vx * sim.r2x + e.vz * sim.r2z;
     if (e.st == EState::Chase && fabsf(side) > 1.4f)
         out.row = (side < 0) ? ENT_ROW_LEAN_L : ENT_ROW_LEAN_R;
-    out.centre = { e.x, e.dispY + 0.98f - sink + bob, e.z };
+    out.centre = { ex, ey + 0.98f - sink + bob, ez };
     out.w = 0.98f; out.h = 1.96f;
-    out.litAt = { e.x, e.dispY + 0.95f, e.z };
+    out.litAt = { ex, ey + 0.95f, ez };
     return true;
 }
 

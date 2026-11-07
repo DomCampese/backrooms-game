@@ -583,7 +583,8 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
         unsigned char lum8 = cl8(40 + 215 * lum);
         unsigned char al = cl8(255 * clampf(fogf * 1.6f, 0, 1) * sp.fade);
         ShapeTex t = sp.sheet == SpriteSheet::Partygoer ? ShapeTex::Partygoer
-                   : sp.sheet == SpriteSheet::Clark ? ShapeTex::Clark : ShapeTex::Smiler;
+                   : sp.sheet == SpriteSheet::Clark ? ShapeTex::Clark
+                   : sp.sheet == SpriteSheet::Animation ? ShapeTex::Animation : ShapeTex::Smiler;
         spriteDraw(out, t, sp, sp.frame0, { lum8, lum8, lum8, cl8(al * (1.0f - sp.blend)) });
         spriteDraw(out, t, sp, sp.frame1, { lum8, lum8, lum8, cl8(al * sp.blend) });
         if (sp.glow) {   // the Smiler's eyes and grin are drawn unlit
@@ -763,7 +764,7 @@ void shapeTexSize(ShapeTex t, int &w, int &h) {
     switch (t) {
     case ShapeTex::Particle: w = 32; h = 32; return;
     case ShapeTex::Clark: case ShapeTex::Smiler: case ShapeTex::SmilerGlow: case ShapeTex::Partygoer:
-    case ShapeTex::Usher:
+    case ShapeTex::Usher: case ShapeTex::Animation:
         w = ENT_FRAME_W * ENT_FRAMES; h = ENT_FRAME_H * ENT_ROWS; return;
     default: w = h = 1; return;
     }

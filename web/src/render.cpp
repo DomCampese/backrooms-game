@@ -59,8 +59,9 @@ void Game::renderScene(double now) {
 
     BeginTextureMode(rt);
     // The Poolrooms clear to their fog colour, since its halls are longer than the
-    // streamed area.
-    ClearBackground(sim.level==2 ? Color{48,70,66,255} : BLACK);
+    // streamed area, and Level 94 to its sky.
+    const Vec3 clear = clearColour(sim.level, sim.blackoutCur);
+    ClearBackground({ (unsigned char)(clear.x * 255), (unsigned char)(clear.y * 255), (unsigned char)(clear.z * 255), 255 });
     BeginMode3D(cam);
     // This storey's chunks in view, then the other storeys' that an opening
     // shows, each nearest first (port/visible.h). After this storey's, so the
@@ -212,7 +213,7 @@ void Game::drawScene(const SceneDraw &d, const Camera3D &cam) {
     case ShapeKind::CylinderEx: DrawCylinderEx(toRl(s.a), toRl(s.b), s.r0, s.r1, s.sides, c); break;
     case ShapeKind::Billboard: {
         const Texture2D *tex[(int)ShapeTex::Count] = { &texParticle, &texParticle, &texClark, &texEntity,
-                                                       &texEntityGlow, &texPartygoer, &texUsher };
+                                                       &texEntityGlow, &texPartygoer, &texUsher, &texAnimation };
         if (s.additive) BeginBlendMode(BLEND_ADDITIVE);
         if (!s.depthWrite) { rlDrawRenderBatchActive(); rlDisableDepthMask(); }
         DrawBillboardRec(cam, *tex[(int)s.tex], { s.src[0], s.src[1], s.src[2], s.src[3] }, toRl(s.a),

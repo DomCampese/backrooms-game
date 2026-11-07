@@ -65,10 +65,11 @@ struct Game {
     bool everFlashed = false;                 // HUD: the flashlight hint shows until first use
     bool chaseKnob = false;                   // BACKROOMS_CHASE: the forced spawn chases (the tape's capture)
     bool spawnKnob = false;                   // BACKROOMS_SPAWN: F3's E on frame 100
+    bool nightKnob = false;                   // BACKROOMS_NIGHT: F3's B on frame 20 (Level 94: on to dusk)
     char bestPath[512] = {};                  // where the records live
 
     // resources
-    Texture2D texClark{}, texEntity{}, texEntityGlow{}, texPartygoer{}, texUsher{}, texProps{}, texScrawl{}, texFixtures{}, texAO{}, texOcc{},
+    Texture2D texClark{}, texEntity{}, texEntityGlow{}, texPartygoer{}, texUsher{}, texAnimation{}, texProps{}, texScrawl{}, texFixtures{}, texAO{}, texOcc{},
               texAlmondWrap{}, texDeck{}, texParticle{};
     Revolver revolver;
     Mesh flareMesh{};

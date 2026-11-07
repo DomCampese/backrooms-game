@@ -72,7 +72,7 @@ enum class ShapeKind : uint8_t {
     Billboard,     // DrawBillboardRec: centre a, size.x by size.y, facing the camera
 };
 // The textures billboards are cut from (render.cpp's texParticle, the sheets).
-enum class ShapeTex : uint8_t { None, Particle, Clark, Smiler, SmilerGlow, Partygoer, Usher, Count };
+enum class ShapeTex : uint8_t { None, Particle, Clark, Smiler, SmilerGlow, Partygoer, Usher, Animation, Count };
 
 struct Shape {
     ShapeKind kind;

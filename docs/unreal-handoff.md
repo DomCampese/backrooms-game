@@ -358,6 +358,21 @@ fallback while the lit look is unproven.
     Click to light it (lighter sound, an orange ember), click again for a
     drag (the cigarette rises to the mouth, then a breath of smoke or a
     cough). If 6 does nothing, check the new action's binding.
+16. **Level 94** (7 November 2026), the third level: the theater's exits
+    lead to it, and its exits to the casino. `LEVEL=6 make unreal-play` goes
+    straight there. The editor must import two new surfaces (`claygrass`,
+    `claywall`) and one sheet (`animation`); `make unreal-play` rebuilds the
+    materials when the surfaces change. Unreal changes: `Shared/SimMotion.cpp`
+    compiles `shared/sim/motion.cpp`; `SheetNames` gains `animation`; and
+    `ClearColour` takes the frame's blackout, so the backdrop is Level 94's
+    sky and darkens at night. At spawn you stand on green grass under a blue
+    sky with clay houses nearby. F3 then B skips to dusk; about 7 s later
+    the sky is dark and "night · the Animations are out" shows. Walk into a
+    house: the line changes to "indoors". A black sky points at the backdrop
+    (`ClearColour`); a Smiler instead of a clay figure at night points at the
+    sheet import. The level has no fittings, so in the Unreal look it is lit
+    by the ambient glow alone; a directional light for the sun is the
+    Unreal look's to add.
 
 A session on the Mac itself (`claude remote-control` in the repository) could
 build, run the tests and read the log directly; from the cloud each Unreal
@@ -384,6 +399,7 @@ repository"); it is not a parity gap. What remains:
 | gap | Web build | Mac build |
 |---|---|---|
 | touch controls | the browser shell's on-screen controls | none needed on the Mac |
+| Level 94's sun | the ambient is the daylight | lit by the ambient glow only; no sun light yet |
 
 New features go into both builds in the same change (AGENTS.md, "Two builds,
 one repository").

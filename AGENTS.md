@@ -63,7 +63,7 @@ PR is easy to lose track of, and asking for one each time is a wasted turn.
 # The theater (November 2026)
 
 Level 4 (`THEATER`, core/level_rules.h) is a cinema, and the second level
-you reach: Level 0's exits lead to it and its exits lead to the casino. Three chunks in four are one
+you reach: Level 0's exits lead to it and its exits lead to Level 94. Three chunks in four are one
 auditorium filling the room patch; the rest, and the spawn chunk, are lobbies
 with a concession counter (`PROP_CONCESSION`), columns, benches and plants.
 The hunter is a Smiler. It is not from the Backrooms wiki, so CREDITS.md has
@@ -1548,13 +1548,13 @@ build's, in `web/src/`.
 | `main.cpp` | `init()`, the `while (!WindowShouldClose())` loop, `shutdown()` |
 | `sim/` | game state and rules (`Sim`), stepped once a tick by `Sim::step` |
 | `sim/sim.cpp` | tick order, levels, descents, death and escape |
-| `sim/player.cpp`, `weapons.cpp`, `items.cpp`, `hunters.cpp`, `usher.cpp`, `casino.cpp`, `place.cpp` | the player; held items; pickups, the deck and the use key; the hunter; the theater's Usher; the casino's slot machines and cigarettes; blackouts, sanity, exits, the Manila Room |
+| `sim/player.cpp`, `weapons.cpp`, `items.cpp`, `hunters.cpp`, `usher.cpp`, `casino.cpp`, `motion.cpp`, `place.cpp` | the player; held items; pickups, the deck and the use key; the hunter; the theater's Usher; the casino's slot machines and cigarettes; Level 94's day and night and the Animation's pose; blackouts, sanity, exits, the Manila Room |
 | `sim/input_frame.h`, `audio_events.h` | what the platform tells the sim, and the sounds the sim requests |
 | `game.{h,cpp}` | the platform: window, assets, input into an `InputFrame`, chunk streaming, the occupancy grid; `Game::tick` |
 | `game_audio.{h,cpp}` | every `Sound`/`Music` handle and the synth; plays the sim's `AudioEvent`s in order |
 | `render.cpp` | 3D scene, viewmodels, HUD, overlays, drawn from `sim` |
 | `core/world.{h,cpp}` | the infinite maze: chunk generation, storeys, collision, line of sight, pathfinding, occupancy grid. `WallKind` / `PropKind` name the codes stored per cell. No raylib |
-| `core/level_rules.h` | per-level rules: wall height, light pitch, storey pitch, name, which tubes work, exits, floor material, distant sound; `THEATER` |
+| `core/level_rules.h` | per-level rules: wall height, light pitch, storey pitch, name, which tubes work, exits, floor material, distant sound; `THEATER`, `CASINO`, `MOTION` |
 | `core/layout.{h,cpp}` | `ChunkLayout`: a chunk's props, fixtures, light fittings and openings, decided from the seed |
 | `core/floorplan.{h,cpp}` | `ChunkFloorplan`: a chunk's floors, walls, risers, ceilings, soffits, flights and arches |
 | `core/hash.{h,cpp}`, `core/vec.h`, `core/portable_math.{h,cpp}` | hashes, RNG, value noise; `Vec2`/`Vec3`, `TAU`, `clampf`; sin, cos, exp, atan2, hypot that round the same on every platform |
@@ -1566,7 +1566,7 @@ build's, in `web/src/`.
 | `port/chunk_mesh.{h,cpp}` | the chunk mesher (`bakeChunkGeometry`), `ChunkMesh` slots |
 | `port/mesh_builder.{h,cpp}`, `port/atlas.{h,cpp}`, `port/palette.h` | `MB`, `addPropBox`, `addSolidBox`, `PLAIN_UV`; the fixtures atlas layout and tile sizes; `cl8`, `PARTY_RGBA` |
 | `port/camcorder.{h,cpp}` | the camcorder's tape: interference, the frames and their playback, clips, the REC mark and the playback's OSD |
-| `sim/entity.h` | `Entity`: Clark on Level 0, a Smiler on Level 1 and the theater, the Partygoer on LEVEL FUN |
+| `sim/entity.h` | `Entity`: Clark on Level 0, a Smiler on Level 1, the theater and the casino, the Partygoer on LEVEL FUN, the Animation on Level 94 |
 | `world_mesh.{h,cpp}`, `mesh_upload.h` | `bakeChunk` (the mesher's output as raylib meshes), `ChunkMeshCache` |
 | `object_meshes.{h,cpp}` | can, tape deck, reels, flare, supply crate |
 | `vec_rl.h` | `toRl` / `fromRl` between core's math types and raylib's |
@@ -1865,7 +1865,7 @@ light flicker, so the same command twice gives comparable images. Frames go to
 | `BACKROOMS_SHOTFRAME=n` | which frame to capture (default 600; about 150 for quick sweeps) |
 | `BACKROOMS_SEED=n` | fix the world seed |
 | `BACKROOMS_NOBLACKOUT=1` | never schedule a blackout (default on under `BACKROOMS_SHOT`; pass `0` to capture one) |
-| `BACKROOMS_LEVEL=n` | start on level n (0-5) |
+| `BACKROOMS_LEVEL=n` | start on level n (0-6) |
 | `BACKROOMS_POS="x,z,yaw[,pitch]"` | start position and heading in metres and radians; pitch (up +) photographs a floor or ceiling |
 | `BACKROOMS_EXITS=1` | exit doors everywhere |
 | `BACKROOMS_MENU=1` | stay on the title screen |
@@ -1873,6 +1873,7 @@ light flicker, so the same command twice gives comparable images. Frames go to
 | `BACKROOMS_MANILA=1` | put a Manila Room in the chunk east of spawn (centre x 48, z 16) |
 | `BACKROOMS_STOREY=n` | start on storey n (Level 0) |
 | `BACKROOMS_RECORD=path` | record the sim's inputs, for `./replay` (shared/sim/trace.h) |
+| `BACKROOMS_NIGHT=1` | presses F3's B on frame 20: on Level 94, dusk now and night 7 s later |
 | `BACKROOMS_SPAWN=1` | presses F3's E on frame 100: the hunter ahead, or the Usher in the theater |
 | `BACKROOMS_CHASE=1` | the hunter spawned on frame 300 chases; with `BACKROOMS_POS=15,15,0.8` and seed 1337 it catches you on frame 410, so the tape plays from there |
 | `BACKROOMS_CLEAN=1` | no intro fade or HUD |
@@ -1886,7 +1887,7 @@ In game, F3 shows the debug HUD. While it is up:
 
 | key | effect |
 |---|---|
-| `B` | blackout now |
+| `B` | blackout now; on Level 94, the next dusk or dawn |
 | `E` | spawn the level's hunter stalking about 12 m ahead (in the theater, the Usher 9 m ahead) |
 | `C` | force a chase (also squeezes, so holding it does both) |
 | `H` | remove the hunter |
@@ -1896,8 +1897,8 @@ In game, F3 shows the debug HUD. While it is up:
 
 # The casino (November 2026)
 
-Level 5 (`CASINO`, core/level_rules.h) is a gaming floor, and the third
-level you reach: the theater's exits lead to it and its exits lead to
+Level 5 (`CASINO`, core/level_rules.h) is a gaming floor, and the fourth
+level you reach: Level 94's exits lead to it and its exits lead to
 Level 1. The hunter is a Smiler. The casino is not from the Backrooms wiki,
 so CREDITS.md has no row for it.
 
@@ -1983,6 +1984,76 @@ revolver. They only work in the casino.
   breath out. Both builds draw it with no platform code.
 - **Sounds, synthesized in port/sounds.cpp**: `Lighter`, `Drag` (its length
   is `Sim::DRAG_IN`), `Exhale`, `Cough` (3 variants).
+
+# Level 94 (November 2026)
+
+Level 94 (`MOTION`, core/level_rules.h, index 6) is "Motion" from the
+Backrooms wiki, with its entity, the Animations (CREDITS.md). It is the third
+level you reach: the theater's exits lead to it and its exits lead to the
+casino. Grass hills under an open sky, houses in towns on the level hilltops,
+and the Animation at night.
+
+- **The hills are `World::motionElev`**, a pure function of the cell (two
+  sine wave trains, `MOTION_WAVE_A` and `_B`, through `portableSin`), so
+  chunks agree at seams with no neighbour read. Below `MOTION_PLATEAU` of the
+  field is level hilltop at 0; the rest falls to -`MOTION_VALLEY` (2.4 m).
+  The slope keeps every step under `MAX_STEP_UNITS` (at most 3 units over 3
+  seeds, 192 x 192 cells each); the regression checks every edge. All floors are 0 or
+  lower, so no ceiling moves up.
+- **Houses are `World::motionHouse(cx, cz, q)`**, one per chunk quarter at
+  most, placed only where the house and a cell of margin are hilltop. It reads
+  the hill field, never a generated chunk, so the generator, the layout (the
+  `FixtureKind::House` fixture: plank floor and pitched roof) and the sim
+  (`World::indoors`) agree. About one house per two chunks, clustered on the
+  hilltops.
+- **The sky is `VF_OPENUP` on every cell outside a house**, set after the
+  storeys pass clears `vflag`. `cellHasCeiling` is false there and `ceilY` is
+  the cell's own floor plus `wallH` (down in a valley too), so walls stand
+  3 m over the floor they are on. Every other reader of `VF_OPENUP` is gated
+  on `storeyH > 0`, which is 0 here. `World::openSky` and `World::indoors`
+  are false on every other level.
+- **Where nothing is drawn is the sky**: `clearColour` (port/levels.h), which
+  render.cpp clears to and Unreal's `ClearColour` passes to its backdrop. It is
+  the fog's colour at the horizon (fog colour 0.76, 1.08, 1.75 at density
+  0.019, measured against the clear in a capture). Both are dimmed by
+  `blackoutCur` the same way, so the horizon stays matched at night.
+- **No fittings** (`LevelRules::dead` 1, `FittingGap::Unlit` on all of them,
+  `DECOR` all off). Daylight is the ambient. Night is `blackoutCur` following
+  `Sim::daylight()` (1 by day, `NIGHT_LIGHT` 0.16 by night), so the shader's
+  ambient and fog dim as in a blackout. Blackouts are off (`hasBlackouts`).
+  `lightAtPlayer` is `blackoutCur`, so at night the player is in shadow (the
+  Animation sees 9 m) unless the flashlight is on.
+- **The day is sim time** (`Sim::sky`, shared/sim/motion.cpp): `DAY_TIME`
+  150 s, `DUSK_TIME` 14, `NIGHT_TIME` 80, `DAWN_TIME` 14, arriving
+  `ARRIVE_AT` 60 s into a day. Night is from mid-dusk to mid-dawn. No rng.
+- **The hunter sleeps by day** (`hunterAsleep`, as on Level 2): a hunter out
+  at dawn goes `Hidden`, and the night's first spawns `NIGHT_SPAWN` s after
+  dark. `spawnHunter` refuses spots indoors; its far fallback retries up to
+  8 times, which draws the same numbers as before on every other level.
+- **Inside a house the player is sheltered**: `updateHiding` sets `hidden`,
+  the hunter's find at `FIND_REACH` is skipped, and he stops at a waypoint
+  indoors (`chaseSpd = 0`), so he waits at the door. Noise still brings him
+  to the house.
+- **The Animation is drawn in stop motion** (`Sim::stopPose`): its pose and
+  position are copied from the sim `STOP_MOTION_FPS` (8) times a second, and
+  `hunterSprite` draws one sheet frame with no cross-fade. The sim moves it
+  smoothly. The sheet is `makeAnimationTex` (`animation` in texdump's Unreal
+  export and `SheetNames`).
+- **Generation order matters**: `furnishMotion` runs after the Poolrooms
+  block and replaces walls, pillars, props and elevation; the lock pass skips
+  Level 94; the spawn-room clear skips it (it would cut a pit into a valley
+  and half a house); the exit pass tries one chunk in 8 and puts the exit in a
+  house's back wall, opposite its door.
+- **Draw once per statement from an rng.** `walls(..., rng.ri(0, 3),
+  rng.f01() < 0.5f)` made gcc and clang build different rooms, because
+  argument order is unspecified; `tools/unreal-check.sh` caught it (its
+  floorplan golden differed in 7 lines).
+- F3's B on Level 94 skips to the next dusk or dawn. `BACKROOMS_NIGHT=1`
+  presses it on frame 20; a capture at frame 330 is at night.
+- Footsteps are `Sfx::StepGrass` outside (`Footing::Grass`, `makeGrassStep`)
+  and `StepWood` indoors (`sheltered`).
+- tests/golden gained lines for the new level and lost none;
+  walk-l0-l2.trace plays back unchanged.
 
 # Regression process
 

@@ -61,6 +61,7 @@ void Game::init() {
     texEntity = makeSmilerTex(false); texEntityGlow = makeSmilerTex(true);
     texPartygoer = makePartygoerTex();
     texUsher = makeUsherTex();
+    texAnimation = makeAnimationTex();
     texProps = makePropsTex();
     texScrawl = makeScrawlTex();
     texFixtures = makeFixturesTex();
@@ -200,6 +201,7 @@ void Game::init() {
     camReel.fit(camcorder);
     chaseKnob = getenv("BACKROOMS_CHASE") != nullptr;
     spawnKnob = getenv("BACKROOMS_SPAWN") != nullptr;
+    nightKnob = getenv("BACKROOMS_NIGHT") != nullptr;
 
     // The look first: applyLevel's schedules start from after its surfaces are made.
     enterLevel(0);
@@ -449,6 +451,7 @@ InputFrame Game::readInput(bool captureClick) {
     in.forceSpawn = shotPath && !benchmark && frame == 300;   // headless: put the hunter in view
     if (chaseKnob && frame == 301) in.dev.chase = true;
     if (spawnKnob && frame == 100) in.dev.spawnAhead = true;
+    if (nightKnob && frame == 20) in.dev.blackout = true;
     return in;
 }
 

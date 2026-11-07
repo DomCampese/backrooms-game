@@ -4,7 +4,7 @@
 // Keys that only act while the F3 debug HUD is up. The platform leaves them
 // false otherwise.
 struct DevKeys {
-    bool blackout = false;     // B: a blackout now
+    bool blackout = false;     // B: a blackout now; on Level 94, the next dusk or dawn
     bool spawnAhead = false;   // E: the hunter stalking ~12 m ahead; in the theater, the Usher facing the player
     bool chase = false;        // C: a chase, spawning him first if hidden
     bool banish = false;       // H

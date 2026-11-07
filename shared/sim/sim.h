@@ -229,6 +229,19 @@ struct Sim {
     static constexpr float DRINK_TIME = 1.75f;  // s the can is up
     static constexpr uint32_t BACKSTAGE_COIN_RATE = 12;
     static constexpr uint32_t CASINO_COIN_RATE = 60;
+    // Level 94's day (motion.cpp), in sim seconds: DAY_TIME of day, DUSK_TIME
+    // of dusk, NIGHT_TIME of night and DAWN_TIME of dawn. The player arrives
+    // ARRIVE_AT seconds into a day, so the first dusk is 90 s away. Night
+    // dims the sky to NIGHT_LIGHT of the day's light (blackoutCur). The
+    // Animation is out only at night, starting NIGHT_SPAWN s after dark, and
+    // a player inside a house is hidden from it.
+    static constexpr float DAY_TIME = 150.0f, DUSK_TIME = 14.0f, NIGHT_TIME = 80.0f, DAWN_TIME = 14.0f;
+    static constexpr float ARRIVE_AT = 60.0f;
+    static constexpr float NIGHT_LIGHT = 0.16f;
+    static constexpr float NIGHT_SPAWN = 6.0f;
+    // The Animation is drawn STOP_MOTION_FPS poses a second, as a stop-motion
+    // figure is shot; its position in the sim moves smoothly.
+    static constexpr float STOP_MOTION_FPS = 8.0f;
     // The casino's slot machines (casino.cpp). A spin costs SLOT_COST, the
     // reels run SLOT_SPIN s, and the hunter hears them SLOT_NOISE m from the
     // machine while they do. The prize is drawn at the pull from slotRng. A
@@ -379,6 +392,18 @@ struct Sim {
         SlotPrize prize = SlotPrize::None;
         float bellsT = 0;     // s left of a jackpot's bells
     } slotSpin;
+    // Level 94's clock, s into the day, and whether it is night (the middle
+    // of dusk to the middle of dawn, when the Animation is out).
+    struct Sky {
+        float t = 0;
+        bool night = false;
+    } sky;
+    // Where the Animation was drawn at its last stop-motion frame.
+    struct StopPose {
+        float x = 0, z = 0, y = 0, gait = 0;
+        float t = 0;   // s since that frame
+    } stopPose;
+    bool sheltered = false;          // Level 94: inside a house, where the Animation cannot find you
     Rng slotRng{1};                  // its own stream, so the casino does not shift grng
     bool slotNear = false;           // a slot machine is in reach of the use key, for the HUD
     float boostT = 0;                // s of almond-water speed left
@@ -456,6 +481,11 @@ struct Sim {
     // Plays LevelRules::distant's one-shot when nextDistant is due.
     void updateDistant(double now);
     void updatePartyMusic(float dt);
+    void updateSky(float dt);
+    float daylight() const;          // Level 94: 1 by day, NIGHT_LIGHT by night; 1 on other levels
+    bool hasBlackouts() const { return level != 2 && level != MOTION; }
+    bool hunterAsleep() const { return level == 2 || (level == MOTION && !sky.night); }
+    void updateStopPose(float dt);
     void updateDevKeys(const DevKeys &dev, double now);
     void updateWeapons(const InputFrame &in, float dt, double now);
     void updateBullets(float dt);
@@ -543,7 +573,9 @@ struct Sim {
     void updateRoomSound(bool blackout);
     bool shiftAWall();               // close one doorway the player cannot see
     bool clarkLevel() const { return level == 0; }
-    const char *hunterName() const { return level == LEVEL_FUN ? "THE PARTYGOER" : level == 0 ? "PIRATE CLARK" : "A SMILER"; }
+    const char *hunterName() const {
+        return level == LEVEL_FUN ? "THE PARTYGOER" : level == 0 ? "PIRATE CLARK" : level == MOTION ? "AN ANIMATION" : "A SMILER";
+    }
     bool wayOpen() const { return coins >= ESCAPE_COST; }
     void spawnHunter();
     float lightAtPlayer();   // 0 dark .. 1 under a working fitting

@@ -4,10 +4,10 @@
 #include "sim.h"
 #include <cmath>
 
-// Full to empty in about 9 / 7.5 / 6.5 / 4 / 5.3 / 6 minutes, standing in the
-// light with nothing hunting.
+// Full to empty in about 9 / 7.5 / 6.5 / 4 / 5.3 / 6 / 7 minutes, standing in
+// the light with nothing hunting.
 float Sim::sanityDrain(int lv) {
-    static const float R[NLEVELS] = { 1.0f / 540, 1.0f / 450, 1.0f / 390, 1.0f / 240, 1.0f / 320, 1.0f / 360 };
+    static const float R[NLEVELS] = { 1.0f / 540, 1.0f / 450, 1.0f / 390, 1.0f / 240, 1.0f / 320, 1.0f / 360, 1.0f / 420 };
     return R[(lv < 0 || lv >= NLEVELS) ? 0 : lv];
 }
 
@@ -27,7 +27,8 @@ void Sim::updateAmbience(float dt, double now) {
             ent.nextSpawn = blackoutEnd + 1.5;   // the hunter spawns as the lights return
         blackout = true;
     }
-    blackoutCur += ((blackout ? 0.02f : 1.0f) - blackoutCur) * fminf(1, 18 * dt);
+    // Level 94's sky dims at night as the tubes do in a blackout.
+    blackoutCur += ((blackout ? 0.02f : daylight()) - blackoutCur) * fminf(1, 18 * dt);
     ambience.hum = blackout ? 0.12f : inManila ? 0.22f : 1.0f;   // the Manila Room has a lower hum
 
     updateRoomSound(blackout);
