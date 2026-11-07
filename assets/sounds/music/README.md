@@ -2,17 +2,19 @@
 
 | File here | Title | Author | License |
 | --- | --- | --- | --- |
-| level_fun.ogg | Sketchbook 2024-02-21_02 (tagged "silly") | Abstraction / Tallbeard Studios (Ben Burnes) | CC0 1.0 |
+| level_fun.ogg | LEVEL FUN toy-band loop | this project | the project's MIT License |
 
-From the Abstraction "Music Loop Bundle" (https://tallbeard.itch.io/music-loop-bundle),
-retrieved September 24, 2026 through the CC0 Media Library release
-https://github.com/jfpx/cc0-media-library/releases/tag/music-v1
-(track id `abstraction-4ee6896a70defe43375a8518`). The file is unchanged; its
-SHA-256 `093ca96891baa29d17eca2ffbd63b9f61cedacd68c93b7ee7dee279cd0deb506`
-matches that catalog. The creator's notice is kept byte-for-byte in
-LICENSE-abstraction-music-loop-bundle.txt.
+An original tune, rendered by `tools/compose-fun.py` (numpy and ffmpeg with
+libvorbis): a toy piano melody over a plucked bass, off-beat ukulele strums, a
+kick, finger snaps and a shaker, with a glockenspiel doubling the melody in the
+second half. 16 bars at 120 bpm in C major, exactly 32 s, and every note's
+tail wraps to the start so the loop has no seam. It is normalised to
+-17.7 LUFS, the loudness of the recording it replaced.
 
-It is a 30-second creator loop. LEVEL FUN plays it slowed and flattened with a
-slow pitch warble (`Game::updateLoopAudio`), which is what turns a cheerful
-party loop into something played on a tape left running too long. It replaced a
-synthesized "Happy Birthday" music box.
+LEVEL FUN plays it slightly flat with a slow pitch wander
+(`LoopLevels::step`, shared/port/sounds.cpp). Edit the notes in the script and
+run it again to change the tune.
+
+It replaced "Sketchbook 2024-02-21_02" by Abstraction (CC0), played slowed to
+0.84, which had replaced a synthesized "Happy Birthday" music box. The owner
+asked for a better song.

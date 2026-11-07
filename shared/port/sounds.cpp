@@ -1272,8 +1272,9 @@ PanGains panGains(float bearing) {
 void LoopLevels::step(const LoopCue &cue, float dt, float hum) {
     float k = 1 - expf(-3.0f * dt);
     underwater += ((cue.underwater ? 0.5f : 0.0f) - underwater) * (1 - expf(-8.0f * dt));
-    // LEVEL FUN: the music plays slowed and flat, with a slowly wandering
-    // pitch, and is quieter during a blackout.
+    // LEVEL FUN: the music plays a little flat, with a slowly wandering pitch
+    // like a worn tape, and is quieter during a blackout. Slowed to 0.84 it
+    // dragged; the tune should still bounce.
     // A stop (Sim::music) winds it down like a turntable losing power: pitch
     // to 0.35 of its own and level to nothing over 0.7 s. It comes back up
     // over 0.4 s.
@@ -1282,5 +1283,5 @@ void LoopLevels::step(const LoopCue &cue, float dt, float hum) {
     partyBase += ((cue.party ? 0.32f * hum : 0.0f) - partyBase) * k;
     party = partyBase * spin;
     t += dt;
-    partyPitch = (0.84f + 0.025f * sinf(t * 0.41f) + 0.008f * sinf(t * 1.9f)) * (0.35f + 0.65f * spin);
+    partyPitch = (0.97f + 0.012f * sinf(t * 0.41f) + 0.004f * sinf(t * 1.9f)) * (0.35f + 0.65f * spin);
 }
