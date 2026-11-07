@@ -169,8 +169,9 @@ constexpr Vec3 REVOLVER_MIDDLE = { 0.0f, -0.0127f, 0.0648f };
 float revolverBob(const SceneItem &it, float now) { return sinf(now * 1.7f + it.gi * 1.3f + it.gk) * 0.05f; }
 
 // The gold halo, a column of light and a pool on the floor under it, and
-// motes rising through it: drawn unlit, so the gun shows even in a blackout.
-void revolverGlowDraws(const SceneItem &it, float now, std::vector<SceneDraw> &out) {
+// motes rising through it: drawn unlit, so the find shows even in a blackout.
+// The revolver and the casino's cigarettes both have it.
+void findGlowDraws(const SceneItem &it, float now, std::vector<SceneDraw> &out) {
     const Vec3 base = it.pos;
     const Vec3 mid = { base.x, base.y + REVOLVER_HOVER + revolverBob(it, now), base.z };
     const float pulse = 0.8f + 0.2f * sinf(now * 2.6f + it.gi);
@@ -195,6 +196,28 @@ void revolverGlowDraws(const SceneItem &it, float now, std::vector<SceneDraw> &o
         mote.additive = true;
         mote.depthWrite = false;
         put(out, mote);
+    }
+}
+
+// The casino's pack of cigarettes, gold and larger than life, hanging where
+// a loose revolver would: unlit like its glow, so it reads across the floor.
+// Three cigarettes stand out of the open top, and the pack rocks as it bobs.
+void cigarettePackDraws(const SceneItem &it, float now, std::vector<SceneDraw> &out) {
+    const float s = 1.5f;   // to read at a distance
+    const Vec3 mid = { it.pos.x, it.pos.y + REVOLVER_HOVER + revolverBob(it, now), it.pos.z };
+    const float w = 0.055f * s, h = 0.085f * s;   // half width and half height
+    const float rock = sinf(now * 1.3f + it.gi) * 0.12f;          // tilt of the pack's long axis
+    const Vec3 up = { sinf(rock) * 0.6f, cosf(rock), sinf(rock) * 0.8f };
+    const Vec3 lo = sub(mid, scale(up, h)), hi = add(mid, scale(up, h));
+    put(out, cylinderEx(lo, hi, w * 1.41f, w * 1.41f, 4, { 232, 186, 70, 255 }));            // the gold card
+    put(out, cylinderEx(add(lo, scale(up, h * 1.15f)), add(lo, scale(up, h * 1.35f)),
+                        w * 1.43f, w * 1.43f, 4, { 120, 22, 30, 255 }));                       // its red band
+    put(out, cylinderEx(sub(hi, scale(up, 0.02f * s)), add(hi, scale(up, 0.002f)),
+                        w * 1.44f, w * 1.44f, 4, { 250, 236, 200, 255 }));                     // the foil at the top
+    for (int c = 0; c < 3; c++) {
+        const Vec3 base = add(hi, { (c - 1) * 0.022f * s * cosf(rock), 0, (c - 1) * 0.005f * s });
+        const Vec3 tip = add(base, scale(up, (0.03f + 0.012f * c) * s));
+        put(out, cylinderEx(base, tip, 0.0055f * s, 0.0055f * s, 8, { 214, 140, 70, 255 }));   // filter
     }
 }
 
@@ -433,7 +456,11 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             break;
         }
         case SceneKind::Revolver:   // the model itself is each build's (looseRevolver)
-            revolverGlowDraws(it, now, out);
+            findGlowDraws(it, now, out);
+            break;
+        case SceneKind::Cigarettes:
+            cigarettePackDraws(it, now, out);
+            findGlowDraws(it, now, out);
             break;
         case SceneKind::Deck:   // where it was set down, facing the throw direction
             deckDraws(sim, then(rotY(-it.yaw), translate(x, gy, z)), it.variant != 0, now, out);
@@ -648,11 +675,68 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
     }
 }
 
+// A cigarette between the fingers, low on the right, raised to the mouth
+// for the inhale of a drag. It shortens as it burns. Lit, it has an ember
+// that flares on the inhale and a thread of smoke; after each breath out
+// a cloud drifts away from the eye.
+static void cigaretteDraws(const Sim &sim, const SimView &view, float now, std::vector<SceneDraw> &out) {
+    const Sim::Smoke &sm = sim.smoke;
+    const Vec3 F = view.forward, U = view.up, R = normalize(cross(F, U));
+    float raise = 0;   // 0 at rest, 1 at the lips
+    if (sm.dragT > 0) {
+        float el = Sim::DRAG_TIME - sm.dragT;   // s into the drag
+        raise = el < Sim::DRAG_IN ? fminf(1.0f, el / 0.3f) : fmaxf(0.0f, 1.0f - (el - Sim::DRAG_IN) / 0.4f);
+        raise = raise * raise * (3 - 2 * raise);
+    }
+    const Vec3 rest = add(view.eye, add(scale(F, 0.24f), add(scale(R, 0.085f), scale(U, -0.085f))));
+    const Vec3 lips = add(view.eye, add(scale(F, 0.07f), scale(U, -0.055f)));
+    const Vec3 filterEnd = add(scale(rest, 1 - raise), scale(lips, raise));
+    // Away from the hand, a little left and up; pointing out of the mouth when raised.
+    const Vec3 dir = normalize(add(scale(F, 0.55f + 0.4f * raise), add(scale(R, -0.65f * (1 - raise)), scale(U, 0.12f))));
+    const bool lit = sm.burnT > 0;
+    const float burnt = lit ? 1.0f - sm.burnT / Sim::SMOKE_TIME : 0.0f;
+    const float filterLen = 0.024f, paperLen = 0.062f * (1.0f - 0.85f * burnt), r = 0.0042f;
+    const Vec3 filterTip = add(filterEnd, scale(dir, filterLen));
+    const Vec3 tip = add(filterTip, scale(dir, paperLen));
+    put(out, cylinderEx(filterEnd, filterTip, r, r, 8, { 206, 132, 66, 255 }));
+    put(out, cylinderEx(filterTip, tip, r, r, 8, { 236, 232, 222, 255 }));
+    if (!lit) return;
+    const bool inhaling = sm.dragT > Sim::DRAG_TIME - Sim::DRAG_IN;
+    const Vec3 ashEnd = add(tip, scale(dir, 0.006f));
+    put(out, cylinderEx(tip, ashEnd, r, r * 0.9f, 8, { 96, 92, 88, 255 }));
+    const float glow = inhaling ? 1.0f : 0.45f + 0.1f * sinf(now * 7.0f);
+    Shape ember = billboardWhole(ShapeTex::Particle, ashEnd, 0.022f + 0.022f * glow, { 255, 110, 30, cl8(255 * glow) });
+    Shape coal = billboardWhole(ShapeTex::Particle, ashEnd, 0.008f + 0.006f * glow, { 255, 220, 150, 255 });
+    ember.additive = coal.additive = true;
+    ember.depthWrite = coal.depthWrite = false;
+    put(out, ember);
+    put(out, coal);
+    for (int i = 0; i < 4; i++) {   // the thread off the tip, rising and fading
+        float ph = fmodf(now * 0.5f + i * 0.25f, 1.0f);
+        Vec3 p = add(ashEnd, { sinf(now * 1.7f + i * 2.1f) * 0.01f * ph, ph * 0.12f, cosf(now * 1.3f + i) * 0.01f * ph });
+        Shape wisp = billboardWhole(ShapeTex::Particle, p, 0.01f + ph * 0.04f, { 190, 190, 196, cl8(90 * (1 - ph)) });
+        wisp.depthWrite = false;
+        put(out, wisp);
+    }
+    const float EXHALE_S = 1.6f;   // how long a breath's cloud hangs
+    if (sm.exhaleT < EXHALE_S) {
+        float e = sm.exhaleT / EXHALE_S;
+        for (int i = 0; i < 3; i++) {
+            Vec3 p = add(lips, add(scale(F, 0.12f + 0.45f * e + i * 0.05f), scale(U, 0.03f * e + i * 0.015f)));
+            Shape cloud = billboardWhole(ShapeTex::Particle, p, 0.06f + 0.30f * e + i * 0.03f,
+                                         { 200, 200, 206, cl8(70 * (1 - e) * (1 - i * 0.25f)) });
+            cloud.depthWrite = false;
+            put(out, cloud);
+        }
+    }
+}
+
 void heldDraws(const Sim &sim, const SimView &view, float now, std::vector<SceneDraw> &out) {
     switch (heldItem(sim)) {
     case Held::Can: put(out, ObjMesh::Can, xformOf(heldCan(sim, view))); break;   // drinking hides the deck
     case Held::Deck: deckDraws(sim, xformOf(heldDeck(sim, view)), sim.deck.playing, now, out); break;
     case Held::Flare: put(out, ObjMesh::Flare, xformOf(heldWeapon(sim, view))); break;
+    case Held::Cigarette: cigaretteDraws(sim, view, now, out); break;
     default: break;
     }
 }

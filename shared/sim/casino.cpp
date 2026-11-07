@@ -1,5 +1,5 @@
-// The casino's slot machines: a doubloon a pull, a prize drawn at the pull,
-// and noise the hunter can follow.
+// The casino: its slot machines (a doubloon a pull, a prize drawn at the pull,
+// and noise the hunter can follow) and its gold pack of cigarettes.
 #include "../core/fp_strict.h"
 #include "sim.h"
 #include <cmath>
@@ -67,4 +67,60 @@ void Sim::updateSlots(float dt) {
         deckNoteT = 1.6f; deckNote = "nothing.";
         break;
     }
+}
+
+// Placed like the revolver, but only in the casino, and still placed once the
+// pack is found so the other pickups do not move.
+bool Sim::cigsAt(int a, int b) {
+    if (level != CASINO) return false;
+    if (ih(a, b, pickupSalt() ^ 0xC16Au) % CIGS_ODDS != 0) return false;
+    return !world.pillarAt(a, b) && !world.propAt(a, b) && !world.poolAt(a, b);
+}
+
+void Sim::putOutCigarette() {
+    smoke.burnT = smoke.dragT = smoke.coughT = 0;
+    smoke.cough = false;
+}
+
+// With a cigarette in hand, the fire button lights one, then takes a drag.
+// A drag inhales for DRAG_IN s, then breathes out or coughs.
+void Sim::updateSmoking(const InputFrame &in, float dt) {
+    smoke.coughT = fmaxf(0, smoke.coughT - dt);
+    smoke.exhaleT += dt;
+    if (weapon != WEAPON_CIGS) {
+        if (smoke.burnT > 0) { putOutCigarette(); deckNoteT = 1.8f; deckNote = "you stub it out."; }
+        return;
+    }
+    if (smoke.burnT > 0) {
+        smoke.burnT -= dt;
+        if (smoke.burnT <= 0) { putOutCigarette(); deckNoteT = 1.8f; deckNote = "it burns down to the filter."; }
+    }
+    if (smoke.dragT > 0) {
+        float before = smoke.dragT;
+        smoke.dragT = fmaxf(0, smoke.dragT - dt);
+        const float out = DRAG_TIME - DRAG_IN;   // dragT when the breath turns
+        if (before > out && smoke.dragT <= out) {
+            smoke.exhaleT = 0;
+            if (smoke.cough) {
+                smoke.coughT = COUGH_TIME;
+                play(Sfx::Cough, smokeRng.ri(0, 2));
+            } else {
+                play(Sfx::Exhale);
+            }
+        }
+    }
+    if (!in.playing || !in.fire || deathT > 0 || drinkT > 0 || smoke.dragT > 0) return;
+    if (smoke.burnT <= 0) {
+        if (cigs <= 0) { deckNoteT = 1.8f; deckNote = "the pack is empty."; return; }
+        cigs--;
+        smoke.burnT = SMOKE_TIME;
+        play(Sfx::Lighter);
+        return;
+    }
+    smoke.dragT = DRAG_TIME;
+    smoke.burnT = fmaxf(0.5f, smoke.burnT - DRAG_BURN);
+    smoke.cough = smokeRng.next() % COUGH_ODDS == 0;
+    sanity = clampf(sanity + DRAG_SANITY, 0.0f, 1.0f);
+    fear *= 0.6f;
+    play(Sfx::Drag);
 }
