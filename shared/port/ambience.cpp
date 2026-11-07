@@ -64,7 +64,7 @@ void Ambience::render(int16_t *stereo, int frames) {
         // The exit tone: 311 and 314.2 Hz, so the pair beats at 3.2 Hz, with
         // the octave below at a third. Dry, and panned equal-power, so its
         // direction stays clear.
-        float tone = (osc(11, 311.0f) + osc(12, 314.2f) + osc(15, 155.5f) * 0.33f) * 0.045f * exitLvl;
+        float tone = (osc(11, 311.0f) + osc(12, 314.2f) + osc(15, 155.5f) * 0.33f) * 0.08f * exitLvl;
         float panA = (exitPan + 1.0f) * 0.7853982f;   // 0 .. pi/2
         float dryL = wet * (1.0f - wetMix * 0.5f) + growlOut + hissOut + ring;
         float dryR = dryL;

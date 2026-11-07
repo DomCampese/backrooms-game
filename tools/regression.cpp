@@ -1456,21 +1456,29 @@ int main() {
         sim.exitCue(lvl,pan);
         float far2=0; { float l2,p2; sim.scanExits(); sim.exitCue(l2,p2); far2=l2; }
         CHECK(lvl<=0.02f && far2<=0.02f);
-        // The bed plays it on the side it is panned to.
-        static Ambience bed;
-        auto sideEnergy=[&](float level,float p,double &L,double &R){
-            LoopCue c; c.exit=level; c.exitPan=p; bed.exitCue(c);
-            static int16_t buf[2*4800];
-            for (int k=0;k<20;k++) bed.render(buf,4800);   // let the level settle
-            L=R=0; bed.render(buf,4800);
-            for (int k=0;k<4800;k++){ L+=(double)buf[2*k]*buf[2*k]; R+=(double)buf[2*k+1]*buf[2*k+1]; }
-        };
-        // The reverb already differs left and right, so compare the sides'
-        // difference with the tone panned each way and with no tone.
-        double L0,R0,Lr,Rr,Ll,Rl;
-        sideEnergy(0,0,L0,R0); sideEnergy(1,1,Lr,Rr); sideEnergy(1,-1,Ll,Rl);
-        double base=fabs(R0-L0);
-        CHECK((Rr-Lr) > base+0.05*(L0+R0) && (Ll-Rl) > base+0.05*(L0+R0));
+        // The bed plays it on the side it is panned to. Two copies of the
+        // bed from one state, one with the tone: their difference is the tone,
+        // since the reverb's own left-right balance drifts from second to second.
+        {
+            static Ambience base, toned;
+            static int16_t b0[2*4800], b1[2*4800];
+            for (int k=0;k<10;k++) base.render(b0,4800);
+            for (float p : { 1.0f, -1.0f }) {
+                toned=base;
+                LoopCue c; c.exit=1; c.exitPan=p; toned.exitCue(c);
+                Ambience plain=base;
+                double dL=0,dR=0;
+                for (int k=0;k<10;k++) {
+                    plain.render(b0,4800); toned.render(b1,4800);
+                    for (int n=0;n<4800;n++) {
+                        double l=b1[2*n]-b0[2*n], r=b1[2*n+1]-b0[2*n+1];
+                        dL+=l*l; dR+=r*r;
+                    }
+                }
+                CHECK(p>0 ? dR>8*dL : dL>8*dR);   // about 15x: the pan glides from the centre
+                CHECK(dL+dR>0);
+            }
+        }
         sim.beginDescent(0); sim.inMenu=false;
     }
     printf("PASS exits can be heard: level by distance, pan by bearing, played on that side\n");

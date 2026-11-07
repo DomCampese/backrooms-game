@@ -431,7 +431,7 @@ Now the nearest exit within `EXIT_HEAR_M` (64 m) sounds a tone
   (`GameAudio::play`, `SoundMixer`): `Ambience::exitCue`. The two fields are
   not in the trace's `audioHash`, so walk-l0-l2.trace plays back unchanged.
 - **The tone is in the ambience bed** (port/ambience.cpp): sines at 311 and
-  314.2 Hz plus 155.5 Hz at a third, 0.045 each, dry and panned equal-power.
+  314.2 Hz plus 155.5 Hz at a third, 0.08 each, dry and panned equal-power. At full level it is about as loud as Level 0's hum; at 32 m (level 0.25) about 12 dB under it.
   It uses oscillator slots 11, 12 and 15, which were free.
 - **The regression's distant-sound table had five levels** and failed on main
   once the casino made six (`want[5]` read as `Sfx::Step`). It lists
