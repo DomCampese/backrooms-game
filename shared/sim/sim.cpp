@@ -190,6 +190,7 @@ void Sim::applyLevel(int lv, double now) {
     mannequin = {};
     mannequin.nextSpawn = now + 150;
     shadowsStale = true;
+    nearExit.found = false; nextExitScan = 0;   // the last level's exit is not in this maze
     usherRng = Rng(hash64((uint64_t)world.seed ^ ((uint64_t)world.visit << 32) ^ 0x05E4ULL));
     usher = Usher{};
     usher.nextSpawn = now + 20.0 + usherRng.f01() * 20.0;
@@ -266,9 +267,11 @@ void Sim::bankRecords() {
 }
 
 LoopCue Sim::loopCue() {
-    return { level == 2 && !inMenu && eyeY < WATER_Y && world.poolAt(cellOf(px), cellOf(pz)),
+    LoopCue cue{ level == 2 && !inMenu && eyeY < WATER_Y && world.poolAt(cellOf(px), cellOf(pz)),
              level == LEVEL_FUN && !inMenu,
              level == LEVEL_FUN && !inMenu && !music.playing };
+    if (!inMenu && deathT <= 0) exitCue(cue.exit, cue.exitPan);
+    return cue;
 }
 
 AudioEvent &Sim::audioEvent(AudioEvent::Kind kind) {

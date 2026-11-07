@@ -203,6 +203,11 @@ and replays are unchanged.
 Six procedurally generated levels, each with its own palette, lighting,
 sounds and hunter. Exits lead to the next level.
 
+Exits can be heard. Within 64 m of one you hear a low two-tone note, two
+sines 3 Hz apart, panned toward it. It grows louder as you get closer, and is
+quieter with a wall in between. Exits are rare, about one in a 250 m square
+on Level 0, so most of the time there is nothing to hear.
+
 | | |
 |---|---|
 | ![Level 0](docs/levels/level_0.png) **LEVEL 0 · THRESHOLD**: empty rooms, yellow chevron wallpaper, damp carpet, an uneven grid of ceiling lights that hums, stairs up to more floors like this one, and railed openings down to others. The exits are walls you walk through. The hunter is Pirate Clark. | ![Level 1](docs/levels/level_1.png) **LEVEL 1 · HABITABLE ZONE**: a concrete warehouse with dim tube lights, many of them dead, low fog on the floor, exposed rebar, supply crates that move during blackouts, and exit doors marked with symbols. The hunter is a Smiler. |

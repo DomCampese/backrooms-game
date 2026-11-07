@@ -1,6 +1,7 @@
 // Native integration checks and reproducible viewmodel captures.
 #include "game.h"
 #include "core/layout.h"
+#include "port/ambience.h"
 #include "raymath.h"
 #include "sfx.h"
 struct EmbeddedAsset { const char *path; const unsigned char *data; size_t size; };
@@ -624,7 +625,7 @@ int main() {
         // updateDistant: the right clip per level, none on Level 2, flags and
         // ranges as set, grng untouched.
         const int lv0=sim.level; const bool man0=sim.inManila, menu0=sim.inMenu; const float death0=sim.deathT;
-        const Sfx want[NLEVELS]={ Sfx::FarDoor, Sfx::FarClang, Sfx::Click, Sfx::FarPop, Sfx::FarBoom };
+        const Sfx want[NLEVELS]={ Sfx::FarDoor, Sfx::FarClang, Sfx::Click, Sfx::FarPop, Sfx::FarBoom, Sfx::FarJingle };
         const double now=5000;
         for (int lv=0;lv<NLEVELS;++lv) {
             sim.level=lv; sim.inManila=false; sim.inMenu=false; sim.deathT=0;
@@ -1466,6 +1467,72 @@ int main() {
         sim.beginDescent(0); sim.inMenu=false;
     }
     printf("PASS in shadow a chasing hunter sees the player only within DARK_SIGHT; the torch gives them away\n");
+
+    // ---- exits can be heard: the nearest exit within EXIT_HEAR_M sets the
+    // loop cue's level by distance and its pan by bearing, and the ambience
+    // bed plays it on that side.
+    {
+        sim.applyLevel(0,GetTime()); sim.beginDescent(0); sim.inMenu=false; sim.deathT=0;
+        World &w=sim.world;
+        bool found=false; int ea=0,eb=0,west=0;
+        for (int a=-90;a<90 && !found;++a) for (int b=-90;b<90 && !found;++b)
+            for (int wv=0; wv<2 && !found; ++wv)
+                if ((wv ? w.wallWVal(a,b) : w.wallNVal(a,b))==WALL_EXIT) { ea=a; eb=b; west=wv; found=true; }
+        CHECK(found);
+        float ex=ea*CELL+(west?0.0f:CELL*0.5f), ez=eb*CELL+(west?CELL*0.5f:0.0f);
+        // An open spot 6-10 m from it with a clear line.
+        found=false; float sx=0,sz=0;
+        for (int i=0;i<360 && !found;i+=5) for (float r=6;r<=10 && !found;r+=1) {
+            float x=ex+cosf(i*0.01745f)*r, z=ez+sinf(i*0.01745f)*r;
+            Vec2 o=w.findOpenSpot(x,z);
+            float d=hypotf(o.x-ex,o.y-ez);
+            if (d>5 && d<11 && w.lineOfSight(o.x,o.y,ex,ez)) { sx=o.x; sz=o.y; found=true; }
+        }
+        CHECK(found);
+        sim.px=sx; sim.pz=sz;
+        float d=hypotf(ex-sx,ez-sz), want=(1-d/Sim::EXIT_HEAR_M)*(1-d/Sim::EXIT_HEAR_M);
+        // Face so the exit is on the right: forward is 90 degrees left of it.
+        float yawTo=atan2f(ez-sz,ex-sx);
+        auto face=[&](float yaw){ sim.yaw=yaw; sim.r2x=-sinf(yaw); sim.r2z=cosf(yaw); };
+        face(yawTo-1.5707963f);
+        sim.updateExits(9000.0);
+        float lvl,pan; sim.exitCue(lvl,pan);
+        CHECK(fabsf(lvl-want)<0.02f && pan>0.95f);
+        LoopCue cue=sim.loopCue();
+        CHECK(cue.exit==lvl && cue.exitPan==pan);
+        face(yawTo+1.5707963f); sim.exitCue(lvl,pan); CHECK(pan<-0.95f);
+        // Far from every exit: nothing. Only scans once EXIT_SCAN_GAP has passed.
+        sim.px=ex+Sim::EXIT_HEAR_M+30; sim.pz=ez;
+        sim.updateExits(9000.0+Sim::EXIT_SCAN_GAP);
+        sim.exitCue(lvl,pan);
+        float far2=0; { float l2,p2; sim.scanExits(); sim.exitCue(l2,p2); far2=l2; }
+        CHECK(lvl<=0.02f && far2<=0.02f);
+        // The bed plays it on the side it is panned to. Two copies of the
+        // bed from one state, one with the tone: their difference is the tone,
+        // since the reverb's own left-right balance drifts from second to second.
+        {
+            static Ambience base, toned;
+            static int16_t b0[2*4800], b1[2*4800];
+            for (int k=0;k<10;k++) base.render(b0,4800);
+            for (float p : { 1.0f, -1.0f }) {
+                toned=base;
+                LoopCue c; c.exit=1; c.exitPan=p; toned.exitCue(c);
+                Ambience plain=base;
+                double dL=0,dR=0;
+                for (int k=0;k<10;k++) {
+                    plain.render(b0,4800); toned.render(b1,4800);
+                    for (int n=0;n<4800;n++) {
+                        double l=b1[2*n]-b0[2*n], r=b1[2*n+1]-b0[2*n+1];
+                        dL+=l*l; dR+=r*r;
+                    }
+                }
+                CHECK(p>0 ? dR>8*dL : dL>8*dR);   // about 15x: the pan glides from the centre
+                CHECK(dL+dR>0);
+            }
+        }
+        sim.beginDescent(0); sim.inMenu=false;
+    }
+    printf("PASS exits can be heard: level by distance, pan by bearing, played on that side\n");
 
     // ---- the hunter's movement and walk cycle (ENT-01/ENT-02). Check the
     // captures by eye too.

@@ -16,11 +16,15 @@ struct Ambience {
     float hum = 1, growl = 0, hiss = 0, whisper = 0;
     float wHum = 1, wDrone = 0;
     float panel = 0, space = 0.25f;
+    // The nearest exit's tone (LoopCue::exit, exitPan), set on each LOOPS
+    // event by whatever plays the bed, and chased a sample at a time.
+    float exitMix = 0, exitPanMix = 0, exitLvl = 0, exitPan = 0;
+    void exitCue(const LoopCue &c) { exitMix = c.exit; exitPanMix = c.exitPan; }
     // One running phase per oscillator, indexed by osc(). Each index belongs to
     // one signal: two signals sharing one advance it at both frequencies, and
     // both come out wrong. Current owners:
     //   0-4   fluorescent hum      5-7   growl        8-10  L1 drone
-    //   11-12 (free; was poolroom water, now a recording) 13-14 whispers     15    (free; LEVEL FUN music is a recording)
+    //   11-12 exit tone           13-14 whispers     15    exit tone, octave below
     //   16-17 hum beat frequency  18-19 blackout ring
     double ph[20] = {};
     float lp1 = 0, lp2 = 0;   // one-pole low-passed noise, at two cutoffs

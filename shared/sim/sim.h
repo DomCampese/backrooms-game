@@ -104,6 +104,12 @@ struct Sim {
     // Distant one-shots: first at LEAD..LEAD+SPAN s after entering a level,
     // then every GAP..GAP+SPAN s, scaled by 0.45 + 0.55 * sanity.
     static constexpr double DISTANT_LEAD = 20, DISTANT_GAP = 35, DISTANT_SPAN = 50;
+    // Exits can be heard: a tone from the nearest WALL_EXIT edge within
+    // EXIT_HEAR_M, at (1 - d / EXIT_HEAR_M)^2, times EXIT_THROUGH with a wall
+    // in the way.
+    static constexpr float EXIT_HEAR_M = 64.0f;
+    static constexpr double EXIT_SCAN_GAP = 0.25;   // s between scans for the nearest exit
+    static constexpr float EXIT_THROUGH = 0.4f;
     static constexpr float MUSIC_PLAY_MIN = 20.0f, MUSIC_PLAY_SPAN = 20.0f;
     static constexpr float MUSIC_STOP_MIN = 6.0f, MUSIC_STOP_SPAN = 3.0f;
     static constexpr float MUSIC_FIRST = 25.0f;   // s of music on arrival before the first stop, at least
@@ -583,6 +589,10 @@ struct Sim {
     double blackoutIn(double now, double lead, double span);
     void bankRecords();              // raise `best` to this run's tallies
     LoopCue loopCue();
+    void exitCue(float &level, float &pan);   // the nearest exit within EXIT_HEAR_M, as LoopCue::exit
+    void scanExits();                          // finds it; run every EXIT_SCAN_GAP s from updateExits
+    struct { bool found = false, los = false; float x = 0, z = 0; } nearExit;
+    double nextExitScan = 0;
 
     // ---- audio out
     AudioEvent &audioEvent(AudioEvent::Kind kind);

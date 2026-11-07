@@ -48,6 +48,7 @@ void GameAudio::play(const std::vector<AudioEvent> &events) {
             break;
         case AudioEvent::LOOPS:
             feedLoops(e.loops, e.dt);
+            synth.bed.exitCue(e.loops);
             break;
         case AudioEvent::AMBIENCE:
             synth.bed.mix = e.mix;

@@ -408,6 +408,35 @@ dark spots matter: `Sim::inShadow()` cuts his sight to `DARK_SIGHT` (9 m)
 - The HUD's cover line says "[ in shadow ]" (or "crouched · in shadow").
 - walk-l0-l2.trace has no chase and plays back unchanged.
 
+# Exits can be heard (November 2026)
+
+Exits are rare (mapdump finds one in a 258 m square on Levels 0, 1 and LEVEL
+FUN at seed 1337), so a player could walk for many minutes without seeing one.
+Now the nearest exit within `EXIT_HEAR_M` (64 m) sounds a tone
+(`Sim::scanExits`, `Sim::exitCue`, shared/sim/place.cpp).
+
+- **`scanExits` runs every `EXIT_SCAN_GAP` (0.25 s) from `updateExits`**: about
+  3,700 edge reads through `wallNVal`/`wallWVal`, 0.08 ms. `applyLevel` clears
+  the result, or the last level's exit would sound in the new maze. Scanning
+  64 m generates no chunk the game would not keep: `unloadFar` keeps 5 chunks
+  (160 m).
+- **`exitCue` computes the level and pan each tick** from the stored exit and
+  the player's current position and right vector, so turning pans at once:
+  level `(1 - d / 64)^2`, times `EXIT_THROUGH` (0.4) with no line of sight
+  at the last scan.
+- **It travels in `LoopCue` (`exit`, `exitPan`), not `AmbienceMix`.** The mix
+  is sent only from `updateEntity`, which returns early on Level 2, so a cue
+  there would stick at the level of the exit just walked through. The LOOPS
+  event goes out every tick. Both builds pass it on in one line
+  (`GameAudio::play`, `SoundMixer`): `Ambience::exitCue`. The two fields are
+  not in the trace's `audioHash`, so walk-l0-l2.trace plays back unchanged.
+- **The tone is in the ambience bed** (port/ambience.cpp): sines at 311 and
+  314.2 Hz plus 155.5 Hz at a third, 0.08 each, dry and panned equal-power. At full level it is about as loud as Level 0's hum; at 32 m (level 0.25) about 12 dB under it.
+  It uses oscillator slots 11, 12 and 15, which were free.
+- **The regression's distant-sound table had five levels** and failed on main
+  once the casino made six (`want[5]` read as `Sfx::Step`). It lists
+  `FarJingle` now.
+
 # Distant one-shots (October 2026)
 
 Levels 0, 1, 3 and 4 play a muffled one-shot at intervals from a random

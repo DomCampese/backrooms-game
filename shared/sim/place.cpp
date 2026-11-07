@@ -163,6 +163,7 @@ bool Sim::shiftAWall() {
 // Both exit orientations are checked at every cell, and the scan stops at
 // the first exit taken: after applyLevel the old coordinates are invalid.
 void Sim::updateExits(double now) {
+    if (now >= nextExitScan) { scanExits(); nextExitScan = now + EXIT_SCAN_GAP; }
     if (escapeT > 0) return;
     int ci = cellOf(px), ck = cellOf(pz);
     for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++)
@@ -299,4 +300,34 @@ void Sim::updatePartyMusic(float dt) {
     music.heard = true; music.heardT = 2.5f;
     play(Sfx::Scare).atPitch(0.8f).atVolume(0.7f);
     callHunter();
+}
+
+// The nearest exit edge within EXIT_HEAR_M, and whether a wall is in the way.
+// About 3,700 edge reads, so it runs every EXIT_SCAN_GAP s, not every tick.
+void Sim::scanExits() {
+    const int r = (int)(EXIT_HEAR_M / CELL) + 1;
+    int ci = cellOf(px), ck = cellOf(pz);
+    float nearest = EXIT_HEAR_M;
+    nearExit.found = false;
+    for (int i = ci - r; i <= ci + r; i++)
+        for (int k = ck - r; k <= ck + r; k++)
+            for (int west = 0; west < 2; ++west) {
+                if ((west ? world.wallWVal(i, k) : world.wallNVal(i, k)) != WALL_EXIT) continue;
+                float x = i * CELL + (west ? 0.0f : CELL * 0.5f), z = k * CELL + (west ? CELL * 0.5f : 0.0f);
+                float d = portableHypot(x - px, z - pz);
+                if (d < nearest) { nearest = d; nearExit.found = true; nearExit.x = x; nearExit.z = z; }
+            }
+    if (nearExit.found) nearExit.los = world.lineOfSight(px, pz, nearExit.x, nearExit.z);
+}
+
+// Level from the distance now, bearing against the player's right vector now,
+// so turning pans it at once between scans.
+void Sim::exitCue(float &lvl, float &pan) {
+    lvl = 0; pan = 0;
+    if (!nearExit.found) return;
+    float d = portableHypot(nearExit.x - px, nearExit.z - pz);
+    if (d >= EXIT_HEAR_M) return;
+    float near = 1.0f - d / EXIT_HEAR_M;
+    lvl = near * near * (nearExit.los ? 1.0f : EXIT_THROUGH);
+    if (d > 0.01f) pan = clampf(((nearExit.x - px) * r2x + (nearExit.z - pz) * r2z) / d, -1.0f, 1.0f);
 }
