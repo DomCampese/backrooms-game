@@ -1807,6 +1807,27 @@ on-screen controls in `web/shell.html`.
   `.default`; the script handles both. Without that, the error is a bare
   `ERR_MODULE_NOT_FOUND`.
 
+## The touch dev panel (November 2026)
+
+A phone has no F3. Three taps on the REC mark in the top left, each within
+`REC_GAP` (450 ms) of the last, open a list of levels (`#dev` in
+web/shell.html); a button there takes the player straight to that level.
+
+- **The jump is `DevKeys::gotoLevel`** (-1 for none), handled with F3's N in
+  `Sim::updateDevKeys`, so it lands the same way N does. It is not gated by
+  `debugHud`, because touch cannot open the F3 HUD. It is in the trace as
+  `devGotoLevel`; older traces omit it and replay with -1.
+- **It reaches the game as `TouchFrame::gotoLevel`**, level + 1 with 0 for
+  none, drained by `webInputPoll` like `pressed`. It is the struct's last
+  field, at `HEAPU32[p + 9]`.
+- **The REC zone is measured off the canvas** (`onRecMark`), at the HUD's
+  scale of height / 850, and never smaller than 72 x 52 px.
+- **Its buttons act on `pointerup`, not `click`.** The double-tap guard cancels
+  the touchend of a tap within 350 ms of the last, which also drops its click.
+- `mobile-check` checks that two taps or three slow ones do not open it,
+  three quick ones do, it stays inside the stage, and a button sets the level.
+- Web build only: the Unreal build has no touch controls.
+
 # Running headless and taking screenshots
 
 The sandbox has no display, so everything runs under Xvfb. `tools/shot.sh`

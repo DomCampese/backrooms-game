@@ -444,6 +444,7 @@ InputFrame Game::readInput(bool captureClick) {
         in.dev.storeyDown = inKeyPressed(KEY_PAGE_DOWN);
         in.dev.nextLevel = inKeyPressed(KEY_N);
     }
+    in.dev.gotoLevel = webGotoLevel();
     in.screenFov = baseFov();
     in.forceSpawn = shotPath && !benchmark && frame == 300;   // headless: put the hunter in view
     if (chaseKnob && frame == 301) in.dev.chase = true;
