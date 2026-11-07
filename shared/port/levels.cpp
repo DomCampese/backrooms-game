@@ -23,16 +23,27 @@ const LevelCfg LEVELS[NLEVELS] = {
     // The casino: warm gold light from a low ceiling over dark carpet, and the
     // slot machines' own glow.
     { LEVEL_RULES[5], 0.85f, 0.040f, 0.06f, {1.00f,0.80f,0.55f}, {0.052f,0.040f,0.034f}, {0.075f,0.050f,0.040f} },
+    // Level 94: no fittings. Daylight is the ambient alone, and the fog is
+    // the sky's colour, so the hills fade into it. Night is blackoutCur.
+    { LEVEL_RULES[6], 1.00f, 0.019f, 0.04f, {1.00f,0.96f,0.86f}, {0.200f,0.196f,0.180f}, {0.760f,1.080f,1.750f} },
 };
 // The Poolrooms are kept nearly uniform on purpose: new tile in a still hall.
-const float SURF_MACRO[NLEVELS] = { 0.05f, 0.08f, 0.015f, 0.06f, 0.05f, 0.05f };
-const float CEIL_BOARD[NLEVELS] = { 2.0f / 3.0f, 0.0f, 0.0f, 0.5f, 0.5f, 0.5f };
+const float SURF_MACRO[NLEVELS] = { 0.05f, 0.08f, 0.015f, 0.06f, 0.05f, 0.05f, 0.10f };
+const float CEIL_BOARD[NLEVELS] = { 2.0f / 3.0f, 0.0f, 0.0f, 0.5f, 0.5f, 0.5f, 0.0f };
+
+Vec3 clearColour(int level, float blackout) {
+    if (level == 2) return { 48 / 255.0f, 70 / 255.0f, 66 / 255.0f };
+    if (level != MOTION) return { 0, 0, 0 };
+    const Vec3 sky = { 0.56f, 0.72f, 0.90f };   // the fog's colour where it meets the hills
+    const float k = 0.10f + 0.90f * blackout;
+    return { sky.x * k, sky.y * k, sky.z * k };
+}
 
 const char *const SURF_NAMES[SURF_COUNT] = {
     "carpet", "ceiling", "wallpaper", "concfloor", "concceil", "concwall",
     "poolfloor", "poolwall", "partycarpet", "partyceil", "partywall",
     "cinemacarpet", "cinemaceil", "cinemawall",
-    "casinocarpet", "casinowall",
+    "casinocarpet", "casinowall", "claygrass", "claywall",
 };
 
 const LevelSurfaces LEVEL_SURFACES[NLEVELS] = {
@@ -42,6 +53,7 @@ const LevelSurfaces LEVEL_SURFACES[NLEVELS] = {
     { SURF_BANQUET, SURF_PARTYCEIL, SURF_PARTYWALL },
     { SURF_CINEMACARPET, SURF_CINEMACEIL, SURF_CINEMAWALL },
     { SURF_CASINOCARPET, SURF_CINEMACEIL, SURF_CASINOWALL },   // the theater's black ceiling
+    { SURF_CLAYGRASS, SURF_CLAYWALL, SURF_CLAYWALL },          // the houses' ceilings are their walls' plaster
 };
 
 

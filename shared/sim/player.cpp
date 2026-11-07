@@ -270,6 +270,7 @@ void Sim::updateHiding(float speed, float dt) {
         }
     }
     foundT = fmaxf(0.0f, foundT - dt);
+    if (sheltered) { hidden = true; hideBreakT = 0; return; }   // Level 94: inside a house
     if (!nearCover || foundT > 0) { hidden = false; hideBreakT = 0; }
     else if (!hidden) { if (speed < HIDE_ENTER) hidden = true; hideBreakT = 0; }
     else if (speed > HIDE_BREAK) {
@@ -349,11 +350,12 @@ void Sim::landFrom(float drop, double now) {
 }
 
 Sfx Sim::stepSfx() const {
-    Footing f = inManila ? Footing::Wood : LEVEL_RULES[level].footing;
+    Footing f = inManila || sheltered ? Footing::Wood : LEVEL_RULES[level].footing;
     switch (f) {
     case Footing::Concrete: return Sfx::StepConcrete;
     case Footing::Tile:     return Sfx::StepTile;
     case Footing::Wood:     return Sfx::StepWood;
+    case Footing::Grass:    return Sfx::StepGrass;
     case Footing::Carpet:   break;
     }
     return Sfx::Step;

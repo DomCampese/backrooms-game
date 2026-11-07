@@ -599,9 +599,11 @@ int main() {
         // hard-floor clips start and end on zero, peak below clipping, and
         // order by zero crossings: carpet < wood < concrete < tile.
         const int lv0=sim.level; const bool man0=sim.inManila;
-        const Sfx want[NLEVELS]={ Sfx::Step, Sfx::StepConcrete, Sfx::StepTile, Sfx::Step, Sfx::Step };
-        for (int lv=0;lv<NLEVELS;++lv) { sim.level=lv; sim.inManila=false; CHECK(sim.stepSfx()==want[lv]); }
+        const Sfx want[NLEVELS]={ Sfx::Step, Sfx::StepConcrete, Sfx::StepTile, Sfx::Step, Sfx::Step, Sfx::Step, Sfx::StepGrass };
+        for (int lv=0;lv<NLEVELS;++lv) { sim.level=lv; sim.inManila=false; sim.sheltered=false; CHECK(sim.stepSfx()==want[lv]); }
         sim.level=0; sim.inManila=true; CHECK(sim.stepSfx()==Sfx::StepWood);
+        sim.level=MOTION; sim.inManila=false; sim.sheltered=true; CHECK(sim.stepSfx()==Sfx::StepWood);   // a house's planks
+        sim.sheltered=false;
         sim.level=lv0; sim.inManila=man0;
         auto crossings=[](const Pcm &p) {
             int n=std::min((int)p.size(),SAMPLE_RATE*6/100), zc=0;
@@ -609,6 +611,14 @@ int main() {
             return zc;
         };
         int carpet=crossings(clipPcm(Sfx::Step,0)), last=carpet;
+        for (Sfx k : { Sfx::StepGrass }) {
+            for (int v=0;v<4;++v) {
+                Pcm pcm=clipPcm(k,v);
+                int peak=0;
+                for (short x : pcm) peak=std::max(peak,std::abs((int)x));
+                CHECK(pcm.front()==0 && pcm.back()==0 && peak>8000 && peak<30000 && pcm.size()<(size_t)SAMPLE_RATE/2);
+            }
+        }
         for (Sfx k : { Sfx::StepWood, Sfx::StepConcrete, Sfx::StepTile }) {
             for (int v=0;v<4;++v) {
                 Pcm pcm=clipPcm(k,v);
@@ -625,7 +635,7 @@ int main() {
         // updateDistant: the right clip per level, none on Level 2, flags and
         // ranges as set, grng untouched.
         const int lv0=sim.level; const bool man0=sim.inManila, menu0=sim.inMenu; const float death0=sim.deathT;
-        const Sfx want[NLEVELS]={ Sfx::FarDoor, Sfx::FarClang, Sfx::Click, Sfx::FarPop, Sfx::FarBoom, Sfx::FarJingle };
+        const Sfx want[NLEVELS]={ Sfx::FarDoor, Sfx::FarClang, Sfx::Click, Sfx::FarPop, Sfx::FarBoom, Sfx::FarJingle, Sfx::Click };
         const double now=5000;
         for (int lv=0;lv<NLEVELS;++lv) {
             sim.level=lv; sim.inManila=false; sim.inMenu=false; sim.deathT=0;
@@ -633,7 +643,7 @@ int main() {
             const uint64_t g0=sim.grng.s;
             sim.updateDistant(now);
             CHECK(sim.grng.s==g0);
-            if (lv==2) { CHECK(sim.audio.empty()); continue; }
+            if (LEVEL_RULES[lv].distant==Distant::None) { CHECK(sim.audio.empty()); continue; }
             CHECK(sim.audio.size()==1);
             const AudioEvent &e=sim.audio.back();
             CHECK(e.kind==AudioEvent::PLAY && e.sfx==want[lv] && e.variant<3);
@@ -689,10 +699,10 @@ int main() {
     // step a body can take; every cell of it that is not a seat is reachable from
     // its back aisle; and its props mesh stays inside 16-bit indices.
     {
-        // Second: Level 0's exits lead here and its exits to the casino, and the
+        // Second: Level 0's exits lead here and its exits to Level 94, and the
         // records rank it just below Level 0.
-        CHECK(EXIT_NEXT[0]==THEATER && EXIT_NEXT[THEATER]==CASINO && EXIT_NEXT[LEVEL_FUN]==0);
-        CHECK(LEVEL_DEPTH[0]<LEVEL_DEPTH[THEATER] && LEVEL_DEPTH[THEATER]<LEVEL_DEPTH[CASINO]);
+        CHECK(EXIT_NEXT[0]==THEATER && EXIT_NEXT[THEATER]==MOTION && EXIT_NEXT[LEVEL_FUN]==0);
+        CHECK(LEVEL_DEPTH[0]<LEVEL_DEPTH[THEATER] && LEVEL_DEPTH[THEATER]<LEVEL_DEPTH[MOTION]);
         World w; w.seed=1337; w.level=THEATER; w.visit=0; w.wallH=LEVEL_RULES[THEATER].wallH; w.storeyH=0;
         int auds=0, lobbies=0;
         for (int cx=-3;cx<=3;++cx) for (int cz=-3;cz<=3;++cz) {
@@ -881,9 +891,9 @@ int main() {
     // in front of it, a pull costs a doubloon and makes noise, and a jackpot
     // calls the hunter.
     {
-        // Third: the theater's exits lead here and its exits to Level 1.
-        CHECK(EXIT_NEXT[THEATER]==CASINO && EXIT_NEXT[CASINO]==1);
-        CHECK(LEVEL_DEPTH[THEATER]<LEVEL_DEPTH[CASINO] && LEVEL_DEPTH[CASINO]<LEVEL_DEPTH[1]);
+        // Fourth: Level 94's exits lead here and its exits to Level 1.
+        CHECK(EXIT_NEXT[MOTION]==CASINO && EXIT_NEXT[CASINO]==1);
+        CHECK(LEVEL_DEPTH[MOTION]<LEVEL_DEPTH[CASINO] && LEVEL_DEPTH[CASINO]<LEVEL_DEPTH[1]);
         // The house wins: a pull returns less than it costs, before the cans.
         CHECK(Sim::SLOT_JACKPOT*Sim::SLOT_JACKPOT_ODDS+Sim::SLOT_SMALL*Sim::SLOT_SMALL_ODDS<Sim::SLOT_COST);
         World w; w.seed=1337; w.level=CASINO; w.visit=0; w.wallH=LEVEL_RULES[CASINO].wallH; w.storeyH=0;
@@ -972,6 +982,109 @@ int main() {
         }
     }
     printf("PASS casino banks, reachability, slot collision, the slot machines' pull, noise and jackpot\n");
+
+    // ---- Level 94. The hills never step more than MAX_STEP; houses stand on
+    // level ground with a ceiling, and every other cell is open to the sky;
+    // every walkable cell of a chunk is reachable; by day nothing hunts, at
+    // night the Animation comes, and a house hides the player from it.
+    {
+        CHECK(EXIT_NEXT[THEATER]==MOTION && LEVEL_DEPTH[THEATER]+1==LEVEL_DEPTH[MOTION]);
+        World w; w.seed=1337; w.level=MOTION; w.visit=0; w.wallH=LEVEL_RULES[MOTION].wallH; w.storeyH=0;
+        int houses=0, exits=0, sunk=0;
+        for (int cx=-4;cx<=4;++cx) for (int cz=-4;cz<=4;++cz) {
+            ChunkData &d=w.data(cx,cz);
+            const int gx0=cx*CCELLS, gz0=cz*CCELLS;
+            bool house[CCELLS][CCELLS]={};
+            for (int q=0;q<4;++q) {
+                MotionHouse hs;
+                if (!w.motionHouse(cx,cz,q,hs)) continue;
+                houses++;
+                for (int i=hs.i0;i<=hs.i1;++i) for (int k=hs.k0;k<=hs.k1;++k) {
+                    house[i][k]=true;
+                    CHECK(d.elev[i][k]==0 && w.indoors(gx0+i,gz0+k) && cellHasCeiling(w,gx0+i,gz0+k));
+                }
+            }
+            for (int i=0;i<CCELLS;++i) for (int k=0;k<CCELLS;++k) {
+                if (!house[i][k]) CHECK(w.openSky(gx0+i,gz0+k) && !cellHasCeiling(w,gx0+i,gz0+k));
+                if (d.elev[i][k]<0) sunk++;
+                if (d.wallN[i][k]==WALL_EXIT || d.wallW[i][k]==WALL_EXIT) exits++;
+                // every edge, across seams too, is a step a body takes
+                CHECK(abs((int)lroundf(w.floorY(gx0+i,gz0+k)*10)-(int)lroundf(w.floorY(gx0+i+1,gz0+k)*10))<=MAX_STEP_UNITS);
+                CHECK(abs((int)lroundf(w.floorY(gx0+i,gz0+k)*10)-(int)lroundf(w.floorY(gx0+i,gz0+k+1)*10))<=MAX_STEP_UNITS);
+            }
+            bool seen[CCELLS][CCELLS]={};
+            int qx[CCELLS*CCELLS],qz[CCELLS*CCELLS],head=0,tail=0;
+            int sx=0,sz=0;
+            while (d.prop[sx][sz]!=PROP_NONE) sx++;
+            qx[tail]=sx; qz[tail]=sz; tail++; seen[sx][sz]=true;
+            while (head<tail) {
+                int x=qx[head], z=qz[head]; head++;
+                const int D[4][2]={{1,0},{-1,0},{0,1},{0,-1}};
+                for (auto &dd : D) {
+                    int nx=x+dd[0], nz=z+dd[1];
+                    if (nx<0||nz<0||nx>=CCELLS||nz>=CCELLS||seen[nx][nz]) continue;
+                    if (!w.canStep(gx0+x,gz0+z,gx0+nx,gz0+nz)) continue;
+                    seen[nx][nz]=true; qx[tail]=nx; qz[tail]=nz; tail++;
+                }
+            }
+            for (int x=0;x<CCELLS;++x) for (int z=0;z<CCELLS;++z)
+                CHECK(seen[x][z]==(d.prop[x][z]==PROP_NONE && !d.pillar[x][z]));
+            ChunkGeometry geo; bakeChunkGeometry(w,cx,cz,geo);
+            for (int sl=0;sl<MESH_COUNT;++sl) CHECK(geo.parts[sl].v.size()/3<=65536);
+        }
+        CHECK(houses>=20 && exits>0 && sunk>CCELLS*CCELLS*20);
+        // The day: no hunter, however long. Dusk, then the night's Animation.
+        sim.applyLevel(MOTION,GetTime());
+        CHECK(!sim.hasBlackouts() && sim.nextBlackout==Sim::BLACKOUT_NEVER && sim.daylight()==1.0f);
+        double now=GetTime();
+        sim.inMenu=false; sim.deathT=0; sim.mannequin.active=false;
+        Vec2 open=sim.world.findOpenSpot(15,15);
+        sim.px=open.x; sim.pz=open.y; sim.velx=sim.velz=0; sim.sprinting=false; sim.crouchCur=0;
+        for (int i=0;i<30*60;++i) { sim.updateSky(1.0f/30); sim.updateEntity(1.0f/30,now); now+=1.0/30; }
+        CHECK(!sim.sky.night && sim.ent.st==EState::Hidden);
+        bool dark=false;
+        for (int i=0;i<30*60 && sim.ent.st==EState::Hidden;++i) {
+            sim.updateSky(1.0f/30); sim.updateEntity(1.0f/30,now); now+=1.0/30;
+            dark |= sim.sky.night;
+        }
+        CHECK(dark && sim.sky.night && sim.daylight()<0.5f && sim.ent.st==EState::Stalk);
+        CHECK(!sim.world.indoors(cellOf(sim.ent.x),cellOf(sim.ent.z)));
+        CHECK(std::string(sim.hunterName())=="AN ANIMATION");
+        // It is drawn where its last stop-motion frame left it, and catches up
+        // at the next frame.
+        sim.updateStopPose(1.0f);
+        const float hx=sim.ent.x;
+        sim.ent.x+=0.5f;
+        sim.updateStopPose(0.25f/Sim::STOP_MOTION_FPS);
+        CHECK(sim.stopPose.x==hx);
+        sim.updateStopPose(1.0f/Sim::STOP_MOTION_FPS);
+        CHECK(sim.stopPose.x==sim.ent.x);
+        // Inside a house the player is hidden, it cannot find them, and it will
+        // not walk in.
+        MotionHouse hs; int hcx=0, hcz=0; bool found=false;
+        for (int cx=-2;cx<=2 && !found;++cx) for (int cz=-2;cz<=2 && !found;++cz)
+            for (int q=0;q<4 && !found;++q) if (sim.world.motionHouse(cx,cz,q,hs)) { hcx=cx; hcz=cz; found=true; }
+        CHECK(found);
+        const int hi=hcx*CCELLS+(hs.i0+hs.i1)/2, hk=hcz*CCELLS+(hs.k0+hs.k1)/2;
+        sim.px=hi*CELL+1.0f; sim.pz=hk*CELL+1.0f;
+        sim.updateSky(1.0f/30);
+        CHECK(sim.sheltered);
+        sim.updateHiding(0.0f,1.0f/30);
+        CHECK(sim.hidden);
+        sim.ent.st=EState::Chase; sim.ent.x=sim.px+1.0f; sim.ent.z=sim.pz; sim.ent.lunge=0; sim.ent.lungeCd=0;
+        sim.health=1; sim.hurtT=0;
+        float fearT=0;
+        for (int i=0;i<60;++i) { sim.entDist=1.0f; sim.hunterChase(1.0f/30,now,fearT); }
+        CHECK(sim.hidden && sim.health==1 && sim.foundT<=0);
+        // Morning: it is gone.
+        sim.sky.t=Sim::DAY_TIME+Sim::DUSK_TIME+Sim::NIGHT_TIME+Sim::DAWN_TIME-1.0f;
+        for (int i=0;i<90;++i) { sim.updateSky(1.0f/30); sim.updateEntity(1.0f/30,now); now+=1.0/30; }
+        CHECK(!sim.sky.night && sim.ent.st==EState::Hidden);
+        sim.hidden=false; sim.sheltered=false;
+        sim.applyLevel(0,GetTime());
+        CHECK(sim.hasBlackouts() && !sim.world.indoors(0,0) && !sim.world.openSky(0,0));
+    }
+    printf("PASS Level 94: hill steps, houses and sky, reachability, the day, the night's Animation, shelter\n");
 
     // ---- the casino's cigarettes. A gold pack lies only in the casino; once
     // found, key 6 and the wheel reach it there. Click lights one, then takes

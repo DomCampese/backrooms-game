@@ -69,9 +69,9 @@ static_assert(sizeof(PROP_NAME) / sizeof(PROP_NAME[0]) == PROP_KINDS, "a name fo
 const char *FIXTURE_NAME[] = {
     "outlet", "broken outlet", "switch", "grille", "exit sign", "diffuser", "sprinkler", "conduit",
     "scrawl", "lift door", "spall", "pillar spall", "pipe", "streamer", "manila room",
-    "auditorium", "poster",
+    "auditorium", "poster", "house",
 };
-static_assert(sizeof(FIXTURE_NAME) / sizeof(FIXTURE_NAME[0]) == (int)FixtureKind::Poster + 1, "a name for every FixtureKind");
+static_assert(sizeof(FIXTURE_NAME) / sizeof(FIXTURE_NAME[0]) == (int)FixtureKind::House + 1, "a name for every FixtureKind");
 const char *OPENING_NAME[] = { "doorway", "locked door", "exit", "window", "rail", "shut door" };
 
 // Which way a normal points, as +x, -z, down.
@@ -137,6 +137,7 @@ void printLayout(World &w, int cx, int cz) {
         if (f.gap == FittingGap::UnderOpening) printf("  none: under an opening");
         else if (f.gap == FittingGap::ManilaRoom) printf("  none: Manila Room");
         else if (f.gap == FittingGap::Auditorium) printf("  none: auditorium");
+        else if (f.gap == FittingGap::Unlit) printf("  none: no lights on this level");
         else printf("  %s  output %.2f%s%s", f.dead ? "dead" : "lit ", f.output, f.faulty ? "  faulty" : "",
                     f.turned ? "  turned" : "");
         printf("\n");

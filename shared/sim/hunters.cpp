@@ -11,9 +11,10 @@ void Sim::updateEntity(float dt, double now, bool forceSpawn) {
         fear = fmaxf(fear, mannequin.pinned ? 0.35f : 0.75f);
         return;
     }
-    // Nothing hunts on Level 2.
-    if (level == 2) {
-        ent.st = EState::Hidden; ent.nextSpawn = now + 60; entDist = 1e9f;
+    // Nothing hunts on Level 2, or on Level 94 by day. A hunter out at dawn
+    // is gone; the night's first comes NIGHT_SPAWN s after dark.
+    if (hunterAsleep()) {
+        ent.st = EState::Hidden; ent.nextSpawn = now + (level == MOTION ? NIGHT_SPAWN : 60); entDist = 1e9f;
         entDarkCur += (0 - entDarkCur) * fminf(1, 4 * dt);
         fear += (0 - fear) * fminf(1, 2 * dt);
         ambience.growl = 0;
@@ -101,6 +102,7 @@ void Sim::updateEntity(float dt, double now, bool forceSpawn) {
         ent.vz = (ent.z - entPrevZ) / dt;
     }
     entPrevX = ent.x; entPrevZ = ent.z;
+    if (level == MOTION) updateStopPose(dt);
     if (ent.st != EState::Hidden) {
         // groundAt: on a flight, the tread under him; over a hole, the flight
         // coming up through it.
@@ -131,6 +133,7 @@ void Sim::spawnHunter() {
         float dx = s.x - px, dz = s.y - pz, d = sqrtf(dx * dx + dz * dz);
         if (d < SPAWN_NEAR_MIN || d > SPAWN_NEAR_MAX) return false;
         if (world.lineOfSight(px, pz, s.x, s.y)) return false;
+        if (world.indoors(cellOf(s.x), cellOf(s.y))) return false;
         ox = s.x; oz = s.y; return true;
     };
     float sx = 0, sz = 0;
@@ -158,11 +161,14 @@ void Sim::spawnHunter() {
             placed = unseenSpot(px + portableCos(a) * d, pz + portableSin(a) * d, sx, sz);
         }
     }
-    if (!placed) {
+    // Out in the fog. Level 94 tries again for a spot outside a house; no
+    // other level has indoors, so it draws the same numbers as before.
+    for (int tries = 0; !placed && tries < 8; tries++) {
         float a = grng.f01() * TAU;
         float d = SPAWN_FAR_MIN + grng.f01() * SPAWN_FAR_SPAN;
         Vec2 spot = world.findOpenSpot(px + portableCos(a) * d, pz + portableSin(a) * d);
         sx = spot.x; sz = spot.y;
+        placed = !world.indoors(cellOf(sx), cellOf(sz));
     }
     ent.x = sx; ent.z = sz;
     ent.st = EState::Stalk; ent.gaze = 0; ent.life = 0; ent.hp = 3; ent.stagger = 0;
@@ -179,7 +185,8 @@ bool Sim::hunterChase(float dt, double now, float &fearT) {
     // are hidden or crouched more than 7 m away, and hears loudestNoise. Either
     // tells him where the player is.
     bool los = world.lineOfSight(ent.x, ent.z, px, pz);
-    if (hidden && entDist < FIND_REACH && los) {   // he has walked up to the player's cover
+    // A house is not cover he can search: on Level 94 he never comes inside.
+    if (hidden && !sheltered && entDist < FIND_REACH && los) {   // he has walked up to the player's cover
         hidden = false;
         foundT = FOUND_TIME;
         play(Sfx::Scare).atPitch(0.7f).atVolume(0.8f);
@@ -241,6 +248,7 @@ bool Sim::hunterChase(float dt, double now, float &fearT) {
         }
     }
     if (hunterOpensDoor(dt)) chaseSpd = 0;
+    if (world.indoors(cellOf(ent.wpx), cellOf(ent.wpz))) chaseSpd = 0;   // Level 94: he waits outside
     float sx = ent.wpx - ent.x, sz = ent.wpz - ent.z, sl = sqrtf(sx * sx + sz * sz) + 1e-4f;
     ent.x += sx / sl * chaseSpd * dt;
     ent.z += sz / sl * chaseSpd * dt;
@@ -368,6 +376,7 @@ bool Sim::hunterOpensDoor(float dt) {
 // 1.5 m, if no wall is in between. The hunter's dark area and a blackout dim
 // them as the shader does (shaders.cpp, uEntDark). Faulty tubes count as on.
 float Sim::lightAtPlayer() {
+    if (level == MOTION) return clampf(blackoutCur, 0.0f, 1.0f);   // the sky: daylight, or night
     float ls = LEVEL_RULES[level].ls, reach = 0.55f * ls + 1.5f;
     int gx0 = (int)floorf(px / ls), gz0 = (int)floorf(pz / ls);
     float lit = 0;

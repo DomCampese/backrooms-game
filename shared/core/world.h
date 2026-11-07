@@ -243,6 +243,31 @@ inline void slotBox(uint8_t rotByte, float x0, float z0, float &bx0, float &bz0,
     turnedBox(rotByte, x0, z0, SLOT_FRONT, SLOT_BACK, bx0, bz0, bx1, bz1);
 }
 
+// Level 94 (MOTION). Open grass hills with no ceiling, and houses on the
+// level hilltops. A cell's floor is World::motionElev: 0 on the hilltops and
+// down to -MOTION_VALLEY elev units in the valleys. It is a pure function of
+// the cell, so neighbouring chunks agree at their seams, and its slope keeps
+// neighbours within MAX_STEP_UNITS of each other.
+constexpr int MOTION_VALLEY = 24;
+// The hill field's share that is level hilltop, 0..1. Raising it widens the
+// hilltops and steepens the slopes (by 1 / (1 - MOTION_PLATEAU)).
+constexpr float MOTION_PLATEAU = 0.42f;
+// Radians per cell of the two wave trains the hills are made of.
+constexpr float MOTION_WAVE_A = 0.157f, MOTION_WAVE_B = 0.112f;
+// A house: a walled rectangle of cells, chunk-local and inclusive, with a
+// ceiling, a plank floor and a pitched roof. There is at most one per chunk
+// quarter, and only where it and a cell of margin round it are hilltop.
+struct MotionHouse {
+    int i0, k0, i1, k1;
+    int door;             // the side its door is in: 0 north, 1 east, 2 south, 3 west
+    uint32_t seed;
+};
+// Quarters that have a flat site build a house MOTION_HOUSE_TENTHS times in ten.
+constexpr uint32_t MOTION_HOUSE_TENTHS = 9;
+// A house's walls stand this high; its roof rises MOTION_ROOF_RISE over half
+// its span.
+constexpr float MOTION_ROOF_RISE = 1.6f;
+
 // What a renderer needs of one auditorium: its screen and the light it throws.
 struct Auditorium {
     int cx, cz, dir;
@@ -334,6 +359,8 @@ enum OccBit : uint8_t {
 };
 
 // walls: wallN[i][k] = north edge of cell (i,k) at z=k*CELL; wallW = west edge at x=i*CELL
+struct Rng;
+
 struct ChunkData {
     uint8_t wallN[CCELLS][CCELLS];   // WallKind
     uint8_t wallW[CCELLS][CCELLS];   // WallKind
@@ -409,6 +436,7 @@ struct World {
 
     ChunkData &data(int cx, int cz);
     void generate(ChunkData &d, int cx, int cz);
+    void furnishMotion(ChunkData &d, int cx, int cz, Rng &rng);   // Level 94's hills, houses and rooms
     // The chunk map for storey s (the live one for the storey you are on).
     std::unordered_map<uint64_t, ChunkData> &layer(int s) { return s == storey ? chunks : layers[s]; }
     // Move to storey s. The chunk maps swap rather than regenerate; baked chunks
@@ -526,6 +554,17 @@ struct World {
     // A vending machine that sells snacks: two in three in the theater, none
     // elsewhere.
     bool snackAt(int ci, int ck);
+    // Level 94: the floor of global cell (ci, ck) in elev units, from the hill
+    // field alone (generate stores it in elev).
+    int motionElev(int ci, int ck) const;
+    // Level 94: quarter q's house in chunk (cx, cz) (q & 1 east, q & 2 south),
+    // or false. Reads only the hill field, never a generated chunk.
+    bool motionHouse(int cx, int cz, int q, MotionHouse &h) const;
+    // Level 94: a cell open to the sky, with no ceiling (any cell outside a
+    // house). False on every other level.
+    bool openSky(int ci, int ck);
+    // Level 94: inside a house's walls.
+    bool indoors(int ci, int ck);
     void rebuildChunk(int cx, int cz);           // report its geometry stale (staleChunks)
     // Chunks whose geometry went stale: unloaded (unloadFar, unloadAll) or
     // rebuilt after a wall changed (rebuildChunk). Core only appends; a renderer

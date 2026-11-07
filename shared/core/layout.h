@@ -67,6 +67,7 @@ enum class FixtureKind : uint8_t {
     ManilaRoom,     // the Manila Room's furnishings (Level 0)
     Auditorium,     // an auditorium's fittings: screen frame, curtains, aisle lights, booth port, exit signs (the theater)
     Poster,         // a backlit film poster on a corridor wall (the theater)
+    House,          // a house's plank floor and pitched roof (Level 94)
 };
 
 // One fixture. What each field means depends on the kind:
@@ -84,6 +85,7 @@ enum class FixtureKind : uint8_t {
 // | ManilaRoom            | room centre; y is its ceiling         |                |                    | seed |
 // | Auditorium            | screen centre, on its face            |                |                    | variant: dir (World::auditorium has the rest) |
 // | Poster                | centre, on the face                   |                | half extents       | seed: its colours and layout |
+// | House                 | floor centre; y is its ceiling        |                | half extents, x z  | variant: 1 ridge along z; seed |
 //
 // `normal` points out of the face a fixture is on. A face is the wall's
 // surface, WT off its centreline; decals stand off it by the renderer's own
@@ -103,6 +105,7 @@ enum class FittingGap : uint8_t {
     UnderOpening,   // its tray would overhang an opening to the storey above (occupancy bit 3)
     ManilaRoom,     // inside the Manila Room, which the chandelier lights (uRoomMask)
     Auditorium,     // over an auditorium, which its screen lights (uRoomMask)
+    Unlit,          // a level with no fittings at all (Level 94): every tube is dead
 };
 
 // A light fitting on the level's grid (LevelRules::ls). The static state comes

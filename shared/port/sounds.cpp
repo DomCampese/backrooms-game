@@ -1141,11 +1141,53 @@ Pcm makeCough(int variant)
     return toPcm(d, 0.75f);
 }
 
+// Shoe on grass (Level 94): a heel thud (white noise through a two-pole
+// 140 Hz low-pass, 35/s decay), then the blades: noise through RBJ band-passes
+// at 3.2 kHz and 1.7 kHz (Q 0.7), rising over 15 ms and decaying at 28/s,
+// and the toe's rustle 50-70 ms later at 0.6. No room tail: it is outdoors.
+// Peak 0.62; 0.30 s.
+Pcm makeGrassStep(uint32_t seed)
+{
+    struct Band {
+        float b0, a1, a2, x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+        Band(float f, float q) {
+            float w = TAU * f / SAMPLE_RATE, alpha = sinf(w) / (2.0f * q), a0 = 1.0f + alpha;
+            b0 = alpha / a0;
+            a1 = -2.0f * cosf(w) / a0;
+            a2 = (1.0f - alpha) / a0;
+        }
+        float operator()(float x) {   // b1 = 0, b2 = -b0
+            float y = b0 * x - b0 * x2 - a1 * y1 - a2 * y2;
+            x2 = x1; x1 = x; y2 = y1; y1 = y;
+            return y;
+        }
+    };
+    Rng r((uint64_t)seed * 2000u + 13u);
+    const float toeDelay = 0.05f + r.f01() * 0.02f, detune = 0.9f + r.f01() * 0.2f;
+    const int n = (int)(0.30f * SAMPLE_RATE);
+    Band hiB(3200.0f * detune, 0.7f), midB(1700.0f * detune, 0.7f);
+    const float k = 1.0f - expf(-TAU * 140.0f / SAMPLE_RATE);
+    float thudA = 0, thudB = 0;
+    std::vector<float> d(n);
+    for (int i = 0; i < n; i++) {
+        float t = (float)i / SAMPLE_RATE, tt = t - toeDelay;
+        float x = r.f01() * 2.0f - 1.0f;
+        thudA += k * (x - thudA);
+        thudB += k * (thudA - thudB);
+        float blades = hiB(x) + midB(x) * 0.5f;
+        float heelEnv = (1.0f - expf(-t * 1000.0f)) * expf(-t * 35.0f);
+        float rustle = (1.0f - expf(-t / 0.015f)) * expf(-t * 28.0f);
+        float toe = tt > 0.0f ? 0.6f * (1.0f - expf(-tt / 0.015f)) * expf(-tt * 28.0f) : 0.0f;
+        d[i] = thudB * 9.0f * heelEnv + blades * (rustle + toe);
+    }
+    return toPcm(d, 0.62f);
+}
+
 ClipSpec clipSpec(Sfx sfx) {
     switch (sfx) {
     case Sfx::Step: case Sfx::SwimStroke:
     case Sfx::EntStep: case Sfx::EntStepThrough:
-    case Sfx::StepConcrete: case Sfx::StepTile: case Sfx::StepWood: return { 4, 1.0f, 1.0f };
+    case Sfx::StepConcrete: case Sfx::StepTile: case Sfx::StepWood: case Sfx::StepGrass: return { 4, 1.0f, 1.0f };
     case Sfx::SplashIn: case Sfx::SplashOut:
     case Sfx::FarDoor: case Sfx::FarClang: case Sfx::FarPop:
     case Sfx::FarBoom: case Sfx::FarJingle:
@@ -1217,6 +1259,7 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::Drag:           return makeDrag();
     case Sfx::Exhale:         return makeExhale();
     case Sfx::Cough:          return makeCough(variant);
+    case Sfx::StepGrass:      return makeGrassStep(800 + variant * 31);
     }
     return {};
 }

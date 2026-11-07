@@ -1028,6 +1028,78 @@ Surface makeCasinoWallSurface() {
     return finishSurface(c, 1.0f);
 }
 
+// Level 94's ground: green modelling clay, 2 m repeat. Thumb dents on a
+// jittered 12.5 cm lattice, each with faint fingerprint ridges, short pressed
+// grass strokes between them, and per-pixel grain (the lore's grainy look).
+Surface makeClayGrassSurface() {
+    const int N = 768, CELLPX = 48;
+    Canvas c(N, N, 2.0f, 2.0f);
+    for (int y = 0; y < N; y++) for (int x = 0; x < N; x++) {
+        int i = y * N + x;
+        float fx = (float)x, fy = (float)y;
+        float tone = c.nz(fx, fy, 1.5f, 1.5f, 0x9401u, 3) - 0.5f;
+        float r = 76 + 30 * tone, g = 140 + 34 * tone, b = 56 + 16 * tone;
+        // the nearest thumb dent, over the cell and its neighbours, wrapping
+        float dent = 0, ridges = 0;
+        int cx0 = x / CELLPX, cy0 = y / CELLPX;
+        for (int oy = -1; oy <= 1; oy++) for (int ox = -1; ox <= 1; ox++) {
+            int gx = (cx0 + ox + N / CELLPX) % (N / CELLPX), gy = (cy0 + oy + N / CELLPX) % (N / CELLPX);
+            float px = (gx + 0.2f + 0.6f * lat(gx, gy, 0x9402u)) * CELLPX, py = (gy + 0.2f + 0.6f * lat(gx, gy, 0x9403u)) * CELLPX;
+            float rad = 13.0f + 9.0f * lat(gx, gy, 0x9404u);
+            float dx = wrapd(fx, px, (float)N), dy = wrapd(fy, py, (float)N);
+            float d = sqrtf(dx * dx + dy * dy) / rad;
+            if (d >= 1.0f) continue;
+            float bowl = 1.0f - d * d;
+            if (bowl > dent) { dent = bowl; ridges = 0.5f + 0.5f * sinf(d * rad * 1.3f); }
+        }
+        // grass strokes: one short pressed ridge per 16 px cell, at its own angle
+        const int BL = 16, NB = N / BL;
+        float blade = 0;
+        for (int oy = -1; oy <= 1; oy++) for (int ox = -1; ox <= 1; ox++) {
+            int gx = (x / BL + ox + NB) % NB, gy = (y / BL + oy + NB) % NB;
+            float px = (gx + lat(gx, gy, 0x9405u)) * BL, py = (gy + lat(gx, gy, 0x9406u)) * BL;
+            float a = lat(gx, gy, 0x9408u) * 3.14159f, len = 6.0f + 5.0f * lat(gx, gy, 0x9409u);
+            float dx = wrapd(fx, px, (float)N), dy = wrapd(fy, py, (float)N);
+            float along = dx * cosf(a) + dy * sinf(a), across = -dx * sinf(a) + dy * cosf(a);
+            if (fabsf(along) >= len) continue;
+            blade = std::max(blade, sstep(2.2f, 0.6f, fabsf(across)) * (1.0f - (along / len) * (along / len)));
+        }
+        float grain = lat(x, y, 0x9407u) - 0.5f;
+        float k = 1.0f - 0.16f * dent + 0.10f * blade + 0.07f * grain;
+        r *= k; g *= k; b *= k;
+        c.set(i, r, g, b);
+        c.ht[i] = -0.004f * dent + 0.0003f * dent * ridges + 0.0012f * blade + 0.00025f * grain;
+        c.gl[i] = 0.3f + 0.5f * dent;
+    }
+    c.matchLuma(96.0f);
+    return finishSurface(c, 1.0f);
+}
+
+// Level 94's house walls and ceilings: cream modelling clay smoothed on with a
+// spatula, 3 m repeat. Broad trowel strokes, thumb smudges and grain. No
+// skirting or band at a height, so it tiles on a ceiling too.
+Surface makeClayWallSurface() {
+    const int N = 1024;
+    Canvas c(N, N, 3.0f, 3.0f);
+    for (int y = 0; y < N; y++) for (int x = 0; x < N; x++) {
+        int i = y * N + x;
+        float fx = (float)x, fy = (float)y;
+        float tone = c.nz(fx, fy, 0.8f, 0.8f, 0x9411u, 3) - 0.5f;
+        float r = 222 + 20 * tone, g = 196 + 18 * tone, b = 160 + 14 * tone;
+        // trowel strokes: long smears with a ridge where each one stops
+        float stroke = c.nz(fx, fy, 1.2f, 6.0f, 0x9412u, 2);
+        float edge = sstep(0.04f, 0.0f, fabsf(stroke - 0.55f));
+        float smudge = sstep(0.62f, 0.80f, c.nz(fx, fy, 5.0f, 5.0f, 0x9413u, 2));
+        float grain = lat(x, y, 0x9414u) - 0.5f;
+        float k = 1.0f + 0.05f * (stroke - 0.5f) - 0.06f * smudge + 0.05f * grain;
+        c.set(i, r * k, g * k, b * k);
+        c.ht[i] = 0.0010f * (stroke - 0.5f) + 0.0006f * edge - 0.0005f * smudge + 0.0002f * grain;
+        c.gl[i] = 0.35f + 0.3f * smudge;
+    }
+    c.matchLuma(150.0f);
+    return finishSurface(c, 1.0f);
+}
+
 Surface makeSurface(SurfSlot slot) {
     switch (slot) {
         case SURF_CARPET:    return makeCarpetSurface();
@@ -1046,6 +1118,8 @@ Surface makeSurface(SurfSlot slot) {
         case SURF_CINEMAWALL:   return makeCinemaWallSurface();
         case SURF_CASINOCARPET: return makeCasinoCarpetSurface();
         case SURF_CASINOWALL:   return makeCasinoWallSurface();
+        case SURF_CLAYGRASS:    return makeClayGrassSurface();
+        case SURF_CLAYWALL:     return makeClayWallSurface();
         case SURF_COUNT:     break;
     }
     return {};

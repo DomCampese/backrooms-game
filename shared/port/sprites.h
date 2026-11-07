@@ -10,7 +10,7 @@
 #include <cstdint>
 #include <vector>
 
-enum class SpriteSheet : uint8_t { Clark, Smiler, Partygoer, Usher, Count };
+enum class SpriteSheet : uint8_t { Clark, Smiler, Partygoer, Usher, Animation, Count };
 
 struct ActorSprite {
     SpriteSheet sheet;

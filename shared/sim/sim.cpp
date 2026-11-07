@@ -30,6 +30,7 @@ void Sim::step(const InputFrame &in, float dt, double now) {
     observation.observationCos = portableCos(in.screenFov * 0.00872664626f);
     updateMannequin(observation, dt, now);
     updatePartyMusic(dt);
+    updateSky(dt);
     updateEntity(dt, now, in.forceSpawn);
     updateUsher(dt, now);
     updateSlots(dt);
@@ -183,9 +184,12 @@ void Sim::applyLevel(int lv, double now) {
     world.storeyH = c.storeyH;
     world.storey = world.qs = 0;       // every level begins on its storey 0
     storeyNoted = false;
-    ambience.humLevel = lv == 0 ? 1.0f : lv == LEVEL_FUN ? 0.5f : lv == 2 ? 0.035f : 0.15f;
+    ambience.humLevel = lv == 0 ? 1.0f : lv == LEVEL_FUN ? 0.5f : lv == 2 ? 0.035f : lv == MOTION ? 0.0f : 0.15f;
     ambience.droneLevel = lv == 1 ? 1.0f : 0.0f;
-    nextBlackout = lv == 2 ? BLACKOUT_NEVER : blackoutIn(now, 30, 60);   // no blackouts in the Poolrooms
+    nextBlackout = !hasBlackouts() ? BLACKOUT_NEVER : blackoutIn(now, 30, 60);   // none in the Poolrooms or Level 94
+    sky = Sky{};
+    sky.t = ARRIVE_AT;
+    stopPose = StopPose{};
     blackoutEnd = -1;
     mannequin = {};
     mannequin.nextSpawn = now + 150;
@@ -290,9 +294,11 @@ AudioEvent &Sim::play(Sfx sfx, int variant) {
 void Sim::stopVoice() { audioEvent(AudioEvent::VOICE_STOP); }
 
 void Sim::updateDevKeys(const DevKeys &dev, double now) {
-    if (dev.blackout) {
+    if (dev.blackout && level == MOTION) {   // Level 94 has no blackouts: on to the next dusk or dawn
+        sky.t = sky.night ? DAY_TIME + DUSK_TIME + NIGHT_TIME : DAY_TIME;
+    } else if (dev.blackout) {
         blackoutEnd = now + 3.0 + grng.f01() * 3.0;
-        nextBlackout = level == 2 ? BLACKOUT_NEVER : blackoutIn(blackoutEnd, 45, 75);
+        nextBlackout = !hasBlackouts() ? BLACKOUT_NEVER : blackoutIn(blackoutEnd, 45, 75);
     }
     if (dev.spawnAhead && level == THEATER) {
         Vec2 spot = world.findOpenSpot(px + f2x * 9, pz + f2z * 9);

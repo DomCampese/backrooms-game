@@ -2,6 +2,7 @@
 #include "world.h"
 #include "hash.h"
 #include "level_rules.h"
+#include "portable_math.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -788,6 +789,7 @@ void World::generate(ChunkData &d, int cx, int cz) {
         }
     }
     if (level == CASINO) furnishCasino(d, ih(cx, cz, sseed() ^ 0xCA51u), rng);
+    if (level == MOTION) furnishMotion(d, cx, cz, rng);
     if (level == THEATER) {
         clearPatch(d);
         // The edge between two neighbouring cells.
@@ -892,6 +894,16 @@ void World::generate(ChunkData &d, int cx, int cz) {
             const int screenWall[4] = { t, AUD_BACKSTAGE - 1, t, AUD_BACKSTAGE };
             for (const auto &sd : sides) protectEdge(d, sd);
             if (t > 0 && t < m) protectEdge(d, screenWall);
+        }
+    }
+    // Level 94: every cell outside a house is open to the sky. Marked here,
+    // after vflag is cleared above.
+    if (level == MOTION) {
+        for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) d.vflag[i][kk] = VF_OPENUP;
+        for (int q = 0; q < 4; q++) {
+            MotionHouse hs;
+            if (!motionHouse(cx, cz, q, hs)) continue;
+            for (int i = hs.i0; i <= hs.i1; i++) for (int kk = hs.k0; kk <= hs.k1; kk++) d.vflag[i][kk] = 0;
         }
     }
     // ---- the Manila Room. Stamped before the connectivity flood so the flood
@@ -1043,7 +1055,8 @@ void World::generate(ChunkData &d, int cx, int cz) {
     // leave its key within 6 cells. The key goes on the side already reachable, which
     // only the flood can tell, so both are stored in the chunk. A lock may strand at
     // most CLOSET_MAX cells (a closet) or nothing (a shortcut).
-    if (level != 2 && (hash64(k ^ 0x10CCEDULL ^ (uint64_t)sseed()
+    // Level 94 has none: a house locked at nightfall is a trap.
+    if (level != 2 && level != MOTION && (hash64(k ^ 0x10CCEDULL ^ (uint64_t)sseed()
                 ^ ((uint64_t)visit * 0x9E3779B97F4A7C15ULL)) % 3) == 0) {
         auto solidCell = [&](int x, int z) { return d.pillar[x][z] != 0 || d.prop[x][z] != PROP_NONE ||
                                                 (d.vflag[x][z] & VF_NOWALK) != 0; };
@@ -1123,8 +1136,23 @@ void World::generate(ChunkData &d, int cx, int cz) {
     // next.
     // The theater's auditorium walls are protected, so only its lobbies can
     // take an exit: it tries four times as often.
-    if (hash64(k ^ 0xE717ULL ^ (uint64_t)sseed()) % (exitTest ? 1 : level == THEATER ? 4 : 16) == 0) {
+    // Level 94's walls are few, so it tries twice as often, and puts the exit
+    // in a house's back wall where it can: the window opposite the door.
+    if (hash64(k ^ 0xE717ULL ^ (uint64_t)sseed()) % (exitTest ? 1 : level == THEATER ? 4 : level == MOTION ? 8 : 16) == 0) {
         bool placed = false;
+        for (int q = 0; q < 4 && !placed; q++) {
+            MotionHouse hs;
+            if (!motionHouse(cx, cz, q, hs)) continue;
+            const int mi = (hs.i0 + hs.i1 + 1) / 2, mk = (hs.k0 + hs.k1 + 1) / 2;
+            const int back = (hs.door + 2) & 3;
+            const int ei = back == 1 ? hs.i1 + 1 : back == 3 ? hs.i0 : mi;
+            const int ek = back == 0 ? hs.k0 : back == 2 ? hs.k1 + 1 : mk;
+            const bool west = back == 1 || back == 3;
+            (west ? d.wallW : d.wallN)[ei][ek] = WALL_EXIT;
+            const int oi = west ? ei - 1 : ei, ok = west ? ek : ek - 1;   // the cells either side
+            d.prop[ei][ek] = d.prop[oi][ok] = PROP_NONE;
+            placed = true;
+        }
         for (int i = 1; i < CCELLS - 1 && !placed; i++)
             for (int kk = 1; kk < CCELLS && !placed; kk++)
                 if (d.wallN[i][kk] == WALL_SOLID && d.wallN[i - 1][kk] == WALL_SOLID &&
@@ -1173,7 +1201,9 @@ void World::generate(ChunkData &d, int cx, int cz) {
             if (d.wallW[i][kk] == WALL_DOOR) d.wallW[i][kk] = WALL_NONE;
         }
     }
-    if (cx == 0 && cz == 0 && level != 2 && qs == 0) {   // clear spawn room (you wake on storey 0)
+    // Level 94's hills and houses are a function of position alone; clearing
+    // a patch would leave a pit in a valley and half a house.
+    if (cx == 0 && cz == 0 && level != 2 && level != MOTION && qs == 0) {   // clear spawn room (you wake on storey 0)
         for (int i = 5; i <= 10; i++) for (int kk = 5; kk <= 10; kk++) {
             d.wallN[i][kk] = d.wallW[i][kk] = d.pillar[i][kk] = d.prop[i][kk] = d.pool[i][kk] = 0;
             d.elev[i][kk] = 0;
@@ -1257,6 +1287,119 @@ bool World::audAt(int ci, int ck, int &u, int &v) {
 
 bool World::snackAt(int ci, int ck) {
     return level == THEATER && propAt(ci, ck) == PROP_VENDING && ih(ci, ck, sseed() ^ 0x5AC1u) % 3 != 0;
+}
+
+// Two wave trains: a checker of hills and valleys, and a ridge on the
+// diagonal. Their slope is at most 0.3 * MOTION_WAVE_A + 0.2 * MOTION_WAVE_B
+// of the field per cell, so with the plateau and MOTION_VALLEY it is under
+// 2.9 units per cell, and rounding keeps a step within MAX_STEP_UNITS.
+int World::motionElev(int ci, int ck) const {
+    const uint32_t h = ih((int)visit, MOTION, sseed() ^ 0x9411u);
+    const float p1 = (h & 1023) * (TAU / 1024), p2 = ((h >> 10) & 1023) * (TAU / 1024), p3 = ((h >> 20) & 1023) * (TAU / 1024);
+    const float u = 0.5f + 0.5f * portableSin(ci * MOTION_WAVE_A + p1) * portableSin(ck * MOTION_WAVE_A + p2);
+    const float v = 0.5f + 0.5f * portableSin((ci + ck) * MOTION_WAVE_B + p3);
+    const float t = (0.6f * u + 0.4f * v - MOTION_PLATEAU) / (1.0f - MOTION_PLATEAU);
+    if (t <= 0) return 0;
+    return -(int)floorf(t * MOTION_VALLEY + 0.5f);
+}
+
+bool World::motionHouse(int cx, int cz, int q, MotionHouse &out) const {
+    if (level != MOTION) return false;
+    const uint32_t h = ih(cx * 2 + (q & 1), cz * 2 + (q >> 1), sseed() ^ 0x40A5Eu ^ (visit * 0x9E3779B1u));
+    if (h % 10 >= MOTION_HOUSE_TENTHS) return false;
+    const int w = 4 + (int)((h >> 4) & 1), dep = 4 + (int)((h >> 5) & 1);
+    const int qx = (q & 1) * (CCELLS / 2), qz = (q >> 1) * (CCELLS / 2);
+    // Inside the quarter with a cell of margin on every side, so two houses
+    // never touch and every door opens onto grass.
+    const int i0 = qx + 1 + (int)((h >> 6) % (uint32_t)(7 - w)), k0 = qz + 1 + (int)((h >> 9) % (uint32_t)(7 - dep));
+    for (int i = i0 - 1; i <= i0 + w; i++)
+        for (int k = k0 - 1; k <= k0 + dep; k++)
+            if (motionElev(cx * CCELLS + i, cz * CCELLS + k) != 0) return false;
+    out = { i0, k0, i0 + w - 1, k0 + dep - 1, (int)((h >> 12) & 3), h };
+    return true;
+}
+
+bool World::openSky(int ci, int ck) {
+    return level == MOTION && (vflagAt(ci, ck) & VF_OPENUP) != 0;
+}
+
+bool World::indoors(int ci, int ck) {
+    return level == MOTION && !(vflagAt(ci, ck) & VF_OPENUP);
+}
+
+// Level 94's chunk: the hill field, a house on each quarter that has a level
+// site for one, and on the slopes a few walls of a house with nothing round
+// them, a piece of furniture beside each, or a roofless room.
+void World::furnishMotion(ChunkData &d, int cx, int cz, Rng &rng) {
+    memset(d.wallN, 0, sizeof(d.wallN));
+    memset(d.wallW, 0, sizeof(d.wallW));
+    memset(d.pillar, 0, sizeof(d.pillar));
+    memset(d.prop, 0, sizeof(d.prop));
+    memset(d.propRot, 0, sizeof(d.propRot));
+    for (int i = 0; i < CCELLS; i++)
+        for (int k = 0; k < CCELLS; k++) d.elev[i][k] = (int8_t)motionElev(cx * CCELLS + i, cz * CCELLS + k);
+    bool taken[CCELLS][CCELLS] = {};   // houses with their margin, and placed rooms
+    auto claim = [&](int i0, int k0, int i1, int k1) {
+        for (int i = std::max(0, i0); i <= std::min(CCELLS - 1, i1); i++)
+            for (int k = std::max(0, k0); k <= std::min(CCELLS - 1, k1); k++) taken[i][k] = true;
+    };
+    auto furnish = [&](int i, int k, uint8_t rot) {
+        static const PropKind KINDS[6] = { PROP_COUCH, PROP_CABINET, PROP_TABLE, PROP_SHELVING, PROP_PLANT, PROP_BOXES };
+        d.prop[i][k] = KINDS[rng.ri(0, 5)];
+        d.propRot[i][k] = rot;
+    };
+    // The four walls of cells i0..i1, k0..k1, solid with a window halfway
+    // along each side and a door in side `door` (-1 for none).
+    auto walls = [&](int i0, int k0, int i1, int k1, int door, bool windows) {
+        for (int i = i0; i <= i1; i++) { d.wallN[i][k0] = WALL_SOLID; d.wallN[i][k1 + 1] = WALL_SOLID; }
+        for (int k = k0; k <= k1; k++) { d.wallW[i0][k] = WALL_SOLID; d.wallW[i1 + 1][k] = WALL_SOLID; }
+        const int mi = (i0 + i1 + 1) / 2, mk = (k0 + k1 + 1) / 2;
+        uint8_t *mid[4] = { &d.wallN[mi][k0], &d.wallW[i1 + 1][mk], &d.wallN[mi][k1 + 1], &d.wallW[i0][mk] };
+        for (int s = 0; s < 4; s++) *mid[s] = s == door ? WALL_DOOR : windows ? WALL_WINDOW : WALL_SOLID;
+    };
+    for (int q = 0; q < 4; q++) {
+        MotionHouse hs;
+        if (!motionHouse(cx, cz, q, hs)) continue;
+        claim(hs.i0 - 1, hs.k0 - 1, hs.i1 + 1, hs.k1 + 1);
+        walls(hs.i0, hs.k0, hs.i1, hs.k1, hs.door, true);
+        // Furniture against the side walls, clear of the door's cell.
+        for (int i = hs.i0; i <= hs.i1; i++)
+            for (int k = hs.k0; k <= hs.k1; k++) {
+                const bool wallN = k == hs.k0, wallS = k == hs.k1, wallW = i == hs.i0, wallE = i == hs.i1;
+                if (!(wallN || wallS || wallW || wallE) || rng.f01() > 0.30f) continue;
+                const int mi = (hs.i0 + hs.i1 + 1) / 2, mk = (hs.k0 + hs.k1 + 1) / 2;
+                const bool byDoor = (hs.door == 0 && wallN && abs(i - mi) <= 1) || (hs.door == 2 && wallS && abs(i - mi) <= 1)
+                                 || (hs.door == 3 && wallW && abs(k - mk) <= 1) || (hs.door == 1 && wallE && abs(k - mk) <= 1);
+                if (byDoor) continue;
+                furnish(i, k, wallN ? 2 : wallS ? 0 : wallW ? 1 : 3);   // facing into the room
+            }
+    }
+    const int pieces = 1 + rng.ri(0, 2);
+    for (int n = 0; n < pieces; n++) {
+        const bool room = rng.f01() < 0.4f;
+        const int span = room ? 3 : 2 + rng.ri(0, 1);
+        const int i0 = rng.ri(2, CCELLS - 3 - span), k0 = rng.ri(2, CCELLS - 3 - span);
+        bool clear = true;
+        for (int i = i0 - 1; i <= i0 + span && clear; i++)
+            for (int k = k0 - 1; k <= k0 + span && clear; k++) clear = !taken[i][k];
+        if (!clear) continue;
+        claim(i0 - 1, k0 - 1, i0 + span, k0 + span);
+        if (room) {
+            // Drawn one per statement: argument order differs between compilers.
+            const int door = rng.ri(0, 3);
+            const bool windows = rng.f01() < 0.5f;
+            walls(i0, k0, i0 + 2, k0 + 2, door, windows);
+            furnish(i0 + 1, k0 + 1, (uint8_t)rng.ri(0, 3));
+        } else if (rng.next() & 1) {   // a wall along x with something standing in front of it
+            for (int i = i0; i < i0 + span; i++) d.wallN[i][k0] = WALL_SOLID;
+            if (span == 3 && (rng.next() & 1)) d.wallN[i0 + 1][k0] = WALL_WINDOW;
+            furnish(i0 + rng.ri(0, span - 1), k0, 2);
+        } else {                        // the same along z
+            for (int k = k0; k < k0 + span; k++) d.wallW[i0][k] = WALL_SOLID;
+            if (span == 3 && (rng.next() & 1)) d.wallW[i0][k0 + 1] = WALL_WINDOW;
+            furnish(i0, k0 + rng.ri(0, span - 1), 1);
+        }
+    }
 }
 
 bool World::keyAt(int ci, int ck) {
@@ -1344,6 +1487,9 @@ float World::ceilY(int ci, int ck) {
     ChunkData &d = data(cx, cz);
     int li = ci - cx * CCELLS, lk = ck - cz * CCELLS;
     if (storeyH > 0.0f && (d.vflag[li][lk] & VF_OPENUP)) return storeyH;
+    // Level 94's sky: no ceiling, and its walls stand wallH over the floor they
+    // are on, down in a valley too.
+    if (level == MOTION && (d.vflag[li][lk] & VF_OPENUP)) return d.elev[li][lk] * ELEV_UNIT + wallH;
     return std::max(d.elev[li][lk] * ELEV_UNIT, 0.0f) + wallH;
 }
 

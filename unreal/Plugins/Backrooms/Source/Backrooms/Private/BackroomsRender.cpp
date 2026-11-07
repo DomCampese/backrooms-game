@@ -44,13 +44,15 @@ EMat MatOfSlot(int32 Slot)
 
 // The sheets the billboards are cut from, by ShapeTex.
 const TCHAR* const SheetNames[(int32)ShapeTex::Count] = {
-	TEXT("particle"), TEXT("particle"), TEXT("clark"), TEXT("smiler"), TEXT("smiler_glow"), TEXT("partygoer"), TEXT("usher"),
+	TEXT("particle"), TEXT("particle"), TEXT("clark"), TEXT("smiler"), TEXT("smiler_glow"), TEXT("partygoer"), TEXT("usher"), TEXT("animation"),
 };
 
-// The colour raylib clears the scene to: the Poolrooms' haze, black elsewhere.
-FLinearColor ClearColour(int32 Level)
+// The colour raylib clears the scene to (clearColour): the Poolrooms' haze,
+// Level 94's sky, black elsewhere.
+FLinearColor ClearColour(int32 Level, float Blackout)
 {
-	return Level == 2 ? FLinearColor(48 / 255.0f, 70 / 255.0f, 66 / 255.0f, 1.0f) : FLinearColor::Black;
+	const Vec3 C = clearColour(Level, Blackout);
+	return FLinearColor(C.x, C.y, C.z, 1.0f);
 }
 
 FLinearColor V(const Vec3& A, float W = 0.0f) { return FLinearColor(A.x, A.y, A.z, W); }
@@ -375,7 +377,7 @@ void UBackroomsRender::Frame(UWorld* Where, const FrameLight& L, const Vec3& Vie
 	PostWater = Water;
 	PostMigraine = Migraine;
 	PostTime = L.time;
-	P->SetVectorParameterValue(TEXT("Clear"), ClearColour(Level));
+	P->SetVectorParameterValue(TEXT("Clear"), ClearColour(Level, L.blackout));
 	P->SetVectorParameterValue(TEXT("Quality"),
 		FLinearColor((float)(int32)GetDefault<UBackroomsSettings>()->LightQuality, 0.0f, 0.0f, 0.0f));
 }

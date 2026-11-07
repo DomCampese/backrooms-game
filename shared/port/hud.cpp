@@ -224,7 +224,8 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
     }
     if (sim.killT > 0) {
         float a = clampf(sim.killT / 3.0f, 0, 1);
-        const char *t = (sim.level == LEVEL_FUN) ? "THE PARTYGOER IS DOWN" : sim.clarkLevel() ? "PIRATE CLARK IS DOWN" : "THE SMILER IS DOWN";
+        const char *t = (sim.level == LEVEL_FUN) ? "THE PARTYGOER IS DOWN" : sim.clarkLevel() ? "PIRATE CLARK IS DOWN"
+                      : sim.level == MOTION ? "THE ANIMATION IS DOWN" : "THE SMILER IS DOWN";
         textC(t, sw / 2, sh / 2 - hud(96), hud(44), fade({ 205, 60, 40, 255 }, a));
         textC(fmt("...but nothing stays down, down here   ·   %d put down", sim.killCount), sw / 2, sh / 2 - hud(44),
               hud(18), fade({ 150, 122, 100, 255 }, a * 0.9f));
@@ -249,6 +250,14 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         else if (!sim.music.playing)
             textC("the music stopped · stand still", sw / 2, sh - hud(190), hud(18),
                   fade({ 236, 214, 160, 220 }, fminf(1.0f, sim.music.stopped * 3.0f)));
+    }
+    if (sim.level == MOTION && sim.deathT <= 0 && sim.winT <= 0) {   // Level 94's night
+        const float toDusk = Sim::DAY_TIME - sim.sky.t;
+        if (sim.sky.night)
+            textC(sim.sheltered ? "night · indoors, it cannot find you" : "night · the Animations are out · get indoors",
+                  sw / 2, sh - hud(190), hud(18), sim.sheltered ? Rgba{ 200, 190, 160, 200 } : Rgba{ 230, 150, 120, 230 });
+        else if (toDusk > 0 && toDusk < 20.0f)
+            textC("the sun is going down", sw / 2, sh - hud(190), hud(18), fade({ 236, 214, 160, 220 }, fminf(1.0f, (20.0f - toDusk) / 2.0f)));
     }
     if (sim.deckNoteT > 0 && sim.winT <= 0 && sim.deathT <= 0) {   // a tape deck message
         float a = clampf(sim.deckNoteT > 2.0f ? (2.6f - sim.deckNoteT) / 0.6f : sim.deckNoteT / 1.2f, 0, 1);
@@ -397,6 +406,9 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
     if (sim.hidden && sim.hideBreakT > 0) {   // hidden, but moving too fast
         coverLine = "[ hidden · you're giving it away ]";
         coverCol = { 228, 196, 128, 200 };
+    } else if (sim.sheltered) {   // Level 94: a house hides the player whatever they do
+        coverLine = "[ indoors ]";
+        coverCol = { 220, 200, 160, 150 };
     } else if (sim.hidden) {
         coverLine = "[ hidden · hold still ]";
     } else if (sim.nearCover) {   // next to cover, but moving too fast to hide

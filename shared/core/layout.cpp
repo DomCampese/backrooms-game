@@ -26,6 +26,7 @@ const LevelDecor DECOR[NLEVELS] = {
     { true,  true,  false, false, false, true,  false },   // LEVEL FUN
     { true,  true,  false, false, false, false, true  },   // the theater
     { true,  false, false, false, false, false, false },   // the casino
+    { false, false, false, false, false, false, false },   // Level 94
 };
 // One wall edge in POSTER_RATE facing a corridor carries a poster.
 constexpr uint32_t POSTER_RATE = 3;
@@ -402,6 +403,7 @@ LightFitting fittingFor(World &w, const ChunkData &d, int cx, int cz, int gx, in
         float a0 = AUD_LO * CELL, a1 = (AUD_LO + AUD_N) * CELL;
         if (lx > wx + a0 && lx < wx + a1 && lz > wz + a0 && lz < wz + a1) f.gap = FittingGap::Auditorium;
     }
+    if (w.level == MOTION) f.gap = FittingGap::Unlit;
     if (f.gap == FittingGap::None && w.storeyH > 0.0f) {
         int ci = (int)floorf(lx / CELL + 0.5f), ck = (int)floorf(lz / CELL + 0.5f);   // the corner it is centred on
         if ((w.vflagAt(ci, ck) | w.vflagAt(ci - 1, ck) | w.vflagAt(ci, ck - 1) | w.vflagAt(ci - 1, ck - 1))
@@ -446,6 +448,7 @@ bool cellHasFloor(World &w, int gi, int gk) {
 }
 
 bool cellHasCeiling(World &w, int gi, int gk) {
+    if (w.level == MOTION) return !w.openSky(gi, gk);
     return w.storeyH <= 0.0f || !(w.vflagAt(gi, gk) & VF_OPENUP);
 }
 
@@ -529,6 +532,19 @@ ChunkLayout chunkLayout(World &w, int cx, int cz) {
         f.normal = aud.normal;
         f.variant = (uint8_t)aud.dir;
         f.seed = aud.seed;
+        L.fixtures.push_back(f);
+    }
+    for (int q = 0; q < 4; q++) {
+        MotionHouse hs;
+        if (!w.motionHouse(cx, cz, q, hs)) continue;
+        Fixture f;
+        f.kind = FixtureKind::House;
+        f.w = (hs.i1 - hs.i0 + 1) * CELL * 0.5f;
+        f.h = (hs.k1 - hs.k0 + 1) * CELL * 0.5f;
+        const float hx = cx * CHUNK + hs.i0 * CELL + f.w, hz = cz * CHUNK + hs.k0 * CELL + f.h;
+        f.pos = { hx, w.ceilY(cellOf(hx), cellOf(hz)), hz };
+        f.variant = f.h > f.w ? 1 : 0;   // the ridge runs the long way
+        f.seed = hs.seed;
         L.fixtures.push_back(f);
     }
     if (decor.streamers) streamers(w, cx, cz, L.fixtures);
