@@ -235,13 +235,31 @@ struct Sim {
     // dims the sky to NIGHT_LIGHT of the day's light (blackoutCur). The
     // Animation is out only at night, starting NIGHT_SPAWN s after dark, and
     // a player inside a house is hidden from it.
-    static constexpr float DAY_TIME = 150.0f, DUSK_TIME = 14.0f, NIGHT_TIME = 80.0f, DAWN_TIME = 14.0f;
-    static constexpr float ARRIVE_AT = 60.0f;
-    static constexpr float NIGHT_LIGHT = 0.16f;
+    static constexpr float DAY_TIME = 120.0f, DUSK_TIME = 12.0f, NIGHT_TIME = 100.0f, DAWN_TIME = 12.0f;
+    static constexpr float ARRIVE_AT = 50.0f;
+    static constexpr float NIGHT_LIGHT = 0.03f;
     static constexpr float NIGHT_SPAWN = 6.0f;
+    // At night the Animations are plentiful: one that loses the player is
+    // back within NIGHT_RETURN s.
+    static constexpr float NIGHT_RETURN = 10.0f;
     // The Animation is drawn STOP_MOTION_FPS poses a second, as a stop-motion
-    // figure is shot; its position in the sim moves smoothly.
-    static constexpr float STOP_MOTION_FPS = 8.0f;
+    // figure is shot, each pose nudged up to POSE_JITTER m as a hand-moved
+    // model is; its position in the sim moves smoothly. Each new pose clicks
+    // like a camera's shutter, heard SHUTTER_HEAR m away.
+    static constexpr float STOP_MOTION_FPS = 6.0f;
+    static constexpr float POSE_JITTER = 0.05f;
+    static constexpr float SHUTTER_HEAR = 18.0f;
+    // Waiting outside a house it knocks on the walls every KNOCK_GAP..+0.8 s.
+    static constexpr float KNOCK_GAP = 1.1f;
+    // A bed (PROP_BED) within BED_REACH m of its cell's centre: E sleeps in it
+    // at night, with nothing hunting nearby, fading out over SLEEP_FADE s and
+    // waking at dawn, healed, with SLEEP_SANITY back.
+    static constexpr float BED_REACH = 1.6f;
+    static constexpr float SLEEP_FADE = 2.5f;
+    static constexpr float SLEEP_SANITY = 0.3f;
+    // An almond water truck's hatch is in reach within TRUCK_REACH m of either
+    // of its cells' centres.
+    static constexpr float TRUCK_REACH = 2.0f;
     // The casino's slot machines (casino.cpp). A spin costs SLOT_COST, the
     // reels run SLOT_SPIN s, and the hunter hears them SLOT_NOISE m from the
     // machine while they do. The prize is drawn at the pull from slotRng. A
@@ -402,7 +420,17 @@ struct Sim {
     struct StopPose {
         float x = 0, z = 0, y = 0, gait = 0;
         float t = 0;   // s since that frame
+        uint32_t frame = 0;   // poses taken: the hash of the jitter
     } stopPose;
+    float knockT = 0;                // s to the Animation's next knock on a house
+    float knockedT = 0;              // s since it last knocked, for the HUD
+    float sleepT = 0;                // s into falling asleep; 0 awake
+    float wakeT = 0;                 // s of waking up left, for the HUD's fade back in
+    bool bedNear = false;            // a bed is in reach of the use key, for the HUD
+    // Level 94's almond water trucks, by their cab's cell: each gives one can
+    // a visit. truckNear: one with a can left is in reach, for the HUD.
+    std::unordered_set<uint64_t> trucksServed;
+    bool truckNear = false;
     bool sheltered = false;          // Level 94: inside a house, where the Animation cannot find you
     Rng slotRng{1};                  // its own stream, so the casino does not shift grng
     bool slotNear = false;           // a slot machine is in reach of the use key, for the HUD
@@ -486,6 +514,11 @@ struct Sim {
     bool hasBlackouts() const { return level != 2 && level != MOTION; }
     bool hunterAsleep() const { return level == 2 || (level == MOTION && !sky.night); }
     void updateStopPose(float dt);
+    bool bedInReach();
+    bool truckInReach(int &cabI, int &cabK);   // the truck in reach of the use key, by its cab's cell
+    void takeFromTruck(int cabI, int cabK);
+    void trySleep();
+    void updateSleep(float dt);
     void updateDevKeys(const DevKeys &dev, double now);
     void updateWeapons(const InputFrame &in, float dt, double now);
     void updateBullets(float dt);

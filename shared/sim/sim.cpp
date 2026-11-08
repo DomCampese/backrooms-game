@@ -8,8 +8,15 @@ void Sim::step(const InputFrame &in, float dt, double now) {
     // The pre-placed marks are laid the tick after arrival: applyLevel runs
     // before a transition moves the player, so px/pz are still the old level's.
     if (chalkSeedPending) { seedStrangerChalk(); chalkSeedPending = false; }
-    updateLook(in);
-    updateMovement(in, dt, now);
+    // Asleep (Level 94's beds) the player neither looks round nor moves.
+    InputFrame still = in;
+    if (sleepT > 0) {
+        still.forward = still.back = still.left = still.right = false;
+        still.jumpPressed = still.jumpHeld = still.sprint = false;
+        still.look = {};
+    }
+    updateLook(still);
+    updateMovement(still, dt, now);
     updateBreath(dt, now);
     updateDevKeys(in.dev, now);
     updateWeapons(in, dt, now);
@@ -31,6 +38,7 @@ void Sim::step(const InputFrame &in, float dt, double now) {
     updateMannequin(observation, dt, now);
     updatePartyMusic(dt);
     updateSky(dt);
+    updateSleep(dt);
     updateEntity(dt, now, in.forceSpawn);
     updateUsher(dt, now);
     updateSlots(dt);
@@ -190,6 +198,7 @@ void Sim::applyLevel(int lv, double now) {
     sky = Sky{};
     sky.t = ARRIVE_AT;
     stopPose = StopPose{};
+    sleepT = wakeT = 0; knockT = 0; knockedT = 1e3f; bedNear = false;
     blackoutEnd = -1;
     mannequin = {};
     mannequin.nextSpawn = now + 150;
@@ -208,7 +217,7 @@ void Sim::applyLevel(int lv, double now) {
     if (!weaponAvailable(weapon)) weapon = WEAPON_HANDS;
     distantRng = Rng(hash64((uint64_t)world.seed ^ ((uint64_t)lv << 40) ^ ((uint64_t)world.visit << 48) ^ 0xD157A47ULL));
     nextDistant = now + DISTANT_LEAD + distantRng.f01() * DISTANT_SPAN;
-    taken.clear(); coinsWorld.clear();
+    taken.clear(); coinsWorld.clear(); trucksServed.clear();
     // Chalk is kept per level for the whole descent; beginDescent clears it.
     chalkSeedPending = !chalkSeeded[lv];
     // Left set, a Manila Room on the previous level would keep restoring sanity here.

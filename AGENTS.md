@@ -2018,25 +2018,80 @@ level you reach: the theater's exits lead to it and its exits lead to the
 casino. Grass hills under an open sky, houses in towns on the level hilltops,
 and the Animation at night.
 
-- **The hills are `World::motionElev`**, a pure function of the cell (two
-  sine wave trains, `MOTION_WAVE_A` and `_B`, through `portableSin`), so
-  chunks agree at seams with no neighbour read. Below `MOTION_PLATEAU` of the
-  field is level hilltop at 0; the rest falls to -`MOTION_VALLEY` (2.4 m).
-  The slope keeps every step under `MAX_STEP_UNITS` (at most 3 units over 3
-  seeds, 192 x 192 cells each); the regression checks every edge. All floors are 0 or
-  lower, so no ceiling moves up.
+- **The hills are `World::motionHeight(u, v)`**, a pure function of a point
+  in cells (two sine wave trains, `MOTION_WAVE_A` and `_B`, through
+  `portableSin`, over the bare `seed`), so chunks agree at seams with no
+  neighbour read. Below `MOTION_PLATEAU` of the field is level hilltop at 0;
+  the rest falls to -`MOTION_VALLEY` (40 units, 4 m).
+  - **They are slopes, not terraces.** `groundAt` and `floorY` read
+    `motionHeight` itself on a sky cell (`World::onHill`), and the mesher
+    draws each sloped cell as 2 x 2 quads on it (`FloorKind::Hill`); a flat
+    cell is one quad. `elev` (`motionElev`, the height at the cell centre,
+    rounded) is still stored, for `canStep`, the pathfinder and mapdump.
+    `risersOf` draws no risers on Level 94.
+  - The slope keeps every step between cell centres under `MAX_STEP_UNITS`;
+    the regression checks every edge, and that the ground along a line never
+    jumps more than 5 cm in 10 cm (cells with furniture are skipped: a body
+    stands on a table's top). All floors are 0 or lower, so no ceiling moves
+    up.
 - **Houses are `World::motionHouse(cx, cz, q)`**, one per chunk quarter at
   most, placed only where the house and a cell of margin are hilltop. It reads
-  the hill field, never a generated chunk, so the generator, the layout (the
-  `FixtureKind::House` fixture: plank floor and pitched roof) and the sim
-  (`World::indoors`) agree. About one house per two chunks, clustered on the
-  hilltops.
-- **The sky is `VF_OPENUP` on every cell outside a house**, set after the
-  storeys pass clears `vflag`. `cellHasCeiling` is false there and `ceilY` is
-  the cell's own floor plus `wallH` (down in a valley too), so walls stand
-  3 m over the floor they are on. Every other reader of `VF_OPENUP` is gated
-  on `storeyH > 0`, which is 0 here. `World::openSky` and `World::indoors`
-  are false on every other level.
+  the hill field and the bare `seed` (not `sseed()`, which differs per
+  storey), never a generated chunk, so the generator, the layout (the
+  `FixtureKind::House` fixture) and the sim (`World::indoors`) agree on every
+  storey. About one house per two chunks, clustered on the hilltops.
+- **The first house in a chunk may have two storeys** (`MotionHouse::storeys`,
+  `MOTION_TALL` 6 cells square, three in five where the site is flat). Level
+  94 uses Level 0's storey machinery: `storeyH` is 3.0 (24 risers of 125 mm),
+  and `pairFeature` returns a `VK_STAIRWELL` inside the house, a cell clear of
+  its walls (the stamp's margin clears interior walls only, so the house
+  walls on the margin's outer edges survive). Storey 1 is
+  `furnishMotionUpstairs`: the upper floor's walls, a window on each side, two
+  beds, a cabinet and a shelf in the column beside the stairwell's margin.
+  Every other storey-1 cell is `VF_HOLE | VF_OPENUP | VF_NOWALK`, a hole down
+  to the ground. About 27 tall houses in 144 chunks at seed 1337.
+- **The storey changes only on the stairwell's flights** (`VF_STAIR` or
+  `VF_WALKHOLE` under the player). On Level 0 any point above the midpoint
+  changes it; here a jump off a cabinet passes 1.6 m. The Animation never
+  follows the player up the stairs.
+- **Another storey shows everywhere, not through openings.** Level 94 is open
+  to the sky, so `streamChunks` streams storey 1 for every chunk in the rings
+  with a tall house (from the ground) or storey 0 for every chunk (from
+  upstairs), and `visibleChunks` considers the other storey in every chunk
+  round the view. Without it, a tall house's upper floor and roof were drawn
+  only from inside its stairwell.
+- **The sky is `VF_OPENUP` without `VF_KEEP`**, set after the storeys pass
+  on every cell outside a house. A stairwell's own cells are open above too,
+  but the stamp marks them and their margin `VF_KEEP`, so `openSky` and
+  `indoors` tell them apart. `ceilY` on a sky cell is its own floor plus
+  `wallH` (down in a valley too); on a stairwell cell it is `storeyH`, as on
+  Level 0. `World::openSky` and `World::indoors` are false on every other
+  level.
+- **The house's outside is built from the layout's openings** (`addHouse` in
+  chunk_mesh.cpp gets the `ChunkLayout`): clapboards in one of six pastels
+  (`HOUSE_PAINT`, the lore's pastel cardboard houses) with gaps cut round each
+  window and door, white frames, shutters, flower boxes under ground-floor
+  windows, a canopy and step at the door, white corner boards, a band at an
+  upper floor's foot, and on the top storey the roof with a ridge cap, painted
+  gables and an attic vent. A house is about 5,000 props vertices a storey;
+  the regression checks every slot of both storeys stays under 65,536.
+- **An almond water truck stands in one chunk in `MOTION_TRUCK_RATE` (2)**
+  (`World::motionTruck`): in the chunk's middle, clear of every house's
+  margin, on hilltop with a cell of level ground round it. It is two
+  `PROP_TRUCK` cells, the cab and the cell behind it (`TRUCK_BACK_STEP[dir]`,
+  marked `PROP_TRUCK_BACK` in `propRot`); the cab's cell builds the whole
+  1930s van, and the layout lists only the cab. E within `TRUCK_REACH` of
+  either cell (`Sim::truckInReach`) takes the can on the counter
+  (`takeFromTruck`): one a truck a visit (`trucksServed`, cleared by
+  `applyLevel`). About six trucks in 81 chunks at seed 1337: most chunks
+  have a house or a slope in the middle.
+- **Beds (`PROP_BED`) sleep the player until morning** (`Sim::trySleep`,
+  `updateSleep`, motion.cpp): E within `BED_REACH` at night, with nothing
+  hunting within 30 m. The screen fades out over `SLEEP_FADE`, then it is the
+  start of the day, healed, with `SLEEP_SANITY` back. By day, or with the
+  Animation near, a line says why not. A bed's box runs along z, so it only
+  turns end for end (`propRot & 2`). Every one-storey house has one in the
+  corner across from its door; every tall house has two upstairs.
 - **Where nothing is drawn is the sky**: `clearColour` (port/levels.h), which
   render.cpp clears to and Unreal's `ClearColour` passes to its backdrop. It is
   the fog's colour at the horizon (fog colour 0.76, 1.08, 1.75 at density
@@ -2044,26 +2099,46 @@ and the Animation at night.
   `blackoutCur` the same way, so the horizon stays matched at night.
 - **No fittings** (`LevelRules::dead` 1, `FittingGap::Unlit` on all of them,
   `DECOR` all off). Daylight is the ambient. Night is `blackoutCur` following
-  `Sim::daylight()` (1 by day, `NIGHT_LIGHT` 0.16 by night), so the shader's
-  ambient and fog dim as in a blackout. Blackouts are off (`hasBlackouts`).
+  `Sim::daylight()` (1 by day, `NIGHT_LIGHT` 0.03 by night), so the shader's
+  fog dims as in a blackout. Blackouts are off (`hasBlackouts`).
   `lightAtPlayer` is `blackoutCur`, so at night the player is in shadow (the
   Animation sees 9 m) unless the flashlight is on.
+- **The shader keeps 35% of the ambient in a blackout** (`0.35 + 0.65 *
+  uBlackout`), which left Level 94's night grey. `FrameLight::ambScale`
+  scales `uAmb` each frame (render.cpp, and the Unreal "Amb" parameter) down
+  to `NIGHT_AMB` (0.22) at night, and the sprites' CPU lighting by the same.
+  Every other level's is 1. The stairwells' landing lamps stay lit at night on
+  Level 94 and are warm (`frameLight`), so a tall house glows.
+- **The sun and the moon** (`skyDraws`, port/draw.cpp) are particle discs
+  160 m from the eye. The sun follows `sunLight`'s path (both read `skyPos`
+  and `skyDir`), so in the Unreal look the disc is where the light comes
+  from; the moon takes the same path over the night. The lore has the moon
+  replace the sun.
 - **The day is sim time** (`Sim::sky`, shared/sim/motion.cpp): `DAY_TIME`
-  150 s, `DUSK_TIME` 14, `NIGHT_TIME` 80, `DAWN_TIME` 14, arriving
-  `ARRIVE_AT` 60 s into a day. Night is from mid-dusk to mid-dawn. No rng.
+  120 s, `DUSK_TIME` 12, `NIGHT_TIME` 100, `DAWN_TIME` 12, arriving
+  `ARRIVE_AT` 50 s into a day. Night is from mid-dusk to mid-dawn. No rng.
 - **The hunter sleeps by day** (`hunterAsleep`, as on Level 2): a hunter out
   at dawn goes `Hidden`, and the night's first spawns `NIGHT_SPAWN` s after
   dark. `spawnHunter` refuses spots indoors; its far fallback retries up to
   8 times, which draws the same numbers as before on every other level.
 - **Inside a house the player is sheltered**: `updateHiding` sets `hidden`,
   the hunter's find at `FIND_REACH` is skipped, and he stops at a waypoint
-  indoors (`chaseSpd = 0`), so he waits at the door. Noise still brings him
-  to the house.
+  indoors (`chaseSpd = 0`), so he waits at the door, knocking every
+  `KNOCK_GAP`..+0.8 s (`Sfx::DoorKnock`, and the HUD says "something is
+  knocking"). Noise still brings him to the house.
+- **The Animations are plentiful at night** (the lore): one that loses the
+  player is back within `NIGHT_RETURN` (10 s). A chase opens with
+  `Sfx::Cackle`, a cartoon laugh on warped film; its footsteps are the
+  hunter's clips at 1.35 pitch.
 - **The Animation is drawn in stop motion** (`Sim::stopPose`): its pose and
-  position are copied from the sim `STOP_MOTION_FPS` (8) times a second, and
-  `hunterSprite` draws one sheet frame with no cross-fade. The sim moves it
-  smoothly. The sheet is `makeAnimationTex` (`animation` in texdump's Unreal
-  export and `SheetNames`).
+  position are copied from the sim `STOP_MOTION_FPS` (6) times a second,
+  nudged up to `POSE_JITTER` by a hash of the frame count, and each new pose
+  plays `Sfx::Shutter` within `SHUTTER_HEAR` (18 m). `hunterSprite` draws one
+  sheet frame with no cross-fade, 2.28 m tall. The sim moves it smoothly. The
+  sheet is `makeAnimationTex` (`animation` in texdump's Unreal export and
+  `SheetNames`): dark clay, a sagging head, mismatched staring eyes with
+  pie-cut pupils, a grin of jagged teeth, rubber-hose arms to white gloves
+  with long fingers, and an outline re-pressed every frame.
 - **Generation order matters**: `furnishMotion` runs after the Poolrooms
   block and replaces walls, pillars, props and elevation; the lock pass skips
   Level 94; the spawn-room clear skips it (it would cut a pit into a valley
@@ -2084,11 +2159,12 @@ and the Animation at night.
   x `WebUnitNits`, so a sunlit face is up to three times as bright as one in
   shade. The Web build reads none of it; its daylight stays the ambient.
 - F3's B on Level 94 skips to the next dusk or dawn. `BACKROOMS_NIGHT=1`
-  presses it on frame 20; a capture at frame 330 is at night.
+  presses it on frame 20; a capture at frame 300 is at night.
 - Footsteps are `Sfx::StepGrass` outside (`Footing::Grass`, `makeGrassStep`)
   and `StepWood` indoors (`sheltered`).
 - tests/golden gained lines for the new level and lost none;
-  walk-l0-l2.trace plays back unchanged.
+  walk-l0-l2.trace plays back unchanged. The two-storey houses changed only
+  Level 94's lines (every changed line was traced to an L6 section).
 
 # Regression process
 
@@ -2544,6 +2620,10 @@ Each of these cost real debugging time.
   same.
 - **`tools/pixdiff.py` needs Pillow.** `tools/sandbox-setup.sh` installs it;
   pixdiff prints a one-line instruction if it is missing.
+- **A scripted edit that opens a file for writing truncates it before any
+  read in the same expression**: `open(p, 'w').write(open(p).read())` in a
+  Python edit script emptied world.h. Read first, then write; check `git diff
+  --stat` after scripted edits.
 - **Remove temporary test hooks by exact string, not by slicing.** Cutting
   from `s.index(start)` to `s.index(end)` is dangerous when the end anchor
   occurs more than once: `if (shotPath && frame == shotFrame)` occurs three

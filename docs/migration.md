@@ -332,7 +332,7 @@ input, assets, audio and rendering.
 | hunters.cpp | the hunter (Clark, the Smiler, the Partygoer) |
 | usher.cpp | the theater's Usher, which patrols with a torch and whistles for the hunter |
 | casino.cpp | the casino's slot machines (the pull, the prize, the reels' noise and the jackpot's bells) and its gold pack of cigarettes (lighting, drags, coughs) |
-| motion.cpp | Level 94's day and night, the Animation's stop-motion pose, and the houses that shelter the player |
+| motion.cpp | Level 94's day and night, the Animation's stop-motion pose and shutter clicks, the houses that shelter the player, sleeping in their beds, and the almond water trucks |
 | place.cpp | blackouts, whispers, sanity and the slide, shifting walls, exits, the Manila Room |
 
 **Entry points.** A run starts from a `SimStart` (shared/sim/start.h): what the

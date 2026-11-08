@@ -361,7 +361,7 @@ void UBackroomsRender::Frame(UWorld* Where, const FrameLight& L, const Vec3& Vie
 	P->SetVectorParameterValue(TEXT("FlarePos"), V(L.flarePos));
 	P->SetVectorParameterValue(TEXT("EntPos"), V(L.entPos));
 	P->SetVectorParameterValue(TEXT("Ent"), FLinearColor(L.entDark, L.entBlock, C.storeyH, (float)OccStorey));
-	P->SetVectorParameterValue(TEXT("Amb"), V(C.amb));
+	P->SetVectorParameterValue(TEXT("Amb"), V({ C.amb.x * L.ambScale, C.amb.y * L.ambScale, C.amb.z * L.ambScale }));
 	P->SetVectorParameterValue(TEXT("FogCol"), V(C.fogCol));
 	P->SetVectorParameterValue(TEXT("LightCol"), V(C.lightCol));
 	P->SetVectorParameterValue(TEXT("LampCol"), V(L.lampCol));

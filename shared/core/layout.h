@@ -67,7 +67,7 @@ enum class FixtureKind : uint8_t {
     ManilaRoom,     // the Manila Room's furnishings (Level 0)
     Auditorium,     // an auditorium's fittings: screen frame, curtains, aisle lights, booth port, exit signs (the theater)
     Poster,         // a backlit film poster on a corridor wall (the theater)
-    House,          // a house's plank floor and pitched roof (Level 94)
+    House,          // a house storey's plank floor, outside trim and (on its top storey) pitched roof (Level 94)
 };
 
 // One fixture. What each field means depends on the kind:
@@ -85,7 +85,7 @@ enum class FixtureKind : uint8_t {
 // | ManilaRoom            | room centre; y is its ceiling         |                |                    | seed |
 // | Auditorium            | screen centre, on its face            |                |                    | variant: dir (World::auditorium has the rest) |
 // | Poster                | centre, on the face                   |                | half extents       | seed: its colours and layout |
-// | House                 | floor centre; y is its ceiling        |                | half extents, x z  | variant: 1 ridge along z; seed |
+// | House                 | floor centre; y is its ceiling        |                | half extents, x z  | variant: 1 ridge along z; tone: 0 one storey, 1 the ground floor of two, 2 the upper floor (no door); normal: out of the door's wall; seed |
 //
 // `normal` points out of the face a fixture is on. A face is the wall's
 // surface, WT off its centreline; decals stand off it by the renderer's own

@@ -382,98 +382,139 @@ Texture2D makePartygoerTex() {
     return finishTexture(img, false);
 }
 
-// The Animation (Level 94), six walk frames: a figure of grey-violet
-// modelling clay with long rubber-hose arms that swing past its knees, a head
-// too big for it, two round white eyes with pinprick pupils and a grin pressed
-// in with a tool. Thumbprints and smears break up the clay, and the outline is
-// lumpy, so it reads as a model rather than a drawing. Away row: no face.
+// The Animation (Level 94), six walk frames, as a 1930s cartoon made in
+// dark modelling clay: a head too big and sagging to one side, two
+// mismatched white eyes with "pie-cut" pupils that stare, a grin split ear to
+// ear and packed with jagged teeth, rubber-hose arms that hang past the knees
+// to white gloves with long fingers, and thin legs on big round shoes. Each
+// frame's outline is re-pressed (the lump noise is seeded per frame), as a
+// hand-moved model's is between exposures. Away row: the back of the head.
 Texture2D makeAnimationTex() {
     const int FW = ENT_FRAME_W, FH = ENT_FRAME_H, W = FW * ENT_FRAMES, H = FH * ENT_ROWS;
     Image img = GenImageColor(W, H, BLANK);
     Color *p = (Color *)img.data;
     int fx = 0, fy = 0;
+    uint32_t frameSeed = 0;
     auto put = [&](int x, int y, Color c) { x += fx; y += fy; if (x >= 0 && x < W && y >= 0 && y < H) p[y * W + x] = c; };
-    // Clay: the base colour pressed lighter or darker by a smear field that
-    // stays put on the body from frame to frame, plus thumbprint dents.
+    // Clay: a dark violet-grey, pressed lighter or darker by a smear field
+    // that stays on the body, with thumbprint dents.
     auto clay = [&](float x, float y) {
         float smear = vnoise2(x * 0.09f, y * 0.05f, 941u) - 0.5f;
         float print = vnoise2(x * 0.32f, y * 0.32f, 942u);
-        float k = 1.0f + 0.22f * smear - (print > 0.72f ? 0.16f : 0.0f);
-        return Color{ cl8(104 * k), cl8(92 * k), cl8(122 * k), 255 };
+        float k = 1.0f + 0.30f * smear - (print > 0.70f ? 0.22f : 0.0f);
+        return Color{ cl8(58 * k), cl8(50 * k), cl8(66 * k), 255 };
     };
     auto hspan = [&](int y, float cx, float halfw) {
         for (int x = (int)(cx - halfw); x <= (int)(cx + halfw); x++) put(x, y, clay((float)x, (float)y));
     };
+    auto hspanC = [&](int y, float cx, float halfw, Color c) {
+        for (int x = (int)(cx - halfw); x <= (int)(cx + halfw); x++) put(x, y, c);
+    };
+    const Color glove = { 236, 232, 222, 255 }, gloveShade = { 170, 164, 156, 255 }, shoe = { 30, 24, 30, 255 };
     for (int hr = 0; hr < ENT_ROWS; hr++)
     for (int f = 0; f < ENT_FRAMES; f++) {
         fx = f * FW; fy = hr * FH;
+        frameSeed = 951u + (uint32_t)f * 7u + (uint32_t)hr * 31u;
         float look = (hr < ENT_ROW_LEAN_L) ? (float)hr / ENT_ROW_FACE : 1.0f;
         float headShift = -(1.0f - look) * 10.0f;
-        float shear = (hr == ENT_ROW_LEAN_L) ? -14.0f : (hr == ENT_ROW_LEAN_R) ? 14.0f : 0.0f;
+        float shear = (hr == ENT_ROW_LEAN_L) ? -16.0f : (hr == ENT_ROW_LEAN_R) ? 16.0f : 0.0f;
         float ph = (float)f / ENT_FRAMES;
         float lx0, ll0, rx0, rl0;
         legPose(ph, lx0, ll0);
         legPose(ph + 0.5f, rx0, rl0);
-        float legL = lx0 * 9.0f, liftL = ll0 * 7.0f, legR = rx0 * 9.0f, liftR = rl0 * 7.0f;
-        float armSw = -lx0 * 11.0f;   // the arms swing wide, against the legs
+        float legL = lx0 * 10.0f, liftL = ll0 * 8.0f, legR = rx0 * 10.0f, liftR = rl0 * 8.0f;
+        float armSw = -lx0 * 13.0f;
         auto bodyOff = [&](float y) {
             float o = shear * clampf((252.0f - y) / 250.0f, 0, 1);
-            if (y < 84) o += headShift * clampf((84.0f - y) / 70.0f, 0, 1);
+            if (y < 80) o += headShift * clampf((80.0f - y) / 70.0f, 0, 1);
             return o;
         };
-        for (int y = 6; y < 252; y++) {
-            float lump = (vnoise2(0.11f * y, 3.0f, 943u) - 0.5f) * 4.0f;
+        for (int y = 2; y < 254; y++) {
+            float lump = (vnoise2(0.13f * y, 2.0f, frameSeed) - 0.5f) * 5.0f;   // re-pressed every frame
             float cx = 64 + bodyOff((float)y);
-            if (y >= 6 && y <= 78) {   // the big round head
-                float dy = (y - 42) / 36.0f;
-                if (dy * dy < 1.0f) hspan(y, cx, 31.0f * sqrtf(1 - dy * dy) + lump);
-            }
-            if (y > 74 && y <= 90) hspan(y, cx, 8 + lump * 0.5f);                 // neck
-            if (y > 86 && y <= 176) {                                               // a pear-shaped body
-                float t = (y - 86) / 90.0f;
-                hspan(y, cx, 14 + 12 * sinf(t * 2.6f) + lump);
-            }
-            if (y > 92 && y <= 214) {                                               // rubber-hose arms
-                float t = (y - 92) / 122.0f;
-                float off = 22 + 6 * t;
-                float bend = sinf(t * 3.14159f) * 5.0f;
-                hspan(y, cx - off - bend - armSw * t, 3.6f + lump * 0.3f);
-                hspan(y, cx + off + bend + armSw * t, 3.6f + lump * 0.3f);
-                if (y > 204) {   // mitten hands
-                    hspan(y, cx - off - bend - armSw * t, 7.0f);
-                    hspan(y, cx + off + bend + armSw * t, 7.0f);
+            if (y >= 2 && y <= 76) {   // the head, sagging toward the viewer's right
+                float dy = (y - 38) / 36.0f;
+                if (dy * dy < 1.0f) {
+                    float half = 33.0f * sqrtf(1 - dy * dy) + lump;
+                    float sag = clampf((y - 30) / 46.0f, 0, 1) * 6.0f;
+                    hspan(y, cx + sag * 0.5f, half + sag * 0.3f);
                 }
             }
-            if (y > 172 && y < 252) {                                               // thin legs, big feet
-                float t = (y - 172) / 80.0f;
-                float lx = cx - 9 + legL * t, rx = cx + 9 + legR * t;
-                if (y < 252 - liftL) hspan(y, lx, y > 242 - liftL ? 10.0f : 4.0f + lump * 0.3f);
-                if (y < 252 - liftR) hspan(y, rx, y > 242 - liftR ? 10.0f : 4.0f + lump * 0.3f);
+            if (y > 72 && y <= 88) hspan(y, cx, 6 + lump * 0.5f);                  // a thin neck
+            if (y > 84 && y <= 170) {                                                 // a pinched, bent body
+                float t = (y - 84) / 86.0f;
+                hspan(y, cx + sinf(t * 2.0f) * 3.0f, 10 + 12 * sinf(t * 2.7f) + lump);
+            }
+            if (y > 90 && y <= 226) {                                                 // arms to below the knees
+                float t = (y - 90) / 136.0f;
+                float off = 20 + 7 * t, bend = sinf(t * 3.14159f) * 7.0f;
+                float la = cx - off - bend - armSw * t, ra = cx + off + bend + armSw * t;
+                hspan(y, la, 3.0f + lump * 0.25f);
+                hspan(y, ra, 3.0f + lump * 0.25f);
+                if (y < 99) hspan(y, cx, off + bend);   // the shoulders
+                if (y > 192) {   // white cartoon gloves: a cuff, a palm, then four long parted fingers
+                    float g = (y - 192) / 30.0f;
+                    for (int fi = -1; fi <= 2; fi++) {
+                        const float spread = (fi - 0.5f) * (2.6f + 6.0f * g);
+                        const Color gc = y > 214 ? gloveShade : glove;
+                        hspanC(y, la + spread, y < 200 ? 8.0f : y < 206 ? 7.0f : 1.2f, gc);
+                        hspanC(y, ra + spread, y < 200 ? 8.0f : y < 206 ? 7.0f : 1.2f, gc);
+                    }
+                }
+            }
+            if (y > 166 && y < 254) {                                                 // rubber-hose legs, big shoes
+                float t = (y - 166) / 88.0f;
+                float lxl = cx - 8 + legL * t, rxl = cx + 8 + legR * t;
+                if (y < 254 - liftL) {
+                    if (y > 240 - liftL) hspanC(y, lxl + 4, 10.0f, shoe);
+                    else hspan(y, lxl, 3.2f + lump * 0.25f);
+                }
+                if (y < 254 - liftR) {
+                    if (y > 240 - liftR) hspanC(y, rxl + 4, 10.0f, shoe);
+                    else hspan(y, rxl, 3.2f + lump * 0.25f);
+                }
             }
         }
-        // The face, stamped on the head's pixels only, using the head's offset.
-        if (look > 0.2f) {
-            auto putIf = [&](int x, int y, Color c) {
-                x += fx + (int)bodyOff((float)y); y += fy;
-                if (x >= 0 && x < W && y >= 0 && y < H && p[y * W + x].a) p[y * W + x] = c;
-            };
-            float narrow = 0.45f + 0.55f * look, shift = -(1.0f - look) * 8.0f;
-            for (int s2 = -1; s2 <= 1; s2 += 2) {
-                float ex = 64 + shift + s2 * 13.0f * narrow;
-                for (int dy = -11; dy <= 11; dy++) for (int dx = -11; dx <= 11; dx++) {
-                    float d = sqrtf((float)(dx * dx) / (narrow * narrow) + (float)(dy * dy));
-                    if (d < 10.5f) putIf((int)ex + dx, 36 + dy, d > 9.0f ? Color{ 40, 34, 46, 255 } : Color{ 246, 244, 236, 255 });
-                }
-                for (int dy = -2; dy <= 2; dy++) for (int dx = -2; dx <= 2; dx++)
-                    if (dx * dx + dy * dy < 5) putIf((int)(ex + s2 * 2.0f) + dx, 38 + dy, { 12, 10, 14, 255 });
+        auto putIf = [&](int x, int y, Color c) {
+            x += fx + (int)bodyOff((float)y); y += fy;
+            if (x >= 0 && x < W && y >= 0 && y < H && p[y * W + x].a) p[y * W + x] = c;
+        };
+        if (look <= 0.2f) {   // the back of the head: a seam where two halves of clay were pressed together
+            for (int y = 6; y < 70; y++) putIf(64 + (int)((vnoise2(y * 0.2f, 1.0f, 961u) - 0.5f) * 4.0f), y, { 30, 26, 34, 255 });
+            continue;
+        }
+        const float narrow = 0.45f + 0.55f * look, shift = -(1.0f - look) * 9.0f;
+        // Eyes: the left smaller and higher. White, a dark rim, and a black
+        // pupil with a wedge cut out of it, staring at the camera.
+        for (int s2 = -1; s2 <= 1; s2 += 2) {
+            const float ex = 64 + shift + s2 * 14.0f * narrow, ey = s2 < 0 ? 26.0f : 31.0f, er = s2 < 0 ? 9.0f : 12.5f;
+            for (int dy = -14; dy <= 14; dy++) for (int dx = -14; dx <= 14; dx++) {
+                float d = sqrtf((float)(dx * dx) / (narrow * narrow) + (float)(dy * dy) * 0.8f);
+                if (d >= er) continue;
+                Color c = d > er - 1.6f ? Color{ 16, 12, 18, 255 } : Color{ 246, 242, 230, 255 };
+                float pdx = dx - s2 * 1.5f, pdy = dy - 1.0f, pd = sqrtf(pdx * pdx + pdy * pdy);
+                float ang = atan2f(pdy, pdx);
+                if (pd < er * 0.42f && !(ang > 2.2f && ang < 2.9f)) c = { 8, 6, 10, 255 };   // the pie-cut pupil
+                putIf((int)ex + dx, (int)ey + dy, c);
             }
-            for (int dx = -22; dx <= 22; dx++) {   // the grin, a groove with stitch marks across it
-                float u = dx / 22.0f;
-                int gy = 58 + (int)(7.0f * (1.0f - u * u));
-                int gx = (int)(64 + shift + dx * narrow);
-                putIf(gx, gy, { 36, 28, 40, 255 }); putIf(gx, gy + 1, { 36, 28, 40, 255 });
-                if ((dx + 22) % 6 == 0) for (int k = -3; k <= 3; k++) putIf(gx, gy + k, { 46, 38, 52, 255 });
+        }
+        // The grin: a split from ear to ear, open in the middle, with jagged
+        // teeth top and bottom and dark gums between.
+        for (int dx = -27; dx <= 27; dx++) {
+            const float u = dx / 27.0f;
+            const int gx = (int)(64 + shift + dx * narrow);
+            const float mid = 52.0f + 10.0f * (1.0f - u * u) + 3.0f * u;
+            const float open = 9.0f * (1.0f - u * u) + 1.5f;
+            for (int y = (int)(mid - open); y <= (int)(mid + open); y++) {
+                const float tooth = fmodf(fabsf(dx) + 100.0f, 5.0f) / 5.0f;
+                const float fang = 1.0f - fabsf(tooth - 0.5f) * 2.0f;
+                const bool upper = y < mid;
+                const float reach = upper ? (y - (mid - open)) / open : ((mid + open) - y) / open;
+                Color c = reach < fang * 0.75f ? Color{ 238, 230, 206, 255 } : Color{ 34, 6, 12, 255 };
+                putIf(gx, y, c);
             }
+            putIf(gx, (int)(mid - open) - 1, { 20, 14, 22, 255 });   // the lips' crease
+            putIf(gx, (int)(mid + open) + 1, { 20, 14, 22, 255 });
         }
     }
     return finishTexture(img, false);

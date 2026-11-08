@@ -1,4 +1,5 @@
 #include "stream.h"
+#include "../core/level_rules.h"
 #include <algorithm>
 #include <cstdlib>
 
@@ -11,6 +12,21 @@ void streamChunks(World &w, int pcx, int pcz, int rings, const std::function<boo
                 more = want({ pcx + dx, pcz + dz, w.qs, false });
             }
     if (w.storeyH <= 0.0f || !more) return;
+    // Level 94 is open to the sky, so another storey shows everywhere, not
+    // through an opening: from the ground, every two-storey house's upper floor
+    // in the rings; from upstairs, the whole ground out of the windows.
+    if (w.level == MOTION) {
+        const int other = w.storey == 0 ? 1 : 0;
+        for (int r = 0; r <= rings && more; r++)
+            for (int dx = -r; dx <= r && more; dx++)
+                for (int dz = -r; dz <= r && more; dz++) {
+                    if (std::max(abs(dx), abs(dz)) != r) continue;
+                    if (other == 1 && !w.linksStorey(pcx + dx, pcz + dz, +1)) continue;
+                    StoreyScope sc(w, other);
+                    more = want({ pcx + dx, pcz + dz, w.qs, r <= 1 });
+                }
+        return;
+    }
     // A feature's own chunk holds the opening; its neighbours are what is
     // visible past its edges.
     for (int rel = -1; rel <= 1 && more; rel += 2)

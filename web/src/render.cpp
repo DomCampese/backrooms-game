@@ -52,6 +52,9 @@ void Game::renderScene(double now) {
     SetShaderValue(worldShader, locRoomMask, light.roomMask, SHADER_UNIFORM_VEC4);
     SetShaderValue(worldShader, locLamp, light.lamp, SHADER_UNIFORM_VEC4);
     SetShaderValue(worldShader, locLampCol, &light.lampCol, SHADER_UNIFORM_VEC3);
+    const Vec3 &lvAmb = LEVELS[sim.level].amb;
+    const Vector3 amb = { lvAmb.x * light.ambScale, lvAmb.y * light.ambScale, lvAmb.z * light.ambScale };
+    SetShaderValue(worldShader, locAmb, &amb, SHADER_UNIFORM_VEC3);
     Vector2 occOrigin = { (float)occOriginI, (float)occOriginK };
     float occN = occValid ? (float)OCC_N : 0.0f;
     SetShaderValue(worldShader, locOccOrigin, &occOrigin, SHADER_UNIFORM_VEC2);
@@ -137,8 +140,7 @@ void Game::renderScene(double now) {
         SetShaderValue(worldShader, locOccN, &occOff, SHADER_UNIFORM_FLOAT);
         // Also give it a minimum ambient, so it is visible in an unlit corridor.
         // This only matters where the room is dark.
-        const Vec3 &la = LEVELS[sim.level].amb;
-        Vector3 vmAmb = { fmaxf(la.x, 0.150f), fmaxf(la.y, 0.142f), fmaxf(la.z, 0.128f) };
+        Vector3 vmAmb = { fmaxf(amb.x, 0.150f), fmaxf(amb.y, 0.142f), fmaxf(amb.z, 0.128f) };
         SetShaderValue(worldShader, locAmb, &vmAmb, SHADER_UNIFORM_VEC3);
         // Where each is held is shared/port/held.cpp's, and what is drawn there
         // port/draw.cpp's, which the Unreal build reads too.
@@ -149,7 +151,7 @@ void Game::renderScene(double now) {
             for (const SceneDraw &d : sceneBuf) drawScene(d, cam);
         }
         SetShaderValue(worldShader, locOccN, &occN, SHADER_UNIFORM_FLOAT);   // both as they were
-        SetShaderValue(worldShader, locAmb, &la, SHADER_UNIFORM_VEC3);
+        SetShaderValue(worldShader, locAmb, &amb, SHADER_UNIFORM_VEC3);
     }
     EndMode3D();
     EndTextureMode();

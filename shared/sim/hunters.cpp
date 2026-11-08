@@ -29,6 +29,7 @@ void Sim::updateEntity(float dt, double now, bool forceSpawn) {
     ent.stagger = fmaxf(0.0f, ent.stagger - dt);
     entDist = 1e9f;
     if (ent.st == EState::Hidden) {
+        if (level == MOTION) ent.nextSpawn = fmin(ent.nextSpawn, now + NIGHT_RETURN);   // plentiful at night
         if (sprinting) ent.nextSpawn -= 1.5 * dt;   // sprinting brings the spawn forward
         if (now > ent.nextSpawn) spawnHunter();
     } else {
@@ -58,6 +59,7 @@ void Sim::updateEntity(float dt, double now, bool forceSpawn) {
             if (ent.gaze > 1.6f || (entVisible && entDist < 8) || (entDist < 3.0f && !hidden)) {
                 ent.st = EState::Chase; ent.repathT = 0;
                 hunterNotice(px, pz);
+                if (level == MOTION) play(Sfx::Cackle).atVolume(clampf(1.4f / (1.0f + 0.02f * entDist * entDist), 0.25f, 0.9f));
             }
             else if (ent.life > 24 && !entVisible) ent.st = EState::Hidden, ent.nextSpawn = now + 18 + grng.f01() * 35;
         }
@@ -85,9 +87,10 @@ void Sim::updateEntity(float dt, double now, bool forceSpawn) {
             // Through a wall, use the muffled clips and a lower volume.
             int pick = grng.ri(0, 3);
             float occ = entLos ? 1.0f : 0.45f;
+            // The Animation's clay feet are lighter and wetter: the same steps, higher.
             play(entLos ? Sfx::EntStep : Sfx::EntStepThrough, pick)
                 .atPan(sd)
-                .atPitch(0.66f + grng.f01() * 0.08f)
+                .atPitch((level == MOTION ? 1.35f : 0.66f) + grng.f01() * 0.08f)
                 .atVolume(clampf(1.4f * occ / (1.0f + (entLos ? 0.07f : 0.13f) * entDist * entDist), 0.0f, 0.9f));
         }
         if (ent.st == EState::Die) {
@@ -248,7 +251,18 @@ bool Sim::hunterChase(float dt, double now, float &fearT) {
         }
     }
     if (hunterOpensDoor(dt)) chaseSpd = 0;
-    if (world.indoors(cellOf(ent.wpx), cellOf(ent.wpz))) chaseSpd = 0;   // Level 94: he waits outside
+    if (world.indoors(cellOf(ent.wpx), cellOf(ent.wpz))) {   // Level 94: it waits outside, knocking
+        chaseSpd = 0;
+        knockT -= dt;
+        if (knockT <= 0 && entDist < 30.0f) {
+            knockT = KNOCK_GAP + grng.f01() * 0.8f;
+            knockedT = 0;
+            const float inv = entDist > 0.01f ? 1.0f / entDist : 0.0f;
+            play(Sfx::DoorKnock, grng.ri(0, 2))
+                .atPan(clampf(((ent.x - px) * inv) * r2x + ((ent.z - pz) * inv) * r2z, -1.0f, 1.0f))
+                .atVolume(clampf(2.0f / (1.0f + 0.03f * entDist * entDist), 0.15f, 0.9f));
+        }
+    }
     float sx = ent.wpx - ent.x, sz = ent.wpz - ent.z, sl = sqrtf(sx * sx + sz * sz) + 1e-4f;
     ent.x += sx / sl * chaseSpd * dt;
     ent.z += sz / sl * chaseSpd * dt;

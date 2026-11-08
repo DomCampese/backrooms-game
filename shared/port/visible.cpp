@@ -79,7 +79,13 @@ std::vector<VisibleChunk> visibleChunks(World &w, const ChunkViewer &v,
         return !(mxx < p.x0 || mnx > p.x1 || mxz < p.z0 || mnz > p.z1);
     };
     size_t own = out.size();
-    if (w.storeyH > 0.0f)
+    // Level 94: the other storey in every chunk round the view (stream.cpp
+    // loads only those with something on it).
+    if (w.level == MOTION && w.storeyH > 0.0f) {
+        const int rel = w.storey == 0 ? 1 : -1;
+        for (int dx = -2; dx <= 2; ++dx) for (int dz = -2; dz <= 2; ++dz)
+            consider(w.storey + rel, pcx + dx, pcz + dz, rel * w.storeyH);
+    } else if (w.storeyH > 0.0f)
         for (int rel = -1; rel <= 1; rel += 2)
             for (int dx = -1; dx <= 1; ++dx) for (int dz = -1; dz <= 1; ++dz) {
                 Portal p1;

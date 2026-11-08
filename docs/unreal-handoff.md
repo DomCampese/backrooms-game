@@ -373,6 +373,25 @@ fallback while the lit look is unproven.
     sheet import. The level has no fittings, so in the Unreal look it is lit
     by the ambient glow alone; a directional light for the sun is the
     Unreal look's to add.
+17. **Level 94's houses and nights** (7 November 2026). One Unreal change:
+    the "Amb" parameter is the level's ambient times `FrameLight::ambScale`,
+    which takes Level 94's night down under the blackout floor
+    (BackroomsRender.cpp). Two-storey houses use the storey streaming and
+    visibility the module already runs (`streamChunks`, `visibleChunks`), and
+    beds, the sun and moon, the shutter clicks and the laugh are shared code
+    and clips. At seed 1337, `LEVEL=6 make unreal-play`: the pastel house at
+    x 18-30, z 18-30 has a second floor; go in at the north door, up the
+    stairwell, and there are two beds. F3 then B for night: the hills go
+    nearly black, a lamp burns in the stairwell, and E at a bed fades to
+    morning. An upper floor or roof that is missing from outside points at
+    the streaming of storey 1.
+18. **Level 94's slopes and almond water trucks** (8 November 2026). No
+    Unreal code: the hills are shared floor geometry (2 x 2 quads a sloped
+    cell) and the truck is a prop the shared mesher builds. At seed 1337,
+    `LEVEL=6 make unreal-play`: a truck stands at about x 14-18, z 80-82,
+    its hatch facing -z, a can on its counter (E takes it, once). The
+    ground should run down into the valleys in smooth slopes with no steps;
+    steps point at an old build of the shared code.
 
 A session on the Mac itself (`claude remote-control` in the repository) could
 build, run the tests and read the log directly; from the cloud each Unreal
