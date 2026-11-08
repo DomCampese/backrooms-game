@@ -31,6 +31,7 @@ enum class FloorKind : uint8_t {
     Boards,   // inside the Manila Room, whose furnishings lay their own floorboards
     Stair,    // a flight or landing: a Flight's steps (or the storey above) cover it
     Hole,     // no floor: the storey below shows through
+    Hill,     // Level 94 out of doors: World::motionHeight's slope, not a level floor
 };
 
 // What stands on one edge of a cell.

@@ -48,8 +48,9 @@ bool hunterSprite(const Sim &sim, ActorSprite &out) {
     float side = e.vx * sim.r2x + e.vz * sim.r2z;
     if (e.st == EState::Chase && fabsf(side) > 1.4f)
         out.row = (side < 0) ? ENT_ROW_LEAN_L : ENT_ROW_LEAN_R;
-    out.centre = { ex, ey + 0.98f - sink + bob, ez };
-    out.w = 0.98f; out.h = 1.96f;
+    // The Animation stands taller than the player.
+    out.w = stop ? 1.14f : 0.98f; out.h = stop ? 2.28f : 1.96f;
+    out.centre = { ex, ey + out.h * 0.5f - sink + bob, ez };
     out.litAt = { ex, ey + 0.95f, ez };
     return true;
 }

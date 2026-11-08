@@ -984,16 +984,40 @@ int main() {
     printf("PASS casino banks, reachability, slot collision, the slot machines' pull, noise and jackpot\n");
 
     // ---- Level 94. The hills never step more than MAX_STEP; houses stand on
-    // level ground with a ceiling, and every other cell is open to the sky;
-    // every walkable cell of a chunk is reachable; by day nothing hunts, at
-    // night the Animation comes, and a house hides the player from it.
+    // level ground with a ceiling (a stairwell's shaft aside), and every other
+    // cell is open to the sky; a two-storey house's upper floor is walled and
+    // furnished over its ground floor, with holes round it; every walkable cell
+    // of a chunk is reachable; by day nothing hunts, at night the Animation
+    // comes, a house hides the player from it, and a bed sleeps them to dawn.
     {
         CHECK(EXIT_NEXT[THEATER]==MOTION && LEVEL_DEPTH[THEATER]+1==LEVEL_DEPTH[MOTION]);
-        World w; w.seed=1337; w.level=MOTION; w.visit=0; w.wallH=LEVEL_RULES[MOTION].wallH; w.storeyH=0;
-        int houses=0, exits=0, sunk=0;
+        World w; w.seed=1337; w.level=MOTION; w.visit=0; w.wallH=LEVEL_RULES[MOTION].wallH; w.storeyH=LEVEL_RULES[MOTION].storeyH;
+        int houses=0, tall=0, beds=0, exits=0, sunk=0, trucks=0;
+        float deepest=0;
         for (int cx=-4;cx<=4;++cx) for (int cz=-4;cz<=4;++cz) {
             ChunkData &d=w.data(cx,cz);
             const int gx0=cx*CCELLS, gz0=cz*CCELLS;
+            // A truck: two PROP_TRUCK cells, the back one marked, on level ground.
+            MotionTruck tr;
+            if (w.motionTruck(cx,cz,tr)) {
+                trucks++;
+                CHECK(d.prop[tr.i][tr.k]==PROP_TRUCK && d.prop[tr.bi][tr.bk]==PROP_TRUCK);
+                CHECK(!(d.propRot[tr.i][tr.k] & PROP_TRUCK_BACK) && (d.propRot[tr.bi][tr.bk] & PROP_TRUCK_BACK));
+                CHECK(d.elev[tr.i][tr.k]==0 && d.elev[tr.bi][tr.bk]==0 && w.openSky(gx0+tr.i,gz0+tr.k));
+            }
+            // The hills are slopes: along a line across the chunk the ground
+            // never jumps, at 10 cm a sample, by more than a 1-in-2 slope gives
+            // (furniture on the slopes is stood on, so its cells are skipped).
+            for (int line=0;line<CCELLS;line+=5) {
+                float last=w.groundAt(gx0*CELL+0.05f,(gz0+line)*CELL+0.7f,0);
+                for (int s=1;s<CCELLS*CELL*10;++s) {
+                    const float x=gx0*CELL+0.05f+s*0.1f, z=(gz0+line)*CELL+0.7f;
+                    const float y=w.groundAt(x,z,0);
+                    if (w.openSky(cellOf(x),cellOf(z)) && w.openSky(cellOf(x-0.1f),cellOf(z))
+                        && w.propAt(cellOf(x),cellOf(z))==PROP_NONE && w.propAt(cellOf(x-0.1f),cellOf(z))==PROP_NONE) CHECK(fabsf(y-last)<=0.05f);
+                    deepest=std::min(deepest,y); last=y;
+                }
+            }
             bool house[CCELLS][CCELLS]={};
             for (int q=0;q<4;++q) {
                 MotionHouse hs;
@@ -1001,8 +1025,25 @@ int main() {
                 houses++;
                 for (int i=hs.i0;i<=hs.i1;++i) for (int k=hs.k0;k<=hs.k1;++k) {
                     house[i][k]=true;
-                    CHECK(d.elev[i][k]==0 && w.indoors(gx0+i,gz0+k) && cellHasCeiling(w,gx0+i,gz0+k));
+                    CHECK(d.elev[i][k]==0 && w.indoors(gx0+i,gz0+k));
+                    CHECK(cellHasCeiling(w,gx0+i,gz0+k) || (d.vflag[i][k] & VF_KEEP));
+                    if (d.prop[i][k]==PROP_BED) { beds++; CHECK((d.propRot[i][k] & 1)==0); }
                 }
+                if (hs.storeys!=2) continue;
+                tall++;
+                VertFeat f;
+                CHECK(w.pairFeature(cx,cz,0,f) && f.kind==VK_STAIRWELL && f.x0==hs.stairX);
+                StoreyScope up(w,1);
+                ChunkData &u=w.data(cx,cz);
+                int upBeds=0;
+                for (int i=0;i<CCELLS;++i) for (int k=0;k<CCELLS;++k) {
+                    const bool in=i>=hs.i0 && i<=hs.i1 && k>=hs.k0 && k<=hs.k1;
+                    if (in) { CHECK(w.indoors(gx0+i,gz0+k)); upBeds+=u.prop[i][k]==PROP_BED; }
+                    // round the house, a hole to the ground (another house's upper floor aside)
+                    else if (!w.indoors(gx0+i,gz0+k)) CHECK((u.vflag[i][k] & (VF_HOLE|VF_OPENUP))==(VF_HOLE|VF_OPENUP));
+                }
+                CHECK(upBeds==2);
+                CHECK(u.wallN[hs.i0][hs.k0]==WALL_SOLID && u.wallW[hs.i0][hs.k0]==WALL_SOLID);
             }
             for (int i=0;i<CCELLS;++i) for (int k=0;k<CCELLS;++k) {
                 if (!house[i][k]) CHECK(w.openSky(gx0+i,gz0+k) && !cellHasCeiling(w,gx0+i,gz0+k));
@@ -1031,11 +1072,32 @@ int main() {
                 CHECK(seen[x][z]==(d.prop[x][z]==PROP_NONE && !d.pillar[x][z]));
             ChunkGeometry geo; bakeChunkGeometry(w,cx,cz,geo);
             for (int sl=0;sl<MESH_COUNT;++sl) CHECK(geo.parts[sl].v.size()/3<=65536);
+            StoreyScope up(w,1);
+            ChunkGeometry geoUp; bakeChunkGeometry(w,cx,cz,geoUp);
+            for (int sl=0;sl<MESH_COUNT;++sl) CHECK(geoUp.parts[sl].v.size()/3<=65536);
         }
-        CHECK(houses>=20 && exits>0 && sunk>CCELLS*CCELLS*20);
+        CHECK(houses>=20 && tall>=5 && beds>=houses-tall && exits>0 && sunk>CCELLS*CCELLS*20);
+        CHECK(trucks>=4 && deepest<-3.0f);
         // The day: no hunter, however long. Dusk, then the night's Animation.
         sim.applyLevel(MOTION,GetTime());
         CHECK(!sim.hasBlackouts() && sim.nextBlackout==Sim::BLACKOUT_NEVER && sim.daylight()==1.0f);
+        {   // A truck's hatch gives one can a visit.
+            MotionTruck tr; int tcx=0,tcz=0; bool got=false;
+            for (int cx=-3;cx<=3 && !got;++cx) for (int cz=-3;cz<=3 && !got;++cz) if (sim.world.motionTruck(cx,cz,tr)) { tcx=cx; tcz=cz; got=true; }
+            CHECK(got);
+            const int ci=tcx*CCELLS+tr.bi, ck=tcz*CCELLS+tr.bk;
+            sim.world.data(tcx,tcz);
+            const float spx=sim.px, spz=sim.pz;
+            sim.px=ci*CELL+1.0f+TRUCK_BACK_STEP[tr.dir][0]*1.5f; sim.pz=ck*CELL+1.0f+TRUCK_BACK_STEP[tr.dir][1]*1.5f;
+            int a=0,b=0;
+            CHECK(sim.truckInReach(a,b) && a==tcx*CCELLS+tr.i && b==tcz*CCELLS+tr.k);
+            const int before=sim.almond;
+            sim.takeFromTruck(a,b); sim.takeFromTruck(a,b);
+            CHECK(sim.almond==before+1);
+            sim.updateSky(1.0f/30);
+            CHECK(!sim.truckNear);
+            sim.px=spx; sim.pz=spz;
+        }
         double now=GetTime();
         sim.inMenu=false; sim.deathT=0; sim.mannequin.active=false;
         Vec2 open=sim.world.findOpenSpot(15,15);
@@ -1050,20 +1112,25 @@ int main() {
         CHECK(dark && sim.sky.night && sim.daylight()<0.5f && sim.ent.st==EState::Stalk);
         CHECK(!sim.world.indoors(cellOf(sim.ent.x),cellOf(sim.ent.z)));
         CHECK(std::string(sim.hunterName())=="AN ANIMATION");
-        // It is drawn where its last stop-motion frame left it, and catches up
-        // at the next frame.
+        // It is drawn where its last stop-motion frame left it, within
+        // POSE_JITTER, and catches up at the next frame with a shutter's click.
         sim.updateStopPose(1.0f);
-        const float hx=sim.ent.x;
+        const float hx=sim.stopPose.x;
+        CHECK(fabsf(hx-sim.ent.x)<=Sim::POSE_JITTER);
         sim.ent.x+=0.5f;
         sim.updateStopPose(0.25f/Sim::STOP_MOTION_FPS);
         CHECK(sim.stopPose.x==hx);
+        sim.audio.clear(); sim.entDist=5.0f;
         sim.updateStopPose(1.0f/Sim::STOP_MOTION_FPS);
-        CHECK(sim.stopPose.x==sim.ent.x);
+        CHECK(fabsf(sim.stopPose.x-sim.ent.x)<=Sim::POSE_JITTER && sim.stopPose.x!=hx);
+        bool click=false;
+        for (const AudioEvent &e : sim.audio) click |= e.kind==AudioEvent::PLAY && e.sfx==Sfx::Shutter;
+        CHECK(click);
         // Inside a house the player is hidden, it cannot find them, and it will
         // not walk in.
         MotionHouse hs; int hcx=0, hcz=0; bool found=false;
         for (int cx=-2;cx<=2 && !found;++cx) for (int cz=-2;cz<=2 && !found;++cz)
-            for (int q=0;q<4 && !found;++q) if (sim.world.motionHouse(cx,cz,q,hs)) { hcx=cx; hcz=cz; found=true; }
+            for (int q=0;q<4 && !found;++q) if (sim.world.motionHouse(cx,cz,q,hs) && hs.storeys==1) { hcx=cx; hcz=cz; found=true; }
         CHECK(found);
         const int hi=hcx*CCELLS+(hs.i0+hs.i1)/2, hk=hcz*CCELLS+(hs.k0+hs.k1)/2;
         sim.px=hi*CELL+1.0f; sim.pz=hk*CELL+1.0f;
@@ -1076,6 +1143,47 @@ int main() {
         float fearT=0;
         for (int i=0;i<60;++i) { sim.entDist=1.0f; sim.hunterChase(1.0f/30,now,fearT); }
         CHECK(sim.hidden && sim.health==1 && sim.foundT<=0);
+        // A bed: no sleep with it at the door; with it gone, the screen fades
+        // out and it is morning, healed.
+        {
+            int bi=0,bk=0; bool bed=false;
+            for (int i=hcx*CCELLS+hs.i0;i<=hcx*CCELLS+hs.i1 && !bed;++i)
+                for (int k=hcz*CCELLS+hs.k0;k<=hcz*CCELLS+hs.k1 && !bed;++k)
+                    if (sim.world.propAt(i,k)==PROP_BED) { bi=i; bk=k; bed=true; }
+            if (bed) {
+                sim.px=bi*CELL+1.0f+1.1f; sim.pz=bk*CELL+1.0f;
+                CHECK(sim.bedInReach());
+                sim.ent.st=EState::Chase; sim.entDist=10.0f;
+                sim.trySleep();
+                CHECK(sim.sleepT==0);
+                sim.ent.st=EState::Hidden; sim.health=0.5f;
+                sim.trySleep();
+                CHECK(sim.sleepT>0);
+                for (int i=0;i<120;++i) { sim.updateSleep(1.0f/30); sim.updateSky(1.0f/30); }
+                CHECK(sim.sleepT==0 && !sim.sky.night && sim.health==1.0f && sim.wakeT>0);
+                sim.sky.t=Sim::DAY_TIME*0.5f;
+                sim.trySleep();
+                CHECK(sim.sleepT==0);   // not by day
+            }
+            CHECK(bed);
+        }
+        // Up the stairwell of a two-storey house: near the top of its second
+        // flight the mover passes the midpoint and the player is upstairs,
+        // indoors; nowhere else does a jump change storey.
+        {
+            VertFeat f; int fcx=0, fcz=0; bool tallFound=false;
+            for (int cx=-2;cx<=2 && !tallFound;++cx) for (int cz=-2;cz<=2 && !tallFound;++cz)
+                if (sim.world.pairFeature(cx,cz,0,f)) { fcx=cx; fcz=cz; tallFound=true; }
+            CHECK(tallFound);
+            Vec3 at=sim.world.featureWorld(f,fcx,fcz,CELL*1.5f,0,2.3f);
+            sim.px=at.x; sim.pz=at.z; sim.py=sim.world.stairY(at.x,at.z); sim.grounded=true; sim.vy=0;
+            CHECK(sim.py>Sim::EYE_H);
+            InputFrame in; in.playing=true;
+            sim.updateMovement(in,1.0f/30,now);
+            CHECK(sim.world.storey==1 && sim.world.indoors(cellOf(sim.px),cellOf(sim.pz)));
+            sim.world.setStorey(0);
+        }
+        sim.sky.night=true;
         // Morning: it is gone.
         sim.sky.t=Sim::DAY_TIME+Sim::DUSK_TIME+Sim::NIGHT_TIME+Sim::DAWN_TIME-1.0f;
         for (int i=0;i<90;++i) { sim.updateSky(1.0f/30); sim.updateEntity(1.0f/30,now); now+=1.0/30; }

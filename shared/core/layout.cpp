@@ -448,7 +448,6 @@ bool cellHasFloor(World &w, int gi, int gk) {
 }
 
 bool cellHasCeiling(World &w, int gi, int gk) {
-    if (w.level == MOTION) return !w.openSky(gi, gk);
     return w.storeyH <= 0.0f || !(w.vflagAt(gi, gk) & VF_OPENUP);
 }
 
@@ -491,6 +490,7 @@ ChunkLayout chunkLayout(World &w, int cx, int cz) {
         cellFixtures(w, d, decor, cx, cz, i, kk, L.fixtures);
         uint8_t kind = d.prop[i][kk];
         if (kind == PROP_NONE) continue;
+        if (kind == PROP_TRUCK && (d.propRot[i][kk] & PROP_TRUCK_BACK)) continue;   // the cab's cell lists the truck
         int gi = cx * CCELLS + i, gk = cz * CCELLS + kk;
         float x = cx * CHUNK + i * CELL + 1.0f, z = cz * CHUNK + kk * CELL + 1.0f;
         PropPlacement p;
@@ -505,7 +505,7 @@ ChunkLayout chunkLayout(World &w, int cx, int cz) {
             float bx0, bz0, bx1, bz1;
             vendFootprint(d.propRot[i][kk], x, z, p.x, p.z, bx0, bz0, bx1, bz1);
         }
-        p.floorY = d.elev[i][kk] * ELEV_UNIT;
+        p.floorY = w.level == MOTION ? w.floorY(gi, gk) : d.elev[i][kk] * ELEV_UNIT;   // Level 94's slope
         p.turn = d.propRot[i][kk] & 3;
         p.yaw = p.turn * PROP_TURN;
         p.againstWall = (d.propRot[i][kk] & PROP_AGAINST_WALL) != 0;
@@ -534,11 +534,16 @@ ChunkLayout chunkLayout(World &w, int cx, int cz) {
         f.seed = aud.seed;
         L.fixtures.push_back(f);
     }
+    // Level 94's houses, on each storey they have: a two-storey house's roof
+    // is on its upper floor.
     for (int q = 0; q < 4; q++) {
         MotionHouse hs;
-        if (!w.motionHouse(cx, cz, q, hs)) continue;
+        if (!w.motionHouse(cx, cz, q, hs) || (w.qs != 0 && hs.storeys != 2)) continue;
         Fixture f;
         f.kind = FixtureKind::House;
+        f.tone = (uint8_t)(w.qs != 0 ? 2 : hs.storeys == 2 ? 1 : 0);
+        static const Vec3 DOOR_NORMAL[4] = { { 0, 0, -1 }, { 1, 0, 0 }, { 0, 0, 1 }, { -1, 0, 0 } };
+        f.normal = DOOR_NORMAL[hs.door];
         f.w = (hs.i1 - hs.i0 + 1) * CELL * 0.5f;
         f.h = (hs.k1 - hs.k0 + 1) * CELL * 0.5f;
         const float hx = cx * CHUNK + hs.i0 * CELL + f.w, hz = cz * CHUNK + hs.k0 * CELL + f.h;

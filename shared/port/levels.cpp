@@ -25,7 +25,7 @@ const LevelCfg LEVELS[NLEVELS] = {
     { LEVEL_RULES[5], 0.85f, 0.040f, 0.06f, {1.00f,0.80f,0.55f}, {0.052f,0.040f,0.034f}, {0.075f,0.050f,0.040f} },
     // Level 94: no fittings. Daylight is the ambient alone, and the fog is
     // the sky's colour, so the hills fade into it. Night is blackoutCur.
-    { LEVEL_RULES[6], 1.00f, 0.019f, 0.04f, {1.00f,0.96f,0.86f}, {0.200f,0.196f,0.180f}, {0.760f,1.080f,1.750f} },
+    { LEVEL_RULES[6], 1.00f, 0.013f, 0.04f, {1.00f,0.96f,0.86f}, {0.300f,0.292f,0.270f}, {0.760f,1.080f,1.750f} },
 };
 // The Poolrooms are kept nearly uniform on purpose: new tile in a still hall.
 const float SURF_MACRO[NLEVELS] = { 0.05f, 0.08f, 0.015f, 0.06f, 0.05f, 0.05f, 0.10f };

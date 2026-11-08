@@ -1183,6 +1183,80 @@ Pcm makeGrassStep(uint32_t seed)
     return toPcm(d, 0.62f);
 }
 
+// The Animation's stop-motion camera: the shutter (white noise through an RBJ
+// band-pass at 3.2 kHz, Q 1.2, decaying at 900/s), then the film advancing:
+// three ratchet clicks 22-30 ms apart at 2.2 kHz, each at 0.45 of the one
+// before. 0.14 s, peak 0.6.
+Pcm makeShutter(int variant)
+{
+    Rng r((uint64_t)variant * 1000u + 41u);
+    const int n = (int)(0.14f * SAMPLE_RATE);
+    const float gap = 0.022f + 0.004f * variant;
+    std::vector<float> d(n);
+    auto bandOf = [](float f, float q, float &b0, float &a1, float &a2) {
+        float w = TAU * f / SAMPLE_RATE, alpha = sinf(w) / (2.0f * q), a0 = 1.0f + alpha;
+        b0 = alpha / a0; a1 = -2.0f * cosf(w) / a0; a2 = (1.0f - alpha) / a0;
+    };
+    float sb0, sa1, sa2, rb0, ra1, ra2;
+    bandOf(3200.0f, 1.2f, sb0, sa1, sa2);
+    bandOf(2200.0f + 150.0f * variant, 2.0f, rb0, ra1, ra2);
+    float sx1 = 0, sx2 = 0, sy1 = 0, sy2 = 0, rx1 = 0, rx2 = 0, ry1 = 0, ry2 = 0;
+    for (int i = 0; i < n; i++) {
+        const float t = (float)i / SAMPLE_RATE, x = r.f01() * 2.0f - 1.0f;
+        float s = sb0 * x - sb0 * sx2 - sa1 * sy1 - sa2 * sy2; sx2 = sx1; sx1 = x; sy2 = sy1; sy1 = s;
+        float k = rb0 * x - rb0 * rx2 - ra1 * ry1 - ra2 * ry2; rx2 = rx1; rx1 = x; ry2 = ry1; ry1 = k;
+        float ratchet = 0;
+        for (int c = 0; c < 3; c++) {
+            const float tc = t - 0.03f - c * gap;
+            if (tc > 0) ratchet += powf(0.45f, (float)c) * expf(-tc * 600.0f);
+        }
+        d[i] = s * expf(-t * 900.0f) * 3.0f + k * ratchet * 2.0f;
+    }
+    return toPcm(d, 0.6f);
+}
+
+// The Animation's laugh: five "ha"s on old film. Each is a sawtooth pulse
+// train through two RBJ band-passes at 700 and 1200 Hz (an "ah"), 0.13 s with a
+// 10 ms rise, 0.06 s apart. The pitch falls from 270 to 140 Hz across the
+// laugh, with a 7 Hz vibrato of 6% and a 0.8 Hz wow of 4%, as film running off
+// speed. A one-pole low-pass at 3.5 kHz and roomTail (0.9 s, a quarter wet)
+// put it outside, somewhere. 1.3 s, peak 0.8.
+Pcm makeCackle()
+{
+    const int n = (int)(1.3f * SAMPLE_RATE);
+    Rng r(9401u);
+    auto bandOf = [](float f, float q, float &b0, float &a1, float &a2) {
+        float w = TAU * f / SAMPLE_RATE, alpha = sinf(w) / (2.0f * q), a0 = 1.0f + alpha;
+        b0 = alpha / a0; a1 = -2.0f * cosf(w) / a0; a2 = (1.0f - alpha) / a0;
+    };
+    float f1b, f1a1, f1a2, f2b, f2a1, f2a2;
+    bandOf(700.0f, 2.5f, f1b, f1a1, f1a2);
+    bandOf(1200.0f, 3.0f, f2b, f2a1, f2a2);
+    float x1 = 0, x2 = 0, y1 = 0, y2 = 0, u1 = 0, u2 = 0, v1 = 0, v2 = 0, phase = 0, lp = 0;
+    const float soften = 1.0f - expf(-TAU * 3500.0f / SAMPLE_RATE);
+    std::vector<float> near(n);
+    for (int i = 0; i < n; i++) {
+        const float t = (float)i / SAMPLE_RATE;
+        const float f0 = (270.0f - 130.0f * fminf(t / 1.0f, 1.0f)) * (1.0f + 0.06f * sinf(TAU * 7.0f * t))
+                       * (1.0f + 0.04f * sinf(TAU * 0.8f * t));
+        phase += f0 / SAMPLE_RATE;
+        phase -= floorf(phase);
+        const float x = (2.0f * phase - 1.0f) + 0.15f * (r.f01() * 2.0f - 1.0f);
+        float a = f1b * x - f1b * x2 - f1a1 * y1 - f1a2 * y2; x2 = x1; x1 = x; y2 = y1; y1 = a;
+        float b = f2b * x - f2b * u2 - f2a1 * v1 - f2a2 * v2; u2 = u1; u1 = x; v2 = v1; v1 = b;
+        const float st = fmodf(t, 0.19f);
+        const int syl = (int)(t / 0.19f);
+        float env = syl < 5 && st < 0.13f ? (1.0f - expf(-st / 0.010f)) * expf(-st * 9.0f) : 0.0f;
+        env *= 1.0f - 0.1f * syl;
+        lp += soften * ((a + 0.7f * b) * env - lp);
+        near[i] = lp;
+    }
+    const std::vector<float> room = roomTail(near, 0.9f);
+    std::vector<float> mix(n);
+    for (int i = 0; i < n; i++) mix[i] = near[i] * 0.75f + room[i] * 0.25f * 2.2f;
+    return toPcm(mix, 0.8f);
+}
+
 ClipSpec clipSpec(Sfx sfx) {
     switch (sfx) {
     case Sfx::Step: case Sfx::SwimStroke:
@@ -1191,7 +1265,8 @@ ClipSpec clipSpec(Sfx sfx) {
     case Sfx::SplashIn: case Sfx::SplashOut:
     case Sfx::FarDoor: case Sfx::FarClang: case Sfx::FarPop:
     case Sfx::FarBoom: case Sfx::FarJingle:
-    case Sfx::DoorShut: case Sfx::DoorKnock: case Sfx::Choke: case Sfx::Cough: return { 3, 1.0f, 1.0f };
+    case Sfx::DoorShut: case Sfx::DoorKnock: case Sfx::Choke: case Sfx::Cough:
+    case Sfx::Shutter: return { 3, 1.0f, 1.0f };
     case Sfx::Hit:       return { 1, 1.7f, 0.40f };
     case Sfx::Kill:      return { 1, 0.55f, 0.80f };
     case Sfx::Heartbeat: return { 1, 1.0f, 0.55f };
@@ -1260,6 +1335,8 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::Exhale:         return makeExhale();
     case Sfx::Cough:          return makeCough(variant);
     case Sfx::StepGrass:      return makeGrassStep(800 + variant * 31);
+    case Sfx::Shutter:        return makeShutter(variant);
+    case Sfx::Cackle:         return makeCackle();
     }
     return {};
 }

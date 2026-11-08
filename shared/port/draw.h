@@ -28,6 +28,9 @@ struct FrameLight {
     float roomMask[4];     // uRoomMask: the Manila Room's dark panels (x0, z0, x1, z1)
     float lamp[4];         // uLamp: the chandelier or a stairwell's landing tube (xyz, output)
     Vec3 lampCol;          // uLampCol
+    // uAmb is the level's ambient (LevelCfg::amb) times this. Level 94's night
+    // takes it down to NIGHT_AMB, under the shader's own blackout floor.
+    float ambScale = 1.0f;
 };
 
 // The world shader's shadow grid (World::buildOccupancy, texture2): OCC_CELLS

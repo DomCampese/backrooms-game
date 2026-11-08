@@ -629,6 +629,59 @@ static void addProp(const PropPlacement &site, int level, MB &pr, MB &ce, MB &ao
         }
         break;
     }
+    case PROP_TRUCK: {   // Level 94's almond water truck, from its cab's cell: the cab at local -z, the shop over the back cell
+        // A 1930s delivery van in a pastel, with a white shop body, a serving
+        // hatch under a striped awning on its right (+x), and a giant can of
+        // almond water on the roof. Plain boxes and three 16-sided drums.
+        static const Rgba PAINT[3] = { { 150, 206, 186, 255 }, { 236, 170, 176, 255 }, { 150, 186, 226, 255 } };
+        const Rgba paint = PAINT[h % 3], shop = { 238, 232, 218, 255 }, dark = { 26, 24, 28, 255 };
+        const Rgba chrome = { 200, 204, 210, 254 }, glass = { 44, 60, 76, 254 }, tyre = { 22, 20, 22, 255 };
+        blob(0.95f, 2.0f);
+        for (int s = -1; s <= 1; s += 2)
+            for (float wz : { -0.30f, 2.30f }) {
+                part(s * 0.78f, wz, 0.13f, 0.34f, ey, ey + 0.66f, Surface::Metal, tyre);          // wheels
+                part(s * 0.92f, wz, 0.02f, 0.14f, ey + 0.19f, ey + 0.47f, Surface::Metal, chrome); // hub caps
+            }
+        part(0, 1.0f, 0.78f, 1.86f, ey + 0.32f, ey + 0.64f, Surface::Metal, dark);                 // chassis
+        part(0, -0.82f, 0.74f, 0.22f, ey + 0.58f, ey + 1.12f, Surface::Metal, paint);              // bonnet
+        part(0, -0.34f, 0.84f, 0.30f, ey + 0.64f, ey + 1.80f, Surface::Metal, paint);              // cab
+        part(0, -0.66f, 0.70f, 0.03f, ey + 1.18f, ey + 1.66f, Surface::Metal, glass);              // windscreen, 3 cm proud
+        for (int s = -1; s <= 1; s += 2) {
+            part(s * 0.86f, -0.34f, 0.02f, 0.22f, ey + 1.20f, ey + 1.62f, Surface::Metal, glass);   // side windows
+            part(s * 0.50f, -1.05f, 0.12f, 0.02f, ey + 0.80f, ey + 0.96f, Surface::Metal, { 255, 236, 170, 240 });   // headlamps
+            part(s * 0.86f, 0.70f, 0.10f, 0.40f, ey + 0.55f, ey + 0.72f, Surface::Metal, paint);    // running boards
+        }
+        part(0, -1.06f, 0.82f, 0.04f, ey + 0.46f, ey + 0.58f, Surface::Metal, chrome);              // bumpers
+        part(0, 2.90f, 0.82f, 0.04f, ey + 0.46f, ey + 0.58f, Surface::Metal, chrome);
+        part(0, 1.52f, 0.86f, 1.34f, ey + 0.64f, ey + 2.12f, Surface::Metal, shop);                // the shop body
+        part(0, 1.52f, 0.88f, 1.36f, ey + 1.02f, ey + 1.12f, Surface::Metal, paint);               // a band round it
+        part(0.87f, 1.40f, 0.02f, 0.62f, ey + 1.20f, ey + 1.80f, Surface::Metal, dark);            // the open hatch
+        part(1.00f, 1.40f, 0.14f, 0.66f, ey + 1.12f, ey + 1.18f, Surface::Wood, { 140, 96, 60, 255 });   // counter
+        for (int sl = 0; sl < 7; sl++)                                                              // striped awning
+            part(1.10f, 0.86f + sl * 0.18f, 0.24f, 0.09f, ey + 1.90f, ey + 1.96f, Surface::Fabric,
+                 sl & 1 ? Rgba{ 244, 240, 230, 255 } : Rgba{ 120, 176, 214, 255 });
+        roundPart(0, 1.52f, 0.46f, 0.46f, ey + 2.12f, ey + 2.42f, { 240, 238, 228, 254 });         // the can on the roof
+        roundPart(0, 1.52f, 0.46f, 0.46f, ey + 2.42f, ey + 2.64f, { 110, 168, 210, 254 });
+        roundPart(0, 1.52f, 0.46f, 0.42f, ey + 2.64f, ey + 2.94f, { 240, 238, 228, 254 });
+        roundPart(0, 1.52f, 0.42f, 0.30f, ey + 2.94f, ey + 2.99f, chrome);
+        // The truck's last can, on the counter.
+        roundPart(1.00f, 1.40f, 0.035f, 0.035f, ey + 1.18f, ey + 1.30f, { 230, 226, 214, 254 });
+        break;
+    }
+    case PROP_BED: {   // a single bed along z, the headboard and pillow at local +z (turn 0 or 2)
+        blob(0.62f, 0.92f);
+        const Rgba frame = { 122, 82, 54, 255 }, sheet = { 236, 230, 214, 255 };
+        static const Rgba QUILT[4] = { { 206, 96, 104, 255 }, { 96, 140, 196, 255 }, { 120, 170, 120, 255 }, { 220, 180, 90, 255 } };
+        for (int lx = -1; lx <= 1; lx += 2) for (int lz = -1; lz <= 1; lz += 2)
+            part(lx * 0.55f, lz * 0.84f, 0.04f, 0.04f, ey, ey + 0.14f, Surface::Wood, frame);   // legs
+        part(0, 0, 0.60f, 0.90f, ey + 0.14f, ey + 0.30f, Surface::Wood, frame);
+        part(0, 0.87f, 0.62f, 0.04f, ey, ey + 1.02f, Surface::Wood, frame);                   // headboard
+        part(0, -0.88f, 0.62f, 0.03f, ey, ey + 0.66f, Surface::Wood, frame);                  // footboard
+        part(0, 0.0f, 0.56f, 0.84f, ey + 0.30f, ey + 0.48f, Surface::Fabric, sheet);         // mattress
+        part(0, -0.22f, 0.585f, 0.62f, ey + 0.46f, ey + top, Surface::Fabric, QUILT[h % 4]);  // the quilt, turned down
+        part(0, 0.64f, 0.40f, 0.15f, ey + 0.48f, ey + 0.62f, Surface::Fabric, { 248, 246, 240, 255 });   // pillow
+        break;
+    }
     case PROP_CARD_TABLE: {   // felt over a wooden rim, the dealer's tray on local +z
         blob(0.80f, 0.62f);
         const PropShape &ps = PROP_SHAPES[PROP_CARD_TABLE];
@@ -1222,17 +1275,113 @@ static void outwardFace(MB &mb, const Vec3 *p, int n, Vec3 out, Rgba col) {
     }
 }
 
-// Level 94's house: planks inside its walls, and a pitched roof whose slopes
-// pass through the top of the walls (pos.y) and run MOTION_ROOF_RISE up to a
-// ridge along the long side, with eaves overhanging the walls, gables over the
-// end walls, and a chimney. Flat clay colours at alpha 254: no relief.
-static void addHouse(MB &pr, const Fixture &f) {
+// Level 94's pastel paints, as the houses look in the lore: cardboard in
+// pink, mint, sky blue, butter yellow, lavender and peach. The trim is white
+// and the shutters a darker shade of the paint.
+static const Rgba HOUSE_PAINT[6] = { { 236, 178, 190, 254 }, { 168, 222, 192, 254 }, { 166, 200, 236, 254 },
+                                     { 240, 222, 150, 254 }, { 200, 182, 230, 254 }, { 244, 196, 160, 254 } };
+
+// One storey of a Level 94 house (FixtureKind::House): planks inside, and on
+// the outside clapboards in the house's pastel, white corner boards, framed
+// windows with shutters, flower boxes under the ground floor's windows, a
+// canopy and step at the door, a band where an upper floor sits on the one
+// below, and on the top storey a pitched roof whose slopes pass through the
+// top of the walls (pos.y) and rise MOTION_ROOF_RISE to a ridge along the long
+// side, with a ridge cap, gables over the end walls and a chimney. Flat colours
+// at alpha 254, so no relief. The openings are the layout's, so the trim
+// follows the walls the generator and the overlays left.
+static void addHouse(MB &pr, const Fixture &f, const ChunkLayout &L) {
     Rng r(((uint64_t)f.seed << 1) ^ 0x94ULL);
-    addPlanks(pr, r, f.pos.x - f.w, f.pos.z - f.h, f.pos.x + f.w, f.pos.z + f.h, 0.85f + 0.3f * r.f01());
+    const float x0 = f.pos.x - f.w, z0 = f.pos.z - f.h, x1 = f.pos.x + f.w, z1 = f.pos.z + f.h;
+    const float top = f.pos.y;
+    addPlanks(pr, r, x0, z0, x1, z1, 0.85f + 0.3f * r.f01());
+    const Rgba paint = HOUSE_PAINT[(f.seed >> 3) % 6];
+    const Rgba shade = { cl8(paint.r * 0.62f), cl8(paint.g * 0.62f), cl8(paint.b * 0.62f), 254 };
+    const Rgba trim = { 246, 242, 232, 254 }, wood = { 120, 84, 56, 254 };
+    static const Rgba FLOWER[3] = { { 220, 54, 70, 254 }, { 246, 210, 60, 254 }, { 236, 120, 190, 254 } };
+    // Side s: 0 north, 1 east, 2 south, 3 west. A box on its outer face from
+    // along-edge a0..a1, height y0..y1, d0..d1 metres out from the wall's face.
+    const int ci0 = (int)lroundf((x0 - L.cx * CHUNK) / CELL), ck0 = (int)lroundf((z0 - L.cz * CHUNK) / CELL);
+    const int nx = (int)lroundf((x1 - x0) / CELL), nz = (int)lroundf((z1 - z0) / CELL);
+    auto face = [&](int s, float a0, float a1, float y0, float y1, float d0, float d1, Rgba col) {
+        const float o0 = WT + d0, o1 = WT + d1;
+        switch (s) {
+        case 0:  addSolidBox(pr, a0, y0, z0 - o1, a1, y1, z0 - o0, col); break;
+        case 2:  addSolidBox(pr, a0, y0, z1 + o0, a1, y1, z1 + o1, col); break;
+        case 3:  addSolidBox(pr, x0 - o1, y0, a0, x0 - o0, y1, a1, col); break;
+        default: addSolidBox(pr, x1 + o0, y0, a0, x1 + o1, y1, a1, col); break;
+        }
+    };
+    const float RH = 0.30f;   // a clapboard's height
+    for (int s = 0; s < 4; s++) {
+        const bool alongX = s == 0 || s == 2;
+        const int n = alongX ? nx : nz;
+        const float e0 = alongX ? x0 : z0;
+        for (int c = 0; c < n; c++) {
+            // The edge this cell of the side is, as the layout lists its opening.
+            const int i = s == 0 || s == 2 ? ci0 + c : s == 3 ? ci0 : ci0 + nx;
+            const int k = s == 1 || s == 3 ? ck0 + c : s == 0 ? ck0 : ck0 + nz;
+            const Opening *op = L.opening(i, k, !alongX);
+            const bool window = op && op->kind == OpeningKind::Window;
+            const bool door = op && !window && op->kind != OpeningKind::Rail;
+            const float lo = c == 0 ? e0 + c * CELL - WT - 0.04f : e0 + c * CELL;
+            const float hi = c == n - 1 ? e0 + (c + 1) * CELL + WT + 0.04f : e0 + (c + 1) * CELL;
+            for (int row = 0; row * RH < top - 0.01f; row++) {
+                const float ya = row * RH, yb = std::min(top, ya + RH);
+                const float d = row & 1 ? 0.036f : 0.022f;
+                const float k2 = 0.96f + 0.08f * ((row * 7 + c * 3) % 5) / 4.0f;
+                const Rgba board = { cl8(paint.r * k2), cl8(paint.g * k2), cl8(paint.b * k2), 254 };
+                const float cutLo = window ? op->sillY - 0.08f : 0.0f, cutHi = op ? op->headY + 0.08f : 0.0f;
+                if (op && (window || door) && yb > cutLo && ya < cutHi) {
+                    face(s, lo, op->a0 - 0.10f, ya, yb, 0, d, board);
+                    face(s, op->a1 + 0.10f, hi, ya, yb, 0, d, board);
+                } else {
+                    face(s, lo, hi, ya, yb, 0, d, board);
+                }
+            }
+            if (!op || !(window || door)) continue;
+            // White frame round the opening, standing proud of the boards.
+            const float hd = op->headY, sl = window ? op->sillY : 0.0f;
+            face(s, op->a0 - 0.12f, op->a0 - 0.02f, sl - 0.04f, hd + 0.04f, 0, 0.06f, trim);
+            face(s, op->a1 + 0.02f, op->a1 + 0.12f, sl - 0.04f, hd + 0.04f, 0, 0.06f, trim);
+            face(s, op->a0 - 0.16f, op->a1 + 0.16f, hd + 0.04f, hd + 0.16f, 0, 0.08f, trim);
+            if (window) {
+                face(s, op->a0 - 0.16f, op->a1 + 0.16f, sl - 0.10f, sl - 0.02f, 0, 0.12f, trim);   // the sill
+                // Shutters, open against the boards either side.
+                face(s, op->a0 - 0.58f, op->a0 - 0.14f, sl, hd, 0.04f, 0.07f, shade);
+                face(s, op->a1 + 0.14f, op->a1 + 0.58f, sl, hd, 0.04f, 0.07f, shade);
+                if (f.tone != 2) {   // a flower box under a ground-floor window
+                    face(s, op->a0 - 0.05f, op->a1 + 0.05f, sl - 0.34f, sl - 0.12f, 0.02f, 0.24f, wood);
+                    for (int fl = 0; fl < 5; fl++) {
+                        const float fa = op->a0 + 0.06f + fl * (op->a1 - op->a0 - 0.12f) / 4.0f;
+                        face(s, fa - 0.06f, fa + 0.06f, sl - 0.12f, sl - 0.02f + 0.05f * (fl & 1), 0.07f, 0.19f,
+                             FLOWER[(f.seed >> (fl * 2)) % 3]);
+                    }
+                }
+            } else {   // a canopy over the door on two brackets, and a step
+                face(s, op->a0 - 0.30f, op->a1 + 0.30f, hd + 0.16f, hd + 0.26f, 0, 0.70f, shade);
+                face(s, op->a0 - 0.22f, op->a0 - 0.14f, hd - 0.30f, hd + 0.16f, 0, 0.50f, trim);
+                face(s, op->a1 + 0.14f, op->a1 + 0.22f, hd - 0.30f, hd + 0.16f, 0, 0.50f, trim);
+                face(s, op->a0 - 0.20f, op->a1 + 0.20f, 0.0f, 0.07f, 0, 0.55f, { 170, 166, 156, 254 });
+            }
+        }
+    }
+    // White boards up the corners, and a band where this storey sits on the one below.
+    // Each corner board wraps the walls' outer corner and sinks 10 cm into them.
+    for (int c = 0; c < 4; c++) {
+        const float ox = c & 1 ? x1 + WT : x0 - WT, oz = c & 2 ? z1 + WT : z0 - WT;
+        const float sx = c & 1 ? 1.0f : -1.0f, sz = c & 2 ? 1.0f : -1.0f;
+        addSolidBox(pr, std::min(ox - sx * 0.10f, ox + sx * 0.07f), 0.0f, std::min(oz - sz * 0.10f, oz + sz * 0.07f),
+                    std::max(ox - sx * 0.10f, ox + sx * 0.07f), top, std::max(oz - sz * 0.10f, oz + sz * 0.07f), trim);
+    }
+    if (f.tone == 2)
+        for (int s = 0; s < 4; s++) face(s, (s == 0 || s == 2 ? x0 : z0) - WT - 0.07f, (s == 0 || s == 2 ? x1 : z1) + WT + 0.07f,
+                                         -0.06f, 0.12f, 0, 0.06f, trim);
+    if (f.tone == 1) return;   // the upper floor carries the roof
     static const Rgba ROOF[4] = { { 168, 64, 46, 254 }, { 72, 96, 150, 254 }, { 70, 120, 72, 254 }, { 120, 78, 132, 254 } };
     const Rgba roof = ROOF[f.seed % 4];
     const Rgba under = { (uint8_t)(roof.r / 2), (uint8_t)(roof.g / 2), (uint8_t)(roof.b / 2), 254 };
-    const Rgba gable = { 236, 222, 196, 254 }, brick = { 150, 84, 62, 254 };
+    const Rgba brick = { 150, 84, 62, 254 };
     // a runs along the ridge, b across it; `at` puts (a, y, b) in the world.
     const bool alongZ = f.variant == 1;
     const float ha = alongZ ? f.h : f.w, hb = alongZ ? f.w : f.h;
@@ -1240,25 +1389,39 @@ static void addHouse(MB &pr, const Fixture &f) {
         return alongZ ? Vec3{ f.pos.x + b, y, f.pos.z + a } : Vec3{ f.pos.x + a, y, f.pos.z + b };
     };
     auto dir = [&](float a, float y, float b) { return alongZ ? Vec3{ b, y, a } : Vec3{ a, y, b }; };
-    const float eave = f.pos.y, ridge = eave + MOTION_ROOF_RISE, slope = MOTION_ROOF_RISE / hb;
+    const float eave = top, ridge = eave + MOTION_ROOF_RISE, slope = MOTION_ROOF_RISE / hb;
     const float O = 0.45f, T = 0.12f;   // overhang, and the roof's thickness
     const float edge = eave - O * slope;
     for (int side = -1; side <= 1; side += 2) {
         const float s = (float)side;
-        const Vec3 top[4] = { at(-ha - O, edge + T, s * (hb + O)), at(ha + O, edge + T, s * (hb + O)),
-                              at(ha + O, ridge + T, 0), at(-ha - O, ridge + T, 0) };
-        outwardFace(pr, top, 4, dir(0, 1, s * slope), roof);
+        const Vec3 roofTop[4] = { at(-ha - O, edge + T, s * (hb + O)), at(ha + O, edge + T, s * (hb + O)),
+                                  at(ha + O, ridge + T, 0), at(-ha - O, ridge + T, 0) };
+        outwardFace(pr, roofTop, 4, dir(0, 1, s * slope), roof);
         const Vec3 bot[4] = { at(-ha - O, edge, s * (hb + O)), at(ha + O, edge, s * (hb + O)),
                               at(ha + O, ridge, 0), at(-ha - O, ridge, 0) };
         outwardFace(pr, bot, 4, dir(0, -1, -s * slope), under);
         const Vec3 rim[4] = { at(-ha - O, edge, s * (hb + O)), at(ha + O, edge, s * (hb + O)),
                               at(ha + O, edge + T, s * (hb + O)), at(-ha - O, edge + T, s * (hb + O)) };
-        outwardFace(pr, rim, 4, dir(0, 0, s), under);
-        // The gable over the end wall at a = s * ha, flush with the wall's face.
-        const float ga = s * (ha + WT);
-        const Vec3 tri[3] = { at(ga, eave, -hb), at(ga, eave, hb), at(ga, ridge, 0) };
-        outwardFace(pr, tri, 3, dir(s, 0, 0), gable);
+        outwardFace(pr, rim, 4, dir(0, 0, s), trim);
+        // The roof's end, seen past the gable: its thickness along the slope.
+        const Vec3 cut[4] = { at(s * (ha + O), edge, -hb - O), at(s * (ha + O), edge + T, -hb - O),
+                              at(s * (ha + O), ridge + T, 0), at(s * (ha + O), ridge, 0) };
+        outwardFace(pr, cut, 4, dir(s, 0, 0), trim);
+        const Vec3 cut2[4] = { at(s * (ha + O), edge, hb + O), at(s * (ha + O), edge + T, hb + O),
+                               at(s * (ha + O), ridge + T, 0), at(s * (ha + O), ridge, 0) };
+        outwardFace(pr, cut2, 4, dir(s, 0, 0), trim);
+        // The gable over the end wall at a = s * ha, in the house's paint.
+        const float ga = s * (ha + WT + 0.03f);
+        const Vec3 tri[3] = { at(ga, eave, -hb - WT), at(ga, eave, hb + WT), at(ga, ridge, 0) };
+        outwardFace(pr, tri, 3, dir(s, 0, 0), paint);
+        // A round attic vent in the gable, as a dark square.
+        const Vec3 v0 = at(s * (ha + WT + 0.05f), eave + MOTION_ROOF_RISE * 0.35f, -0.22f);
+        const Vec3 v1 = at(s * (ha + WT + 0.05f), eave + MOTION_ROOF_RISE * 0.35f + 0.44f, 0.22f);
+        const Vec3 vv[4] = { v0, at(s * (ha + WT + 0.05f), v0.y, 0.22f), v1, at(s * (ha + WT + 0.05f), v1.y, -0.22f) };
+        outwardFace(pr, vv, 4, dir(s, 0, 0), { 40, 34, 40, 254 });
     }
+    const Vec3 rc0 = at(-ha - O, ridge + T - 0.04f, -0.12f), rc1 = at(ha + O, ridge + T + 0.08f, 0.12f);   // the ridge cap
+    addSolidBox(pr, std::min(rc0.x, rc1.x), rc0.y, std::min(rc0.z, rc1.z), std::max(rc0.x, rc1.x), rc1.y, std::max(rc0.z, rc1.z), under);
     // A chimney through one slope, a third of the way along.
     const float ca = ha * (r.f01() < 0.5f ? -0.45f : 0.45f), cb = hb * 0.45f;
     // Its foot stays above the ceiling: at the ceiling's height it fights it for depth.
@@ -1287,7 +1450,7 @@ static void addFixture(const FixtureMeshes &m, const Fixture &f) {
     case FixtureKind::ManilaRoom:  addManilaRoom(m.pr, m.fx, m.ao, f.pos.x, f.pos.z, f.pos.y, f.seed); break;
     case FixtureKind::Auditorium:  addAuditorium(m.pr, m.fx, f); break;
     case FixtureKind::Poster:      addPoster(m.pr, f); break;
-    case FixtureKind::House:       addHouse(m.pr, f); break;
+    case FixtureKind::House:       break;   // bakeChunkGeometry builds it with the layout's openings
     }
 }
 
@@ -1521,6 +1684,23 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
                                  (unsigned char)(wcol.b * k2), wcol.a };
                     fl.quad({x0,y00,z0},{x1,y10,z0},{x1,y11,z1},{x0,y01,z1}, n,
                             {x0/2,z0/2},{x1/2,z0/2},{x1/2,z1/2},{x0/2,z1/2}, sc);
+                }
+            } else if (c.floor == FloorKind::Hill) {
+                // Level 94's slope: HILLSUB x HILLSUB quads on World::motionHeight,
+                // each with the normal of its own slope. A hilltop cell is one quad.
+                const int HILLSUB = 2;
+                auto hAt = [&](float x, float z) { return w.motionHeight(x / CELL, z / CELL); };
+                const bool flat = hAt(gx, gz) == 0 && hAt(gx + CELL, gz) == 0 && hAt(gx, gz + CELL) == 0 && hAt(gx + CELL, gz + CELL) == 0;
+                const int sub = flat ? 1 : HILLSUB;
+                for (int a = 0; a < sub; a++) for (int b = 0; b < sub; b++) {
+                    const float x0 = gx + a * CELL / sub, x1 = gx + (a + 1) * CELL / sub;
+                    const float z0 = gz + b * CELL / sub, z1 = gz + (b + 1) * CELL / sub;
+                    const float y00 = hAt(x0, z0), y10 = hAt(x1, z0), y11 = hAt(x1, z1), y01 = hAt(x0, z1);
+                    const float dydx = ((y10 + y11) - (y00 + y01)) / (2 * (x1 - x0));
+                    const float dydz = ((y01 + y11) - (y00 + y10)) / (2 * (z1 - z0));
+                    const float nl = sqrtf(dydx * dydx + 1 + dydz * dydz);
+                    fl.quad({x0,y00,z0},{x1,y10,z0},{x1,y11,z1},{x0,y01,z1}, { -dydx / nl, 1 / nl, -dydz / nl },
+                            {x0/2,z0/2},{x1/2,z0/2},{x1/2,z1/2},{x0/2,z1/2}, wcol);
                 }
             } else
             fl.quad({gx,fy,gz},{gx+CELL,fy,gz},{gx+CELL,fy,gz+CELL},{gx,fy,gz+CELL},{0,1,0},
@@ -1847,7 +2027,10 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
     // streamers).
     for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++)
         addCellFixtures(i, kk, FixtureStage::Service);
-    for (const Fixture &f : L.chunkFixtures()) addFixture(fm, f);
+    for (const Fixture &f : L.chunkFixtures()) {
+        if (f.kind == FixtureKind::House) addHouse(pr, f, L);
+        else addFixture(fm, f);
+    }
     out.parts[MESH_FLOOR] = std::move(fl);
     out.parts[MESH_CEILING] = std::move(ce);
     out.parts[MESH_WALLS] = std::move(wa);

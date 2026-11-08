@@ -51,6 +51,20 @@ bool World::manilaChunk(int cx, int cz, int s) {
 
 bool World::pairFeature(int cx, int cz, int p, VertFeat &f) {
     if (storeyH <= 0.0f) return false;
+    // Level 94: the stairwell of the chunk's two-storey house, rising from the
+    // ground. Placed by the house, so it has no other feature to avoid.
+    if (level == MOTION) {
+        if (p != 0) return false;
+        for (int q = 0; q < 4; q++) {
+            MotionHouse hs;
+            if (!motionHouse(cx, cz, q, hs) || hs.storeys != 2) continue;
+            f = VertFeat{};
+            f.lo = 0; f.kind = VK_STAIRWELL; f.wu = 2; f.lv = 4; f.dir = 0;
+            f.x0 = (int8_t)hs.stairX; f.z0 = (int8_t)(hs.k0 + 1);
+            return true;
+        }
+        return false;
+    }
     // Tall courts: one aligned opening through 3, 5 or 7 storeys. The whole
     // eight-storey band is reserved, caps included, so no pair feature overlaps the
     // court on an end storey.
@@ -898,13 +912,16 @@ void World::generate(ChunkData &d, int cx, int cz) {
     }
     // Level 94: every cell outside a house is open to the sky. Marked here,
     // after vflag is cleared above.
+    // On storey 1 the rest is a hole down to the ground.
     if (level == MOTION) {
-        for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) d.vflag[i][kk] = VF_OPENUP;
+        bool house[CCELLS][CCELLS] = {};
         for (int q = 0; q < 4; q++) {
             MotionHouse hs;
-            if (!motionHouse(cx, cz, q, hs)) continue;
-            for (int i = hs.i0; i <= hs.i1; i++) for (int kk = hs.k0; kk <= hs.k1; kk++) d.vflag[i][kk] = 0;
+            if (!motionHouse(cx, cz, q, hs) || (qs != 0 && hs.storeys != 2)) continue;
+            for (int i = hs.i0; i <= hs.i1; i++) for (int kk = hs.k0; kk <= hs.k1; kk++) house[i][kk] = true;
         }
+        const uint8_t sky = qs == 0 ? VF_OPENUP : (VF_OPENUP | VF_HOLE | VF_NOWALK);
+        for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++) if (!house[i][kk]) d.vflag[i][kk] |= sky;
     }
     // ---- the Manila Room. Stamped before the connectivity flood so the flood
     // sees it, and again at the end so door thinning, the locked door and the exit
@@ -1138,7 +1155,9 @@ void World::generate(ChunkData &d, int cx, int cz) {
     // take an exit: it tries four times as often.
     // Level 94's walls are few, so it tries twice as often, and puts the exit
     // in a house's back wall where it can: the window opposite the door.
-    if (hash64(k ^ 0xE717ULL ^ (uint64_t)sseed()) % (exitTest ? 1 : level == THEATER ? 4 : level == MOTION ? 8 : 16) == 0) {
+    // Level 94's upper floors have none.
+    if ((level != MOTION || qs == 0) &&
+        hash64(k ^ 0xE717ULL ^ (uint64_t)sseed()) % (exitTest ? 1 : level == THEATER ? 4 : level == MOTION ? 8 : 16) == 0) {
         bool placed = false;
         for (int q = 0; q < 4 && !placed; q++) {
             MotionHouse hs;
@@ -1292,39 +1311,100 @@ bool World::snackAt(int ci, int ck) {
 // Two wave trains: a checker of hills and valleys, and a ridge on the
 // diagonal. Their slope is at most 0.3 * MOTION_WAVE_A + 0.2 * MOTION_WAVE_B
 // of the field per cell, so with the plateau and MOTION_VALLEY it is under
-// 2.9 units per cell, and rounding keeps a step within MAX_STEP_UNITS.
-int World::motionElev(int ci, int ck) const {
-    const uint32_t h = ih((int)visit, MOTION, sseed() ^ 0x9411u);
+// 2.8 units per cell (0.14 m a metre), and rounding keeps a step within
+// MAX_STEP_UNITS. The waves are 70 and 100 cells long: rolling hills 4 m deep.
+// Both read the bare seed, not sseed(): the hills and houses are the same on
+// every storey, so a house's upper floor sits on its ground floor.
+float World::motionHeight(float u, float v) const {
+    const uint32_t h = ih((int)visit, MOTION, seed ^ 0x9411u);
     const float p1 = (h & 1023) * (TAU / 1024), p2 = ((h >> 10) & 1023) * (TAU / 1024), p3 = ((h >> 20) & 1023) * (TAU / 1024);
-    const float u = 0.5f + 0.5f * portableSin(ci * MOTION_WAVE_A + p1) * portableSin(ck * MOTION_WAVE_A + p2);
-    const float v = 0.5f + 0.5f * portableSin((ci + ck) * MOTION_WAVE_B + p3);
-    const float t = (0.6f * u + 0.4f * v - MOTION_PLATEAU) / (1.0f - MOTION_PLATEAU);
-    if (t <= 0) return 0;
-    return -(int)floorf(t * MOTION_VALLEY + 0.5f);
+    const float a = 0.5f + 0.5f * portableSin(u * MOTION_WAVE_A + p1) * portableSin(v * MOTION_WAVE_A + p2);
+    const float b = 0.5f + 0.5f * portableSin((u + v) * MOTION_WAVE_B + p3);
+    const float t = (0.6f * a + 0.4f * b - MOTION_PLATEAU) / (1.0f - MOTION_PLATEAU);
+    return t <= 0 ? 0.0f : -t * MOTION_VALLEY * ELEV_UNIT;
 }
 
+int World::motionElev(int ci, int ck) const {
+    return -(int)floorf(-motionHeight(ci + 0.5f, ck + 0.5f) / ELEV_UNIT + 0.5f);
+}
+
+bool World::onHill(int ci, int ck) {
+    return level == MOTION && qs == 0 && openSky(ci, ck);
+}
+
+// One storey feature joins a chunk's storeys (featuresFor's cap), so only the
+// first quarter that may be tall can be.
 bool World::motionHouse(int cx, int cz, int q, MotionHouse &out) const {
     if (level != MOTION) return false;
-    const uint32_t h = ih(cx * 2 + (q & 1), cz * 2 + (q >> 1), sseed() ^ 0x40A5Eu ^ (visit * 0x9E3779B1u));
+    bool tallTaken = false;
+    for (int r = 0; r < q; r++) {
+        MotionHouse earlier;
+        if (motionSite(cx, cz, r, !tallTaken, earlier) && earlier.storeys == 2) tallTaken = true;
+    }
+    return motionSite(cx, cz, q, !tallTaken, out);
+}
+
+bool World::motionSite(int cx, int cz, int q, bool tallOk, MotionHouse &out) const {
+    const uint32_t h = ih(cx * 2 + (q & 1), cz * 2 + (q >> 1), seed ^ 0x40A5Eu ^ (visit * 0x9E3779B1u));
     if (h % 10 >= MOTION_HOUSE_TENTHS) return false;
-    const int w = 4 + (int)((h >> 4) & 1), dep = 4 + (int)((h >> 5) & 1);
     const int qx = (q & 1) * (CCELLS / 2), qz = (q >> 1) * (CCELLS / 2);
     // Inside the quarter with a cell of margin on every side, so two houses
     // never touch and every door opens onto grass.
+    auto flat = [&](int i0, int k0, int w, int dep) {
+        for (int i = i0 - 1; i <= i0 + w; i++)
+            for (int k = k0 - 1; k <= k0 + dep; k++)
+                if (motionElev(cx * CCELLS + i, cz * CCELLS + k) != 0) return false;
+        return true;
+    };
+    const int door = (int)((h >> 12) & 3);
+    if (tallOk && (h >> 13) % 10 < MOTION_TALL_TENTHS && flat(qx + 1, qz + 1, MOTION_TALL, MOTION_TALL)) {
+        const int i0 = qx + 1, k0 = qz + 1, n = MOTION_TALL;
+        // The stairwell keeps a cleared cell between it and the walls, against
+        // the west or the east side.
+        const int stairX = (h >> 16) & 1 ? i0 + 1 : i0 + n - 3;
+        out = { i0, k0, i0 + n - 1, k0 + n - 1, door, 2, stairX, h };
+        return true;
+    }
+    const int w = 4 + (int)((h >> 4) & 1), dep = 4 + (int)((h >> 5) & 1);
     const int i0 = qx + 1 + (int)((h >> 6) % (uint32_t)(7 - w)), k0 = qz + 1 + (int)((h >> 9) % (uint32_t)(7 - dep));
-    for (int i = i0 - 1; i <= i0 + w; i++)
-        for (int k = k0 - 1; k <= k0 + dep; k++)
-            if (motionElev(cx * CCELLS + i, cz * CCELLS + k) != 0) return false;
-    out = { i0, k0, i0 + w - 1, k0 + dep - 1, (int)((h >> 12) & 3), h };
+    if (!flat(i0, k0, w, dep)) return false;
+    out = { i0, k0, i0 + w - 1, k0 + dep - 1, door, 1, -1, h };
     return true;
 }
 
+bool World::motionTruck(int cx, int cz, MotionTruck &t) const {
+    if (level != MOTION) return false;
+    const uint32_t h = ih(cx, cz, seed ^ 0x7A0Cu ^ (visit * 0x85EBCA6Bu));
+    if (h % MOTION_TRUCK_RATE != 0) return false;
+    // The chunk's middle, between the quarters' houses, which keep a cell of
+    // margin inside their quarter.
+    const int dir = (int)((h >> 4) & 3);
+    t = { CCELLS / 2 - 1 + (int)((h >> 6) & 1), CCELLS / 2 - 1 + (int)((h >> 7) & 1), dir, 0, 0 };
+    t.bi = t.i + TRUCK_BACK_STEP[dir][0]; t.bk = t.k + TRUCK_BACK_STEP[dir][1];
+    for (int q = 0; q < 4; q++) {
+        MotionHouse hs;
+        if (!motionHouse(cx, cz, q, hs)) continue;
+        for (int c = 0; c < 2; c++) {
+            const int ti = c ? t.bi : t.i, tk = c ? t.bk : t.k;
+            if (ti >= hs.i0 - 1 && ti <= hs.i1 + 1 && tk >= hs.k0 - 1 && tk <= hs.k1 + 1) return false;
+        }
+    }
+    for (int i = std::min(t.i, t.bi) - 1; i <= std::max(t.i, t.bi) + 1; i++)
+        for (int k = std::min(t.k, t.bk) - 1; k <= std::max(t.k, t.bk) + 1; k++)
+            if (motionElev(cx * CCELLS + i, cz * CCELLS + k) != 0) return false;
+    return true;
+}
+
+// The stairwell's own cells are open above too, but they are inside a house
+// (VF_KEEP marks the feature and its cleared margin).
 bool World::openSky(int ci, int ck) {
-    return level == MOTION && (vflagAt(ci, ck) & VF_OPENUP) != 0;
+    if (level != MOTION) return false;
+    const uint8_t f = vflagAt(ci, ck);
+    return (f & VF_OPENUP) && !(f & VF_KEEP);
 }
 
 bool World::indoors(int ci, int ck) {
-    return level == MOTION && !(vflagAt(ci, ck) & VF_OPENUP);
+    return level == MOTION && !openSky(ci, ck);
 }
 
 // Level 94's chunk: the hill field, a house on each quarter that has a level
@@ -1336,6 +1416,10 @@ void World::furnishMotion(ChunkData &d, int cx, int cz, Rng &rng) {
     memset(d.pillar, 0, sizeof(d.pillar));
     memset(d.prop, 0, sizeof(d.prop));
     memset(d.propRot, 0, sizeof(d.propRot));
+    if (qs != 0) {
+        furnishMotionUpstairs(d, cx, cz);
+        return;
+    }
     for (int i = 0; i < CCELLS; i++)
         for (int k = 0; k < CCELLS; k++) d.elev[i][k] = (int8_t)motionElev(cx * CCELLS + i, cz * CCELLS + k);
     bool taken[CCELLS][CCELLS] = {};   // houses with their margin, and placed rooms
@@ -1344,9 +1428,10 @@ void World::furnishMotion(ChunkData &d, int cx, int cz, Rng &rng) {
             for (int k = std::max(0, k0); k <= std::min(CCELLS - 1, k1); k++) taken[i][k] = true;
     };
     auto furnish = [&](int i, int k, uint8_t rot) {
-        static const PropKind KINDS[6] = { PROP_COUCH, PROP_CABINET, PROP_TABLE, PROP_SHELVING, PROP_PLANT, PROP_BOXES };
-        d.prop[i][k] = KINDS[rng.ri(0, 5)];
-        d.propRot[i][k] = rot;
+        static const PropKind KINDS[7] = { PROP_COUCH, PROP_CABINET, PROP_TABLE, PROP_SHELVING, PROP_PLANT, PROP_BOXES, PROP_BED };
+        d.prop[i][k] = KINDS[rng.ri(0, 6)];
+        // A bed's box runs along z, so it turns only end for end.
+        d.propRot[i][k] = d.prop[i][k] == PROP_BED ? (uint8_t)(rot & 2) : rot;
     };
     // The four walls of cells i0..i1, k0..k1, solid with a window halfway
     // along each side and a door in side `door` (-1 for none).
@@ -1373,6 +1458,17 @@ void World::furnishMotion(ChunkData &d, int cx, int cz, Rng &rng) {
                 if (byDoor) continue;
                 furnish(i, k, wallN ? 2 : wallS ? 0 : wallW ? 1 : 3);   // facing into the room
             }
+        // A bed in a corner on the far side from the door. A tall house's
+        // ground floor may lose it to the stairwell's margin; its beds are upstairs.
+        const int bi = hs.door == 1 ? hs.i0 : hs.i1, bk = hs.door == 2 ? hs.k0 : hs.k1;
+        d.prop[bi][bk] = PROP_BED;
+        d.propRot[bi][bk] = bk == hs.k0 ? 2 : 0;   // the pillow against the end wall
+    }
+    MotionTruck tr;
+    if (motionTruck(cx, cz, tr)) {
+        claim(std::min(tr.i, tr.bi) - 1, std::min(tr.k, tr.bk) - 1, std::max(tr.i, tr.bi) + 1, std::max(tr.k, tr.bk) + 1);
+        d.prop[tr.i][tr.k] = PROP_TRUCK;   d.propRot[tr.i][tr.k] = (uint8_t)tr.dir;
+        d.prop[tr.bi][tr.bk] = PROP_TRUCK; d.propRot[tr.bi][tr.bk] = (uint8_t)(tr.dir | PROP_TRUCK_BACK);
     }
     const int pieces = 1 + rng.ri(0, 2);
     for (int n = 0; n < pieces; n++) {
@@ -1398,6 +1494,31 @@ void World::furnishMotion(ChunkData &d, int cx, int cz, Rng &rng) {
             for (int k = k0; k < k0 + span; k++) d.wallW[i0][k] = WALL_SOLID;
             if (span == 3 && (rng.next() & 1)) d.wallW[i0][k0 + 1] = WALL_WINDOW;
             furnish(i0, k0 + rng.ri(0, span - 1), 1);
+        }
+    }
+}
+
+// Storey 1 of a Level 94 chunk: the upper floor of its two-storey house, if
+// it has one, walled with a window halfway along each side and two beds in the
+// column of rooms beside the stairwell's margin. Every other cell is a hole to
+// the ground (marked after the storeys pass).
+void World::furnishMotionUpstairs(ChunkData &d, int cx, int cz) {
+    memset(d.elev, 0, sizeof(d.elev));
+    for (int q = 0; q < 4; q++) {
+        MotionHouse hs;
+        if (!motionHouse(cx, cz, q, hs) || hs.storeys != 2) continue;
+        for (int i = hs.i0; i <= hs.i1; i++) { d.wallN[i][hs.k0] = WALL_SOLID; d.wallN[i][hs.k1 + 1] = WALL_SOLID; }
+        for (int k = hs.k0; k <= hs.k1; k++) { d.wallW[hs.i0][k] = WALL_SOLID; d.wallW[hs.i1 + 1][k] = WALL_SOLID; }
+        const int mi = (hs.i0 + hs.i1 + 1) / 2, mk = (hs.k0 + hs.k1 + 1) / 2;
+        d.wallN[mi][hs.k0] = d.wallN[mi][hs.k1 + 1] = WALL_WINDOW;
+        d.wallW[hs.i0][mk] = d.wallW[hs.i1 + 1][mk] = WALL_WINDOW;
+        // The outer column away from the stairwell: beds at the end walls,
+        // a cabinet and a shelf between them.
+        const int col = hs.stairX == hs.i0 + 1 ? hs.i1 : hs.i0;
+        const PropKind room[MOTION_TALL] = { PROP_BED, PROP_CABINET, PROP_NONE, PROP_NONE, PROP_SHELVING, PROP_BED };
+        for (int r = 0; r < MOTION_TALL; r++) {
+            d.prop[col][hs.k0 + r] = room[r];
+            d.propRot[col][hs.k0 + r] = r < MOTION_TALL / 2 ? 2 : 0;
         }
     }
 }
@@ -1471,6 +1592,7 @@ bool World::poolAt(int ci, int ck) {
     return data(cx, cz).pool[ci - cx * CCELLS][ck - cz * CCELLS] != 0;
 }
 float World::floorY(int ci, int ck) {
+    if (onHill(ci, ck)) return motionHeight(ci + 0.5f, ck + 0.5f);
     int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
     return data(cx, cz).elev[ci - cx * CCELLS][ck - cz * CCELLS] * ELEV_UNIT;
 }
@@ -1486,10 +1608,11 @@ float World::ceilY(int ci, int ck) {
     int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
     ChunkData &d = data(cx, cz);
     int li = ci - cx * CCELLS, lk = ck - cz * CCELLS;
-    if (storeyH > 0.0f && (d.vflag[li][lk] & VF_OPENUP)) return storeyH;
     // Level 94's sky: no ceiling, and its walls stand wallH over the floor they
-    // are on, down in a valley too.
-    if (level == MOTION && (d.vflag[li][lk] & VF_OPENUP)) return d.elev[li][lk] * ELEV_UNIT + wallH;
+    // are on, down in a valley too. Its stairwells are open above, as Level 0's.
+    if (level == MOTION && (d.vflag[li][lk] & VF_OPENUP) && !(d.vflag[li][lk] & VF_KEEP))
+        return d.elev[li][lk] * ELEV_UNIT + wallH;
+    if (storeyH > 0.0f && (d.vflag[li][lk] & VF_OPENUP)) return storeyH;
     return std::max(d.elev[li][lk] * ELEV_UNIT, 0.0f) + wallH;
 }
 
@@ -1710,7 +1833,8 @@ float World::groundAt(float x, float z, float feetY) {
     }
     // A rotten patch is dished: walk down into it. Furniture tops below the feet
     // still win.
-    float g = (vf & VF_STAIR) ? stairY(x, z) : floorY(ci, ck) - softDip(x, z);
+    float g = (vf & VF_STAIR) ? stairY(x, z) : onHill(ci, ck) ? motionHeight(x / CELL, z / CELL)
+            : floorY(ci, ck) - softDip(x, z);
     AABB boxes[MAX_NEARBY_AABBS];
     int cnt = 0;
     for (int dx = -1; dx <= 1; dx++)

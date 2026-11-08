@@ -79,9 +79,15 @@ enum PropKind : uint8_t {
     PROP_ROPE,           // 15 a queue rope between two brass posts, run along x (the theater)
     PROP_SLOTS,          // 16 two slot machines side by side, backs to the cell's back edge (the casino)
     PROP_CARD_TABLE,     // 17 a blackjack table with its dealer's chip tray (the casino)
+    PROP_BED,            // 18 a single bed along z, slept in until morning (Level 94's houses)
+    // 19 an almond water truck, two cells long (Level 94). The cab's cell has
+    // its turn (it faces -z, +x, +z, -x); the back's has the same turn plus
+    // PROP_TRUCK_BACK. The cab's cell builds the whole truck.
+    PROP_TRUCK,
 };
 
-constexpr int PROP_KINDS = PROP_CARD_TABLE + 1;
+constexpr int PROP_KINDS = PROP_TRUCK + 1;
+constexpr uint8_t PROP_TRUCK_BACK = 8;
 
 // A prop's collision box, as offsets from its cell's min corner, and its top
 // above the floor it stands on. The mesher builds each piece to this top and
@@ -113,6 +119,8 @@ constexpr PropShape PROP_SHAPES[PROP_KINDS] = {
     { true, 0.00f, 0.92f, 2.00f, 1.08f, 0.95f, false },   // PROP_ROPE: full length, so a run is one barrier
     {},                                                    // PROP_SLOTS: turned, so gatherCellAABBs boxes it (slotBox)
     { true, 0.22f, 0.40f, 1.78f, 1.60f, 0.92f, false },   // PROP_CARD_TABLE: the felt
+    { true, 0.40f, 0.10f, 1.60f, 1.90f, 0.55f, false },   // PROP_BED: the mattress
+    { true, 0.12f, 0.12f, 1.88f, 1.88f, 2.30f, false },   // PROP_TRUCK: each half, the gap between them too narrow to pass
 };
 // Where things lie on the Manila Room's table: its notes and its can, 2 mm
 // over the top (0.785) so they do not fight it for depth.
@@ -244,24 +252,43 @@ inline void slotBox(uint8_t rotByte, float x0, float z0, float &bx0, float &bz0,
 }
 
 // Level 94 (MOTION). Open grass hills with no ceiling, and houses on the
-// level hilltops. A cell's floor is World::motionElev: 0 on the hilltops and
-// down to -MOTION_VALLEY elev units in the valleys. It is a pure function of
-// the cell, so neighbouring chunks agree at their seams, and its slope keeps
-// neighbours within MAX_STEP_UNITS of each other.
-constexpr int MOTION_VALLEY = 24;
+// level hilltops. The ground is World::motionHeight, a smooth surface: 0 on
+// the hilltops and down to -MOTION_VALLEY elev units in the valleys. It is a
+// pure function of position, so neighbouring chunks agree at their seams, and
+// its slope keeps neighbouring cells within MAX_STEP_UNITS of each other.
+constexpr int MOTION_VALLEY = 40;
 // The hill field's share that is level hilltop, 0..1. Raising it widens the
 // hilltops and steepens the slopes (by 1 / (1 - MOTION_PLATEAU)).
 constexpr float MOTION_PLATEAU = 0.42f;
 // Radians per cell of the two wave trains the hills are made of.
-constexpr float MOTION_WAVE_A = 0.157f, MOTION_WAVE_B = 0.112f;
+constexpr float MOTION_WAVE_A = 0.0898f, MOTION_WAVE_B = 0.0628f;
 // A house: a walled rectangle of cells, chunk-local and inclusive, with a
 // ceiling, a plank floor and a pitched roof. There is at most one per chunk
-// quarter, and only where it and a cell of margin round it are hilltop.
+// quarter, and only where it and a cell of margin round it are hilltop. The
+// first house in a chunk whose hash asks for it, on a site flat enough, has a
+// second storey reached by a stairwell (World::pairFeature): its storey-1
+// floor is the same rectangle, with its own walls and the roof.
 struct MotionHouse {
     int i0, k0, i1, k1;
     int door;             // the side its door is in: 0 north, 1 east, 2 south, 3 west
+    int storeys;          // 1, or 2 with a stairwell
+    int stairX;           // chunk-local x of the stairwell's footprint (2 cells across, z k0 + 1 .. k0 + 4)
     uint32_t seed;
 };
+// A two-storey house is MOTION_TALL cells square, so its stairwell (2 x 4
+// cells) and the cleared cell round it fit inside its walls with a column of
+// rooms beside them. Three in five houses that could be tall are.
+constexpr int MOTION_TALL = 6;
+constexpr uint32_t MOTION_TALL_TENTHS = 6;
+// An almond water truck parked on a hilltop: one chunk in MOTION_TRUCK_RATE
+// has one, in its middle, where no house stands and the ground is level.
+// `back` is the cell behind the cab: cab + TRUCK_BACK_STEP[dir].
+struct MotionTruck {
+    int i, k, dir;
+    int bi, bk;
+};
+constexpr uint32_t MOTION_TRUCK_RATE = 2;
+constexpr int TRUCK_BACK_STEP[4][2] = { { 0, 1 }, { -1, 0 }, { 0, -1 }, { 1, 0 } };
 // Quarters that have a flat site build a house MOTION_HOUSE_TENTHS times in ten.
 constexpr uint32_t MOTION_HOUSE_TENTHS = 9;
 // A house's walls stand this high; its roof rises MOTION_ROOF_RISE over half
@@ -437,6 +464,7 @@ struct World {
     ChunkData &data(int cx, int cz);
     void generate(ChunkData &d, int cx, int cz);
     void furnishMotion(ChunkData &d, int cx, int cz, Rng &rng);   // Level 94's hills, houses and rooms
+    void furnishMotionUpstairs(ChunkData &d, int cx, int cz);       // and its storey 1
     // The chunk map for storey s (the live one for the storey you are on).
     std::unordered_map<uint64_t, ChunkData> &layer(int s) { return s == storey ? chunks : layers[s]; }
     // Move to storey s. The chunk maps swap rather than regenerate; baked chunks
@@ -554,14 +582,21 @@ struct World {
     // A vending machine that sells snacks: two in three in the theater, none
     // elsewhere.
     bool snackAt(int ci, int ck);
-    // Level 94: the floor of global cell (ci, ck) in elev units, from the hill
-    // field alone (generate stores it in elev).
+    // Level 94: the ground's height in metres at (u, v) cells (world metres /
+    // CELL), and a cell's floor in elev units, its centre's height rounded
+    // (generate stores it in elev). Out of doors on the ground storey, floorY
+    // and groundAt read motionHeight itself, so the hills are slopes, not steps.
+    float motionHeight(float u, float v) const;
     int motionElev(int ci, int ck) const;
+    bool onHill(int ci, int ck);   // out of doors on the ground storey of Level 94
     // Level 94: quarter q's house in chunk (cx, cz) (q & 1 east, q & 2 south),
     // or false. Reads only the hill field, never a generated chunk.
     bool motionHouse(int cx, int cz, int q, MotionHouse &h) const;
+    bool motionSite(int cx, int cz, int q, bool tallOk, MotionHouse &h) const;   // motionHouse's quarter, alone
+    bool motionTruck(int cx, int cz, MotionTruck &t) const;
     // Level 94: a cell open to the sky, with no ceiling (any cell outside a
-    // house). False on every other level.
+    // house; on storey 1, any cell outside a two-storey house, which is a hole
+    // down to the ground). False on every other level.
     bool openSky(int ci, int ck);
     // Level 94: inside a house's walls.
     bool indoors(int ci, int ck);

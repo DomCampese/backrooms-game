@@ -1,5 +1,6 @@
 #include "fp_strict.h"
 #include "floorplan.h"
+#include "level_rules.h"
 #include <algorithm>
 
 namespace {
@@ -36,6 +37,7 @@ FloorKind floorKindOf(World &w, const ChunkData &d, int i, int k, int gi, int gk
     if (d.vflag[i][k] & VF_STAIR) return FloorKind::Stair;
     if (d.vflag[i][k] & VF_HOLE) return FloorKind::Hole;
     if (w.level == 0 && w.softAt(gi, gk)) return FloorKind::Soft;
+    if (w.onHill(gi, gk)) return FloorKind::Hill;
     return FloorKind::Flat;
 }
 
@@ -63,7 +65,8 @@ void risersOf(ChunkFloorplan &P, World &w, int i, int k) {
     // Elsewhere a cell with no floor of its own, or a flat one, draws none: each
     // shared riser is drawn by this cell when the neighbour is flat, otherwise by
     // the lower cell of the pair.
-    if (c.floor == FloorKind::Boards || c.floor == FloorKind::Stair || c.floor == FloorKind::Hole) return;
+    // Level 94's ground is a slope with no steps in it.
+    if (c.floor == FloorKind::Boards || c.floor == FloorKind::Stair || c.floor == FloorKind::Hole || w.level == MOTION) return;
     if (fy == 0.0f) return;
     float hN = w.floorY(gi, gk - 1), hS = w.floorY(gi, gk + 1), hW = w.floorY(gi - 1, gk), hE = w.floorY(gi + 1, gk);
     if (hN < fy && hN == 0.0f) riser(gx, gz, gx + CELL, gz, fy, hN, 0, -1);

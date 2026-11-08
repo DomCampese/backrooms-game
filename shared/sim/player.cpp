@@ -177,7 +177,10 @@ void Sim::updateMovement(const InputFrame &in, float dt, double now) {
     // Past the middle of a flight, or halfway down a fall into the floor below,
     // the storey changes. The 10 cm either side is hysteresis, so standing at
     // the midpoint cannot flicker between floors.
-    if (world.storeyH > 0.0f && deathT <= 0) {
+    // Level 94 changes storey only on a stairwell's flights: a jump off a
+    // cabinet also passes the midpoint.
+    const bool canChange = level != MOTION || (world.vflagAt(cellOf(px), cellOf(pz)) & (VF_STAIR | VF_WALKHOLE));
+    if (world.storeyH > 0.0f && deathT <= 0 && canChange) {
         float half = world.storeyH * 0.5f;
         if (py > half + 0.1f) changeStorey(+1, now);
         else if (py < -half - 0.1f) changeStorey(-1, now);
@@ -312,7 +315,9 @@ void Sim::changeStorey(int dir, double now) {
     for (auto &c : confetti) c.pos.y -= sh;
     ent.dispY -= sh;
     if (ent.st != EState::Hidden && ent.st != EState::Die) {
-        if (ent.st == EState::Chase && entDist < 16.0f && onFlight) {
+        // Level 94's Animation never comes into a house, so it never follows
+        // the player up its stairs.
+        if (ent.st == EState::Chase && entDist < 16.0f && onFlight && level != MOTION) {
             // On the flight the player used: below if they climbed, above if they came down.
             float u, v;
             if (used.kind == VK_STAIRWELL) { u = dir > 0 ? 1.0f : 3.0f; v = dir > 0 ? 3.0f : 3.2f; }
@@ -335,7 +340,8 @@ void Sim::changeStorey(int dir, double now) {
     if (!storeyNoted) {
         storeyNoted = true;
         deckNoteT = 3.4f;
-        deckNote = dir > 0 ? "another floor. it looks exactly like the last one."
+        deckNote = level == MOTION ? (dir > 0 ? "upstairs. there are beds up here." : "downstairs.")
+                 : dir > 0 ? "another floor. it looks exactly like the last one."
                            : "a floor below. it looks exactly like the one above.";
     }
 }

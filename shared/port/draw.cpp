@@ -326,8 +326,10 @@ FrameLight frameLight(Sim &sim, float now) {
     } else if (wellD2 < 22.0f * 22.0f) {
         // Like any tube: it goes out in a blackout and stutters.
         l.lamp[0] = wellLamp.x; l.lamp[1] = wellLamp.y; l.lamp[2] = wellLamp.z;
-        l.lamp[3] = 0.95f * sim.blackoutCur * l.flick;
-        l.lampCol = { 0.95f, 0.93f, 0.80f };
+        // Level 94's is a house lamp: warm, and lit through the night.
+        const bool house = sim.level == MOTION;
+        l.lamp[3] = 0.95f * (house ? 1.0f : sim.blackoutCur) * l.flick;
+        l.lampCol = house ? Vec3{ 1.0f, 0.78f, 0.50f } : Vec3{ 0.95f, 0.93f, 0.80f };
     }
     // The theater: the nearest auditorium's tubes are masked, and its screen
     // lights the front of the room in the colour of the film. The shader has one
@@ -343,8 +345,38 @@ FrameLight frameLight(Sim &sim, float now) {
             l.lampCol = film.col;
         }
     }
+    if (sim.level == MOTION) {
+        constexpr float NIGHT_AMB = 0.22f;
+        const float day = clampf((sim.blackoutCur - Sim::NIGHT_LIGHT) / (1.0f - Sim::NIGHT_LIGHT), 0.0f, 1.0f);
+        l.ambScale = NIGHT_AMB + (1.0f - NIGHT_AMB) * day;
+    }
     setLightExtrasCPU(l.roomMask, l.lamp);
     return l;
+}
+
+// Level 94's sun by day and moon by night ("the sun is replaced by the moon"),
+// painted discs SKY_DISC_M away from the eye so they never get nearer, rising
+// in the east (-x) and setting in the west over their half of the day. Drawn
+// unlit and unfogged; anything nearer hides them.
+static void skyDraws(const Sim &sim, std::vector<SceneDraw> &out) {
+    if (sim.level != MOTION) return;
+    constexpr float SKY_DISC_M = 160.0f;
+    const float day = Sim::DAY_TIME + Sim::DUSK_TIME, night = Sim::NIGHT_TIME + Sim::DAWN_TIME;
+    const bool sun = sim.sky.t < day;
+    const float p = sun ? sim.sky.t / day : (sim.sky.t - day) / night;   // 0 rising .. 1 set
+    const float elev = 0.10f + 0.85f * sinf(p * PI_F), az = PI_F * p;
+    const Vec3 dir = { -cosf(az) * cosf(elev), sinf(elev), 0.35f * cosf(elev) };
+    const float dl = sqrtf(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+    const Vec3 at = { sim.px + dir.x / dl * SKY_DISC_M, sim.eyeY + dir.y / dl * SKY_DISC_M, sim.pz + dir.z / dl * SKY_DISC_M };
+    if (sun) {
+        const unsigned char a = cl8(255 * clampf(sim.blackoutCur * 1.4f - 0.2f, 0.0f, 1.0f));
+        put(out, billboardWhole(ShapeTex::Particle, at, 46.0f, { 255, 236, 180, cl8(a * 0.35f) }));
+        put(out, billboardWhole(ShapeTex::Particle, at, 20.0f, { 255, 248, 214, a }));
+    } else {
+        const unsigned char a = cl8(255 * clampf(1.6f - sim.blackoutCur * 4.0f, 0.0f, 1.0f));
+        put(out, billboardWhole(ShapeTex::Particle, at, 30.0f, { 170, 190, 255, cl8(a * 0.20f) }));
+        put(out, billboardWhole(ShapeTex::Particle, at, 11.0f, { 226, 232, 255, a }));
+    }
 }
 
 void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneDraw> &out) {
@@ -354,10 +386,13 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
     const Vec3 flarePos = light.flarePos;
     // Stairwell landing lights: the tube on each nearby batten, at the current
     // tube brightness. Drawn here, not in the chunk mesh, so it can go out.
+    // Level 94's lamps are a house's own and stay lit at night.
+    const float tubeOn = sim.level == MOTION ? 1.0f : sim.blackoutCur;
     for (const LandingLight &well : sim.world.landingLights(pcx, pcz)) {
-        unsigned char g8 = cl8(60 + 195 * sim.blackoutCur * flick);
+        unsigned char g8 = cl8(60 + 195 * tubeOn * flick);
         put(out, cube(well.tube, well.alongX ? 0.96f : 0.035f, 0.035f, well.alongX ? 0.035f : 0.96f, { g8, g8, cl8(g8 * 0.92f), 255 }));
     }
+    skyDraws(sim, out);
     // The theater's screens, showing a film, and the projector's beam through
     // the haze from the port in the back wall: translucent, writing no depth.
     for (const Auditorium &a : sim.world.auditoriums(pcx, pcz)) {
@@ -376,7 +411,7 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
     // CPU (plus the flare or muzzle light); otherwise balloons would stay lit
     // in a blackout.
     const LevelCfg &lc = LEVELS[sim.level];
-    float ambLumP = (lc.amb.x + lc.amb.y + lc.amb.z) / 3.0f;
+    float ambLumP = (lc.amb.x + lc.amb.y + lc.amb.z) / 3.0f * light.ambScale;
     float edSend = (sim.ent.st == EState::Hidden) ? 0.0f : sim.entDarkCur;
     auto propLum = [&](float x, float y, float z) {
         float lum = lightAtCPU(x, y, z, sim.blackoutCur, lc.ls, lc.wallH - LIGHT_DROP, lc.dead, lc.lightMul, ambLumP,
@@ -564,7 +599,7 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
     }
     if (ActorSprite sp; hunterSprite(sim, sp)) {
         const LevelCfg &c = LEVELS[sim.level];
-        float ambLum = (c.amb.x + c.amb.y + c.amb.z) / 3.0f;
+        float ambLum = (c.amb.x + c.amb.y + c.amb.z) / 3.0f * light.ambScale;
         float lum = lightAtCPU(sp.litAt.x, sp.litAt.y, sp.litAt.z, sim.blackoutCur,
                                c.ls, c.wallH - LIGHT_DROP, c.dead, c.lightMul, ambLum,
                                sim.ent.x, sim.ent.z, sim.entDarkCur, c.vary);   // the light at his position, dimmed by entDarkCur
@@ -595,7 +630,7 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
     }
     if (ActorSprite sp; usherSprite(sim, sp)) {
         const LevelCfg &c = LEVELS[sim.level];
-        float ambLum = (c.amb.x + c.amb.y + c.amb.z) / 3.0f;
+        float ambLum = (c.amb.x + c.amb.y + c.amb.z) / 3.0f * light.ambScale;
         float lum = lightAtCPU(sp.litAt.x, sp.litAt.y, sp.litAt.z, sim.blackoutCur,
                                c.ls, c.wallH - LIGHT_DROP, c.dead, c.lightMul, ambLum, 0, 0, 0, c.vary);
         float ux = sp.litAt.x - sim.px, uz = sp.litAt.z - sim.pz, ud = sqrtf(ux * ux + uz * uz) + 1e-4f;

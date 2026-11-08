@@ -252,8 +252,15 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
                   fade({ 236, 214, 160, 220 }, fminf(1.0f, sim.music.stopped * 3.0f)));
     }
     if (sim.level == MOTION && sim.deathT <= 0 && sim.winT <= 0) {   // Level 94's night
+        // Falling asleep fades out to black; waking fades back in.
+        const float dark = sim.sleepT > 0 ? clampf(sim.sleepT / (Sim::SLEEP_FADE * 0.8f), 0, 1) : clampf(sim.wakeT / 2.0f, 0, 1);
+        if (dark > 0) rect(0, 0, sw, sh, fade(BLACK_RGBA, dark));
+        if (sim.sleepT > 0)
+            textC("you sleep.", sw / 2, sh / 2, hud(20), fade({ 200, 190, 170, 255 }, clampf(sim.sleepT - 0.6f, 0, 1)));
         const float toDusk = Sim::DAY_TIME - sim.sky.t;
-        if (sim.sky.night)
+        if (sim.sky.night && sim.sheltered && sim.knockedT < 2.5f)
+            textC("something is knocking", sw / 2, sh - hud(190), hud(18), { 236, 120, 100, 235 });
+        else if (sim.sky.night)
             textC(sim.sheltered ? "night · indoors, it cannot find you" : "night · the Animations are out · get indoors",
                   sw / 2, sh - hud(190), hud(18), sim.sheltered ? Rgba{ 200, 190, 160, 200 } : Rgba{ 230, 150, 120, 230 });
         else if (toDusk > 0 && toDusk < 20.0f)
@@ -424,7 +431,11 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         coverCol = { 180, 170, 140, 120 };
     }
     if (coverLine) textC(coverLine, sw / 2, sh - hud(62), hud(14), coverCol);
-    if (sim.doorReach.ok) {   // the doorway the use key would shut or open
+    if (sim.bedNear) {   // a bed the use key would sleep in (Level 94); it comes before a door
+        textC(fmt("%s · sleep until morning", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14), { 200, 190, 160, 150 });
+    } else if (sim.truckNear) {   // an almond water truck with a can on its counter (Level 94)
+        textC(fmt("%s · take the almond water", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14), { 200, 214, 220, 160 });
+    } else if (sim.doorReach.ok) {   // the doorway the use key would shut or open
         const char *verb = sim.doorReach.shut ? "open the door" : "shut the door";
         textC(fmt("%s · %s", in.touch ? "USE" : "E", verb), sw / 2, sh / 2 + hud(46), hud(14), { 200, 190, 160, 150 });
     } else if (sim.slotNear) {   // a slot machine the use key would play
