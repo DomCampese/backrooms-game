@@ -141,7 +141,9 @@ struct Sim {
     // in CIGS_ODDS, in the casino only, about one every three chunks. It holds
     // CIGS_PER_PACK. A lit one burns SMOKE_TIME s, and each drag burns
     // DRAG_BURN s more. A drag takes DRAG_TIME s, inhaling for the first
-    // DRAG_IN, and gives DRAG_SANITY. One drag in COUGH_ODDS ends in a cough
+    // DRAG_IN. The first drag of a cigarette gives DRAG_SANITY and each later
+    // one half the last, so one cigarette is worth under 2 x DRAG_SANITY
+    // however fast it is smoked. One drag in COUGH_ODDS ends in a cough
     // the hunter hears COUGH_NOISE m away. While it is lit, the ember means the
     // player is never in shadow (inShadow).
     static constexpr uint32_t CIGS_ODDS = 607;
@@ -150,7 +152,7 @@ struct Sim {
     static constexpr float SMOKE_TIME = 45.0f;
     static constexpr float DRAG_BURN = 4.0f;
     static constexpr float DRAG_TIME = 2.4f, DRAG_IN = 1.1f;
-    static constexpr float DRAG_SANITY = 0.03f;
+    static constexpr float DRAG_SANITY = 0.04f;
     static constexpr uint32_t COUGH_ODDS = 4;
     static constexpr float COUGH_NOISE = 14.0f, COUGH_TIME = 0.7f;
     static constexpr float MUZZLE_FLASH = 0.09f;   // s the muzzle flash lights the room
@@ -355,6 +357,7 @@ struct Sim {
         bool cough = false;          // this drag ends in a cough
         float coughT = 0;            // s left of the cough's noise
         float exhaleT = 0;           // s since the last breath out, for the cloud; large: none
+        float calm = 0;              // sanity the next drag gives; halves each drag
     } smoke;
     Rng smokeRng{1};                 // its own stream, like slotRng
     int ammo = MAXAMMO;

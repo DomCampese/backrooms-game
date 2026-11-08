@@ -80,6 +80,7 @@ bool Sim::cigsAt(int a, int b) {
 void Sim::putOutCigarette() {
     smoke.burnT = smoke.dragT = smoke.coughT = 0;
     smoke.cough = false;
+    smoke.calm = 0;
 }
 
 // With a cigarette in hand, the fire button lights one, then takes a drag.
@@ -114,13 +115,15 @@ void Sim::updateSmoking(const InputFrame &in, float dt) {
         if (cigs <= 0) { deckNoteT = 1.8f; deckNote = "the pack is empty."; return; }
         cigs--;
         smoke.burnT = SMOKE_TIME;
+        smoke.calm = DRAG_SANITY;
         play(Sfx::Lighter);
         return;
     }
     smoke.dragT = DRAG_TIME;
     smoke.burnT = fmaxf(0.5f, smoke.burnT - DRAG_BURN);
     smoke.cough = smokeRng.next() % COUGH_ODDS == 0;
-    sanity = clampf(sanity + DRAG_SANITY, 0.0f, 1.0f);
+    sanity = clampf(sanity + smoke.calm, 0.0f, 1.0f);
+    smoke.calm *= 0.5f;
     fear *= 0.6f;
     play(Sfx::Drag);
 }

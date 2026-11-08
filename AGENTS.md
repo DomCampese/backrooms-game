@@ -1994,7 +1994,11 @@ revolver. They only work in the casino.
   casino.cpp). Lit, it burns `SMOKE_TIME` (45 s) and each drag `DRAG_BURN`
   (4 s) more. A drag is `DRAG_TIME` (2.4 s): an inhale of `DRAG_IN`, then a
   breath out or, one drag in `COUGH_ODDS` (4, from `smokeRng`), a cough.
-  A drag gives `DRAG_SANITY` (0.03) and cuts fear. A cough is a noise
+  The first drag of a cigarette gives `DRAG_SANITY` (0.04) and each later
+  one half the last (`Smoke::calm`), so a cigarette is worth under 0.08
+  however fast it is smoked; every drag cuts fear. At a flat 0.03 a drag,
+  chain-smoking gave 0.0125 a second, 4.5 times the casino's drain, and a
+  pack was worth two full bars. A cough is a noise
   (`COUGH_NOISE`, 14 m, for `COUGH_TIME`). Switching away stubs it out.
 - **A lit ember means the player is never in shadow** (`inShadow`), so a
   chasing hunter sees them at full range in the dark.

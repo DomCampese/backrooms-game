@@ -1236,6 +1236,17 @@ int main() {
         in.fire=true; sim.updateSmoking(in,1.0f/30); in.fire=false;
         CHECK(sim.smoke.dragT==Sim::DRAG_TIME && fabsf(sim.sanity-(0.5f+Sim::DRAG_SANITY))<1e-6f);
         CHECK(sim.smoke.burnT<Sim::SMOKE_TIME-Sim::DRAG_BURN);
+        // Each later drag of the same cigarette gives half the last.
+        {
+            Sim::Smoke keep=sim.smoke; float s0=sim.sanity;
+            sim.sanity=0.5f; sim.smoke.dragT=0;
+            in.fire=true; sim.updateSmoking(in,1.0f/30); in.fire=false;
+            CHECK(fabsf(sim.sanity-(0.5f+Sim::DRAG_SANITY*0.5f))<1e-6f);
+            sim.sanity=0.0f; sim.smoke.burnT=Sim::SMOKE_TIME;
+            for (int i=0;i<40;++i) { sim.smoke.dragT=0; in.fire=true; sim.updateSmoking(in,1.0f/30); in.fire=false; sim.smoke.burnT=Sim::SMOKE_TIME; }
+            CHECK(sim.sanity<Sim::DRAG_SANITY*0.5f);   // 1/4 + 1/8 + ... of the first drag's
+            sim.smoke=keep; sim.sanity=s0;
+        }
         // This one ends in a cough, which the hunter hears.
         sim.smoke.cough=true;
         sim.velx=sim.velz=0; sim.sprinting=false; sim.crouchCur=0; sim.deck.playing=false; sim.doorNoiseT=0;
