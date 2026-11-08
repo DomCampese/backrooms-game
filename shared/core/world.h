@@ -268,12 +268,19 @@ constexpr float MOTION_WAVE_A = 0.0898f, MOTION_WAVE_B = 0.0628f;
 // first house in a chunk whose hash asks for it, on a site flat enough, has a
 // second storey reached by a stairwell (World::pairFeature): its storey-1
 // floor is the same rectangle, with its own walls and the roof.
+// How a one-storey house's ground floor is divided (MotionHouse::rooms),
+// seen from its door: one open room; a front room with a bedroom behind it;
+// a front room with two back rooms side by side; or one open room with a
+// small room in the back corner away from the bed. Inner doorways are
+// WALL_DOOR. A two-storey house's ground floor is open round its stairwell.
+enum MotionRooms : int { ROOMS_OPEN, ROOMS_BEDROOM, ROOMS_TWO_BACK, ROOMS_CORNER, ROOMS_KINDS };
 struct MotionHouse {
     int i0, k0, i1, k1;
     int door;             // the side its door is in: 0 north, 1 east, 2 south, 3 west
     int storeys;          // 1, or 2 with a stairwell
     int stairX;           // chunk-local x of the stairwell's footprint (2 cells across, z k0 + 1 .. k0 + 4)
     uint32_t seed;
+    int rooms = ROOMS_OPEN;
 };
 // A two-storey house is MOTION_TALL cells square, so its stairwell (2 x 4
 // cells) and the cleared cell round it fit inside its walls with a column of

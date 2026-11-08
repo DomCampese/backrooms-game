@@ -1369,6 +1369,7 @@ bool World::motionSite(int cx, int cz, int q, bool tallOk, MotionHouse &out) con
     const int i0 = qx + 1 + (int)((h >> 6) % (uint32_t)(7 - w)), k0 = qz + 1 + (int)((h >> 9) % (uint32_t)(7 - dep));
     if (!flat(i0, k0, w, dep)) return false;
     out = { i0, k0, i0 + w - 1, k0 + dep - 1, door, 1, -1, h };
+    out.rooms = (int)((h >> 24) % ROOMS_KINDS);
     return true;
 }
 
@@ -1447,11 +1448,71 @@ void World::furnishMotion(ChunkData &d, int cx, int cz, Rng &rng) {
         if (!motionHouse(cx, cz, q, hs)) continue;
         claim(hs.i0 - 1, hs.k0 - 1, hs.i1 + 1, hs.k1 + 1);
         walls(hs.i0, hs.k0, hs.i1, hs.k1, hs.door, true);
+        // The inner walls, laid out as seen from the door: a runs across the
+        // house (0 .. A - 1), b back from the door (0 .. D - 1). The bed's
+        // corner below is always (A - 1, D - 1).
+        const bool depthZ = hs.door == 0 || hs.door == 2;
+        const int A = depthZ ? hs.i1 - hs.i0 + 1 : hs.k1 - hs.k0 + 1;
+        const int D = depthZ ? hs.k1 - hs.k0 + 1 : hs.i1 - hs.i0 + 1;
+        auto cellAt = [&](int a, int b, int &i, int &k) {
+            switch (hs.door) {
+            case 0: i = hs.i0 + a; k = hs.k0 + b; break;
+            case 2: i = hs.i0 + a; k = hs.k1 - b; break;
+            case 3: i = hs.i0 + b; k = hs.k0 + a; break;
+            default: i = hs.i1 - b; k = hs.k0 + a; break;
+            }
+        };
+        // The edge between rows b - 1 and b, at a; and between columns
+        // a - 1 and a, at b.
+        auto rowEdge = [&](int a, int b) -> uint8_t & {
+            switch (hs.door) {
+            case 0: return d.wallN[hs.i0 + a][hs.k0 + b];
+            case 2: return d.wallN[hs.i0 + a][hs.k1 - b + 1];
+            case 3: return d.wallW[hs.i0 + b][hs.k0 + a];
+            default: return d.wallW[hs.i1 - b + 1][hs.k0 + a];
+            }
+        };
+        auto colEdge = [&](int a, int b) -> uint8_t & {
+            switch (hs.door) {
+            case 0: return d.wallW[hs.i0 + a][hs.k0 + b];
+            case 2: return d.wallW[hs.i0 + a][hs.k1 - b];
+            case 3: return d.wallN[hs.i0 + b][hs.k0 + a];
+            default: return d.wallN[hs.i1 - b][hs.k0 + a];
+            }
+        };
+        bool keepClear[CCELLS][CCELLS] = {};   // either side of an inner doorway
+        auto doorway = [&](uint8_t &e, int a0, int b0, int a1, int b1) {
+            e = WALL_DOOR;
+            int i, k;
+            cellAt(a0, b0, i, k); keepClear[i][k] = true;
+            cellAt(a1, b1, i, k); keepClear[i][k] = true;
+        };
+        if (hs.storeys == 1 && hs.rooms != ROOMS_OPEN) {
+            if (hs.rooms == ROOMS_CORNER) {
+                // A 2 x 2 room at the back, on the side away from the bed,
+                // opening into the main room through its side wall.
+                for (int a = 0; a < 2; a++) rowEdge(a, D - 2) = WALL_SOLID;
+                for (int b = D - 2; b < D; b++) colEdge(2, b) = WALL_SOLID;
+                doorway(colEdge(2, D - 2), 1, D - 2, 2, D - 2);
+            } else {
+                // The front room is two rows deep; the rest is behind a wall.
+                for (int a = 0; a < A; a++) rowEdge(a, 2) = WALL_SOLID;
+                if (hs.rooms == ROOMS_BEDROOM) {
+                    const int da = (hs.seed >> 28) & 1;
+                    doorway(rowEdge(da, 2), da, 1, da, 2);
+                } else {
+                    const int m = A / 2;
+                    for (int b = 2; b < D; b++) colEdge(m, b) = WALL_SOLID;
+                    doorway(rowEdge(0, 2), 0, 1, 0, 2);
+                    doorway(rowEdge(A - 1, 2), A - 1, 1, A - 1, 2);
+                }
+            }
+        }
         // Furniture against the side walls, clear of the door's cell.
         for (int i = hs.i0; i <= hs.i1; i++)
             for (int k = hs.k0; k <= hs.k1; k++) {
                 const bool wallN = k == hs.k0, wallS = k == hs.k1, wallW = i == hs.i0, wallE = i == hs.i1;
-                if (!(wallN || wallS || wallW || wallE) || rng.f01() > 0.30f) continue;
+                if (!(wallN || wallS || wallW || wallE) || keepClear[i][k] || rng.f01() > 0.30f) continue;
                 const int mi = (hs.i0 + hs.i1 + 1) / 2, mk = (hs.k0 + hs.k1 + 1) / 2;
                 const bool byDoor = (hs.door == 0 && wallN && abs(i - mi) <= 1) || (hs.door == 2 && wallS && abs(i - mi) <= 1)
                                  || (hs.door == 3 && wallW && abs(k - mk) <= 1) || (hs.door == 1 && wallE && abs(k - mk) <= 1);
@@ -1512,10 +1573,16 @@ void World::furnishMotionUpstairs(ChunkData &d, int cx, int cz) {
         const int mi = (hs.i0 + hs.i1 + 1) / 2, mk = (hs.k0 + hs.k1 + 1) / 2;
         d.wallN[mi][hs.k0] = d.wallN[mi][hs.k1 + 1] = WALL_WINDOW;
         d.wallW[hs.i0][mk] = d.wallW[hs.i1 + 1][mk] = WALL_WINDOW;
-        // The outer column away from the stairwell: beds at the end walls,
-        // a cabinet and a shelf between them.
+        // The outer column away from the stairwell: beds at the end walls and,
+        // between them, a bedroom's cabinet and shelf, a sitting room's plant
+        // and couch, or an attic's boxes and table, by the house's hash.
         const int col = hs.stairX == hs.i0 + 1 ? hs.i1 : hs.i0;
-        const PropKind room[MOTION_TALL] = { PROP_BED, PROP_CABINET, PROP_NONE, PROP_NONE, PROP_SHELVING, PROP_BED };
+        static const PropKind ROOMS[3][MOTION_TALL] = {
+            { PROP_BED, PROP_CABINET, PROP_NONE, PROP_NONE, PROP_SHELVING, PROP_BED },
+            { PROP_BED, PROP_PLANT, PROP_NONE, PROP_NONE, PROP_COUCH, PROP_BED },
+            { PROP_BED, PROP_BOXES, PROP_NONE, PROP_NONE, PROP_TABLE, PROP_BED },
+        };
+        const PropKind *room = ROOMS[(hs.seed >> 26) % 3];
         for (int r = 0; r < MOTION_TALL; r++) {
             d.prop[col][hs.k0 + r] = room[r];
             d.propRot[col][hs.k0 + r] = r < MOTION_TALL / 2 ? 2 : 0;
