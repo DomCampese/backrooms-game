@@ -31,7 +31,20 @@ struct FrameLight {
     // uAmb is the level's ambient (LevelCfg::amb) times this. Level 94's night
     // takes it down to NIGHT_AMB, under the shader's own blackout floor.
     float ambScale = 1.0f;
+    // Level 94's sun (sunLight): the direction toward it, its colour and its
+    // strength 0..1. Strength 0 on every other level and at night. Only the
+    // Unreal look draws it; the Web build's daylight is the ambient.
+    Vec3 sunDir;
+    Vec3 sunCol;
+    float sun;
 };
+
+// The sun for Level 94's clock (Sim::sky.t): it rises at the start of dawn,
+// crosses from +x to -x, peaks at SUN_PEAK_DEG at the middle of the lit span,
+// and sets at the end of dusk.
+struct SunLight { Vec3 dir, col; float strength; };
+constexpr float SUN_PEAK_DEG = 55.0f;
+SunLight sunLight(const Sim &sim);
 
 // The world shader's shadow grid (World::buildOccupancy, texture2): OCC_CELLS
 // a side round the player, rebuilt once the player is OCC_RECENTRE cells off

@@ -418,7 +418,6 @@ repository"); it is not a parity gap. What remains:
 | gap | Web build | Mac build |
 |---|---|---|
 | touch controls | the browser shell's on-screen controls | none needed on the Mac |
-| Level 94's sun | the ambient is the daylight, and a painted disc | lit by the ambient glow only, with the same disc; no sun light yet |
 
 New features go into both builds in the same change (AGENTS.md, "Two builds,
 one repository").

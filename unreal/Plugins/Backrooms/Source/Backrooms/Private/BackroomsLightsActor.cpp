@@ -2,6 +2,7 @@
 #include "BackroomsCoords.h"
 #include "BackroomsRender.h"
 #include "BackroomsSettings.h"
+#include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/RectLightComponent.h"
@@ -34,6 +35,14 @@ const FLinearColor FlareColour(1.0f, 0.42f, 0.15f);
 constexpr float LampLumens = 2400.0f;
 // The Web shader's lamp fades out by 90 m^2, about 9.5 m.
 constexpr float LampReach = 9.5f;
+
+// Level 94's sun at full strength, in lux. A surface it lights square-on
+// gains SunShare times the brightness the level's ambient glow gives it
+// (Amb luma 0.196 at WebUnitNits): E = pi * SunShare * 0.196 * WebUnitNits.
+constexpr float SunShare = 2.0f;
+constexpr float SunLux = 3.14159265f * SunShare * 0.196f * UBackroomsRender::WebUnitNits;
+// How far its shadows reach, in cm: a house or a hill 80 m off still shades.
+constexpr float SunShadowCm = 8000.0f;
 
 // Unreal's fog density is per 1000 world units (cm), the Web build's per
 // metre: exp(-den * metres) is exp(-(den * 10) / 1000 * cm).
@@ -118,6 +127,7 @@ void ABackroomsLightsActor::Show(World& W, int32 Level, const Vec3& Eye, const F
 {
 	ShowFittings(W, Level, Eye, L, Origin);
 	ShowFog(Level, L, Origin);
+	ShowSun(L);
 
 	if (!Torch)
 	{
@@ -221,4 +231,30 @@ void ABackroomsLightsActor::ShowFog(int32 Level, const FrameLight& L, const FVec
 	const float Lit = FMath::Lerp(FogBlackoutFloor, 1.0f, L.blackout);
 	Fog->SetFogInscatteringColor(FLinearColor(C.fogCol.x, C.fogCol.y, C.fogCol.z) * (Lit * UBackroomsRender::WebUnitNits));
 	Fog->SetVolumetricFog(Settings->LightQuality != EBackroomsLightQuality::Low);
+}
+
+void ABackroomsLightsActor::ShowSun(const FrameLight& L)
+{
+	if (!Sun)
+	{
+		Sun = NewObject<UDirectionalLightComponent>(this);
+		Sun->SetupAttachment(GetRootComponent());
+		Sun->SetMobility(EComponentMobility::Movable);
+		Sun->SetCastShadows(true);
+		Sun->SetDynamicShadowDistanceMovableLight(SunShadowCm);
+		Sun->SetVisibility(false);
+		Sun->RegisterComponent();
+	}
+	// L.sun is 0 off Level 94 and at night; L.blackout is the level's
+	// daylight there, so the sun dims through dusk with the ambient.
+	const float Strength = L.sun * L.blackout;
+	Sun->SetVisibility(Strength > 0.01f);
+	if (Strength <= 0.01f)
+	{
+		return;
+	}
+	// A directional light shines along its +X, away from the sun.
+	Sun->SetWorldRotation((-BackroomsCoords::ToUnrealDirection(L.sunDir)).Rotation());
+	Sun->SetLightColor(FLinearColor(L.sunCol.x, L.sunCol.y, L.sunCol.z));
+	Sun->SetIntensity(SunLux * Strength);
 }

@@ -1755,6 +1755,32 @@ int main() {
     }
     printf("PASS exits can be heard: level by distance, pan by bearing, played on that side\n");
 
+    // ---- Level 94's sun: none off Level 94 or at night; it rises at dawn,
+    // peaks at SUN_PEAK_DEG mid-span, sets at the end of dusk, warms near the
+    // horizon, and frameLight carries it.
+    {
+        sim.applyLevel(0,GetTime());
+        CHECK(sunLight(sim).strength==0);
+        sim.applyLevel(MOTION,GetTime()); sim.inMenu=false;
+        const float dawnAt=Sim::DAY_TIME+Sim::DUSK_TIME+Sim::NIGHT_TIME;
+        const float span=Sim::DAWN_TIME+Sim::DAY_TIME+Sim::DUSK_TIME;
+        auto at=[&](float t){ sim.sky.t=t; return sunLight(sim); };
+        CHECK(at(dawnAt-1).strength==0);                                  // night
+        SunLight rise=at(dawnAt+0.5f);
+        CHECK(rise.strength<0.2f && rise.dir.x>0.9f && rise.col.z<0.5f);  // low in the east, warm
+        float mid=fmodf(dawnAt+span*0.5f, dawnAt+Sim::DAWN_TIME);
+        SunLight noon=at(mid);
+        CHECK(noon.strength==1 && fabsf(asinf(noon.dir.y)/0.01745329f-SUN_PEAK_DEG)<1.5f && noon.col.z==1);
+        SunLight set=at(Sim::DAY_TIME+Sim::DUSK_TIME-0.5f);
+        CHECK(set.strength<0.2f && set.dir.x<-0.9f);                      // low in the west
+        CHECK(at(Sim::DAY_TIME+Sim::DUSK_TIME+1).strength==0);
+        sim.sky.t=mid;
+        FrameLight fl=frameLight(sim,1.0f);
+        CHECK(fl.sun==1 && fl.sunDir.y==noon.dir.y);
+        sim.beginDescent(0); sim.inMenu=false;
+    }
+    printf("PASS Level 94's sun rises at dawn, peaks mid-day, sets at dusk, and is off at night\n");
+
     // ---- the hunter's movement and walk cycle (ENT-01/ENT-02). Check the
     // captures by eye too.
     {

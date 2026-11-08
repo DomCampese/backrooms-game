@@ -271,8 +271,56 @@ ObjMat objMat(ObjMesh m) {
 
 float objGloss(ObjMesh m) { return m == ObjMesh::Flare ? FLARE_GLOSS : -1.0f; }
 
+// The lit span is dawn, day and dusk, DAWN_TIME + DAY_TIME + DUSK_TIME s,
+// starting at dawn (sky.t = DAY + DUSK + NIGHT). The sun's height is a sine
+// over it; its strength fades in over its first 12 degrees, and below 20
+// degrees its colour warms toward (1, 0.62, 0.38).
+// Where the sun (or, by night, the moon) is: lit is true from dawn to the end
+// of dusk, and p runs 0 (rising) to 1 (set) over that span or over the night.
+// sunLight and skyDraws both read it, so the painted disc is where the light
+// comes from.
+struct SkyPos { bool lit; float p; };
+static SkyPos skyPos(const Sim &sim) {
+    const float dawnAt = Sim::DAY_TIME + Sim::DUSK_TIME + Sim::NIGHT_TIME;
+    const float cycle = dawnAt + Sim::DAWN_TIME;
+    const float span = Sim::DAWN_TIME + Sim::DAY_TIME + Sim::DUSK_TIME;
+    float u = sim.sky.t - dawnAt;
+    if (u < 0) u += cycle;
+    if (u < span) return { true, u / span };
+    return { false, (u - span) / (cycle - span) };
+}
+
+// The direction toward a body p of the way across the sky, and its height in
+// radians.
+static Vec3 skyDir(float p, float &elev) {
+    elev = sinf(p * 3.14159265f) * SUN_PEAK_DEG * 0.01745329f;
+    const float az = p * 3.14159265f;   // 0 rising at +x, pi setting at -x
+    // The heading leans 0.35 toward +z so shadows are not square to the
+    // grid; normalised on its own, so the height above stays exactly elev.
+    const float hx = cosf(az), hz = 0.35f, hl = sqrtf(hx * hx + hz * hz);
+    return { hx / hl * cosf(elev), sinf(elev), hz / hl * cosf(elev) };
+}
+
+SunLight sunLight(const Sim &sim) {
+    SunLight s{ { 0, 1, 0 }, { 1, 1, 1 }, 0 };
+    if (sim.level != MOTION) return s;
+    const SkyPos at = skyPos(sim);
+    if (!at.lit) return s;   // night
+    float elev = 0;
+    s.dir = skyDir(at.p, elev);
+    const float deg = elev / 0.01745329f;
+    s.strength = clampf(deg / 12.0f, 0.0f, 1.0f);
+    const float warm = clampf(1.0f - deg / 20.0f, 0.0f, 1.0f);
+    s.col = { 1.0f, 1.0f - 0.38f * warm, 1.0f - 0.62f * warm };
+    return s;
+}
+
 FrameLight frameLight(Sim &sim, float now) {
     FrameLight l{};
+    {
+        const SunLight sun = sunLight(sim);
+        l.sunDir = sun.dir; l.sunCol = sun.col; l.sun = sun.strength;
+    }
     l.time = now;
     l.blackout = sim.blackoutCur * (sim.whisperT > 0 ? 0.86f : 1.0f);   // lights dim during a whisper
     l.flash = sim.flashCur;
@@ -355,19 +403,17 @@ FrameLight frameLight(Sim &sim, float now) {
 }
 
 // Level 94's sun by day and moon by night ("the sun is replaced by the moon"),
-// painted discs SKY_DISC_M away from the eye so they never get nearer, rising
-// in the east (-x) and setting in the west over their half of the day. Drawn
-// unlit and unfogged; anything nearer hides them.
+// painted discs SKY_DISC_M away from the eye so they never get nearer, on
+// sunLight's path: rising at +x and setting at -x. Drawn unlit and unfogged;
+// anything nearer hides them.
 static void skyDraws(const Sim &sim, std::vector<SceneDraw> &out) {
     if (sim.level != MOTION) return;
     constexpr float SKY_DISC_M = 160.0f;
-    const float day = Sim::DAY_TIME + Sim::DUSK_TIME, night = Sim::NIGHT_TIME + Sim::DAWN_TIME;
-    const bool sun = sim.sky.t < day;
-    const float p = sun ? sim.sky.t / day : (sim.sky.t - day) / night;   // 0 rising .. 1 set
-    const float elev = 0.10f + 0.85f * sinf(p * PI_F), az = PI_F * p;
-    const Vec3 dir = { -cosf(az) * cosf(elev), sinf(elev), 0.35f * cosf(elev) };
-    const float dl = sqrtf(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
-    const Vec3 at = { sim.px + dir.x / dl * SKY_DISC_M, sim.eyeY + dir.y / dl * SKY_DISC_M, sim.pz + dir.z / dl * SKY_DISC_M };
+    const SkyPos pos = skyPos(sim);
+    const bool sun = pos.lit;
+    float elev = 0;
+    const Vec3 dir = skyDir(pos.p, elev);   // a unit vector
+    const Vec3 at = { sim.px + dir.x * SKY_DISC_M, sim.eyeY + dir.y * SKY_DISC_M, sim.pz + dir.z * SKY_DISC_M };
     if (sun) {
         const unsigned char a = cl8(255 * clampf(sim.blackoutCur * 1.4f - 0.2f, 0.0f, 1.0f));
         put(out, billboardWhole(ShapeTex::Particle, at, 46.0f, { 255, 236, 180, cl8(a * 0.35f) }));

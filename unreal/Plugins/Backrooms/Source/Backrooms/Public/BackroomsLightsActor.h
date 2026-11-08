@@ -6,6 +6,7 @@
 
 struct FrameLight;
 struct World;
+class UDirectionalLightComponent;
 class UExponentialHeightFogComponent;
 class UPointLightComponent;
 class URectLightComponent;
@@ -13,7 +14,8 @@ class USpotLightComponent;
 
 // The Unreal look's lights and air: a rect light at each of the working
 // ceiling panels nearest the player, the flashlight, the burning flare or
-// muzzle flash, the chandelier or landing lamp, and the level's fog. Which
+// muzzle flash, the chandelier or landing lamp, Level 94's sun, and the
+// level's fog. Which
 // fittings exist, and which are dead, part output or faulty, is core's
 // (chunkLayout); what the moment does to them (blackouts, flicker, the
 // hunter's pool of dead light, the torch) is the sim's (FrameLight), the
@@ -39,6 +41,7 @@ private:
 	const TArray<LightFitting>& FittingsOf(World& W, int32 Cx, int32 Cz);
 	void ShowFittings(World& W, int32 Level, const Vec3& Eye, const FrameLight& L, const FVector& Origin);
 	void ShowFog(int32 Level, const FrameLight& L, const FVector& Origin);
+	void ShowSun(const FrameLight& L);
 
 	// The fittings that ever light, of each chunk read so far, keyed as the
 	// subsystem keys chunks: (cx, cz, storey).
@@ -53,4 +56,7 @@ private:
 	TObjectPtr<UPointLightComponent> Lamp;
 	UPROPERTY(Transient)
 	TObjectPtr<UExponentialHeightFogComponent> Fog;
+	// Level 94's sun (FrameLight::sun), off on every other level.
+	UPROPERTY(Transient)
+	TObjectPtr<UDirectionalLightComponent> Sun;
 };
