@@ -35,7 +35,9 @@ constexpr int NLEVELS = 7;
 // which all read it from here. Level 1 stays at 12 m: at 8 m nearly all nine
 // summed fittings fall inside shadow range and the frame costs 58% more.
 // Level 0's storeyH is 24 risers of 180 mm. Level 94's is its two-storey
-// houses' floor to floor, 24 risers of 125 mm up their stairwells.
+// houses' floor to floor, 24 risers of 137.5 mm up their stairwells. It must
+// be more than wallH: the 0.3 m between is the floor slab, and with none the
+// ground floor's ceiling and the upper floor shared a plane and flickered.
 // Level 94 has no lights: every fitting is dead, and the sky lights it
 // (Sim::daylight drives blackoutCur).
 inline constexpr LevelRules LEVEL_RULES[NLEVELS] = {
@@ -46,7 +48,7 @@ inline constexpr LevelRules LEVEL_RULES[NLEVELS] = {
     { 3.0f,  8.0f, 0.0f,  "LEVEL FUN =)",             0.10f, 0.0f,  0.07f, Footing::Carpet,   Distant::Pop },
     { 5.0f,  8.0f, 0.0f,  "THE THEATER",              0.25f, 0.30f, 0.10f, Footing::Carpet,   Distant::Boom },
     { 4.0f,  8.0f, 0.0f,  "THE CASINO",               0.12f, 0.20f, 0.05f, Footing::Carpet,   Distant::Jingle },
-    { 3.0f,  8.0f, 3.0f,  "LEVEL 94 · MOTION",        1.0f,  0.0f,  0.0f,  Footing::Grass,    Distant::None },
+    { 3.0f,  8.0f, 3.3f,  "LEVEL 94 · MOTION",        1.0f,  0.0f,  0.0f,  Footing::Grass,    Distant::None },
 };
 
 // The party level, with balloons, confetti and the Partygoer.

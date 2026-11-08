@@ -811,15 +811,40 @@ static void addSymbolDoor(MB &pr, MB &fx, const Opening &op) {
     }
 }
 
+// Calls emit(xa, za, xb, zb) for the parts of a rectangle over cells of F that
+// have a floor, or once for the whole of it without F. A board over a stair or
+// the hole it climbs through is cut back to the floor round it.
+template <class Emit>
+static void overFloor(const ChunkFloorplan *F, float xa, float za, float xb, float zb, Emit emit) {
+    if (!F) { emit(xa, za, xb, zb); return; }
+    const float ox = F->cx * CHUNK, oz = F->cz * CHUNK;
+    const int i0 = std::max(0, (int)floorf((xa - ox) / CELL)), i1 = std::min(CCELLS - 1, (int)floorf((xb - ox) / CELL));
+    const int k0 = std::max(0, (int)floorf((za - oz) / CELL)), k1 = std::min(CCELLS - 1, (int)floorf((zb - oz) / CELL));
+    auto floored = [&](int i, int k) { FloorKind f = F->cells[i][k].floor; return f != FloorKind::Hole && f != FloorKind::Stair; };
+    bool all = true;
+    for (int i = i0; i <= i1; i++) for (int k = k0; k <= k1; k++) all = all && floored(i, k);
+    if (all) { emit(xa, za, xb, zb); return; }
+    for (int i = i0; i <= i1; i++) for (int k = k0; k <= k1; k++) {
+        if (!floored(i, k)) continue;
+        const float ca = std::max(xa, ox + i * CELL), cb = std::min(xb, ox + (i + 1) * CELL);
+        const float da = std::max(za, oz + k * CELL), db = std::min(zb, oz + (k + 1) * CELL);
+        if (cb > ca && db > da) emit(ca, da, cb, db);
+    }
+}
+
 // Floorboards over x0..x1, z0..z1 at floor 0: 145 mm strips east-west, random
 // lengths, staggered, over a dark underlay that shows as the gaps. Alpha 255
 // so the wood takes its relief and gloss. `tone` scales the wood's colour.
-static void addPlanks(MB &pr, Rng &r, float x0, float z0, float x1, float z1, float tone) {
+// With F, only over the cells that have a floor (overFloor).
+static void addPlanks(MB &pr, Rng &r, float x0, float z0, float x1, float z1, float tone,
+                      const ChunkFloorplan *F = nullptr) {
     const float WU0 = 0.51f, WV0 = 0.02f, WU1 = 0.99f, WV1 = 0.48f;   // props atlas: wood
     const Vec3 up = { 0, 1, 0 };
     const Vec2 u = PLAIN_UV;
-    pr.quad({x0,0.002f,z0},{x0,0.002f,z1},{x1,0.002f,z1},{x1,0.002f,z0}, up,
-            u, u, u, u, Rgba{ 34, 24, 18, 254 });
+    overFloor(F, x0, z0, x1, z1, [&](float xa, float za, float xb, float zb) {
+        pr.quad({xa,0.002f,za},{xa,0.002f,zb},{xb,0.002f,zb},{xb,0.002f,za}, up,
+                u, u, u, u, Rgba{ 34, 24, 18, 254 });
+    });
     const float PW = 0.145f;
     for (float z = z0; z < z1 - 0.01f; z += PW) {
         float zb = std::min(z + PW, z1);
@@ -831,10 +856,12 @@ static void addPlanks(MB &pr, Rng &r, float x0, float z0, float x1, float z1, fl
                 float ou = WU0 + r.f01() * (WU1 - WU0 - 0.26f), ov = WV0 + r.f01() * (WV1 - WV0 - 0.05f);
                 float k = (0.80f + 0.34f * r.f01()) * tone;
                 Rgba t = { cl8(150 * k), cl8(104 * k), cl8(70 * k), 255 };
-                float ua = ou, ub = ou + (xb - xa) * 0.11f, va = ov, vb = ov + 0.03f;
-                pr.quad({xa+0.003f,0.005f,z+0.003f},{xa+0.003f,0.005f,zb-0.003f},
-                        {xb-0.003f,0.005f,zb-0.003f},{xb-0.003f,0.005f,z+0.003f}, up,
-                        {ua,va},{ua,vb},{ub,vb},{ub,va}, t);
+                const float va = ov, vb = ov + 0.03f, bx = xa + 0.003f, ex = xb - 0.003f, du = (xb - xa) * 0.11f;
+                overFloor(F, bx, z + 0.003f, ex, zb - 0.003f, [&](float pa, float qa, float pb, float qb) {
+                    const float ua = ou + (pa - bx) / (ex - bx) * du, ub = ou + (pb - bx) / (ex - bx) * du;
+                    pr.quad({pa,0.005f,qa},{pa,0.005f,qb},{pb,0.005f,qb},{pb,0.005f,qa}, up,
+                            {ua,va},{ua,vb},{ub,vb},{ub,va}, t);
+                });
             }
             x += len;
         }
@@ -1290,11 +1317,11 @@ static const Rgba HOUSE_PAINT[6] = { { 236, 178, 190, 254 }, { 168, 222, 192, 25
 // side, with a ridge cap, gables over the end walls and a chimney. Flat colours
 // at alpha 254, so no relief. The openings are the layout's, so the trim
 // follows the walls the generator and the overlays left.
-static void addHouse(MB &pr, const Fixture &f, const ChunkLayout &L) {
+static void addHouse(MB &pr, const Fixture &f, const ChunkLayout &L, const ChunkFloorplan &F) {
     Rng r(((uint64_t)f.seed << 1) ^ 0x94ULL);
     const float x0 = f.pos.x - f.w, z0 = f.pos.z - f.h, x1 = f.pos.x + f.w, z1 = f.pos.z + f.h;
     const float top = f.pos.y;
-    addPlanks(pr, r, x0, z0, x1, z1, 0.85f + 0.3f * r.f01());
+    addPlanks(pr, r, x0, z0, x1, z1, 0.85f + 0.3f * r.f01(), &F);
     const Rgba paint = HOUSE_PAINT[(f.seed >> 3) % 6];
     const Rgba shade = { cl8(paint.r * 0.62f), cl8(paint.g * 0.62f), cl8(paint.b * 0.62f), 254 };
     const Rgba trim = { 246, 242, 232, 254 }, wood = { 120, 84, 56, 254 };
@@ -2028,7 +2055,7 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
     for (int i = 0; i < CCELLS; i++) for (int kk = 0; kk < CCELLS; kk++)
         addCellFixtures(i, kk, FixtureStage::Service);
     for (const Fixture &f : L.chunkFixtures()) {
-        if (f.kind == FixtureKind::House) addHouse(pr, f, L);
+        if (f.kind == FixtureKind::House) addHouse(pr, f, L, F);
         else addFixture(fm, f);
     }
     out.parts[MESH_FLOOR] = std::move(fl);
