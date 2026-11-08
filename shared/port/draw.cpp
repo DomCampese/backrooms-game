@@ -271,8 +271,38 @@ ObjMat objMat(ObjMesh m) {
 
 float objGloss(ObjMesh m) { return m == ObjMesh::Flare ? FLARE_GLOSS : -1.0f; }
 
+// The lit span is dawn, day and dusk, DAWN_TIME + DAY_TIME + DUSK_TIME s,
+// starting at dawn (sky.t = DAY + DUSK + NIGHT). The sun's height is a sine
+// over it; its strength fades in over its first 12 degrees, and below 20
+// degrees its colour warms toward (1, 0.62, 0.38).
+SunLight sunLight(const Sim &sim) {
+    SunLight s{ { 0, 1, 0 }, { 1, 1, 1 }, 0 };
+    if (sim.level != MOTION) return s;
+    const float dawnAt = Sim::DAY_TIME + Sim::DUSK_TIME + Sim::NIGHT_TIME;
+    const float cycle = dawnAt + Sim::DAWN_TIME;
+    const float span = Sim::DAWN_TIME + Sim::DAY_TIME + Sim::DUSK_TIME;
+    float u = sim.sky.t - dawnAt;
+    if (u < 0) u += cycle;
+    if (u >= span) return s;   // night
+    const float p = u / span;
+    const float elev = sinf(p * 3.14159265f) * SUN_PEAK_DEG * 0.01745329f;
+    const float az = p * 3.14159265f;   // 0 rising at +x, pi setting at -x
+    s.dir = { cosf(az) * cosf(elev), sinf(elev), 0.35f * cosf(elev) };
+    const float len = sqrtf(s.dir.x * s.dir.x + s.dir.y * s.dir.y + s.dir.z * s.dir.z);
+    s.dir = { s.dir.x / len, s.dir.y / len, s.dir.z / len };
+    const float deg = elev / 0.01745329f;
+    s.strength = clampf(deg / 12.0f, 0.0f, 1.0f);
+    const float warm = clampf(1.0f - deg / 20.0f, 0.0f, 1.0f);
+    s.col = { 1.0f, 1.0f - 0.38f * warm, 1.0f - 0.62f * warm };
+    return s;
+}
+
 FrameLight frameLight(Sim &sim, float now) {
     FrameLight l{};
+    {
+        const SunLight sun = sunLight(sim);
+        l.sunDir = sun.dir; l.sunCol = sun.col; l.sun = sun.strength;
+    }
     l.time = now;
     l.blackout = sim.blackoutCur * (sim.whisperT > 0 ? 0.86f : 1.0f);   // lights dim during a whisper
     l.flash = sim.flashCur;
