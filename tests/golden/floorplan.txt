@@ -5486,10 +5486,10 @@ cell 9,13 floor 5 y -1.47308159 ceiling 0 1.5 pool 0 pillar 0 N wall 0 -1.473081
 cell 9,14 floor 5 y -1.67074168 ceiling 0 1.29999995 pool 0 pillar 0 N wall 0 -1.67074168..1.5 buried 0 void 0 floor -1.47308159 -1.67074168 ceil 1.5 1.29999995 has 1100 W wall 0 -1.67074168..1.39999998 buried 0 void 0 floor -1.58112097 -1.67074168 ceil 1.39999998 1.29999995 has 1100
 cell 9,15 floor 5 y -1.85721302 ceiling 0 1.10000002 pool 0 pillar 0 N wall 0 -1.85721302..1.29999995 buried 0 void 0 floor -1.67074168 -1.85721302 ceil 1.29999995 1.10000002 has 1100 W wall 0 -1.85721302..1.19999993 buried 0 void 0 floor -1.76482379 -1.85721302 ceil 1.19999993 1.10000002 has 1100
 cell 10,0 floor 5 y 0 ceiling 0 3 pool 0 pillar 0 N wall 0 0..3 buried 0 void 0 floor 0 0 ceil 3 3 has 1100 W wall 0 0..3 buried 2 void 0 floor 0 0 ceil 3 3 has 1100
-cell 10,1 floor 0 y 0 ceiling 1 3 pool 0 pillar 0 N wall 4 0..3 buried 2 void 0 floor 0 0 ceil 3 3 has 1101 W wall 1 0..3 buried 2 void 0 floor 0 0 ceil 3 3 has 1101
-cell 10,2 floor 0 y 0 ceiling 1 3 pool 0 pillar 0 W wall 1 0..3 buried 3 void 0 floor 0 0 ceil 3 3 has 1101
-cell 10,3 floor 0 y 0 ceiling 1 3 pool 0 pillar 0 W wall 3 0..3 buried 3 void 0 floor 0 0 ceil 3 3 has 1101
-cell 10,4 floor 0 y 0 ceiling 1 3 pool 0 pillar 0 W wall 1 0..3 buried 1 void 0 floor 0 0 ceil 3 3 has 1101
+cell 10,1 floor 2 y 0 ceiling 1 3 pool 0 pillar 0 N wall 4 0..3 buried 2 void 0 floor 0 0 ceil 3 3 has 1101 W wall 1 0..3 buried 2 void 0 floor 0 0 ceil 3 3 has 1101
+cell 10,2 floor 2 y 0 ceiling 1 3 pool 0 pillar 0 W wall 1 0..3 buried 3 void 0 floor 0 0 ceil 3 3 has 1101
+cell 10,3 floor 2 y 0 ceiling 1 3 pool 0 pillar 0 W wall 3 0..3 buried 3 void 0 floor 0 0 ceil 3 3 has 1101
+cell 10,4 floor 2 y 0 ceiling 1 3 pool 0 pillar 0 W wall 1 0..3 buried 1 void 0 floor 0 0 ceil 3 3 has 1101
 cell 10,5 floor 5 y 0 ceiling 0 3 pool 0 pillar 0 N wall 1 0..3 buried 2 void 0 floor 0 0 ceil 3 3 has 1110 W wall 0 0..3 buried 1 void 0 floor 0 0 ceil 3 3 has 1100
 cell 10,6 floor 5 y 0 ceiling 0 3 pool 0 pillar 0 N wall 0 0..3 buried 0 void 0 floor 0 0 ceil 3 3 has 1100 W wall 0 0..3 buried 0 void 0 floor 0 0 ceil 3 3 has 1100
 cell 10,7 floor 5 y -0.188092932 ceiling 0 2.79999995 pool 0 pillar 0 N wall 0 -0.188092932..3 buried 0 void 0 floor 0 -0.188092932 ceil 3 2.79999995 has 1100 W wall 0 -0.188092932..2.9000001 buried 0 void 0 floor -0.128777668 -0.188092932 ceil 2.9000001 2.79999995 has 1100
@@ -5502,7 +5502,10 @@ cell 10,13 floor 5 y -1.54961026 ceiling 0 1.5 pool 0 pillar 0 N wall 0 -1.54961
 cell 10,14 floor 5 y -1.74916828 ceiling 0 1.29999995 pool 0 pillar 0 N wall 0 -1.74916828..1.5 buried 0 void 0 floor -1.54961026 -1.74916828 ceil 1.5 1.29999995 has 1100 W wall 0 -1.74916828..1.29999995 buried 0 void 0 floor -1.67074168 -1.74916828 ceil 1.29999995 1.29999995 has 1100
 cell 10,15 floor 5 y -1.93723989 ceiling 0 1.10000002 pool 0 pillar 0 N wall 0 -1.93723989..1.29999995 buried 0 void 0 floor -1.74916828 -1.93723989 ceil 1.29999995 1.10000002 has 1100 W wall 0 -1.93723989..1.10000002 buried 0 void 0 floor -1.85721302 -1.93723989 ceil 1.10000002 1.10000002 has 1100
 cell 11,0 floor 5 y 0 ceiling 0 3 pool 0 pillar 0 N wall 0 0..3 buried 0 void 0 floor 0 0 ceil 3 3 has 1100 W wall 0 0..3 buried 0 void 0 floor 0 0 ceil 3 3 has 1100
-cell 11,1 floor 0 y 0 ceiling 1 3 pool 0 pillar 0 N wall 1 0..3 buried 2 void 0 floor 0 0 ceil 3 3 has 1101
+cell 11,1 floor 2 y 0 ceiling 1 3 pool 0 pillar 0 N wall 1 0..3 buried 2 void 0 floor 0 0 ceil 3 3 has 1101
+cell 11,2 floor 2 y 0 ceiling 1 3 pool 0 pillar 0
+cell 11,3 floor 2 y 0 ceiling 1 3 pool 0 pillar 0
+cell 11,4 floor 2 y 0 ceiling 1 3 pool 0 pillar 0
 cell 11,5 floor 5 y 0 ceiling 0 3 pool 0 pillar 0 N wall 1 0..3 buried 3 void 0 floor 0 0 ceil 3 3 has 1110 W wall 0 0..3 buried 0 void 0 floor 0 0 ceil 3 3 has 1100
 cell 11,6 floor 5 y -0.00439573964 ceiling 0 3 pool 0 pillar 0 N wall 0 -0.00439573964..3 buried 0 void 0 floor 0 -0.00439573964 ceil 3 3 has 1100 W wall 0 -0.00439573964..3 buried 0 void 0 floor 0 -0.00439573964 ceil 3 3 has 1100
 cell 11,7 floor 5 y -0.246386275 ceiling 0 2.79999995 pool 0 pillar 0 N wall 0 -0.246386275..3 buried 0 void 0 floor -0.00439573964 -0.246386275 ceil 3 2.79999995 has 1100 W wall 0 -0.246386275..2.79999995 buried 0 void 0 floor -0.188092932 -0.246386275 ceil 2.79999995 2.79999995 has 1100
@@ -5515,7 +5518,10 @@ cell 11,13 floor 5 y -1.61592102 ceiling 0 1.39999998 pool 0 pillar 0 N wall 0 -
 cell 11,14 floor 5 y -1.81610429 ceiling 0 1.19999993 pool 0 pillar 0 N wall 0 -1.81610429..1.39999998 buried 0 void 0 floor -1.61592102 -1.81610429 ceil 1.39999998 1.19999993 has 1100 W wall 0 -1.81610429..1.29999995 buried 0 void 0 floor -1.74916828 -1.81610429 ceil 1.29999995 1.19999993 has 1100
 cell 11,15 floor 5 y -2.00460076 ceiling 0 1 pool 0 pillar 0 N wall 0 -2.00460076..1.19999993 buried 0 void 0 floor -1.81610429 -2.00460076 ceil 1.19999993 1 has 1100 W wall 0 -2.00460076..1.10000002 buried 0 void 0 floor -1.93723989 -2.00460076 ceil 1.10000002 1 has 1100
 cell 12,0 floor 5 y 0 ceiling 0 3 pool 0 pillar 0 N wall 0 0..3 buried 0 void 0 floor 0 0 ceil 3 3 has 1100 W wall 0 0..3 buried 0 void 0 floor 0 0 ceil 3 3 has 1100
-cell 12,1 floor 0 y 0 ceiling 1 3 pool 0 pillar 0 N wall 3 0..3 buried 3 void 0 floor 0 0 ceil 3 3 has 1101
+cell 12,1 floor 2 y 0 ceiling 1 3 pool 0 pillar 0 N wall 3 0..3 buried 3 void 0 floor 0 0 ceil 3 3 has 1101
+cell 12,2 floor 2 y 0 ceiling 1 3 pool 0 pillar 0
+cell 12,3 floor 2 y 0 ceiling 1 3 pool 0 pillar 0
+cell 12,4 floor 2 y 0 ceiling 1 3 pool 0 pillar 0
 cell 12,5 floor 5 y 0 ceiling 0 3 pool 0 pillar 0 N wall 3 0..3 buried 3 void 0 floor 0 0 ceil 3 3 has 1110 W wall 0 0..3 buried 0 void 0 floor 0 0 ceil 3 3 has 1100
 cell 12,6 floor 5 y -0.0610902384 ceiling 0 2.9000001 pool 0 pillar 0 N wall 0 -0.0610902384..3 buried 0 void 0 floor 0 -0.0610902384 ceil 3 2.9000001 has 1100 W wall 0 -0.0610902384..3 buried 0 void 0 floor -0.00439573964 -0.0610902384 ceil 3 2.9000001 has 1100
 cell 12,7 floor 5 y -0.303451538 ceiling 0 2.70000005 pool 0 pillar 0 N wall 0 -0.303451538..2.9000001 buried 0 void 0 floor -0.0610902384 -0.303451538 ceil 2.9000001 2.70000005 has 1100 W wall 0 -0.303451538..2.79999995 buried 0 void 0 floor -0.246386275 -0.303451538 ceil 2.79999995 2.70000005 has 1100
@@ -5528,7 +5534,10 @@ cell 12,13 floor 5 y -1.67181385 ceiling 0 1.29999995 pool 0 pillar 0 N wall 0 -
 cell 12,14 floor 5 y -1.87134826 ceiling 0 1.10000002 pool 0 pillar 0 N wall 0 -1.87134826..1.29999995 buried 0 void 0 floor -1.67181385 -1.87134826 ceil 1.29999995 1.10000002 has 1100 W wall 0 -1.87134826..1.19999993 buried 0 void 0 floor -1.81610429 -1.87134826 ceil 1.19999993 1.10000002 has 1100
 cell 12,15 floor 5 y -2.05909729 ceiling 0 0.899999857 pool 0 pillar 0 N wall 0 -2.05909729..1.10000002 buried 0 void 0 floor -1.87134826 -2.05909729 ceil 1.10000002 0.899999857 has 1100 W wall 0 -2.05909729..1 buried 0 void 0 floor -2.00460076 -2.05909729 ceil 1 0.899999857 has 1100
 cell 13,0 floor 5 y 0 ceiling 0 3 pool 0 pillar 0 N wall 0 0..3 buried 0 void 0 floor 0 0 ceil 3 3 has 1100 W wall 0 0..3 buried 0 void 0 floor 0 0 ceil 3 3 has 1100
-cell 13,1 floor 0 y 0 ceiling 1 3 pool 0 pillar 0 N wall 1 0..3 buried 3 void 0 floor 0 0 ceil 3 3 has 1101
+cell 13,1 floor 2 y 0 ceiling 1 3 pool 0 pillar 0 N wall 1 0..3 buried 3 void 0 floor 0 0 ceil 3 3 has 1101
+cell 13,2 floor 2 y 0 ceiling 1 3 pool 0 pillar 0
+cell 13,3 floor 2 y 0 ceiling 1 3 pool 0 pillar 0
+cell 13,4 floor 2 y 0 ceiling 1 3 pool 0 pillar 0
 cell 13,5 floor 5 y 0 ceiling 0 3 pool 0 pillar 0 N wall 1 0..3 buried 3 void 0 floor 0 0 ceil 3 3 has 1110 W wall 0 0..3 buried 0 void 0 floor 0 0 ceil 3 3 has 1100
 cell 13,6 floor 5 y -0.118050076 ceiling 0 2.9000001 pool 0 pillar 0 N wall 0 -0.118050076..3 buried 0 void 0 floor 0 -0.118050076 ceil 3 2.9000001 has 1100 W wall 0 -0.118050076..2.9000001 buried 0 void 0 floor -0.0610902384 -0.118050076 ceil 2.9000001 2.9000001 has 1100
 cell 13,7 floor 5 y -0.35910666 ceiling 0 2.5999999 pool 0 pillar 0 N wall 0 -0.35910666..2.9000001 buried 0 void 0 floor -0.118050076 -0.35910666 ceil 2.9000001 2.5999999 has 1100 W wall 0 -0.35910666..2.70000005 buried 0 void 0 floor -0.303451538 -0.35910666 ceil 2.70000005 2.5999999 has 1100
@@ -5541,7 +5550,10 @@ cell 13,13 floor 5 y -1.71718025 ceiling 0 1.29999995 pool 0 pillar 0 N wall 0 -
 cell 13,14 floor 5 y -1.91480434 ceiling 0 1.10000002 pool 0 pillar 0 N wall 0 -1.91480434..1.29999995 buried 0 void 0 floor -1.71718025 -1.91480434 ceil 1.29999995 1.10000002 has 1100 W wall 0 -1.91480434..1.10000002 buried 0 void 0 floor -1.87134826 -1.91480434 ceil 1.10000002 1.10000002 has 1100
 cell 13,15 floor 5 y -2.10064411 ceiling 0 0.899999857 pool 0 pillar 0 N wall 0 -2.10064411..1.10000002 buried 0 void 0 floor -1.91480434 -2.10064411 ceil 1.10000002 0.899999857 has 1100 W wall 0 -2.10064411..0.899999857 buried 0 void 0 floor -2.05909729 -2.10064411 ceil 0.899999857 0.899999857 has 1100
 cell 14,0 floor 5 y 0 ceiling 0 3 pool 0 pillar 0 N wall 0 0..3 buried 0 void 0 floor 0 0 ceil 3 3 has 1100 W wall 0 0..3 buried 0 void 0 floor 0 0 ceil 3 3 has 1100
-cell 14,1 floor 0 y 0 ceiling 1 3 pool 0 pillar 0 N wall 1 0..3 buried 1 void 0 floor 0 0 ceil 3 3 has 1101
+cell 14,1 floor 2 y 0 ceiling 1 3 pool 0 pillar 0 N wall 1 0..3 buried 1 void 0 floor 0 0 ceil 3 3 has 1101
+cell 14,2 floor 2 y 0 ceiling 1 3 pool 0 pillar 0
+cell 14,3 floor 2 y 0 ceiling 1 3 pool 0 pillar 0
+cell 14,4 floor 2 y 0 ceiling 1 3 pool 0 pillar 0
 cell 14,5 floor 5 y 0 ceiling 0 3 pool 0 pillar 0 N wall 1 0..3 buried 1 void 0 floor 0 0 ceil 3 3 has 1110 W wall 0 0..3 buried 0 void 0 floor 0 0 ceil 3 3 has 1100
 cell 14,6 floor 5 y -0.17509295 ceiling 0 2.79999995 pool 0 pillar 0 N wall 0 -0.17509295..3 buried 0 void 0 floor 0 -0.17509295 ceil 3 2.79999995 has 1100 W wall 0 -0.17509295..2.9000001 buried 0 void 0 floor -0.118050076 -0.17509295 ceil 2.9000001 2.79999995 has 1100
 cell 14,7 floor 5 y -0.413193762 ceiling 0 2.5999999 pool 0 pillar 0 N wall 0 -0.413193762..2.79999995 buried 0 void 0 floor -0.17509295 -0.413193762 ceil 2.79999995 2.5999999 has 1100 W wall 0 -0.413193762..2.5999999 buried 0 void 0 floor -0.35910666 -0.413193762 ceil 2.5999999 2.5999999 has 1100
@@ -5569,7 +5581,7 @@ cell 15,12 floor 5 y -1.57590914 ceiling 0 1.39999998 pool 0 pillar 0 N wall 0 -
 cell 15,13 floor 5 y -1.77634013 ceiling 0 1.19999993 pool 0 pillar 0 N wall 0 -1.77634013..1.39999998 buried 0 void 0 floor -1.57590914 -1.77634013 ceil 1.39999998 1.19999993 has 1100 W wall 0 -1.77634013..1.19999993 buried 0 void 0 floor -1.75199723 -1.77634013 ceil 1.19999993 1.19999993 has 1100
 cell 15,14 floor 5 y -1.96644819 ceiling 0 1 pool 0 pillar 0 N wall 0 -1.96644819..1.19999993 buried 0 void 0 floor -1.77634013 -1.96644819 ceil 1.19999993 1 has 1100 W wall 0 -1.96644819..1.10000002 buried 0 void 0 floor -1.94646955 -1.96644819 ceil 1.10000002 1 has 1100
 cell 15,15 floor 5 y -2.1450665 ceiling 0 0.899999857 pool 0 pillar 0 N wall 0 -2.1450665..1 buried 0 void 0 floor -1.96644819 -2.1450665 ceil 1 0.899999857 has 1100 W wall 0 -2.1450665..0.899999857 buried 0 void 0 floor -2.12925696 -2.1450665 ceil 0.899999857 0.899999857 has 1100
-cells hash=bdfd166dff2f3c12 plain=12
+cells hash=b7be3e037964aa7a plain=0
 ceiling 1300 -1182 .. 1310 -1174 y 3
 
 chunk L0 v1 s0 (1,0) floorplan: 0 risers, 0 lips, 1 ceiling rects, 0 soffits, 0 flights, 0 arches

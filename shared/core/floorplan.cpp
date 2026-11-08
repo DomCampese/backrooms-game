@@ -36,6 +36,9 @@ FloorKind floorKindOf(World &w, const ChunkData &d, int i, int k, int gi, int gk
     if (d.manila && i >= MANILA_LO && i <= MANILA_HI && k >= MANILA_LO && k <= MANILA_HI) return FloorKind::Boards;
     if (d.vflag[i][k] & VF_STAIR) return FloorKind::Stair;
     if (d.vflag[i][k] & VF_HOLE) return FloorKind::Hole;
+    // Under the planks the grass is only a second floor 2 mm down, which
+    // flickered through them on a phone.
+    if (w.indoors(gi, gk)) return FloorKind::Boards;
     if (w.level == 0 && w.softAt(gi, gk)) return FloorKind::Soft;
     if (w.onHill(gi, gk)) return FloorKind::Hill;
     return FloorKind::Flat;
@@ -143,6 +146,7 @@ void flightsOf(ChunkFloorplan &P, World &w, const ChunkData &d) {
         const float R = w.storeyH / 24.0f;
         Flight fl;
         fl.feat = f;
+        fl.wooden = w.level == MOTION;
         if (f.kind == VK_STAIRWELL) {
             // Lane A: 12 risers from the foot (plain floor) to the half landing
             // across the far end of the shaft; lane B 12 more back toward the door

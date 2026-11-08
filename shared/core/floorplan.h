@@ -28,7 +28,7 @@ constexpr int ARCH_SEGMENTS = 24;
 enum class FloorKind : uint8_t {
     Flat,     // level at y
     Soft,     // Level 0's rotten patch: a bowl World::softDip deep under y
-    Boards,   // inside the Manila Room, whose furnishings lay their own floorboards
+    Boards,   // inside the Manila Room or a Level 94 house, whose planks are the floor
     Stair,    // a flight or landing: a Flight's steps (or the storey above) cover it
     Hole,     // no floor: the storey below shows through
     Hill,     // Level 94 out of doors: World::motionHeight's slope, not a level floor
@@ -112,6 +112,8 @@ struct Flight {
     // An enclosed stairwell's half landing, after its first twelve steps: the
     // rectangle u 0..landingU1, v landingV0..landingV1 at landingY.
     bool landing = false;
+    bool wooden = false;     // Level 94: a house's stair, in planks, not the level's floor
+
     float landingU1 = 0, landingV0 = 0, landingV1 = 0, landingY = 0;
     int landingAfter = 0;    // how many steps come before it
 };
