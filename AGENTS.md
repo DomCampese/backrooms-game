@@ -2073,6 +2073,14 @@ and the Animation at night.
   chunk_mesh.cpp, from the floorplan). It was one rectangle over the whole
   house, so upstairs it covered the stairwell's hole and the player climbed
   through it.
+- **A house's cells are `FloorKind::Boards`**, so no grass floor is drawn
+  under the planks, and the planks are one layer, edge to edge, with no dark
+  underlay (`addPlanks`, the Manila Room's too). Grass at 0, underlay at
+  2 mm and boards at 5 mm z-fought on a phone, and the 6 mm gaps between
+  boards shimmered as the camera turned.
+- **A house's stairs are wood** (`Flight::wooden`, `addWoodStep`, and planks
+  on the half landing). Steps go in the floor mesh, so they took the level's
+  grass.
 - **The storey changes only on the stairwell's flights** (`VF_STAIR` or
   `VF_WALKHOLE` under the player). On Level 0 any point above the midpoint
   changes it; here a jump off a cabinet passes 1.6 m. The Animation never

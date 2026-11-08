@@ -225,6 +225,33 @@ static void addStep(MB &fl, MB &pr, ToWorld to, float u0, float u1, float va, fl
     }
 }
 
+// A Level 94 house's step (Flight::wooden): the same block as addStep, in the
+// props mesh's wood, with a darker nosing board instead of aluminium. `shade`
+// varies the boards from step to step.
+template <class ToWorld>
+static void addWoodStep(MB &pr, ToWorld to, float u0, float u1, float va, float vb, float y0, float y1,
+                        bool risesPlusV, float shade) {
+    const float WU0 = 0.51f, WV0 = 0.02f;   // props atlas: wood
+    const float vr = risesPlusV ? va : vb, vs = risesPlusV ? -1.0f : 1.0f;
+    const Rgba tread = { cl8(150 * shade), cl8(104 * shade), cl8(70 * shade), 255 };
+    const Rgba riser = { cl8(118 * shade), cl8(82 * shade), cl8(56 * shade), 255 };
+    auto uvU = [&](float u) { return WU0 + 0.02f + u * 0.11f; };
+    Vec3 t0 = to(u0, y1, va), t1 = to(u1, y1, va), t2 = to(u1, y1, vb), t3 = to(u0, y1, vb);
+    const float tv0 = WV0 + 0.02f, tv1 = tv0 + (vb - va) * 0.2f;
+    pr.quad(t0, t1, t2, t3, { 0, 1, 0 }, { uvU(u0), tv0 }, { uvU(u1), tv0 }, { uvU(u1), tv1 }, { uvU(u0), tv1 }, tread);
+    Vec3 n0 = to(0, 0, 0), nv = to(0, 0, vs);
+    Vec3 rn = { nv.x - n0.x, 0, nv.z - n0.z };
+    Vec3 r0 = to(u0, y0, vr), r1 = to(u1, y0, vr), r2 = to(u1, y1, vr), r3 = to(u0, y1, vr);
+    const float rv0 = WV0 + 0.25f, rv1 = rv0 + (y1 - y0) * 0.2f;
+    pr.quad(r0, r1, r2, r3, rn, { uvU(u0), rv0 }, { uvU(u1), rv0 }, { uvU(u1), rv1 }, { uvU(u0), rv1 }, riser);
+    if (y1 > 0.01f) {
+        const float a = vr, b = vr - vs * 0.03f;
+        Vec3 q0 = to(u0 + 0.02f, y1 - 0.025f, std::min(a, b)), q1 = to(u1 - 0.02f, y1 + 0.006f, std::max(a, b));
+        addSolidBox(pr, std::min(q0.x, q1.x), y1 - 0.025f, std::min(q0.z, q1.z),
+                    std::max(q0.x, q1.x), y1 + 0.006f, std::max(q0.z, q1.z), Rgba{ 92, 62, 42, 254 });
+    }
+}
+
 // Build one piece of furniture: boxes in the props mesh, a contact shadow in
 // the AO mesh, and for the fallen tile a hole in the ceiling mesh. What
 // collision stops at and a carton stands on is PROP_SHAPES' top (core/world.h).
@@ -832,35 +859,31 @@ static void overFloor(const ChunkFloorplan *F, float xa, float za, float xb, flo
     }
 }
 
-// Floorboards over x0..x1, z0..z1 at floor 0: 145 mm strips east-west, random
-// lengths, staggered, over a dark underlay that shows as the gaps. Alpha 255
-// so the wood takes its relief and gloss. `tone` scales the wood's colour.
+// Floorboards over x0..x1, z0..z1 on a floor at y: 145 mm strips east-west, random
+// lengths, staggered, each its own shade, edge to edge in one layer. Gaps over
+// a dark underlay shimmered as the camera moved (a 6 mm gap is under a pixel
+// a few metres off), and on a phone the underlay z-fought the boards. Alpha
+// 255 so the wood takes its relief and gloss. `tone` scales the wood's colour.
 // With F, only over the cells that have a floor (overFloor).
-static void addPlanks(MB &pr, Rng &r, float x0, float z0, float x1, float z1, float tone,
+static void addPlanks(MB &pr, Rng &r, float x0, float z0, float x1, float z1, float y, float tone,
                       const ChunkFloorplan *F = nullptr) {
     const float WU0 = 0.51f, WV0 = 0.02f, WU1 = 0.99f, WV1 = 0.48f;   // props atlas: wood
     const Vec3 up = { 0, 1, 0 };
-    const Vec2 u = PLAIN_UV;
-    overFloor(F, x0, z0, x1, z1, [&](float xa, float za, float xb, float zb) {
-        pr.quad({xa,0.002f,za},{xa,0.002f,zb},{xb,0.002f,zb},{xb,0.002f,za}, up,
-                u, u, u, u, Rgba{ 34, 24, 18, 254 });
-    });
-    const float PW = 0.145f;
+    const float PW = 0.145f, Y = y + 0.002f;
     for (float z = z0; z < z1 - 0.01f; z += PW) {
         float zb = std::min(z + PW, z1);
         float x = x0 - r.f01() * 1.2f;
         while (x < x1) {
             float len = 0.9f + r.f01() * 1.6f;
             float xa = std::max(x, x0), xb = std::min(x + len, x1);
-            if (xb - xa > 0.05f) {
+            if (xb - xa > 0.0f) {
                 float ou = WU0 + r.f01() * (WU1 - WU0 - 0.26f), ov = WV0 + r.f01() * (WV1 - WV0 - 0.05f);
                 float k = (0.80f + 0.34f * r.f01()) * tone;
                 Rgba t = { cl8(150 * k), cl8(104 * k), cl8(70 * k), 255 };
-                const float va = ov, vb = ov + 0.03f, bx = xa + 0.003f, ex = xb - 0.003f, du = (xb - xa) * 0.11f;
-                overFloor(F, bx, z + 0.003f, ex, zb - 0.003f, [&](float pa, float qa, float pb, float qb) {
-                    const float ua = ou + (pa - bx) / (ex - bx) * du, ub = ou + (pb - bx) / (ex - bx) * du;
-                    pr.quad({pa,0.005f,qa},{pa,0.005f,qb},{pb,0.005f,qb},{pb,0.005f,qa}, up,
-                            {ua,va},{ua,vb},{ub,vb},{ub,va}, t);
+                const float va = ov, vb = ov + 0.03f;
+                overFloor(F, xa, z, xb, zb, [&](float pa, float qa, float pb, float qb) {
+                    const float ua = ou + (pa - xa) * 0.11f, ub = ou + (pb - xa) * 0.11f;
+                    pr.quad({pa,Y,qa},{pa,Y,qb},{pb,Y,qb},{pb,Y,qa}, up, {ua,va},{ua,vb},{ub,vb},{ub,va}, t);
                 });
             }
             x += len;
@@ -880,7 +903,7 @@ static void addManilaRoom(MB &pr, MB &fx, MB &ao, float rx, float rz, float cy, 
     };
     Rng r(((uint64_t)h << 1) ^ 0x3A11AULL);
 
-    addPlanks(pr, r, rx - R, rz - R, rx + R, rz + R, 1.0f);
+    addPlanks(pr, r, rx - R, rz - R, rx + R, rz + R, 0.0f, 1.0f);
 
     // Manila paper on the four inside faces: 500 mm tiles 1.5 mm off the plaster,
     // from the skirting to the ceiling and round each doorway, anchored to the world
@@ -1321,7 +1344,7 @@ static void addHouse(MB &pr, const Fixture &f, const ChunkLayout &L, const Chunk
     Rng r(((uint64_t)f.seed << 1) ^ 0x94ULL);
     const float x0 = f.pos.x - f.w, z0 = f.pos.z - f.h, x1 = f.pos.x + f.w, z1 = f.pos.z + f.h;
     const float top = f.pos.y;
-    addPlanks(pr, r, x0, z0, x1, z1, 0.85f + 0.3f * r.f01(), &F);
+    addPlanks(pr, r, x0, z0, x1, z1, 0.0f, 0.85f + 0.3f * r.f01(), &F);
     const Rgba paint = HOUSE_PAINT[(f.seed >> 3) % 6];
     const Rgba shade = { cl8(paint.r * 0.62f), cl8(paint.g * 0.62f), cl8(paint.b * 0.62f), 254 };
     const Rgba trim = { 246, 242, 232, 254 }, wood = { 120, 84, 56, 254 };
@@ -2034,11 +2057,20 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
                 const float y = flight.landingY;
                 Vec3 a = to(0, y, flight.landingV0), b = to(flight.landingU1, y, flight.landingV0);
                 Vec3 c = to(flight.landingU1, y, flight.landingV1), e = to(0, y, flight.landingV1);
-                fl.quad(a, b, c, e, { 0, 1, 0 }, { a.x / 2, a.z / 2 }, { b.x / 2, b.z / 2 }, { c.x / 2, c.z / 2 },
-                        { e.x / 2, e.z / 2 }, RGBA_WHITE);
+                if (flight.wooden) {
+                    Rng lr(((uint64_t)(uint32_t)cx << 32) ^ (uint32_t)cz ^ 0x1A4DULL);
+                    addPlanks(pr, lr, std::min(a.x, c.x), std::min(a.z, c.z), std::max(a.x, c.x), std::max(a.z, c.z),
+                              y, 1.0f);
+                } else {
+                    fl.quad(a, b, c, e, { 0, 1, 0 }, { a.x / 2, a.z / 2 }, { b.x / 2, b.z / 2 }, { c.x / 2, c.z / 2 },
+                            { e.x / 2, e.z / 2 }, RGBA_WHITE);
+                }
             }
             const FlightStep &st = flight.steps[s];
-            addStep(fl, pr, to, st.u0, st.u1, st.va, st.vb, st.y0, st.y1, st.risesPlusV, false);
+            if (flight.wooden)
+                addWoodStep(pr, to, st.u0, st.u1, st.va, st.vb, st.y0, st.y1, st.risesPlusV, 0.82f + 0.06f * (float)(s % 4));
+            else
+                addStep(fl, pr, to, st.u0, st.u1, st.va, st.vb, st.y0, st.y1, st.risesPlusV, false);
         }
         if (f.kind == VK_STAIRWELL) {
             // The landing light's steel body. Its tube is drawn by the renderer, because
