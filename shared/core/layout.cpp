@@ -547,7 +547,8 @@ ChunkLayout chunkLayout(World &w, int cx, int cz) {
         f.w = (hs.i1 - hs.i0 + 1) * CELL * 0.5f;
         f.h = (hs.k1 - hs.k0 + 1) * CELL * 0.5f;
         const float hx = cx * CHUNK + hs.i0 * CELL + f.w, hz = cz * CHUNK + hs.k0 * CELL + f.h;
-        f.pos = { hx, w.ceilY(cellOf(hx), cellOf(hz)), hz };
+        // A lower storey is clad up to the floor above, over the slab.
+        f.pos = { hx, f.tone == 1 ? w.storeyH : w.ceilY(cellOf(hx), cellOf(hz)), hz };
         f.variant = f.h > f.w ? 1 : 0;   // the ridge runs the long way
         f.seed = hs.seed;
         L.fixtures.push_back(f);

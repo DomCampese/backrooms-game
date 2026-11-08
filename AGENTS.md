@@ -2056,7 +2056,7 @@ and the Animation at night.
   per-chunk flood checks every room is reached.
 - **The first house in a chunk may have two storeys** (`MotionHouse::storeys`,
   `MOTION_TALL` 6 cells square, three in five where the site is flat). Level
-  94 uses Level 0's storey machinery: `storeyH` is 3.0 (24 risers of 125 mm),
+  94 uses Level 0's storey machinery: `storeyH` is 3.3 (24 risers of 137.5 mm),
   and `pairFeature` returns a `VK_STAIRWELL` inside the house, a cell clear of
   its walls (the stamp's margin clears interior walls only, so the house
   walls on the margin's outer edges survive). Storey 1 is
@@ -2064,6 +2064,15 @@ and the Animation at night.
   beds, a cabinet and a shelf in the column beside the stairwell's margin.
   Every other storey-1 cell is `VF_HOLE | VF_OPENUP | VF_NOWALK`, a hole down
   to the ground. About 27 tall houses in 144 chunks at seed 1337.
+- **`storeyH` must stay above `wallH` (3.0).** The 0.3 m between is the
+  slab. At 3.0 the ground floor's ceiling and the upper floor's floor were in
+  one plane and the ceiling flickered green with the grass floor. The lower
+  storey's `FixtureKind::House` (tone 1) takes `storeyH` as its top, so its
+  clapboards cover the slab from outside.
+- **The house's plank floor skips stair and hole cells** (`overFloor` in
+  chunk_mesh.cpp, from the floorplan). It was one rectangle over the whole
+  house, so upstairs it covered the stairwell's hole and the player climbed
+  through it.
 - **The storey changes only on the stairwell's flights** (`VF_STAIR` or
   `VF_WALKHOLE` under the player). On Level 0 any point above the midpoint
   changes it; here a jump off a cabinet passes 1.6 m. The Animation never
