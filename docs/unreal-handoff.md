@@ -392,6 +392,11 @@ fallback while the lit look is unproven.
     its hatch facing -z, a can on its counter (E takes it, once). The
     ground should run down into the valleys in smooth slopes with no steps;
     steps point at an old build of the shared code.
+19. **Level 94's house layouts** (8 November 2026). No Unreal code: inner
+    walls and doorways are generated in core and drawn by the shared
+    mesher. At seed 1337, `LEVEL=6 make unreal-play`: the house at x 50-60,
+    z 38-46 has its door on the south side; inside is a front room, a wall
+    with a doorway at each end, and two back rooms, the east one with a bed.
 
 A session on the Mac itself (`claude remote-control` in the repository) could
 build, run the tests and read the log directly; from the cloud each Unreal

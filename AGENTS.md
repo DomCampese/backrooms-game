@@ -2040,6 +2040,20 @@ and the Animation at night.
   storey), never a generated chunk, so the generator, the layout (the
   `FixtureKind::House` fixture) and the sim (`World::indoors`) agree on every
   storey. About one house per two chunks, clustered on the hilltops.
+- **A one-storey house has one of four layouts** (`MotionHouse::rooms`, from
+  its hash, `MotionRooms` in core/world.h): one open room; a front room two
+  rows deep with a bedroom behind it; a front room with two back rooms side
+  by side; or an open room with a 2 x 2 room in the back corner away from the
+  bed. `furnishMotion` lays the inner walls out as seen from the door
+  (`cellAt`, `rowEdge`, `colEdge`: a across the house, b back from the door),
+  so one set of numbers serves all four door sides. Inner doorways are
+  `WALL_DOOR`, and furniture keeps clear of both cells either side of one
+  (`keepClear`). The bed's corner is always the back corner (A - 1, D - 1),
+  inside the bedroom. `addHouse` clads only the outer walls, so inner walls
+  are plain wall surface. The upper floor of a tall house is a bedroom, a
+  sitting room or an attic (`furnishMotionUpstairs`), two beds in each. The
+  regression checks each layout appears and keeps its inner doorways; the
+  per-chunk flood checks every room is reached.
 - **The first house in a chunk may have two storeys** (`MotionHouse::storeys`,
   `MOTION_TALL` 6 cells square, three in five where the site is flat). Level
   94 uses Level 0's storey machinery: `storeyH` is 3.0 (24 risers of 125 mm),

@@ -993,6 +993,7 @@ int main() {
         CHECK(EXIT_NEXT[THEATER]==MOTION && LEVEL_DEPTH[THEATER]+1==LEVEL_DEPTH[MOTION]);
         World w; w.seed=1337; w.level=MOTION; w.visit=0; w.wallH=LEVEL_RULES[MOTION].wallH; w.storeyH=LEVEL_RULES[MOTION].storeyH;
         int houses=0, tall=0, beds=0, exits=0, sunk=0, trucks=0;
+        int layouts[ROOMS_KINDS]={};
         float deepest=0;
         for (int cx=-4;cx<=4;++cx) for (int cz=-4;cz<=4;++cz) {
             ChunkData &d=w.data(cx,cz);
@@ -1023,6 +1024,18 @@ int main() {
                 MotionHouse hs;
                 if (!w.motionHouse(cx,cz,q,hs)) continue;
                 houses++;
+                // A divided house keeps its inner doorways (and no other inner walls
+                // are open edges: every inner WALL_DOOR is one of them).
+                if (hs.storeys==1) {
+                    layouts[hs.rooms]++;
+                    int inner=0, innerWalls=0;
+                    for (int i=hs.i0;i<=hs.i1;++i) for (int k=hs.k0;k<=hs.k1;++k) {
+                        if (k>hs.k0) { inner+=d.wallN[i][k]==WALL_DOOR; innerWalls+=d.wallN[i][k]!=WALL_NONE; }
+                        if (i>hs.i0) { inner+=d.wallW[i][k]==WALL_DOOR; innerWalls+=d.wallW[i][k]!=WALL_NONE; }
+                    }
+                    const int want=hs.rooms==ROOMS_OPEN ? 0 : hs.rooms==ROOMS_TWO_BACK ? 2 : 1;
+                    CHECK(inner>=want && (hs.rooms==ROOMS_OPEN)==(innerWalls==0));
+                }
                 for (int i=hs.i0;i<=hs.i1;++i) for (int k=hs.k0;k<=hs.k1;++k) {
                     house[i][k]=true;
                     CHECK(d.elev[i][k]==0 && w.indoors(gx0+i,gz0+k));
@@ -1078,6 +1091,7 @@ int main() {
         }
         CHECK(houses>=20 && tall>=5 && beds>=houses-tall && exits>0 && sunk>CCELLS*CCELLS*20);
         CHECK(trucks>=4 && deepest<-3.0f);
+        for (int r=0;r<ROOMS_KINDS;++r) CHECK(layouts[r]>=2);
         // The day: no hunter, however long. Dusk, then the night's Animation.
         sim.applyLevel(MOTION,GetTime());
         CHECK(!sim.hasBlackouts() && sim.nextBlackout==Sim::BLACKOUT_NEVER && sim.daylight()==1.0f);
