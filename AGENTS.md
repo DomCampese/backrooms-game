@@ -2073,6 +2073,16 @@ and the Animation at night.
   rng.f01() < 0.5f)` made gcc and clang build different rooms, because
   argument order is unspecified; `tools/unreal-check.sh` caught it (its
   floorplan golden differed in 7 lines).
+- **The Unreal look has a sun on Level 94** (`ABackroomsLightsActor::ShowSun`).
+  Its direction, colour and strength are `sunLight(sim)` (port/draw.cpp),
+  carried in `FrameLight` (`sunDir`, `sunCol`, `sun`): a function of
+  `Sim::sky.t` alone. The sun rises at the start of dawn at +x, crosses to
+  -x, peaks at `SUN_PEAK_DEG` (55) mid-span and sets at the end of dusk.
+  Strength fades in over its first 12 degrees; below 20 it warms toward
+  (1, 0.62, 0.38). Unreal multiplies it by `blackout` (the level's
+  daylight), and at full strength it is `SunLux`, π x 2 x the ambient's luma
+  x `WebUnitNits`, so a sunlit face is up to three times as bright as one in
+  shade. The Web build reads none of it; its daylight stays the ambient.
 - F3's B on Level 94 skips to the next dusk or dawn. `BACKROOMS_NIGHT=1`
   presses it on frame 20; a capture at frame 330 is at night.
 - Footsteps are `Sfx::StepGrass` outside (`Footing::Grass`, `makeGrassStep`)

@@ -127,6 +127,7 @@ a world starts. The log says which one is drawing ("the world draws with").
 | surfaces | `M_BackroomsLit` and `M_BackroomsLitBlend`: default lit, two-sided; base colour, normal, roughness, metal and glow from `Shaders/BackroomsSurface.ush` | `M_BackroomsWorld` and `M_BackroomsWorldBlend`: unlit, coloured by the Web build's shader (below) |
 | ceiling panels | glow in the material, plus a rect light at each of the 16 nearest working panels (`ABackroomsLightsActor`), the 8 nearest with shadows; dead, dim and faulty tubes, blackouts and the hunter's dead light from core and the sim | the Web shader's 3x3 panel sum |
 | torch, flare or muzzle flash, chandelier or landing lamp | a spot light and two point lights with shadows, from `frameLight` | in the shader |
+| Level 94's sun | a directional light with shadows (`ABackroomsLightsActor::ShowSun`) from `frameLight`'s `sunDir`, `sunCol` and `sun` (`sunLight`, shared/port/draw.h): it rises at dawn, peaks at 55 degrees and sets at dusk; up to 2x the ambient glow on a lit face | the ambient alone |
 | shadows | the chunks cast Unreal's shadows (virtual shadow maps) | marched over the occupancy grid |
 | bounce light | Lumen, screen traces only (procedural meshes have no distance fields), and the level's ambient floor as glow | the Web shader's ambient term |
 | fog | exponential height fog with volumetric fog (off at `LightQuality` Low): the torch's beam shows in the air | in the shader |
