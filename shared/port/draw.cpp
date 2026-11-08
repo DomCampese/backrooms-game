@@ -287,9 +287,10 @@ SunLight sunLight(const Sim &sim) {
     const float p = u / span;
     const float elev = sinf(p * 3.14159265f) * SUN_PEAK_DEG * 0.01745329f;
     const float az = p * 3.14159265f;   // 0 rising at +x, pi setting at -x
-    s.dir = { cosf(az) * cosf(elev), sinf(elev), 0.35f * cosf(elev) };
-    const float len = sqrtf(s.dir.x * s.dir.x + s.dir.y * s.dir.y + s.dir.z * s.dir.z);
-    s.dir = { s.dir.x / len, s.dir.y / len, s.dir.z / len };
+    // The heading leans 0.35 toward +z so shadows are not square to the
+    // grid; normalised on its own, so the height above stays exactly elev.
+    const float hx = cosf(az), hz = 0.35f, hl = sqrtf(hx * hx + hz * hz);
+    s.dir = { hx / hl * cosf(elev), sinf(elev), hz / hl * cosf(elev) };
     const float deg = elev / 0.01745329f;
     s.strength = clampf(deg / 12.0f, 0.0f, 1.0f);
     const float warm = clampf(1.0f - deg / 20.0f, 0.0f, 1.0f);
