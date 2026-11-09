@@ -17,7 +17,7 @@ void Sim::step(const InputFrame &in, float dt, double now) {
     }
     updateLook(still);
     updateMovement(still, dt, now);
-    updateBreath(dt, now);
+    updateBreath(still.jumpHeld, dt, now);
     updateDevKeys(in.dev, now);
     updateWeapons(in, dt, now);
     updateBullets(dt);
@@ -55,6 +55,7 @@ void Sim::updateTimers(float dt) {
     winT = fmaxf(0, winT - dt);
     closeCallT = fmaxf(0, closeCallT - dt);
     doorNoiseT = fmaxf(0, doorNoiseT - dt);
+    gaspNoiseT = fmaxf(0, gaspNoiseT - dt);
     tapeFoundT = fmaxf(0, tapeFoundT - dt);
     revolverFoundT = fmaxf(0, revolverFoundT - dt);
     cigsFoundT = fmaxf(0, cigsFoundT - dt);
@@ -143,7 +144,7 @@ void Sim::beginDescent(double now) {
     // deathCount and winCount stay: they count this session's runs, and
     // dieRun increments deathCount just before calling here.
     fear = 0; boostT = 0;
-    stamina = 1; breath = 1; drownT = 0; headUnder = false; sprintExhausted = false; aiming = false; aimBlend = 0;
+    stamina = 1; breath = 1; drownT = 0; headUnder = false; holdingBreath = breathSpent = false; gaspNoiseT = 0; sprintExhausted = false; aiming = false; aimBlend = 0;
     health = 1; hurtT = 0; sinceHurt = 0;
     sanity = 1.0f; sanityStage = 0; sanityWarnT = 0; sanityLine = "";
     migraine = 0; migraineWarned = false; notesRead = false; manilaSeen = false; noteT = 0;

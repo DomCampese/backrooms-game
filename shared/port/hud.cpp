@@ -416,6 +416,14 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
     } else if (sim.sheltered) {   // Level 94: a house hides the player whatever they do
         coverLine = "[ indoors ]";
         coverCol = { 220, 200, 160, 150 };
+    } else if (sim.holdingBreath) {   // the search cannot find the player while this lasts
+        coverLine = "[ hidden · holding your breath ]";
+        coverCol = { 150, 200, 225, 190 };
+    } else if (sim.hidden && sim.breathSpent) {
+        coverLine = "[ hidden · catching your breath ]";
+        coverCol = { 210, 150, 120, 180 };
+    } else if (sim.hidden && sim.ent.st != EState::Hidden) {   // a hunter is out: say how to hold the breath
+        coverLine = in.touch ? "[ hidden · hold JUMP to hold your breath ]" : "[ hidden · hold SPACE to hold your breath ]";
     } else if (sim.hidden) {
         coverLine = "[ hidden · hold still ]";
     } else if (sim.nearCover) {   // next to cover, but moving too fast to hide
@@ -430,7 +438,9 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         coverLine = "[ crouched ]";
         coverCol = { 180, 170, 140, 120 };
     }
-    if (coverLine) textC(coverLine, sw / 2, sh - hud(62), hud(14), coverCol);
+    // Above the breath bar when it shows, or the two overlap.
+    const bool breathBar = (sim.headUnder || sim.breath < 0.995f) && sim.deathT <= 0;
+    if (coverLine) textC(coverLine, sw / 2, sh - hud(breathBar ? 82 : 62), hud(14), coverCol);
     if (sim.bedNear) {   // a bed the use key would sleep in (Level 94); it comes before a door
         textC(fmt("%s · sleep until morning", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14), { 200, 190, 160, 150 });
     } else if (sim.truckNear) {   // an almond water truck with a can on its counter (Level 94)

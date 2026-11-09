@@ -189,7 +189,8 @@ bool Sim::hunterChase(float dt, double now, float &fearT) {
     // tells him where the player is.
     bool los = world.lineOfSight(ent.x, ent.z, px, pz);
     // A house is not cover he can search: on Level 94 he never comes inside.
-    if (hidden && !sheltered && entDist < FIND_REACH && los) {   // he has walked up to the player's cover
+    // Breathing gives the cover away; a held breath does not.
+    if (hidden && !sheltered && !holdingBreath && entDist < FIND_REACH && los) {   // he has walked up to the player's cover
         hidden = false;
         foundT = FOUND_TIME;
         play(Sfx::Scare).atPitch(0.7f).atVolume(0.8f);
@@ -291,12 +292,14 @@ float Sim::loudestNoise(float &x, float &z) const {
     if (sprinting) noise = 20.0f;
     else if (velx * velx + velz * velz > 1.0f) noise = 11.0f;
     if (crouchCur > 0.7f) noise *= 0.45f;
+    if (holdingBreath && velx * velx + velz * velz <= 1.0f) noise = 0;   // standing still and silent
     if (level == LEVEL_FUN && music.playing) noise *= MUSIC_MASK;   // the music covers footsteps
     if (deck.playing && TAPE_NOISE > noise) {
         noise = TAPE_NOISE;
         x = deck.carried ? px : deck.x;
         z = deck.carried ? pz : deck.z;
     }
+    if (gaspNoiseT > 0 && GASP_NOISE > noise) { noise = GASP_NOISE; x = px; z = pz; }   // a gasp for air
     if (doorNoiseT > 0 && DOOR_NOISE > noise) { noise = DOOR_NOISE; x = px; z = pz; }   // a door shut or opened
     if (slotSpin.t > 0 && SLOT_NOISE > noise) { noise = SLOT_NOISE; x = slotSpin.x; z = slotSpin.z; }   // reels turning
     if (smoke.coughT > 0 && COUGH_NOISE > noise) { noise = COUGH_NOISE; x = px; z = pz; }   // a smoker's cough

@@ -38,6 +38,7 @@ enum class Sfx : uint8_t {
     StepGrass,        // 4: Footing::Grass (Level 94)
     Shutter,          // 3: a camera's shutter and film advance, one per Animation pose (Level 94)
     Cackle,           // the Animation's laugh as it starts a chase: a cartoon laugh on warped film
+    HoldBreath,       // a quick breath in through the mouth, held (Sim::holdingBreath)
 };
 
 // What the ambience synth (audio.cpp) chases. The rules write each field where

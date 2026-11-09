@@ -394,7 +394,8 @@ the random spots it used to try.
   open neighbour 0.4 m toward it, waits `CHECK_TIME` (1 s), and takes the
   nearest unchecked one next. `Entity::checked` holds the last six cells, so
   he does not check one twice. `hunterNotice` clears it.
-- **He finds a hidden player within `FIND_REACH` (1.4 m) with line of sight.**
+- **He finds a hidden player within `FIND_REACH` (2.6 m, 1.4 m before the
+  breath could be held) with line of sight, unless they hold their breath.**
   That clears `hidden`, plays `Sfx::Scare` low, and sets `foundT`
   (`FOUND_TIME`, 2 s), during which `updateHiding` will not hide the player
   again. Without it the player re-hid on the next frame and the find did
@@ -405,6 +406,35 @@ the random spots it used to try.
   catches it. Call such locals `nearest`.
 - No new `Sfx` and no platform code, so both builds get it. walk-l0-l2.trace
   has no chase and plays back unchanged.
+
+# Holding the breath in cover (November 2026)
+
+Hiding used to be safe until the searching hunter stood within 1.4 m. Now a
+hidden player breathes, and can hold it (`Sim::updateBreath`,
+shared/sim/player.cpp; the find in `hunterChase`).
+
+- **The jump key held while hidden holds the breath** (`holdingBreath`), on
+  any level, out of the water. Hidden, the jump key no longer jumps, so a
+  touch player holds JUMP. It empties `breath` (the Poolrooms' meter) in
+  `HOLD_TIME` (7 s), and the breath bar shows.
+- **Held, the search cannot find the player, and standing still makes no
+  noise** (`loudestNoise` returns 0 instead of the 2.25 m crouched base).
+  Not held, `FIND_REACH` is 2.6 m (was 1.4).
+- **`HOLD_TIME` must stay under `SEARCH_TIME` (10 s).** At 12 s one breath
+  held from the start of a search outlasted it, so holding always won. At 7 s
+  the player has to wait until he is close.
+- **Letting go below `HOLD_QUIET` (0.3), or running out, is a gasp**
+  (`Sfx::Gasp`, a `GASP_NOISE` of 12 m for `GASP_NOISE_TIME`), and the breath
+  cannot be held again until it is back over `HOLD_AGAIN` (0.5), 1.5 s later.
+  Letting go earlier is a quiet `Exhale`.
+- While held a heartbeat plays, 0.95 s apart at full breath and 0.45 s empty.
+  The start is `Sfx::HoldBreath`, the last `Sfx` value, synthesized in
+  port/sounds.cpp, so both builds load it with no platform code.
+- The HUD's cover line says "hold SPACE (JUMP) to hold your breath" while a
+  hunter is out, and sits above the breath bar when the bar shows; they
+  overlapped at `sh - 62`.
+- The new fields are not in the trace digest, and walk-l0-l2.trace never
+  hides with the jump key down, so it plays back unchanged.
 
 # Shadow hides the player from a chasing hunter (November 2026)
 
