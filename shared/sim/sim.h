@@ -180,6 +180,14 @@ struct Sim {
     static constexpr float DARK_SIGHT = 9.0f;
     static constexpr float SHADOW_LIT = 0.3f;
     static constexpr float SEARCH_SPEED = 2.6f;
+    // Stalking (Sim::hunterStalk), he walks toward the player at STALK_SPEED
+    // m/s while they are not looking his way: his direction within
+    // STALK_WATCH_COS of their forward (50 degrees, about the edge of the
+    // view) with line of sight holds him still. A stare of 1.6 s or his
+    // coming within 3 m starts the chase. Unseen for STALK_TIME s, he goes.
+    static constexpr float STALK_SPEED = 1.5f;
+    static constexpr float STALK_WATCH_COS = 0.64f;
+    static constexpr float STALK_TIME = 35.0f;
     static constexpr float SEARCH_STEP_MIN = 3.0f, SEARCH_STEP_MAX = 7.0f;
     static constexpr float SEARCH_TIME = 10.0f;
     // Searching, he first walks to the cover (hideSpotAt) within SEARCH_COVER_R m
@@ -615,6 +623,8 @@ struct Sim {
     bool inShadow() const {
         return ent.st != EState::Hidden && playerLight < SHADOW_LIT && flashCur < 0.5f && smoke.burnT <= 0;
     }
+    void hunterWaypoint(float tx, float tz, float dt, bool throughShut);
+    bool hunterStalk(float dt, bool watched);   // true if he moved
     float loudestNoise(float &x, float &z) const;   // how far the loudest noise carries, and where
     bool hunterChase(float dt, double now, float &fearT);   // true if it ended the run
     bool findDoor(DoorReach &d);            // the doorway in reach and in front, if any

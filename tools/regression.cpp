@@ -1525,6 +1525,54 @@ int main() {
     }
     printf("PASS searching, he checks cover near where he lost the player and finds a player hidden there\n");
 
+    // ---- stalking, he walks toward the player only while they look away.
+    // Watched (inside STALK_WATCH_COS, line of sight) he stands still; with
+    // the player's back to him he closes in and the chase starts at 3 m.
+    {
+        sim.applyLevel(0,GetTime()); sim.beginDescent(0);
+        sim.inMenu=false; sim.deathT=0; sim.health=1; sim.hurtT=0; sim.hidden=false; sim.crouchCur=0; sim.mannequin.active=false;
+        sim.velx=sim.velz=0; sim.sprinting=false; sim.muzzleT=0; sim.gunCd=0; sim.doorNoiseT=0;
+        sim.deck.playing=false; for (auto &f : sim.litFlares) f.active=false;
+        World &w=sim.world;
+        // A player spot and a hunter spot 10-14 m away with line of sight.
+        bool found=false; Vec2 P{}, H{};
+        for (int t=0; t<400 && !found; ++t) {
+            P=w.findOpenSpot(t*7.0f, t*3.0f);
+            for (int d=0; d<16 && !found; ++d) {
+                float a=d*TAU/16;
+                H=w.findOpenSpot(P.x+portableCos(a)*12.0f, P.y+portableSin(a)*12.0f);
+                float dist=hypotf(H.x-P.x, H.y-P.y);
+                if (dist>10 && dist<14 && w.lineOfSight(P.x,P.y,H.x,H.y) && !w.indoors(cellOf(H.x),cellOf(H.y))) found=true;
+            }
+        }
+        CHECK(found);
+        auto stalkFrom=[&](bool facing) {
+            sim.px=P.x; sim.pz=P.y; sim.py=0;
+            float dx=H.x-P.x, dz=H.y-P.y, l=hypotf(dx,dz);
+            float s=facing?1.0f:-1.0f;
+            sim.fwd={s*dx/l,0,s*dz/l}; sim.r2x=-sim.fwd.z; sim.r2z=sim.fwd.x;
+            sim.ent=Entity{}; sim.ent.st=EState::Stalk; sim.ent.x=H.x; sim.ent.z=H.y;
+            sim.ent.wpx=H.x; sim.ent.wpz=H.y; sim.ent.dispY=0; sim.ent.gaze=-100;
+        };
+        // Watched: not a millimetre in 1 s.
+        stalkFrom(true);
+        for (int f=0; f<30; ++f) sim.updateEntity(1.0f/30, 700.0+f/30.0);
+        CHECK(sim.ent.st==EState::Stalk);
+        CHECK(hypotf(sim.ent.x-H.x, sim.ent.z-H.y)<1e-4f);
+        // Back turned: he comes on at STALK_SPEED and the chase starts within 3 m.
+        stalkFrom(false);
+        int f=0;
+        for (; f<30*20 && sim.ent.st==EState::Stalk; ++f) sim.updateEntity(1.0f/30, 710.0+f/30.0);
+        CHECK(sim.ent.st==EState::Chase);
+        CHECK(f/30.0f > (hypotf(H.x-P.x,H.y-P.y)-3.0f)/Sim::STALK_SPEED*0.9f);   // no faster than STALK_SPEED
+        // Hidden, he does not follow.
+        stalkFrom(false); sim.hidden=true;
+        for (int g=0; g<60; ++g) sim.updateEntity(1.0f/30, 740.0+g/30.0);
+        CHECK(hypotf(sim.ent.x-H.x, sim.ent.z-H.y)<1e-4f);
+        sim.hidden=false; sim.ent=Entity{}; sim.ent.nextSpawn=1e9;
+    }
+    printf("PASS stalking, he holds still while watched and closes in while the player looks away\n");
+
     // ---- breath in the Poolrooms: under water it drains over BREATH_TIME,
     // out of air the player loses DROWN_HIT a second, surfacing gasps and
     // refills it, and holding under ends the run. Loot on a deep floor is out

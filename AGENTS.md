@@ -383,6 +383,29 @@ knows (`Sim::hunterChase`, shared/sim/hunters.cpp).
   plays back the same; a recording with a chase out of sight would not.
 - No platform code changed, so both builds get it.
 
+# The stalking hunter follows the player (November 2026)
+
+A stalking hunter used to stand where he spawned until the player stared at
+him, came within 3 m, or 24 s passed. Now he follows (`Sim::hunterStalk`,
+shared/sim/hunters.cpp), on every level with a hunter.
+
+- **He walks toward the player at `STALK_SPEED` (1.5 m/s) only while they
+  are not looking his way.** Watched is his direction within
+  `STALK_WATCH_COS` (0.64, 50 degrees) of the player's forward, under 36 m,
+  with line of sight. That is wider than the stare's 30 degree cone
+  (`entVisible`, which still counts `gaze` toward the 1.6 s chase), so a
+  hunter at the edge of the view holds still without starting a chase.
+- **The chase still starts at 3 m**, so a player who never looks back is
+  caught up with. A player walking (3 m/s) outpaces him.
+- **He does not follow a hidden player**, route through a shut door
+  (`throughShut` false), or step indoors on Level 94.
+- **`STALK_TIME` (35 s, was 24) unseen sends him away.**
+- **The router step is `hunterWaypoint`**, taken out of `hunterChase`
+  unchanged, and shared by both.
+- **His footfalls draw from `grng`** (the variant), so a moving stalker
+  shifts everything after it. walk-l0-l2.trace has a stalk at frame 21 and
+  was re-recorded.
+
 # The searching hunter checks cover (November 2026)
 
 When the hunter loses the player it walks to the last-known spot and then
