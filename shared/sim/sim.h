@@ -196,6 +196,16 @@ struct Sim {
     // DOOR_OPEN_TIME s, knocking on it every DOOR_KNOCK s.
     static constexpr float DOOR_REACH = 1.6f;
     static constexpr float DOOR_NOISE = 14.0f, DOOR_NOISE_TIME = 0.5f;
+    // A tossed doubloon (Sim::tossCoin): fire with empty hands throws one at
+    // TOSS_SPEED m/s along the view, plus TOSS_LIFT m/s up, every TOSS_GAP s.
+    // Each landing faster than 2 m/s is heard COIN_NOISE m from where it hits
+    // for COIN_NOISE_TIME s, so a hunter searching for the player goes there.
+    // It comes to rest as a spilled doubloon and can be picked up again.
+    static constexpr float TOSS_SPEED = 9.0f;
+    static constexpr float TOSS_LIFT = 1.6f;
+    static constexpr float TOSS_GAP = 0.6f;
+    static constexpr float COIN_NOISE = 16.0f;
+    static constexpr float COIN_NOISE_TIME = 0.5f;
     static constexpr float DOOR_OPEN_TIME = 1.6f, DOOR_KNOCK = 0.45f;
     static constexpr float DEATH_CARD = 12.0f;  // s the death card stays up: the tape playback, then the text
     static constexpr float DEATH_CARD_HOLD = 1.6f;   // s of it no key can dismiss
@@ -463,6 +473,13 @@ struct Sim {
     int almond = 0, coins = 0, tapes = 0, keys = 0;
     std::unordered_set<uint64_t> taken;   // world pickups already collected, this level
     std::vector<Vec3> coinsWorld;      // doubloons spilled on the floor
+    // A doubloon tossed with empty hands (Sim::tossCoin), in flight until it
+    // comes to rest, then one of coinsWorld.
+    struct TossedCoin { float x = 0, y = 0, z = 0, vx = 0, vy = 0, vz = 0; };
+    std::vector<TossedCoin> coinsFlying;
+    float tossCd = 0;                  // s before the next toss
+    float coinNoiseT = 0;              // s left of the noise of a doubloon landing
+    float coinNoiseX = 0, coinNoiseZ = 0;
     std::vector<ChalkMark> chalk[NLEVELS];   // per level, cleared by beginDescent
     bool chalkSeeded[NLEVELS]{};
     bool chalkSeedPending = false;        // place the level's two pre-placed marks next tick, once px/pz are set
@@ -521,6 +538,8 @@ struct Sim {
     void updateSleep(float dt);
     void updateDevKeys(const DevKeys &dev, double now);
     void updateWeapons(const InputFrame &in, float dt, double now);
+    void tossCoin();
+    void updateTossedCoins(float dt);
     void updateBullets(float dt);
     void updateFlare(const InputFrame &in, float dt, double now);
     void updateTapeDeck(const InputFrame &in, float dt, double now);

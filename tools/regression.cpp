@@ -1462,6 +1462,70 @@ int main() {
     }
     printf("PASS hunter searches the last-known spot out of sight, hears sprinting, gives up\n");
 
+    // ---- a doubloon tossed with empty hands flies, clinks where it lands
+    // (a noise at that spot), lands as a spilled doubloon, and a searching
+    // hunter within COIN_NOISE goes to it.
+    {
+        sim.applyLevel(0,GetTime()); sim.beginDescent(0);
+        sim.inMenu=false; sim.deathT=0; sim.health=1; sim.hurtT=0; sim.hidden=false; sim.crouchCur=0;
+        sim.mannequin.active=false; sim.velx=sim.velz=0; sim.sprinting=false; sim.muzzleT=0; sim.gunCd=0;
+        sim.doorNoiseT=0; sim.deck.playing=false; for (auto &f : sim.litFlares) f.active=false;
+        World &w=sim.world;
+        // A spot with 8 m of open floor ahead.
+        bool found=false; Vec2 P{}; float yaw=0;
+        for (int t=0; t<400 && !found; ++t) {
+            P=w.findOpenSpot(t*5.0f, t*2.0f);
+            for (int d=0; d<8 && !found; ++d) {
+                float a=d*TAU/8;
+                float ex=P.x+portableCos(a)*8.0f, ez=P.y+portableSin(a)*8.0f;
+                if (w.lineOfSight(P.x,P.y,ex,ez) && w.floorY(cellOf(ex),cellOf(ez))==0) { found=true; yaw=a; }
+            }
+        }
+        CHECK(found);
+        sim.px=P.x; sim.pz=P.y; sim.py=0; sim.eyeY=1.6f;
+        sim.fwd={portableCos(yaw),0,portableSin(yaw)}; sim.r2x=-sim.fwd.z; sim.r2z=sim.fwd.x;
+        sim.weapon=WEAPON_HANDS; sim.coins=3; sim.coinsWorld.clear(); sim.coinsFlying.clear(); sim.tossCd=0;
+        InputFrame in{}; in.playing=true; in.fire=true;
+        sim.updateWeapons(in,1.0f/30,800.0);
+        CHECK(sim.coins==2 && sim.coinsFlying.size()==1);
+        in.fire=false;
+        bool heard=false; float hx=0,hz=0;
+        for (int f=0; f<30*6 && !sim.coinsFlying.empty(); ++f) {
+            sim.updateWeapons(in,1.0f/30,800.0+f/30.0);
+            if (sim.coinNoiseT>0 && !heard) {
+                heard=true;
+                float nx,nz; CHECK(sim.loudestNoise(nx,nz)==Sim::COIN_NOISE);
+                hx=nx; hz=nz;
+            }
+        }
+        CHECK(heard && sim.coinsFlying.empty() && sim.coinsWorld.size()==1);
+        float land=hypotf(hx-P.x,hz-P.y);
+        CHECK(land>3.0f && land<12.0f);   // about 6-9 m ahead at 9 m/s
+        // A searching hunter near the landing walks to it.
+        sim.coins=2; sim.tossCd=0; sim.coinNoiseT=0; sim.coinsWorld.clear();   // the second toss lands on the first
+        sim.ent=Entity{}; sim.ent.st=EState::Chase; sim.ent.hp=3; sim.ent.lungeCd=5;
+        Vec2 E=w.findOpenSpot(hx+4.0f, hz); sim.ent.x=E.x; sim.ent.z=E.y; sim.ent.wpx=E.x; sim.ent.wpz=E.y;
+        sim.hidden=true; sim.hunterNotice(E.x+30.0f, E.y);   // he last heard the player far away
+        in.fire=true; sim.updateWeapons(in,1.0f/30,810.0); in.fire=false;
+        float lx=0,lz=0; bool lured=false;
+        for (int f=0; f<30*3 && !lured; ++f) {
+            sim.updateWeapons(in,1.0f/30,810.0+f/30.0);
+            sim.updateEntity(1.0f/30,810.0+f/30.0);
+            if (sim.coinNoiseT>0 && fabsf(sim.ent.lastX-sim.coinNoiseX)<1e-4f && fabsf(sim.ent.lastZ-sim.coinNoiseZ)<1e-4f) {
+                lured=true; lx=sim.ent.lastX; lz=sim.ent.lastZ;
+            }
+        }
+        CHECK(lured && hypotf(lx-E.x,lz-E.y)<Sim::COIN_NOISE);
+        // Walking over a landed doubloon picks it back up.
+        while (!sim.coinsFlying.empty()) sim.updateWeapons(in,1.0f/30,820.0);
+        CHECK(sim.coinsWorld.size()==1 && sim.coins==1);
+        sim.px=sim.coinsWorld[0].x; sim.pz=sim.coinsWorld[0].z; sim.py=sim.coinsWorld[0].y;
+        sim.collectPickups();
+        CHECK(sim.coins==2 && sim.coinsWorld.empty());
+        sim.hidden=false; sim.ent=Entity{}; sim.ent.nextSpawn=1e9; sim.coinsWorld.clear();
+    }
+    printf("PASS a doubloon tossed with empty hands clinks where it lands, lures a searching hunter, and can be picked up\n");
+
     // ---- searching, he checks the cover near where he last heard the player.
     // A player hidden at it is found when he walks up to it; one hidden at
     // cover outside SEARCH_COVER_R is not, and he gives up.

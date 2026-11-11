@@ -217,7 +217,7 @@ void Sim::applyLevel(int lv, double now) {
     if (!weaponAvailable(weapon)) weapon = WEAPON_HANDS;
     distantRng = Rng(hash64((uint64_t)world.seed ^ ((uint64_t)lv << 40) ^ ((uint64_t)world.visit << 48) ^ 0xD157A47ULL));
     nextDistant = now + DISTANT_LEAD + distantRng.f01() * DISTANT_SPAN;
-    taken.clear(); coinsWorld.clear(); trucksServed.clear();
+    taken.clear(); coinsWorld.clear(); coinsFlying.clear(); coinNoiseT = 0; trucksServed.clear();
     // Chalk is kept per level for the whole descent; beginDescent clears it.
     chalkSeedPending = !chalkSeeded[lv];
     // Left set, a Manila Room on the previous level would keep restoring sanity here.

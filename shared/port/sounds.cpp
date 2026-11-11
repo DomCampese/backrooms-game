@@ -946,6 +946,25 @@ static float coinClink(float hz, float t) {
     return env * (sinf(TAU * hz * t) + 0.6f * sinf(TAU * hz * 1.47f * t) + 0.35f * sinf(TAU * hz * 2.13f * t));
 }
 
+// CoinDrop: 0.6 s. A doubloon landing: four strikes of coinClink at
+// 3.3 kHz (partials 1, 1.47 and 2.13 times), 0, 0.12, 0.21 and 0.27 s
+// apart as its bounces shorten, each 0.55 times the last, then a 6 ms tap
+// as it falls flat.
+Pcm makeCoinDrop()
+{
+    std::vector<float> d((int)(0.6f * SAMPLE_RATE));
+    const float at[4] = { 0.0f, 0.12f, 0.21f, 0.27f };
+    const float hz[4] = { 3300.0f, 3320.0f, 3290.0f, 3310.0f };
+    for (int i = 0; i < (int)d.size(); i++) {
+        float t = (float)i / SAMPLE_RATE, s = 0, lv = 1.0f;
+        for (int k = 0; k < 4; k++, lv *= 0.55f) s += coinClink(hz[k], t - at[k]) * lv;
+        float ft = t - 0.31f;   // falling flat: a short low tap
+        if (ft > 0 && ft < 0.006f) s += 0.25f * sinf(TAU * 900.0f * ft) * (1.0f - ft / 0.006f);
+        d[i] = s;
+    }
+    return toPcm(d, 0.7f);
+}
+
 // SlotSpin: Sim::SLOT_SPIN s. The reels tick past the window (clicks at 24 Hz) under a
 // quiet looping arpeggio, and stop one at a time with a clunk at 0.85, 1.15
 // and 1.45 s; each stop takes a third of the ticking away.
@@ -1278,6 +1297,7 @@ ClipSpec clipSpec(Sfx sfx) {
     case Sfx::SlotSpin:  return { 1, 1.0f, 0.55f };
     case Sfx::SlotWin:   return { 1, 1.0f, 0.65f };
     case Sfx::Jackpot:   return { 1, 1.0f, 0.85f };
+    case Sfx::CoinDrop:  return { 1, 1.0f, 0.7f };
     case Sfx::Lighter:   return { 1, 1.0f, 0.6f };
     case Sfx::Drag:      return { 1, 1.0f, 0.5f };
     case Sfx::Exhale:    return { 1, 1.0f, 0.5f };
@@ -1335,6 +1355,7 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::Exhale:         return makeExhale();
     case Sfx::Cough:          return makeCough(variant);
     case Sfx::StepGrass:      return makeGrassStep(800 + variant * 31);
+    case Sfx::CoinDrop:       return makeCoinDrop();
     case Sfx::Shutter:        return makeShutter(variant);
     case Sfx::Cackle:         return makeCackle();
     }

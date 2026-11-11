@@ -128,6 +128,12 @@ std::vector<SceneItem> simScene(Sim &sim) {
         it.pos = c;
         out.push_back(it);
     }
+    for (const Sim::TossedCoin &c : sim.coinsFlying) {   // in flight: drawn at its height (the draw adds 0.06)
+        SceneItem it;
+        it.kind = SceneKind::Coin;
+        it.pos = { c.x, c.y - 0.06f, c.z };
+        out.push_back(it);
+    }
     balloons(sim, ci, ck, out);
     tableBunches(sim, ci, ck, out);
     if (sim.level == LEVEL_FUN)

@@ -312,6 +312,7 @@ void Sim::changeStorey(int dir, double now) {
     for (auto &b : bullets) { b.pos.y -= sh; b.tail.y -= sh; }
     for (auto &im : bulletImpacts) im.pos.y -= sh;
     for (auto &cw : coinsWorld) cw.y -= sh;
+    for (auto &cf : coinsFlying) cf.y -= sh;
     for (auto &c : confetti) c.pos.y -= sh;
     ent.dispY -= sh;
     if (ent.st != EState::Hidden && ent.st != EState::Die) {

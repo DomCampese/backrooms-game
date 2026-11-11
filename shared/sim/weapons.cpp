@@ -63,9 +63,60 @@ void Sim::updateWeapons(const InputFrame &in, float dt, double now) {
             else if (ent.st == EState::Stalk) ent.gaze += 0.8f;
         }
     }
+    tossCd = fmaxf(0, tossCd - dt);
+    if (weapon == WEAPON_HANDS && in.playing && in.fire && coins > 0 && tossCd <= 0 && deathT <= 0 &&
+        drinkT <= 0 && !inMenu) tossCoin();
+    updateTossedCoins(dt);
     if (in.reload && in.playing && canReload()) {
         reloadT = RELOAD_TIME;
         play(Sfx::Click).atPitch(0.95f);
+    }
+}
+
+// A doubloon thrown from the eye along the view. It costs the doubloon until
+// the player picks it up where it lands.
+void Sim::tossCoin() {
+    coins--;
+    tossCd = TOSS_GAP;
+    TossedCoin c;
+    c.x = px + fwd.x * 0.3f; c.y = eyeY - 0.1f; c.z = pz + fwd.z * 0.3f;
+    c.vx = fwd.x * TOSS_SPEED; c.vy = fwd.y * TOSS_SPEED + TOSS_LIFT; c.vz = fwd.z * TOSS_SPEED;
+    coinsFlying.push_back(c);
+    play(Sfx::Click).atPitch(1.9f).atVolume(0.35f);
+}
+
+// The flare's flight (gravity 18 m/s2, walls reflect at 0.35) with a lighter
+// bounce. Each hard landing clinks and is a noise at that spot; a slow one
+// leaves the doubloon on the floor.
+void Sim::updateTossedCoins(float dt) {
+    coinNoiseT = fmaxf(0, coinNoiseT - dt);
+    for (size_t i = 0; i < coinsFlying.size();) {
+        TossedCoin &c = coinsFlying[i];
+        c.vy -= 18.0f * dt;
+        c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt;
+        float cx = c.x, cz = c.z;
+        world.collideCircle(c.x, c.z, 0.04f, c.y);
+        if (fabsf(cx - c.x) > 1e-5f) c.vx *= -0.35f;
+        if (fabsf(cz - c.z) > 1e-5f) c.vz *= -0.35f;
+        float fg = world.groundAt(c.x, c.z, c.y);
+        if (c.y < fg + 0.02f && c.vy < 0) {
+            c.y = fg + 0.02f;
+            if (c.vy < -2.0f) {
+                float ddx = c.x - px, ddz = c.z - pz, d = sqrtf(ddx * ddx + ddz * ddz);
+                float inv = d > 0.01f ? 1.0f / d : 0.0f;
+                play(Sfx::CoinDrop)
+                    .atPan(clampf((ddx * inv) * r2x + (ddz * inv) * r2z, -1.0f, 1.0f))
+                    .atPitch(0.95f + 0.1f * clampf(-c.vy / 8.0f, 0.0f, 1.0f))
+                    .atVolume(clampf(1.6f / (1.0f + 0.06f * d * d), 0.12f, 0.8f) * clampf(-c.vy / 6.0f, 0.3f, 1.0f));
+                coinNoiseT = COIN_NOISE_TIME; coinNoiseX = c.x; coinNoiseZ = c.z;
+                c.vy *= -0.35f; c.vx *= 0.5f; c.vz *= 0.5f;
+            } else {
+                coinsWorld.push_back({ c.x, fg, c.z });
+                coinsFlying.erase(coinsFlying.begin() + i);
+                continue;
+            }
+        }
+        ++i;
     }
 }
 
