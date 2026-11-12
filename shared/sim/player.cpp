@@ -36,7 +36,8 @@ void Sim::updateSprint(bool requested, bool moving, bool crouched, float dt) {
     // Zero turns sprint limiting off; the meter, its recovery and the
     // regression check stay live. A limit is 1/seconds (it was 1/16).
     const float SPRINT_DRAIN = 0.0f;
-    stamina = clampf(stamina + (sprinting ? -SPRINT_DRAIN * dt : dt / 6.0f), 0, 1);
+    // Holding a door shut, the shoves are paid from it and it does not recover.
+    stamina = clampf(stamina + (sprinting ? -SPRINT_DRAIN * dt : bracing ? 0.0f : dt / 6.0f), 0, 1);
 }
 
 // Holding rise swims up to the surface and stays there; releasing it sinks,

@@ -132,6 +132,7 @@ bool inKeyDown(int key) {
         // has to answer the held query too, not just the press edge below —
         // without it a swimmer on a phone can only sink.
         case KEY_SPACE:        return (g.down & BTN_JUMP) != 0;
+        case KEY_E:            return (g.down & BTN_INTERACT) != 0;   // holding a door shut
         default:               return false;
     }
 }

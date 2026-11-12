@@ -225,6 +225,7 @@ void Sim::updateInteraction(const InputFrame &in) {
         play(Sfx::Gulp);
     }
     findDoor(doorReach);
+    updateBracing(in.playing && in.useHeld);
     if (in.use) useWhatIsNear();
     if (in.chalk) markChalk();
 }
@@ -268,9 +269,27 @@ bool Sim::bodyInDoorway(int ci, int ck, bool west) const {
     return false;
 }
 
+// Bracing: the use key held at a shut door in reach, within BRACE_REACH of
+// its leaf. The hunter's shoves on it are paid from stamina (hunterOpensDoor).
+void Sim::updateBracing(bool held) {
+    const DoorReach &d = doorReach;
+    bracing = false;
+    if (held && d.ok && d.shut && deathT <= 0) {
+        float across = d.west ? px - d.i * CELL : pz - d.k * CELL;
+        bracing = fabsf(across) < BRACE_REACH;
+    }
+}
+
+// True when the hunter is at the door in reach, pushing it.
+bool Sim::hunterAtDoor(const DoorReach &d) const {
+    return d.ok && d.shut && ent.st != EState::Hidden && ent.doorT > 0 &&
+           ent.doorI == d.i && ent.doorK == d.k && ent.doorWest == d.west;
+}
+
 void Sim::useDoor() {
     const DoorReach &d = doorReach;
     if (!d.ok) return;
+    if (hunterAtDoor(d)) return;   // he is pushing it: the key holds it shut instead (bracing)
     if (!d.shut && bodyInDoorway(d.i, d.k, d.west)) {
         deckNoteT = 1.6f; deckNote = "something is in the doorway.";
         return;

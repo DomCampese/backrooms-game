@@ -238,6 +238,7 @@ void ABackroomsPlayerController::PlayerTick(float DeltaTime)
 	In.throwFlare = Pressed(EControl::Throw);
 	In.flashlight = Pressed(EControl::Flashlight);
 	In.use = Pressed(EControl::Use);
+	In.useHeld = Down(EControl::Use);
 	In.drink = Pressed(EControl::Drink);
 	In.chalk = Pressed(EControl::Chalk);
 	In.begin = Pressed(EControl::Begin) || Pressed(EControl::Fire);

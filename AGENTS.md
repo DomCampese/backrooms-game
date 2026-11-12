@@ -186,6 +186,27 @@ shared/sim/items.cpp). A shut door is `WALL_SHUT`, which no chunk stores: the
 - **`Sim::crateAt` treats `WALL_SHUT` as a doorway**, or shutting a door
   would move Level 1's crates.
 - The HUD shows "E · shut the door" or "open the door" while one is in reach.
+- **The use key held holds a shut door** (`Sim::bracing`, `updateBracing`;
+  `InputFrame::useHeld`, which both builds fill from the use key's held
+  state and touch from USE's held bit). Held within `BRACE_REACH` (1.2 m)
+  of a shut door in reach, each time the hunter would open it
+  (`DOOR_OPEN_TIME`) he shoves instead (`hunterOpensDoor`): `BRACE_COST`
+  (0.25) of stamina, a low `DoorShut` and a fear spike. Stamina does not
+  recover while bracing. He gives up after 3-6 shoves
+  (`Entity::shovesToQuit`, drawn from `grng` at the first shove) and goes
+  `Hidden`. A shove the stamina cannot pay bursts the door open, and
+  `hurtPlayer` takes up to `BURST_HIT` (0.25, never the last 0.05) and pushes
+  the player back at `BURST_PUSH` (5 m/s). With full stamina four shoves are
+  paid, so half the draws end in a burst; the stamina bar shows how many are
+  left.
+- **A press of the use key does not open a shut door the hunter is pushing**
+  (`hunterAtDoor`): the press is the start of a hold.
+- The HUD says "hold E · hold the door shut" (touch: USE) while he pushes the
+  door in reach, and "holding the door" while it is held, growing for 0.4 s
+  after each shove (`shoveT`).
+- `useHeld` is a new trace input. Older traces omit it and replay with it
+  false; walk-l0-l2.trace has no hunter at a shut door and plays back
+  unchanged.
 
 # The theater: backstage, lobbies, snack machines and the Usher (November 2026)
 

@@ -33,6 +33,10 @@ struct Entity {
     // without contact he walks there and searches (Sim::hunterChase).
     float lastX = 0, lastZ = 0, lostT = 0;
     float doorT = 0;   // s he has stood at the shut door in front of him
+    // The door he is at (doorT > 0), and the shoves a held door has taken and
+    // will take before he gives up (Sim::hunterOpensDoor).
+    int doorI = 0, doorK = 0; bool doorWest = false;
+    int shoves = 0, shovesToQuit = 0;
     // His search: the centre (the last place he saw or heard the player), the
     // cover he has already checked there (cell keys, oldest overwritten), and
     // s left standing at the cover he is checking now.

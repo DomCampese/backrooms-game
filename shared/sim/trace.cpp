@@ -25,6 +25,7 @@ template <class F> void inputFields(InputFrame &in, F &&f) {
     f("reload", in.reload); f("throwFlare", in.throwFlare); f("flashlight", in.flashlight);
     f("observing", in.observing); f("observationCos", in.observationCos);
     f("use", in.use); f("drink", in.drink); f("chalk", in.chalk);
+    f("useHeld", in.useHeld);
     f("begin", in.begin);
     f("devBlackout", in.dev.blackout); f("devSpawnAhead", in.dev.spawnAhead); f("devChase", in.dev.chase);
     f("devBanish", in.dev.banish); f("devRefill", in.dev.refill);

@@ -356,6 +356,7 @@ bool Sim::nextCover(Vec2 &spot) {
 // it is open. Without this the router (which passes shut doors for him) walks
 // him into the leaf and collision holds him there.
 bool Sim::hunterOpensDoor(float dt) {
+    const double now = stepNow;
     const int ci = cellOf(ent.x), ck = cellOf(ent.z);
     struct Edge { int i, k; bool west; float line; bool alongX; };
     const Edge edges[4] = { { ci, ck, false, ck * CELL, false }, { ci, ck + 1, false, (ck + 1) * CELL, false },
@@ -365,6 +366,9 @@ bool Sim::hunterOpensDoor(float dt) {
         float me = e.alongX ? ent.x - e.line : ent.z - e.line;
         float wp = e.alongX ? ent.wpx - e.line : ent.wpz - e.line;
         if (fabsf(me) > 0.9f || (me < 0) == (wp < 0)) continue;   // too far, or not in his way
+        if (ent.doorT <= 0 || ent.doorI != e.i || ent.doorK != e.k || ent.doorWest != e.west) {   // a new door
+            ent.doorT = 0; ent.doorI = e.i; ent.doorK = e.k; ent.doorWest = e.west; ent.shoves = 0;
+        }
         float before = ent.doorT;
         ent.doorT += dt;
         float dx = (e.west ? e.i * CELL : e.i * CELL + 1.0f) - px, dz = (e.west ? e.k * CELL + 1.0f : e.k * CELL) - pz;
@@ -372,6 +376,38 @@ bool Sim::hunterOpensDoor(float dt) {
         float pan = clampf((dx / d) * r2x + (dz / d) * r2z, -1.0f, 1.0f);
         if (floorf(ent.doorT / DOOR_KNOCK) > floorf(before / DOOR_KNOCK) || before == 0.0f)
             play(Sfx::DoorKnock, grng.ri(0, 2)).atPan(pan).atVolume(clampf(2.0f / (1.0f + 0.04f * d * d), 0.1f, 1.0f));
+        // The player holding this door shut: a shove instead of the opening.
+        const bool held = bracing && doorReach.ok && doorReach.i == e.i && doorReach.k == e.k && doorReach.west == e.west;
+        if (ent.doorT >= DOOR_OPEN_TIME && held && stamina >= BRACE_COST) {
+            if (ent.shoves == 0) ent.shovesToQuit = grng.ri(BRACE_QUIT_MIN, BRACE_QUIT_MAX);
+            ent.shoves++;
+            stamina -= BRACE_COST;
+            ent.doorT = 1e-4f;   // still at this door; the next shove after DOOR_OPEN_TIME
+            shoveT = 0;
+            fear = fmaxf(fear, 0.8f);
+            play(Sfx::DoorShut, 2).atPan(pan).atPitch(0.62f).atVolume(1.0f);
+            if (ent.shoves >= ent.shovesToQuit) {   // he gives up and goes
+                ent.st = EState::Hidden;
+                ent.nextSpawn = now + 30 + grng.f01() * 30;
+                ent.doorT = 0;
+                deckNoteT = 2.4f; deckNote = "it stops pushing.";
+            }
+            return true;
+        }
+        if (ent.doorT >= DOOR_OPEN_TIME && held) {   // the stamina is spent: it bursts open
+            world.shutEdge(e.i, e.k, e.west, false);
+            shadowsStale = true;
+            ent.doorT = 0;
+            play(Sfx::DoorShut, 2).atPan(pan).atPitch(0.5f).atVolume(1.0f);
+            // Knocked back from his side of the door. It never kills: the
+            // lunge that follows can.
+            if (hurtT <= 0) {
+                hurtPlayer(now, fmaxf(0.0f, fminf(BURST_HIT, health - 0.05f)), hunterName(), ent.x, ent.z);
+                velx *= BURST_PUSH / 6.0f; velz *= BURST_PUSH / 6.0f;   // hurtPlayer pushes at 6 m/s
+            }
+            fear = 1.0f;
+            return false;
+        }
         if (ent.doorT >= DOOR_OPEN_TIME) {
             world.shutEdge(e.i, e.k, e.west, false);
             shadowsStale = true;

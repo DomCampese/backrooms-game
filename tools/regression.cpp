@@ -1343,6 +1343,69 @@ int main() {
     }
     printf("PASS doors: shut and opened by the use key, block bodies, sight and light, opened by the hunter\n");
 
+    // ---- holding a shut door: the use key held against a shut door the hunter
+    // pushes turns each opening into a shove paid from stamina. He gives up
+    // after shovesToQuit shoves; if the stamina runs out first the door
+    // bursts open, knocking the player back.
+    {
+        sim.applyLevel(0,GetTime()); sim.beginDescent(0);
+        sim.inMenu=false; sim.deathT=0; sim.health=1; sim.hurtT=0; sim.hidden=false; sim.crouchCur=0;
+        sim.mannequin.active=false; sim.velx=sim.velz=0; sim.sprinting=false; sim.muzzleT=0; sim.gunCd=0;
+        sim.doorNoiseT=0; sim.deck.playing=false; for (auto &f : sim.litFlares) f.active=false;
+        World &w=sim.world;
+        int da=0, db=0; bool found=false;
+        for (int a=-20;a<20 && !found;++a) for (int b=-20;b<20 && !found;++b) {
+            if (w.wallNVal(a,b)!=WALL_DOOR || w.doorJoined(a,b,false)) continue;
+            if (!w.canStep(a,b,a,b-1) || !w.canStep(a,b-1,a,b)) continue;
+            if (w.floorY(a,b)!=0 || w.floorY(a,b-1)!=0) continue;
+            if (w.propAt(a,b+1) || w.pillarAt(a,b+1) || w.propAt(a,b-2) || w.pillarAt(a,b-2)) continue;
+            if (w.wallNVal(a,b+1)==WALL_DOOR) continue;
+            da=a; db=b; found=true;
+        }
+        CHECK(found);
+        InputFrame idle{}; idle.playing=true;
+        InputFrame press=idle; press.use=true; press.useHeld=true;
+        InputFrame hold=idle; hold.useHeld=true;
+        // Run the hunter against the door, the player south of it facing it.
+        // quitAt overrides the drawn number of shoves; returns frames run.
+        auto push=[&](bool holding, int quitAt) {
+            sim.px=da*CELL+1.0f; sim.pz=db*CELL+1.0f; sim.py=0; sim.yaw=-1.5707963f; sim.pitch=0;
+            sim.velx=sim.velz=0; sim.updateLook(idle);
+            if (w.wallNVal(da,db)!=WALL_SHUT) w.shutEdge(da,db,false,true);
+            sim.stamina=1; sim.health=1; sim.hurtT=0; sim.bracing=false;
+            sim.ent=Entity{}; sim.ent.st=EState::Chase; sim.ent.hp=3; sim.ent.lungeCd=5;
+            sim.ent.x=da*CELL+1.0f; sim.ent.z=db*CELL-0.6f; sim.ent.wpx=sim.ent.x; sim.ent.wpz=sim.ent.z;
+            sim.ent.lastX=sim.px; sim.ent.lastZ=sim.pz;
+            int f=0;
+            for (; f<30*20 && sim.ent.st==EState::Chase && w.wallNVal(da,db)==WALL_SHUT; ++f) {
+                // A press while he pushes (doorT > 0) holds the door; it does not open it.
+                sim.updateInteraction(holding ? (sim.ent.doorT>0.5f && sim.ent.shoves==0 ? press : hold) : idle);
+                sim.updateEntity(1.0f/30, 900.0+f/30.0);
+                if (sim.ent.shoves==1 && quitAt>0) sim.ent.shovesToQuit=quitAt;
+                sim.updateTimers(1.0f/30);
+                CHECK(sim.ent.z<db*CELL);
+            }
+            return f;
+        };
+        // Held, and he gives up after three shoves: the door stays shut and
+        // three shoves' stamina is gone.
+        push(true,3);
+        CHECK(sim.ent.st==EState::Hidden && w.wallNVal(da,db)==WALL_SHUT);
+        CHECK(fabsf(sim.stamina-(1-3*Sim::BRACE_COST))<0.01f && sim.health==1);
+        // Held past the stamina: the fifth
+        // shove cannot be paid, so the door bursts open and the player is hurt
+        // and pushed back south.
+        push(true,6);
+        CHECK(w.wallNVal(da,db)==WALL_DOOR && sim.ent.shoves==4);
+        CHECK(sim.health<1 && sim.health>0 && sim.hurtT>0 && sim.velz>0);
+        // Not held, it opens after DOOR_OPEN_TIME as before.
+        int f=push(false,0);
+        CHECK(w.wallNVal(da,db)==WALL_DOOR && f<=(int)(Sim::DOOR_OPEN_TIME*30)+2);
+        sim.ent=Entity{}; sim.ent.nextSpawn=1e9;
+        sim.applyLevel(0,GetTime());
+    }
+    printf("PASS holding a shut door: the hunter's shoves cost stamina, he gives up, or the door bursts open\n");
+
     // ---- the catch, only from a lunge. The old proximity test caught the
     // player as soon as they came within 1.25 m, with no warning.
     {
