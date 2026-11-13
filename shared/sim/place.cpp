@@ -34,6 +34,7 @@ void Sim::updateAmbience(float dt, double now) {
     updateRoomSound(blackout);
     updateDistant(now);
     if (updateSanity(dt, blackout, now)) return;
+    updatePhantom(dt, now);
 
     // During the slide, walls start to shift.
     if (level != 2 && slide > 0.0f && now > nextShift && !inMenu) {
@@ -331,4 +332,71 @@ void Sim::exitCue(float &lvl, float &pan) {
     float near = 1.0f - d / EXIT_HEAR_M;
     lvl = near * near * (nearExit.los ? 1.0f : EXIT_THROUGH);
     if (d > 0.01f) pan = clampf(((nearExit.x - px) * r2x + (nearExit.z - pz) * r2z) / d, -1.0f, 1.0f);
+}
+
+// A phantom of the level's hunter, at low sanity (PHANTOM_*). Placed only
+// where the player can see it but is not looking: the edge of the view.
+void Sim::updatePhantom(float dt, double now) {
+    if (phantomEntry != levelEntries) {   // a new level or visit: start over
+        phantomEntry = levelEntries;
+        phantom = Phantom{};
+        phantomRng = Rng(hash64((uint64_t)world.seed ^ ((uint64_t)level << 40) ^ ((uint64_t)world.visit << 48) ^ 0x9A47013ULL));
+        nextPhantom = now + PHANTOM_GAP_MAX * phantomRng.f01();
+    }
+    Phantom &p = phantom;
+    if (p.fadeT > 0) {   // going
+        p.fadeT -= dt;
+        if (p.fadeT <= 0) p = Phantom{};
+        return;
+    }
+    const bool allowed = !inMenu && deathT <= 0 && !hunterAsleep() && ent.st == EState::Hidden &&
+                         !mannequin.active && sanity < PHANTOM_BELOW;
+    if (p.active) {
+        p.life += dt;
+        float dx = p.x - px, dz = p.z - pz, d = sqrtf(dx * dx + dz * dz) + 1e-4f;
+        bool onIt = (dx * fwd.x + dz * fwd.z) / d > PHANTOM_LOOK_COS && world.lineOfSight(px, pz, p.x, p.z);
+        p.seen = onIt ? p.seen + dt : 0.0f;
+        if (!allowed || p.seen >= PHANTOM_LOOK_TIME || d < PHANTOM_CLOSE || p.life >= PHANTOM_LIFE) {
+            p.looked = p.seen >= PHANTOM_LOOK_TIME || d < PHANTOM_CLOSE;
+            p.fadeT = PHANTOM_FADE_OUT;
+            if (p.looked) whisperT = fmaxf(whisperT, 1.5f);   // a whisper as it goes
+        }
+        return;
+    }
+    if (!allowed || now < nextPhantom) return;
+    float depth = clampf((PHANTOM_BELOW - sanity) / PHANTOM_BELOW, 0.0f, 1.0f);
+    nextPhantom = now + PHANTOM_GAP_MAX + (PHANTOM_GAP_MIN - PHANTOM_GAP_MAX) * depth + PHANTOM_GAP_JITTER * phantomRng.f01();
+    if (!placePhantom()) nextPhantom = now + 3.0;   // nowhere in view: try again soon
+}
+
+// Six tries at a spot PHANTOM_NEAR..FAR m out, PHANTOM_SIDE_MIN..MAX degrees
+// to a random side of the view, open and in line of sight. Always draws
+// three numbers a try, so a failed try does not change the next.
+bool Sim::placePhantom() {
+    const float yaw0 = portableAtan2(fwd.z, fwd.x);
+    for (int t = 0; t < 6; t++) {
+        float side = phantomRng.f01() < 0.5f ? -1.0f : 1.0f;
+        float off = (PHANTOM_SIDE_MIN + (PHANTOM_SIDE_MAX - PHANTOM_SIDE_MIN) * phantomRng.f01()) * (TAU / 360.0f);
+        float dist = PHANTOM_NEAR + (PHANTOM_FAR - PHANTOM_NEAR) * phantomRng.f01();
+        float a = yaw0 + side * off;
+        Vec2 spot = world.findOpenSpot(px + portableCos(a) * dist, pz + portableSin(a) * dist);
+        float dx = spot.x - px, dz = spot.y - pz, d = sqrtf(dx * dx + dz * dz);
+        if (d < PHANTOM_NEAR - 2.0f || d > PHANTOM_FAR + 2.0f) continue;
+        float c = (dx * fwd.x + dz * fwd.z) / d;
+        if (c > PHANTOM_LOOK_COS || c < 0.5f) continue;   // in the view, not on its centre
+        if (!world.lineOfSight(px, pz, spot.x, spot.y) || world.indoors(cellOf(spot.x), cellOf(spot.y))) continue;
+        phantom = Phantom{};
+        phantom.active = true;
+        phantom.x = spot.x; phantom.z = spot.y;
+        phantom.y = world.groundAt(spot.x, spot.y, py + 1.0f);
+        return true;
+    }
+    return false;
+}
+
+float Sim::phantomAlpha() const {
+    const Phantom &p = phantom;
+    if (p.fadeT > 0) return clampf(p.fadeT / PHANTOM_FADE_OUT, 0.0f, 1.0f);
+    if (!p.active) return 0.0f;
+    return clampf(p.life / PHANTOM_FADE_IN, 0.0f, 1.0f);
 }

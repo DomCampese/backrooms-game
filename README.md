@@ -378,6 +378,13 @@ AGENTS.md has the module map file by file.
   whispers come more often and you hear your pulse. Below a tenth, the view
   narrows and the whispers and pulse get louder. At zero the run ends. Almond
   water and the tape player restore it.
+- **Phantoms.** Below 60% sanity, while no hunter is after you, you start to
+  see the level's hunter at the edge of your view, 9-16 m away, standing
+  still and facing you. It is not there: it goes, with a whisper, when you
+  look straight at it or get within 6 m, or after 6 s. It cannot hurt you,
+  but you cannot tell it from the real one until you look. The lower your
+  sanity, the more often it comes: every 40-52 s at 60%, every 14-26 s near
+  zero.
 - **Shifting walls.** Below a tenth of your sanity, doorways you have passed
   through can become walls. Only doorways you cannot currently see change, and
   never a room's last way out.

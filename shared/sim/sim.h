@@ -219,6 +219,22 @@ struct Sim {
     // and a hall near 1.
     static constexpr int   ROOM_PROBE = 10;
     static constexpr float SLIDE_FROM = 0.10f;  // the fraction of the sanity meter that is the terminal slide
+    // Phantoms (Sim::updatePhantom): below PHANTOM_BELOW sanity, with the
+    // hunter not out, the level's hunter is shown standing still at the edge
+    // of the view, PHANTOM_NEAR..FAR m away and PHANTOM_SIDE_MIN..MAX degrees
+    // off the player's forward, in line of sight. It is not an entity: it
+    // cannot hear, move or hurt. It goes when the player looks within
+    // PHANTOM_LOOK_COS of it for PHANTOM_LOOK_TIME s, comes within
+    // PHANTOM_CLOSE m, or after PHANTOM_LIFE s. The next comes after
+    // PHANTOM_GAP_MAX s at PHANTOM_BELOW, shortening to PHANTOM_GAP_MIN at
+    // zero sanity, plus up to PHANTOM_GAP_JITTER.
+    static constexpr float PHANTOM_BELOW = 0.6f;
+    static constexpr float PHANTOM_NEAR = 9.0f, PHANTOM_FAR = 16.0f;
+    static constexpr float PHANTOM_SIDE_MIN = 30.0f, PHANTOM_SIDE_MAX = 48.0f;
+    static constexpr float PHANTOM_LOOK_COS = 0.94f, PHANTOM_LOOK_TIME = 0.25f;
+    static constexpr float PHANTOM_CLOSE = 6.0f, PHANTOM_LIFE = 6.0f;
+    static constexpr float PHANTOM_GAP_MAX = 40.0f, PHANTOM_GAP_MIN = 14.0f, PHANTOM_GAP_JITTER = 12.0f;
+    static constexpr float PHANTOM_FADE_IN = 0.5f, PHANTOM_FADE_OUT = 0.3f;
     // Walls shift within this many cells of the player, more often as the slide
     // deepens.
     static constexpr int   SHIFT_RING = 8;
@@ -387,6 +403,20 @@ struct Sim {
     float blackoutCur = 1.0f, fear = 0.0f;
     float whisperT = 0;
     double nextWhisper = 0;
+    // The phantom (PHANTOM_*): where it stands, how long it has stood, how
+    // long it has been looked at, and its fade out once it goes (fadeT > 0).
+    // Its own RNG, reseeded each level entry, so it does not shift grng.
+    struct Phantom {
+        bool active = false;
+        float x = 0, z = 0, y = 0;
+        float life = 0, seen = 0, fadeT = 0;
+        bool looked = false;     // it went because the player looked at it
+    };
+    Phantom phantom;
+    Rng phantomRng{1};
+    double nextPhantom = 0;
+    unsigned phantomEntry = ~0u;  // the levelEntries the phantom's state was reset for
+    float phantomAlpha() const;   // 0..1: fading in, shown, or fading out
     // Separate RNG for distant sounds, so they do not shift grng (blackouts,
     // spawns).
     double nextDistant = 0;
@@ -603,6 +633,8 @@ struct Sim {
     // ---- the place
     static float sanityDrain(int lv);   // meter-fraction per second
     bool updateSanity(float dt, bool blackout, double now);   // true if it ended the run
+    void updatePhantom(float dt, double now);
+    bool placePhantom();
     void updateRoomSound(bool blackout);
     bool shiftAWall();               // close one doorway the player cannot see
     bool clarkLevel() const { return level == 0; }

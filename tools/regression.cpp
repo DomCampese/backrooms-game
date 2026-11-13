@@ -1641,6 +1641,53 @@ int main() {
     }
     printf("PASS LEVEL FUN's music stops; moving during a stop calls the Partygoer\n");
 
+    // ---- phantoms: at low sanity the level's hunter is shown at the edge of
+    // the view, in line of sight; it goes when looked at; none at high sanity
+    // or with the hunter out; and grng is not drawn from.
+    {
+        sim.applyLevel(0,GetTime()); sim.beginDescent(0);
+        sim.inMenu=false; sim.deathT=0; sim.health=1; sim.hidden=false; sim.crouchCur=0;
+        sim.mannequin.active=false; sim.ent=Entity{}; sim.ent.nextSpawn=1e9;
+        World &w=sim.world;
+        InputFrame idle{}; idle.playing=true;
+        Vec2 P=w.findOpenSpot(15.0f,15.0f);
+        sim.px=P.x; sim.pz=P.y; sim.py=0;
+        int shown=0, tried=0;
+        for (int d=0; d<16 && shown<5; ++d) {   // several headings, so some have room at the side
+            sim.yaw=d*TAU/16; sim.pitch=0; sim.updateLook(idle);
+            sim.sanity=0.3f; sim.phantom=Sim::Phantom{}; sim.nextPhantom=0;
+            sim.phantomEntry=sim.levelEntries;   // keep the reseeded stream
+            Rng before=sim.grng;
+            sim.updatePhantom(1.0f/30, 1000.0+d);
+            CHECK(sim.grng.s==before.s);
+            tried++;
+            if (!sim.phantom.active) continue;
+            shown++;
+            float dx=sim.phantom.x-sim.px, dz=sim.phantom.z-sim.pz, dist=hypotf(dx,dz);
+            CHECK(dist>=Sim::PHANTOM_NEAR-2.0f && dist<=Sim::PHANTOM_FAR+2.0f);
+            float c=(dx*sim.fwd.x+dz*sim.fwd.z)/dist;
+            CHECK(c>0.5f && c<=Sim::PHANTOM_LOOK_COS);           // in view, not where the player looks
+            CHECK(w.lineOfSight(sim.px,sim.pz,sim.phantom.x,sim.phantom.z));
+            // It fades in, then looking straight at it sends it away with a whisper.
+            for (int f=0; f<20; ++f) sim.updatePhantom(1.0f/30, 1000.0+d+f/30.0);
+            CHECK(sim.phantomAlpha()>0.9f);
+            sim.yaw=portableAtan2(dz,dx); sim.updateLook(idle);
+            int f=0;
+            for (; f<30 && sim.phantom.fadeT<=0; ++f) sim.updatePhantom(1.0f/30, 1001.0+d+f/30.0);
+            CHECK(sim.phantom.fadeT>0 && sim.phantom.looked && sim.whisperT>0);
+            CHECK(f<=(int)(Sim::PHANTOM_LOOK_TIME*30)+2);
+            for (int g=0; g<15; ++g) sim.updatePhantom(1.0f/30, 1002.0+d+g/30.0);
+            CHECK(!sim.phantom.active && sim.phantomAlpha()==0);
+        }
+        CHECK(shown>=3);
+        // None at high sanity, and none while the hunter is out.
+        sim.sanity=0.9f; sim.nextPhantom=0; sim.updatePhantom(1.0f/30, 2000.0); CHECK(!sim.phantom.active);
+        sim.sanity=0.3f; sim.nextPhantom=0; sim.ent.st=EState::Stalk; sim.ent.x=sim.px+30; sim.ent.z=sim.pz;
+        sim.updatePhantom(1.0f/30, 2001.0); CHECK(!sim.phantom.active);
+        sim.ent=Entity{}; sim.ent.nextSpawn=1e9; sim.sanity=1;
+    }
+    printf("PASS phantoms: shown at the edge of view at low sanity, gone when looked at, own RNG\n");
+
     // ---- in shadow, a chasing hunter sees the player only within DARK_SIGHT.
     // A lit spot is seen from 15 m; a dark one is not, unless the flashlight
     // is on or he is within DARK_SIGHT. The layout and the sim agree on which

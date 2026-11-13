@@ -674,6 +674,27 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             spriteDraw(out, ShapeTex::SmilerGlow, sp, sp.frame1, { 255, 255, 255, cl8(ga * sp.blend) });
         }
     }
+    if (ActorSprite sp; phantomSprite(sim, sp)) {   // lit as the hunter is, with no dark area of its own
+        const LevelCfg &c = LEVELS[sim.level];
+        float ambLum = (c.amb.x + c.amb.y + c.amb.z) / 3.0f * light.ambScale;
+        float lum = lightAtCPU(sp.litAt.x, sp.litAt.y, sp.litAt.z, sim.blackoutCur,
+                               c.ls, c.wallH - LIGHT_DROP, c.dead, c.lightMul, ambLum, 0, 0, 0, c.vary);
+        float px2 = sp.litAt.x - sim.px, pz2 = sp.litAt.z - sim.pz, pd = sqrtf(px2 * px2 + pz2 * pz2) + 1e-4f;
+        if (sim.flashCur > 0.05f) {
+            float cone = powf(fmaxf((px2 * sim.fwd.x + pz2 * sim.fwd.z) / pd, 0.0f), 26.0f);
+            lum = clampf(lum + sim.flashCur * cone * 7.5f / (1.0f + 0.10f * pd * pd), 0.0f, 1.0f);
+        }
+        const float fogf = expf(-pd * c.fogDen);
+        unsigned char l8 = cl8(40 + 215 * lum);
+        unsigned char al = cl8(255 * clampf(fogf * 1.6f, 0, 1) * sp.fade);
+        ShapeTex t = sp.sheet == SpriteSheet::Partygoer ? ShapeTex::Partygoer
+                   : sp.sheet == SpriteSheet::Clark ? ShapeTex::Clark
+                   : sp.sheet == SpriteSheet::Animation ? ShapeTex::Animation : ShapeTex::Smiler;
+        spriteDraw(out, t, sp, sp.frame0, { l8, l8, l8, al });
+        if (sp.glow)
+            spriteDraw(out, ShapeTex::SmilerGlow, sp, sp.frame0,
+                       { 255, 255, 255, cl8(255 * clampf(fogf * 2.2f, 0, 1) * sp.fade) });
+    }
     if (ActorSprite sp; usherSprite(sim, sp)) {
         const LevelCfg &c = LEVELS[sim.level];
         float ambLum = (c.amb.x + c.amb.y + c.amb.z) / 3.0f * light.ambScale;

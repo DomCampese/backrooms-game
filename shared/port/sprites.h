@@ -32,6 +32,9 @@ void gaitFrames(float phase, int frames, int &f0, int &f1, float &t);
 
 // The hunter, if it is drawn (not hidden, and within 45 m).
 bool hunterSprite(const Sim &sim, ActorSprite &out);
+// The phantom (Sim::phantom), if one is shown: the level's hunter standing
+// still and facing the camera, its fade the phantom's alpha.
+bool phantomSprite(const Sim &sim, ActorSprite &out);
 // The Usher, if it is drawn (out of the Gone state and within 45 m). Its
 // head row follows the torch: the face row when the beam points at the camera.
 bool usherSprite(const Sim &sim, ActorSprite &out);
