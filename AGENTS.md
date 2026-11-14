@@ -569,6 +569,36 @@ Now the nearest exit within `EXIT_HEAR_M` (64 m) sounds a tone
   once the casino made six (`want[5]` read as `Sfx::Step`). It lists
   `FarJingle` now.
 
+# Phantoms at low sanity (November 2026)
+
+Below `PHANTOM_BELOW` (0.6) sanity, with the hunter `Hidden`, the level's
+hunter is shown standing still at the edge of the view (`Sim::phantom`,
+`updatePhantom`, `placePhantom`, shared/sim/place.cpp). It is not an entity:
+nothing hears, routes or catches through it.
+
+- **Placement:** `PHANTOM_NEAR`..`FAR` (9-16 m) out, 30-48 degrees to a
+  random side of the forward, through `findOpenSpot`, in line of sight, not
+  indoors on Level 94, and outside `PHANTOM_LOOK_COS` (so never where the
+  player is already looking). Six tries, three draws each; none fits, it
+  tries again in 3 s.
+- **It goes** when the player looks within `PHANTOM_LOOK_COS` (0.94, about
+  20 degrees) of it with line of sight for `PHANTOM_LOOK_TIME` (0.25 s),
+  comes within `PHANTOM_CLOSE` (6 m), after `PHANTOM_LIFE` (6 s), or when it
+  is no longer allowed (the hunter came out, sanity recovered). Seen or
+  approached, it sets `whisperT` (1.5 s of the whisper bed).
+- **Gaps:** `PHANTOM_GAP_MAX` (40 s) at 0.6 sanity down to `PHANTOM_GAP_MIN`
+  (14 s) at zero, plus up to 12 s.
+- **`phantomRng` is its own stream**, reseeded from the seed, level and visit
+  whenever `levelEntries` changes (checked in `updatePhantom`, so
+  `applyLevel` is untouched). It never draws from `grng`; the regression
+  checks the state is unchanged across a placement.
+- **Drawn by `sceneDraws`** (`phantomSprite`, port/sprites.cpp): the
+  hunter's sheet for the level, face row, frame 0, faded in over 0.5 s and
+  out over 0.3 s, lit by `lightAtCPU` without the hunter's dark area, so
+  both builds draw it with no platform code. It is not in `actorSprites`, so
+  it casts no shadow.
+- walk-l0-l2.trace never drops below 0.6 sanity and plays back unchanged.
+
 # Distant one-shots (October 2026)
 
 Levels 0, 1, 3 and 4 play a muffled one-shot at intervals from a random

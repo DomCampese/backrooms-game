@@ -55,6 +55,24 @@ bool hunterSprite(const Sim &sim, ActorSprite &out) {
     return true;
 }
 
+bool phantomSprite(const Sim &sim, ActorSprite &out) {
+    const float a = sim.phantomAlpha();
+    if (a <= 0.0f) return false;
+    const Sim::Phantom &p = sim.phantom;
+    out = {};
+    out.sheet = sim.level == LEVEL_FUN ? SpriteSheet::Partygoer : sim.clarkLevel() ? SpriteSheet::Clark
+              : sim.level == MOTION ? SpriteSheet::Animation : SpriteSheet::Smiler;
+    out.glow = out.sheet == SpriteSheet::Smiler;
+    out.frame0 = out.frame1 = 0;   // standing, one frame
+    out.row = ENT_ROW_FACE;
+    const bool tall = out.sheet == SpriteSheet::Animation;
+    out.w = tall ? 1.14f : 0.98f; out.h = tall ? 2.28f : 1.96f;
+    out.centre = { p.x, p.y + out.h * 0.5f, p.z };
+    out.litAt = { p.x, p.y + 0.95f, p.z };
+    out.fade = a;
+    return true;
+}
+
 bool usherSprite(const Sim &sim, ActorSprite &out) {
     const Usher &u = sim.usher;
     if (u.st == UState::Gone || sim.usherDist >= 45) return false;
