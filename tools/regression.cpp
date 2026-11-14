@@ -1510,6 +1510,48 @@ int main() {
         CHECK(hypotf(sim.ent.x-sim.px, sim.ent.z-sim.pz)<Sim::FIND_REACH);
         // Hiding cannot be taken back until FOUND_TIME has run out.
         sim.updateHiding(0.0f,1.0f/30); CHECK(!sim.hidden);
+        // The same search with the breath held: he comes within FIND_REACH and
+        // does not find them. When the breath runs out the gasp is a noise, the
+        // breath cannot be held again, and he finds them.
+        {
+            sim.foundT=0; sim.hidden=false; sim.updateHiding(0.0f,0.05f); CHECK(sim.hidden);
+            sim.breath=1; sim.breathSpent=false; sim.holdingBreath=false; sim.gaspNoiseT=0;
+            sim.ent.st=EState::Chase; sim.ent.lunge=0; sim.ent.lungeCd=5; sim.ent.repathT=0;
+            sim.ent.x=cxw; sim.ent.z=czw; sim.hunterNotice(cxw,czw);
+            float nearest=1e9f; bool gasped=false;
+            int held=0;
+            for (; held<(int)(Sim::HOLD_TIME*30)+30 && sim.hidden; ++held) {
+                sim.updateHiding(0.0f,1.0f/30);
+                sim.updateBreath(true,1.0f/30,500.0+held/30.0);
+                if (sim.gaspNoiseT>0) gasped=true;
+                if (!gasped) {
+                    float nx, nz; CHECK(sim.loudestNoise(nx,nz)==0.0f || !sim.holdingBreath);
+                }
+                sim.updateEntity(1.0f/30, 500.0+held/30.0);
+                if (!gasped) nearest=fminf(nearest, hypotf(sim.ent.x-sim.px, sim.ent.z-sim.pz));
+                if (!gasped) CHECK(sim.hidden);
+                sim.updateTimers(1.0f/30);
+            }
+            CHECK(nearest<Sim::FIND_REACH);          // he stood close enough to find a breathing player
+            CHECK(gasped && sim.breathSpent && !sim.holdingBreath);
+            CHECK(held>(int)(Sim::HOLD_TIME*30)-3);   // the breath lasted HOLD_TIME
+            // Still searching, he hears the gasp, comes back and finds the
+            // player breathing hard.
+            CHECK(sim.ent.st==EState::Chase);
+            for (int f=0; f<(int)(Sim::SEARCH_TIME*30) && sim.hidden; ++f) {
+                sim.updateHiding(0.0f,1.0f/30);
+                sim.updateBreath(false,1.0f/30,520.0+f/30.0);
+                sim.updateEntity(1.0f/30, 520.0+f/30.0);
+                sim.updateTimers(1.0f/30);
+            }
+            CHECK(!sim.hidden && sim.foundT>0);
+            // Letting go with breath to spare is quiet and can be held again.
+            sim.foundT=0; sim.hidden=true; sim.breath=1; sim.breathSpent=false; sim.gaspNoiseT=0;
+            sim.updateBreath(true,1.0f/30,600.0); CHECK(sim.holdingBreath);
+            sim.updateBreath(false,1.0f/30,600.1); CHECK(!sim.holdingBreath && sim.gaspNoiseT==0 && !sim.breathSpent);
+            sim.foundT=0; sim.hidden=false; sim.updateHiding(0.0f,0.05f); CHECK(sim.hidden);
+        }
+        printf("PASS hidden, a held breath keeps the searching hunter from finding the player until it runs out\n");
         // The same cover, but he last heard the player far from it: he checks
         // nothing near them and gives up with the player still hidden.
         sim.foundT=0; sim.hidden=false; sim.updateHiding(0.0f,0.05f); CHECK(sim.hidden);

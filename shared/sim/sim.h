@@ -125,6 +125,17 @@ struct Sim {
     static constexpr float DROWN_TICK = 1.0f;
     static constexpr float DROWN_HIT = 0.26f;
     static constexpr float GASP_BELOW = 0.6f;    // surfacing below this much breath gasps
+    // Holding the breath (Sim::updateBreath): the jump key held while hidden.
+    // It empties the breath in HOLD_TIME s. While held, the player makes no
+    // sound standing still and the hunter cannot find them in their cover;
+    // not held, their breathing lets him find them from FIND_REACH. Letting go below HOLD_QUIET, or
+    // running out, is a gasp heard GASP_NOISE m away for GASP_NOISE_TIME s,
+    // and the breath cannot be held again until it is back above HOLD_AGAIN.
+    static constexpr float HOLD_TIME = 7.0f;   // under his SEARCH_TIME, so it must be timed
+    static constexpr float HOLD_QUIET = 0.3f;
+    static constexpr float HOLD_AGAIN = 0.5f;
+    static constexpr float GASP_NOISE = 12.0f;
+    static constexpr float GASP_NOISE_TIME = 0.6f;
     // Loot on the floor of the Poolrooms' deep water (floor at SUNKEN_DEPTH or
     // lower): a doubloon in SUNKEN_COIN_RATE cells, a carton of almond water in
     // SUNKEN_ALMOND_RATE. A swimmer floating at the surface is too far above it
@@ -185,10 +196,11 @@ struct Sim {
     // Searching, he first walks to the cover (hideSpotAt) within SEARCH_COVER_R m
     // of where he last saw or heard the player, nearest first, and stands at
     // each for CHECK_TIME s. A hidden player within FIND_REACH m of him, in
-    // line of sight, is found: hiding is lost for FOUND_TIME s.
+    // line of sight and not holding their breath, is found: hiding is lost for
+    // FOUND_TIME s. It was 1.4 m before the breath could be held.
     static constexpr float SEARCH_COVER_R = 8.0f;
     static constexpr float CHECK_TIME = 1.0f;
-    static constexpr float FIND_REACH = 1.4f;
+    static constexpr float FIND_REACH = 2.6f;
     static constexpr float FOUND_TIME = 2.0f;
     // Doors. The use key shuts or opens a doorway within DOOR_REACH m of its
     // middle that the player faces. Shutting or opening one is heard DOOR_NOISE m
@@ -320,6 +332,10 @@ struct Sim {
     float health = 1.0f, hurtT = 0, sinceHurt = 0;   // hurtT: immunity left after a hit
     float stamina = 1.0f;
     float breath = 1.0f, drownT = 0;   // breath 0..1; drownT counts to the next DROWN_TICK
+    bool holdingBreath = false;      // the jump key held while hidden (HOLD_TIME)
+    bool breathSpent = false;        // gasped: cannot hold again until breath is over HOLD_AGAIN
+    float holdBeatT = 0;             // s to the next heartbeat while holding
+    float gaspNoiseT = 0;            // s left of the noise of a gasp
     bool headUnder = false;
     float fov = 70.0f;               // camera fovy, deg, eased toward the window's base plus the action pulls
     float bobPhase = 0;              // counts footfalls: an integer is a foot landing
@@ -539,7 +555,7 @@ struct Sim {
     // ---- movement pieces
     void updateSprint(bool requested, bool moving, bool crouched, float dt);
     bool updateSwimming(float dt, bool rise);
-    void updateBreath(float dt, double now);
+    void updateBreath(bool jumpHeld, float dt, double now);
     void updateSqueeze(bool held, float dt);
     void updateSoftFloor(float dt, double now);
     void updateGait(float spd, float speed, bool inWater, float dt);

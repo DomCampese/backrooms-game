@@ -674,6 +674,31 @@ Pcm makeGasp()
     return toPcm(d, 0.8f);
 }
 
+// HoldBreath: a quick breath in through the mouth, then the throat closing.
+// Noise through a resonator swept 900-1700 Hz over 0.22 s with a 0.02 s
+// attack, stopped short by a 6 ms click low-passed at about 1 kHz. Quieter
+// and shorter than the gasp, which is the same breath let out too late.
+Pcm makeHoldBreath()
+{
+    Rng r(0xB4EAULL);
+    std::vector<float> d((int)(0.34f * SAMPLE_RATE));
+    float y1 = 0, y2 = 0, lp = 0;
+    for (int i = 0; i < (int)d.size(); i++) {
+        float t = (float)i / SAMPLE_RATE;
+        float x = r.f01() * 2.0f - 1.0f;
+        float f = 900.0f + 800.0f * fminf(1.0f, t / 0.22f);
+        float env = t < 0.24f ? fminf(1.0f, t / 0.02f) * (0.6f + 0.4f * t / 0.24f) * fminf(1.0f, (0.24f - t) * 60.0f) : 0.0f;
+        float w = TAU * f / SAMPLE_RATE, rr = 0.965f;
+        float y = x * (1.0f - rr) + 2.0f * rr * cosf(w) * y1 - rr * rr * y2;
+        y2 = y1; y1 = y;
+        float ct = t - 0.245f;   // the throat closing
+        lp += 0.13f * (x - lp);
+        float click = ct > 0 && ct < 0.006f ? lp * 2.5f * (1.0f - ct / 0.006f) : 0.0f;
+        d[i] = y * env + click;
+    }
+    return toPcm(d, 0.6f);
+}
+
 // Choke: air escaping under water. Five to eight bubbles in 0.6 s, each a sine
 // chirping up from 260-520 Hz by half again over 25-45 ms, over noise
 // low-passed at about 400 Hz. Variants differ by seed.
@@ -1281,6 +1306,7 @@ ClipSpec clipSpec(Sfx sfx) {
     case Sfx::Lighter:   return { 1, 1.0f, 0.6f };
     case Sfx::Drag:      return { 1, 1.0f, 0.5f };
     case Sfx::Exhale:    return { 1, 1.0f, 0.5f };
+    case Sfx::HoldBreath: return { 1, 1.0f, 0.6f };
     default:             return { 1, 1.0f, 1.0f };
     }
 }
@@ -1337,6 +1363,7 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::StepGrass:      return makeGrassStep(800 + variant * 31);
     case Sfx::Shutter:        return makeShutter(variant);
     case Sfx::Cackle:         return makeCackle();
+    case Sfx::HoldBreath:     return makeHoldBreath();
     }
     return {};
 }

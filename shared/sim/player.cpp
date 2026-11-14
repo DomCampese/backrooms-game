@@ -144,7 +144,8 @@ void Sim::updateMovement(const InputFrame &in, float dt, double now) {
         int v = grng.ri(0, 2);
         play(Sfx::SplashIn, v).atPitch(0.95f + grng.f01() * 0.1f).atVolume(0.55f);
     }
-    if (!afloat && in.jumpPressed && grounded) { vy = inWater ? 4.3f : 5.6f; grounded = false; }
+    // Hidden, the jump key holds the breath instead (updateBreath).
+    if (!afloat && in.jumpPressed && grounded && !hidden) { vy = inWater ? 4.3f : 5.6f; grounded = false; }
     if (grounded) {
         if (py > groundY + 0.05f && world.poolAt(cellOf(px), cellOf(pz))) { grounded = false; vy = 0; }  // pool edge: drop in
         // Off anything taller than a step the player falls. The glide below
@@ -369,17 +370,47 @@ Sfx Sim::stepSfx() const {
 
 // Head under water drains breath; out of breath, the player takes DROWN_HIT
 // every DROWN_TICK s. Surfacing short of breath plays a gasp.
-void Sim::updateBreath(float dt, double now) {
+// Out of the water, the jump key held while hidden holds the breath
+// (HOLD_TIME), which the hunter's search cannot see through (hunterChase).
+void Sim::updateBreath(bool jumpHeld, float dt, double now) {
     bool under = level == 2 && !inMenu && deathT <= 0 && eyeY < WATER_Y
               && world.poolAt(cellOf(px), cellOf(pz));
     if (headUnder && !under && breath < GASP_BELOW && deathT <= 0)
         play(Sfx::Gasp).atVolume(0.5f + 0.5f * (GASP_BELOW - breath) / GASP_BELOW);
     headUnder = under;
     if (!under) {
-        breath = fminf(1, breath + dt / BREATH_REFILL);
         drownT = 0;
+        if (breathSpent && breath > HOLD_AGAIN) breathSpent = false;
+        bool hold = jumpHeld && hidden && !swimming && !breathSpent && deathT <= 0 && !inMenu;
+        if (hold && !holdingBreath) {
+            play(Sfx::HoldBreath).atVolume(0.45f);
+            holdBeatT = 0.5f;
+        }
+        if (holdingBreath && !hold) {   // let go, or the cover was lost
+            if (breath < HOLD_QUIET) {
+                play(Sfx::Gasp).atVolume(0.6f + 0.4f * (HOLD_QUIET - breath) / HOLD_QUIET);
+                gaspNoiseT = GASP_NOISE_TIME;
+                breathSpent = true;
+            } else play(Sfx::Exhale).atPitch(1.25f).atVolume(0.35f);
+        }
+        holdingBreath = hold;
+        if (!hold) { breath = fminf(1, breath + dt / BREATH_REFILL); return; }
+        breath = fmaxf(0, breath - dt / HOLD_TIME);
+        // The heartbeat quickens as the breath runs out: 0.95 s apart full, 0.45 s empty.
+        holdBeatT -= dt;
+        if (holdBeatT <= 0) {
+            play(Sfx::Heartbeat).atVolume(0.35f + 0.4f * (1 - breath));
+            holdBeatT += 0.45f + 0.5f * breath;
+        }
+        if (breath <= 0) {   // out of air: the gasp comes whatever the player holds
+            play(Sfx::Gasp).atVolume(1.0f);
+            gaspNoiseT = GASP_NOISE_TIME;
+            breathSpent = true;
+            holdingBreath = false;
+        }
         return;
     }
+    holdingBreath = false;
     breath = fmaxf(0, breath - dt / BREATH_TIME);
     if (breath > 0) return;
     drownT += dt;
