@@ -323,6 +323,12 @@ AGENTS.md has the module map file by file.
 - **Death.** When you die, a card shows the level, the time, the metres walked
   and what killed you, then the title screen returns. Your deepest level and
   longest run are kept with the other records.
+- **Stalking.** Before a chase the hunter follows you at a slow walk
+  (1.5 m/s), but only while you are not looking its way. With it anywhere in
+  your view and in sight, it stands still. It chases if you stare at it for
+  1.6 s or let it get within 3 m. Walking away outpaces it, and it does not
+  follow you while you are hidden or through a shut door. After 35 s unseen
+  it goes away.
 - **The lunge.** The hunter has to start a lunge from within 2.5 m. The lunge
   plays a sound and lasts 0.6 s, and only a lunge in progress can hit you.
   Sprint out of reach and it has to reposition.

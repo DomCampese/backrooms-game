@@ -56,12 +56,16 @@ void Sim::updateEntity(float dt, double now, bool forceSpawn) {
             ent.life += dt;
             fearT = entVisible ? 0.45f : 0.15f;
             if (entVisible) ent.gaze += dt;
+            // In the player's view at all (not only the stare's narrow cone),
+            // he holds still; out of it he comes closer.
+            bool watched = entDist < 36 && dirDot > STALK_WATCH_COS && entLos && !hidden;
+            hunterStalk(dt, watched);
             if (ent.gaze > 1.6f || (entVisible && entDist < 8) || (entDist < 3.0f && !hidden)) {
                 ent.st = EState::Chase; ent.repathT = 0;
                 hunterNotice(px, pz);
                 if (level == MOTION) play(Sfx::Cackle).atVolume(clampf(1.4f / (1.0f + 0.02f * entDist * entDist), 0.25f, 0.9f));
             }
-            else if (ent.life > 24 && !entVisible) ent.st = EState::Hidden, ent.nextSpawn = now + 18 + grng.f01() * 35;
+            else if (ent.life > STALK_TIME && !entVisible) ent.st = EState::Hidden, ent.nextSpawn = now + 18 + grng.f01() * 35;
         }
         if (ent.st == EState::Chase && hunterChase(dt, now, fearT)) return;
         if (ent.st == EState::Flee) {   // runs from the nearest flare, or from the player once none are lit
@@ -237,20 +241,7 @@ bool Sim::hunterChase(float dt, double now, float &fearT) {
             ent.repathT = 0;
         }
     }
-    ent.repathT -= dt;
-    float wdx = ent.wpx - ent.x, wdz = ent.wpz - ent.z;
-    if (ent.repathT <= 0 || wdx * wdx + wdz * wdz < 0.20f) {
-        ent.repathT = 0.25;
-        int eci = cellOf(ent.x), eck = cellOf(ent.z);
-        int oi, ok;
-        float gx = tx - ent.x, gz = tz - ent.z;
-        if (gx * gx + gz * gz > 2.5f * 2.5f && !world.lineOfSight(ent.x, ent.z, tx, tz) &&
-            world.pathStep(eci, eck, cellOf(tx), cellOf(tz), oi, ok, true) && !(oi == eci && ok == eck)) {
-            ent.wpx = oi * CELL + 1.0f; ent.wpz = ok * CELL + 1.0f;
-        } else {
-            ent.wpx = tx; ent.wpz = tz;
-        }
-    }
+    hunterWaypoint(tx, tz, dt, true);
     if (hunterOpensDoor(dt)) chaseSpd = 0;
     if (world.indoors(cellOf(ent.wpx), cellOf(ent.wpz))) {   // Level 94: it waits outside, knocking
         chaseSpd = 0;
@@ -286,6 +277,42 @@ bool Sim::hunterChase(float dt, double now, float &fearT) {
 
 // How far the loudest noise carries this tick, in metres, and where it is.
 // Usually the player; a playing deck that was set down is a separate source.
+// The next point he walks to on the way to (tx, tz): straight there with
+// line of sight or within 2.5 m, otherwise the next cell on the router's
+// path. Recomputed every 0.25 s or on reaching the waypoint.
+void Sim::hunterWaypoint(float tx, float tz, float dt, bool throughShut) {
+    ent.repathT -= dt;
+    float wdx = ent.wpx - ent.x, wdz = ent.wpz - ent.z;
+    if (ent.repathT <= 0 || wdx * wdx + wdz * wdz < 0.20f) {
+        ent.repathT = 0.25;
+        int eci = cellOf(ent.x), eck = cellOf(ent.z);
+        int oi, ok;
+        float gx = tx - ent.x, gz = tz - ent.z;
+        if (gx * gx + gz * gz > 2.5f * 2.5f && !world.lineOfSight(ent.x, ent.z, tx, tz) &&
+            world.pathStep(eci, eck, cellOf(tx), cellOf(tz), oi, ok, throughShut) && !(oi == eci && ok == eck)) {
+            ent.wpx = oi * CELL + 1.0f; ent.wpz = ok * CELL + 1.0f;
+        } else {
+            ent.wpx = tx; ent.wpz = tz;
+        }
+    }
+}
+
+// Stalking, he follows the player at STALK_SPEED, but only while they are
+// not looking his way: inside STALK_WATCH_COS of their view with line of
+// sight, he stands still. He does not follow a hidden player, open a shut
+// door or go indoors (Level 94). Returns true if he moved.
+bool Sim::hunterStalk(float dt, bool watched) {
+    if (watched || hidden || ent.stagger > 0) return false;
+    hunterWaypoint(px, pz, dt, false);
+    if (world.indoors(cellOf(ent.wpx), cellOf(ent.wpz))) return false;
+    float sx = ent.wpx - ent.x, sz = ent.wpz - ent.z, sl = sqrtf(sx * sx + sz * sz) + 1e-4f;
+    float step = fminf(STALK_SPEED * dt, sl);
+    ent.x += sx / sl * step;
+    ent.z += sz / sl * step;
+    world.collideCircle(ent.x, ent.z, 0.38f, ent.dispY);
+    return true;
+}
+
 float Sim::loudestNoise(float &x, float &z) const {
     float noise = 5.0f;
     x = px; z = pz;
