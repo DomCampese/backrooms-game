@@ -2148,3 +2148,13 @@ void World::unloadAll() {
         for (auto &kv : lv.second) staleChunks.push_back({ lv.first, keyX(kv.first), keyZ(kv.first) });
     layers.clear();
 }
+
+FilmShot filmShot(uint32_t seed, float t) {
+    float phase = (seed & 1023) / 1023.0f * FILM_SHOT;
+    int shot = (int)floorf((t + phase) / FILM_SHOT);
+    uint32_t h = ih(shot, (int)(seed >> 10), seed ^ 0xF117u);
+    FilmShot f;
+    f.colour = (int)(h % 6);
+    f.level = (h >> 3) % 9 == 0 ? FILM_DARK : 0.45f + ((h >> 6) & 255) / 255.0f * 0.55f;
+    return f;
+}

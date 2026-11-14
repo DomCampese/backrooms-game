@@ -53,6 +53,7 @@ struct AmbienceMix {
     float droneLevel = 0.0f;   // ...and of Level 1's drone
     float panel = 0.0f;        // how directly overhead a live fitting is, 0..1
     float space = 0.25f;       // how big the room sounds: 0 corridor .. 1 hall
+    float film = 0.0f;         // the theater: the soundtrack of the film in the auditorium the player is in, 0..1
 };
 
 // The looping recordings, by what the player is in.

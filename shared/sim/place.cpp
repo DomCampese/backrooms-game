@@ -19,6 +19,7 @@ void Sim::updateAmbience(float dt, double now) {
     whisperT = level == 2 ? 0 : fmaxf(0, whisperT - dt);
     ambience.whisper = whisperT > 0 ? 0.55f : 0.0f;
 
+    updateFilm(now);
     bool blackout = now < blackoutEnd;
     if (!blackout && now > nextBlackout) {
         blackoutEnd = now + 2.5 + grng.f01() * 4.0;
@@ -52,6 +53,23 @@ void Sim::updateAmbience(float dt, double now) {
         if (c.pos.y < fy + 0.02f) { c.pos.y = fy + 0.02f; c.vel = { 0, 0, 0 }; c.life -= dt * 3.0f; }
         if (c.life <= 0) confetti[i] = confetti.back(), confetti.pop_back();
         else ++i;
+    }
+}
+
+// The theater: the shot showing in the auditorium the player stands in (core's
+// filmShot, the same the screen shows), for the footstep cover in
+// loudestNoise and the soundtrack in the ambience bed. A blackout stops the
+// projector, as it darkens the screen.
+void Sim::updateFilm(double now) {
+    filmLevel = -1;
+    ambience.film = 0;
+    if (level != THEATER || inMenu || now < blackoutEnd) return;
+    const int pcx = fdiv(cellOf(px), CCELLS), pcz = fdiv(cellOf(pz), CCELLS);
+    for (const Auditorium &a : world.auditoriums(pcx, pcz)) {
+        if (px < a.rect[0] || px > a.rect[2] || pz < a.rect[1] || pz > a.rect[3]) continue;
+        filmLevel = filmShot(a.seed, (float)now).level;
+        ambience.film = filmLevel;
+        return;
     }
 }
 

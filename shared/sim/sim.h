@@ -116,6 +116,11 @@ struct Sim {
     static constexpr float MUSIC_GRACE = 0.8f;    // s to stop moving after the music stops
     static constexpr float MUSIC_STILL = 0.6f;    // m/s: slower than this counts as standing still
     static constexpr float MUSIC_MASK = 0.6f;     // footstep noise radius while the music plays
+    // In an auditorium (Sim::updateFilm), a shot at FILM_LOUD level or over
+    // covers footsteps: loudestNoise's footstep radius is scaled by
+    // FILM_MASK. A dark shot (FILM_DARK) is quiet, and the radius is scaled
+    // by FILM_HUSH instead. Shots, doors, flares and the deck are not scaled.
+    static constexpr float FILM_LOUD = 0.8f, FILM_MASK = 0.5f, FILM_HUSH = 1.4f;
     static constexpr int   MAXAMMO = 6;
     // Breath: BREATH_TIME s with the head under water empties it, and
     // BREATH_REFILL s with the head out fills it. Empty, the player loses
@@ -464,6 +469,9 @@ struct Sim {
     // Separate RNG for distant sounds, so they do not shift grng (blackouts,
     // spawns).
     double nextDistant = 0;
+    // The theater's film (Sim::updateFilm): the level of the shot showing in
+    // the auditorium the player stands in, or -1 outside one.
+    float filmLevel = -1;
     Rng distantRng{1};
     // LEVEL FUN's music stops for MUSIC_STOP_MIN..+SPAN s every
     // MUSIC_PLAY_MIN..+SPAN s. Moving faster than MUSIC_STILL m/s while it is
@@ -693,6 +701,7 @@ struct Sim {
     bool placePhantom();
     void updateRoomSound(bool blackout);
     bool shiftAWall();               // close one doorway the player cannot see
+    void updateFilm(double now);     // the theater's film: filmLevel and the soundtrack
     bool clarkLevel() const { return level == 0; }
     const char *hunterName() const {
         return level == LEVEL_FUN ? "THE PARTYGOER" : level == 0 ? "PIRATE CLARK" : level == MOTION ? "AN ANIMATION" : "A SMILER";

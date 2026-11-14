@@ -16,6 +16,7 @@ struct Ambience {
     float hum = 1, growl = 0, hiss = 0, whisper = 0;
     float wHum = 1, wDrone = 0;
     float panel = 0, space = 0.25f;
+    float filmLvl = 0;         // mix.film, chased
     // The nearest exit's tone (LoopCue::exit, exitPan), set on each LOOPS
     // event by whatever plays the bed, and chased a sample at a time.
     float exitMix = 0, exitPanMix = 0, exitLvl = 0, exitPan = 0;
@@ -26,7 +27,8 @@ struct Ambience {
     //   0-4   fluorescent hum      5-7   growl        8-10  L1 drone
     //   11-12 exit tone           13-14 whispers     15    exit tone, octave below
     //   16-17 hum beat frequency  18-19 blackout ring
-    double ph[20] = {};
+    //   20-23 film soundtrack
+    double ph[24] = {};
     float lp1 = 0, lp2 = 0;   // one-pole low-passed noise, at two cutoffs
     uint32_t xr = 0x12345u;    // xorshift state for frand()
     float frand() { xr ^= xr << 13; xr ^= xr >> 17; xr ^= xr << 5; return (float)(xr & 0xFFFFFF) / 8388608.0f - 1.0f; }

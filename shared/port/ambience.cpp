@@ -14,6 +14,7 @@ void Ambience::render(int16_t *stereo, int frames) {
         wDrone += (mix.droneLevel - wDrone) * 1.5e-5f;
         panel += (mix.panel - panel) * 3e-5f;
         space += (mix.space - space) * 1.2e-5f;   // slow, because a stepped reverb change is audible
+        filmLvl += (mix.film - filmLvl) * 1.5e-4f;   // about 0.15 s: a cut between shots is heard as one
         exitLvl += (exitMix - exitLvl) * 4e-5f;
         exitPan += (exitPanMix - exitPan) * 4e-5f;
         float wn = frand();
@@ -53,7 +54,12 @@ void Ambience::render(int16_t *stereo, int frames) {
         // ---- the reverb (AUD-04). Only the bed and the whispers go through
         // it. The growl and the flare hiss stay dry, because reverb would hide
         // how close they are.
-        float wet = amb + whisperOut;
+        // The theater's film soundtrack (mix.film, the shot's level): a C minor
+        // chord at 65.4, 98.0 and 155.6 Hz under low-passed noise, swelling at
+        // 0.17 Hz, into the reverb with the bed. Quiet shots are near silent.
+        float score = osc(20, 65.4f) * 0.5f + osc(21, 98.0f) * 0.35f + osc(22, 155.6f) * 0.22f;
+        float filmOut = (score * (0.7f + 0.3f * osc(23, 0.17f)) + lp2 * 3.0f) * 0.16f * filmLvl;
+        float wet = amb + whisperOut + filmOut;
         float fb = 0.70f + 0.26f * space;     // corridor .. warehouse hall
         float combSum = comb(cb0, RV_L0, ci0, wet, fb) + comb(cb1, RV_L1, ci1, wet, fb)
                       + comb(cb2, RV_L2, ci2, wet, fb) + comb(cb3, RV_L3, ci3, wet, fb);

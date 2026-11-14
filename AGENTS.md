@@ -121,6 +121,27 @@ no row for it.
   skirting or anything else at a height: auditorium walls are 8 m tall and the
   texture repeats every 3 m. The mesher adds dark skirting.
 - `Distant::Boom` plays `Sfx::FarBoom`: a film's soundtrack through a wall.
+- **The film's shots are core's `filmShot(seed, t)`** (core/world.h):
+  `FILM_SHOT` (3.4 s) each, colour 0..5, level 0.45..1 or `FILM_DARK` (0.04)
+  one shot in nine. port's `filmFrame` adds the projector flicker to it for
+  the screen and its light; the move was checked on 2,000,000 (seed, time)
+  pairs, none differ. **In an auditorium the soundtrack covers footsteps**
+  (`Sim::updateFilm`, place.cpp): `filmLevel` is the shot's level while the
+  player stands inside one's `rect`, else -1; it is -1 in a blackout, which
+  stops the projector. `loudestNoise` scales the footstep radius by `FILM_MASK` (0.5)
+  at `FILM_LOUD` (0.8) or over, and by `FILM_HUSH` (1.4) on a dark shot.
+  The sim's time is its `now`, the render's is its own clock; in play they
+  are the same `GetTime()`.
+- **The soundtrack is in the ambience bed** (`AmbienceMix::film`, port/
+  ambience.cpp): a C minor chord at 65.4, 98.0 and 155.6 Hz swelling at
+  0.17 Hz, over low-passed noise, at 0.16 times the shot level, chased over
+  about 0.15 s, into the reverb. At full level it is about as loud as
+  Level 0's hum (RMS 2,348 against 2,487). Oscillator slots 20-23. `film` is
+  not in the trace's `audioHash`.
+- `World::auditoriums` reports only chunks already generated; a test must
+  generate the 3 x 3 round the player first, as streaming does in play.
+- The HUD's cover line says "[ loud scene · it covers your steps ]" or
+  "[ quiet scene · your steps carry ]".
 - **Its number is 4 but its place is second.** `EXIT_NEXT` sets the order,
   and the records' "deepest" compares `LEVEL_DEPTH`, not the level number;
   comparing numbers would rank the theater deepest of all. The records file
