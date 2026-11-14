@@ -362,6 +362,10 @@ AGENTS.md has the module map file by file.
   1.4 m with a clear line to you, which it does when it checks your cover, it
   finds you: you hear it, and you cannot hide again for 2 s. Hide away from
   where it lost you, more than 8 m off, and it does not check there.
+- **Tossing a doubloon.** With empty hands (1), click (FIRE on touch) to
+  toss a doubloon ahead of you. It clinks where it lands, and a hunter that
+  is searching for you and within 16 m of that spot goes to look there. It
+  costs the doubloon until you walk over it and pick it up again.
 - **Flares.** Throw one (Q, or left click when selected). It bounces off
   walls and burns for 9 s as a point light in the shader. The hunter will not
   come within 6 m of a burning flare and runs from one. You carry up to three

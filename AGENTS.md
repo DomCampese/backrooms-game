@@ -241,6 +241,13 @@ shared/sim/items.cpp). A shut door is `WALL_SHUT`, which no chunk stores: the
 - **The regression harness crashes at `Game::init` in a fresh sandbox**
   (a null GL call after `InitWindow`), on main as well. The theater's new
   checks were also run from a core-and-sim program with no window.
+  A second crash, found 11 November 2026: with the sandbox wheel's raylib
+  6.2 the harness segfaults at its first check (tools/regression.cpp:59),
+  because `UpdateModelAnimation` no longer fills `Mesh::animVertices` for
+  the weighted fixture and the check reads through a null pointer. main
+  crashes the same way. Until the fixture check is ported to 6.2, run the
+  regression from a scratch copy that skips that block when `animVertices`
+  is null, and say so in the PR.
 
 # Breath and sunken loot in the Poolrooms (November 2026)
 
@@ -482,6 +489,35 @@ dark spots matter: `Sim::inShadow()` cuts his sight to `DARK_SIGHT` (9 m)
   46% of LEVEL FUN and 61% of the theater.
 - The HUD's cover line says "[ in shadow ]" (or "crouched · in shadow").
 - walk-l0-l2.trace has no chase and plays back unchanged.
+
+# A tossed doubloon lures the hunter (November 2026)
+
+With empty hands (key 1) the fire button tosses a doubloon
+(`Sim::tossCoin`, `updateTossedCoins`, shared/sim/weapons.cpp). It is a
+noise where it lands, so a searching hunter goes there.
+
+- **It flies like a flare**: `TOSS_SPEED` (9 m/s) along the view plus
+  `TOSS_LIFT` (1.6 m/s) up, gravity 18 m/s2, walls reflect 0.35 of the
+  speed, one toss every `TOSS_GAP` (0.6 s). It costs a doubloon from `coins`.
+- **Each landing faster than 2 m/s plays `Sfx::CoinDrop`** (panned and
+  scaled by distance) and sets `coinNoiseT` (`COIN_NOISE_TIME`, 0.5 s) at
+  the landing spot. `loudestNoise` returns `COIN_NOISE` (16 m) there, so a
+  chasing hunter that cannot see the player calls `hunterNotice` on the
+  spot, as for any noise. A hunter that sees the player ignores it.
+- **At rest it joins `coinsWorld`**, the spilled doubloons
+  `collectPickups` gives back. Coins in flight are `coinsFlying`;
+  `changeStorey` shifts them, `applyLevel` clears them, and `simScene` draws
+  them as `SceneKind::Coin` at their height, so both builds draw them.
+- **`Sfx::CoinDrop` is not the last value of the enum.** It sits before
+  `Shutter`, because the open PR #214 appends `HoldBreath` after `Cackle`;
+  two appends at the same line conflict whichever merges second. Shutter and
+  Cackle play only on Level 94, which walk-l0-l2.trace never reaches, so the
+  renumbering does not change its `audioHash`. Both builds load clips by
+  enum up to `SFX_COUNT`, which is unchanged.
+- The HUD's doubloon line adds "click tosses one" (touch: "FIRE tosses
+  one") while hands are out.
+- walk-l0-l2.trace never fires with empty hands and a doubloon, and plays
+  back unchanged.
 
 # Exits can be heard (November 2026)
 

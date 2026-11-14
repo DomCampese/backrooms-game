@@ -350,7 +350,10 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         // These four lines are placed in unscaled pixels, as the Web build
         // always placed them.
         if (sim.coins > 0 || sim.wayOpen())   // doubloons pay for the exit (ESCAPE_COST)
-            raw(fmt("doubloons  ×%d / %d", sim.coins, Sim::ESCAPE_COST), 16, sh - 116, 16,
+            // With empty hands (1) the fire button tosses one (Sim::tossCoin).
+            raw(fmt("doubloons  ×%d / %d%s", sim.coins, Sim::ESCAPE_COST,
+                    sim.weapon == WEAPON_HANDS && sim.coins > 0 ? (in.touch ? "  · FIRE tosses one" : "  · click tosses one") : ""),
+                16, sh - 116, 16,
                 sim.wayOpen() ? Rgba{ 120, 230, 140, 210 } : Rgba{ 214, 178, 92, 170 });
         raw(fmt("3  almond water  ×%d", sim.almond), 16, sh - 94, 16,
             sim.almond > 0 ? Rgba{ 150, 190, 235, 170 } : dimc);
