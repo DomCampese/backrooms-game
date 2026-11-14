@@ -42,6 +42,7 @@ struct InputFrame {
     bool aim = false;             // secondary held (touch latches it)
     bool reload = false, throwFlare = false, flashlight = false;
     bool use = false, drink = false, chalk = false;
+    bool useHeld = false;          // the use key down: holds a shut door (Sim::bracing)
 
     bool begin = false;           // title screen: any key except F11, a click, or a touch start gesture
     DevKeys dev;

@@ -236,6 +236,16 @@ struct Sim {
     static constexpr float HURT_GRACE = 1.5f;   // s of immunity after a hit
     static constexpr float REGEN_DELAY = 6.0f;
     static constexpr float REGEN_RATE = 0.06f;  // meter-fraction per second
+    // Holding a shut door (Sim::bracing): the use key held at a shut door in
+    // reach. Each time the hunter would open it (DOOR_OPEN_TIME) he shoves
+    // instead, and the shove takes BRACE_COST of the stamina, which does not
+    // recover while bracing. He gives up after BRACE_QUIT_MIN..MAX shoves; a
+    // shove the stamina cannot pay bursts the door open, knocks the player
+    // back at BURST_PUSH m/s and takes BURST_HIT health.
+    static constexpr float BRACE_COST = 0.25f;
+    static constexpr int BRACE_QUIT_MIN = 3, BRACE_QUIT_MAX = 6;
+    static constexpr float BURST_PUSH = 5.0f, BURST_HIT = 0.25f;
+    static constexpr float BRACE_REACH = 1.2f;   // m from the leaf's line
     // Where the hunter spawns: the near band is inside fog range but out of
     // sight; the far band is beyond fog range.
     static constexpr float SPAWN_NEAR_MIN = 6.0f;
@@ -530,6 +540,9 @@ struct Sim {
     // for the HUD's hint.
     struct DoorReach { bool ok = false; int i = 0, k = 0; bool west = false, shut = false; };
     DoorReach doorReach;
+    bool bracing = false;            // holding doorReach's shut door (BRACE_COST)
+    double stepNow = 0;              // the clock step() was given, for rules called without it
+    float shoveT = 0;                // s since the hunter's last shove on a held door; large: none
     float doorNoiseT = 0;            // s left of the noise of a door shut or opened
 
     // ---- the tick. step() runs the updates below in this order; each may
@@ -667,6 +680,8 @@ struct Sim {
     void useDoor();                               // shut or open doorReach
     bool nextCover(Vec2 &spot);                    // the next cover to check while searching
     bool hunterOpensDoor(float dt);              // true while he stands at a shut door, knocking on it
+    void updateBracing(bool held);
+    bool hunterAtDoor(const DoorReach &d) const;
     void hunterNotice(float x, float z);   // the hunter now knows the player is at (x, z)
     void spawnUsher(double now);
     void usherRoamTarget(double now);

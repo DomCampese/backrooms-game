@@ -431,6 +431,7 @@ InputFrame Game::readInput(bool captureClick) {
     in.throwFlare = inKeyPressed(KEY_Q);
     in.flashlight = inKeyPressed(KEY_F) || inKeyPressed(KEY_L);
     in.use = inKeyPressed(KEY_E);
+    in.useHeld = inKeyDown(KEY_E);
     in.drink = inKeyPressed(KEY_THREE);
     in.chalk = inKeyPressed(KEY_M);
     // On touch, a tap on open screen or a stick push also starts a run.

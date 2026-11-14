@@ -349,7 +349,11 @@ AGENTS.md has the module map file by file.
   shut door blocks the hunter's sight and the light. The hunter can open one:
   it stops, knocks on it every 0.45 s,
   and opens it after 1.6 s. Shutting or opening a door can be heard 14 m
-  away.
+  away. Hold E (USE on touch) against a shut door it is knocking on to hold
+  it shut: each shove costs a quarter of your stamina bar, which does not
+  refill while you hold. It gives up after three to six shoves. If your
+  stamina runs out first, the door bursts open, knocks you back and hurts
+  you.
 - **Darkness around the hunter.** Ceiling lights go dark in a radius around
   the hunter and the dark area moves with it: partly while it stalks, fully
   while it chases. The flashlight and flares are not affected, so they show

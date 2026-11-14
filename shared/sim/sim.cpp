@@ -4,6 +4,7 @@
 #include <cmath>
 
 void Sim::step(const InputFrame &in, float dt, double now) {
+    stepNow = now;
     updateFlashlight(in, dt);
     // The pre-placed marks are laid the tick after arrival: applyLevel runs
     // before a transition moves the player, so px/pz are still the old level's.
@@ -50,6 +51,7 @@ void Sim::updateTimers(float dt) {
     deathT = fmaxf(0, deathT - dt);
     updateHealth(dt);
     escapeT = fmaxf(0, escapeT - dt);
+    shoveT += dt;
     killT = fmaxf(0, killT - dt);
     fellT = fmaxf(0, fellT - dt);
     winT = fmaxf(0, winT - dt);

@@ -448,6 +448,15 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         textC(fmt("%s · sleep until morning", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14), { 200, 190, 160, 150 });
     } else if (sim.truckNear) {   // an almond water truck with a can on its counter (Level 94)
         textC(fmt("%s · take the almond water", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14), { 200, 214, 220, 160 });
+    } else if (sim.hunterAtDoor(sim.doorReach)) {   // the hunter pushing the shut door in reach
+        // Each shove is paid from the sprint bar, which shows below.
+        if (sim.bracing) {
+            float jolt = clampf(1.0f - sim.shoveT / 0.4f, 0.0f, 1.0f);
+            textC("holding the door", sw / 2, sh / 2 + hud(46), hud(14 + (int)(4 * jolt)), { 230, 170, 120, 200 });
+        } else {
+            textC(fmt("hold %s · hold the door shut", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14),
+                  { 230, 170, 120, 180 });
+        }
     } else if (sim.doorReach.ok) {   // the doorway the use key would shut or open
         const char *verb = sim.doorReach.shut ? "open the door" : "shut the door";
         textC(fmt("%s · %s", in.touch ? "USE" : "E", verb), sw / 2, sh / 2 + hud(46), hud(14), { 200, 190, 160, 150 });
