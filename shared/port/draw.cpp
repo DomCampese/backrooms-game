@@ -36,13 +36,10 @@ struct FilmFrame { Vec3 col; float level; };
 FilmFrame filmFrame(uint32_t seed, float t) {
     static const Vec3 SHOTS[6] = { { 0.55f, 0.66f, 0.95f }, { 1.0f, 0.78f, 0.52f }, { 0.86f, 0.88f, 0.90f },
                                    { 0.60f, 0.86f, 0.66f }, { 0.95f, 0.42f, 0.36f }, { 0.78f, 0.74f, 0.96f } };
-    const float SHOT = 3.4f;
-    float phase = (seed & 1023) / 1023.0f * SHOT;
-    int shot = (int)floorf((t + phase) / SHOT);
-    uint32_t h = ih(shot, (int)(seed >> 10), seed ^ 0xF117u);
+    const FilmShot shot = filmShot(seed, t);   // core: the rules read the same shot
     FilmFrame f;
-    f.col = SHOTS[h % 6];
-    f.level = (h >> 3) % 9 == 0 ? 0.04f : 0.45f + ((h >> 6) & 255) / 255.0f * 0.55f;
+    f.col = SHOTS[shot.colour];
+    f.level = shot.level;
     f.level *= 0.96f + 0.04f * sinf(t * TAU * 24.0f) * sinf(t * 7.1f + (float)(seed & 63));
     return f;
 }

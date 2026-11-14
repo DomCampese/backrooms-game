@@ -292,6 +292,8 @@ float Sim::loudestNoise(float &x, float &z) const {
     else if (velx * velx + velz * velz > 1.0f) noise = 11.0f;
     if (crouchCur > 0.7f) noise *= 0.45f;
     if (level == LEVEL_FUN && music.playing) noise *= MUSIC_MASK;   // the music covers footsteps
+    if (filmLevel >= FILM_LOUD) noise *= FILM_MASK;                     // a loud scene covers them too
+    else if (filmLevel >= 0 && filmLevel <= FILM_DARK) noise *= FILM_HUSH;   // and a quiet one carries them
     if (deck.playing && TAPE_NOISE > noise) {
         noise = TAPE_NOISE;
         x = deck.carried ? px : deck.x;

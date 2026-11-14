@@ -1703,6 +1703,45 @@ int main() {
     }
     printf("PASS in shadow a chasing hunter sees the player only within DARK_SIGHT; the torch gives them away\n");
 
+    // ---- the theater's film: in an auditorium, filmLevel is the shot the
+    // screen shows (core's filmShot); a loud shot halves the footstep noise
+    // radius, a dark one scales it by FILM_HUSH; outside one, or in a
+    // blackout, nothing changes.
+    {
+        sim.applyLevel(THEATER,GetTime());
+        sim.inMenu=false; sim.deathT=0; sim.hidden=false; sim.crouchCur=0; sim.blackoutEnd=-1;
+        sim.velx=sim.velz=0; sim.sprinting=false; sim.muzzleT=0; sim.gunCd=0; sim.doorNoiseT=0;
+        sim.deck.playing=false; for (auto &f : sim.litFlares) f.active=false;
+        std::vector<Auditorium> auds;
+        // auditoriums() reports only chunks already generated, as streaming leaves them.
+        for (int c=0; c<6 && auds.empty(); ++c) {
+            for (int dx=-1; dx<=1; ++dx) for (int dz=-1; dz<=1; ++dz) sim.world.data(c*3+dx,1+dz);
+            auds=sim.world.auditoriums(c*3,1);
+        }
+        CHECK(!auds.empty());
+        const Auditorium &a=auds[0];
+        sim.px=(a.rect[0]+a.rect[2])*0.5f; sim.pz=(a.rect[1]+a.rect[3])*0.5f;
+        float nx,nz;
+        int loud=0, dark=0, mid=0;
+        for (int i=0; i<400; ++i) {
+            double now=5000.0+i*FILM_SHOT*0.5;
+            sim.updateFilm(now);
+            FilmShot shot=filmShot(a.seed,(float)now);
+            CHECK(sim.filmLevel==shot.level && sim.ambience.film==shot.level);
+            float r=sim.loudestNoise(nx,nz);   // standing still: 5 m
+            if (shot.level>=Sim::FILM_LOUD) { loud++; CHECK(fabsf(r-5.0f*Sim::FILM_MASK)<1e-4f); }
+            else if (shot.level<=FILM_DARK) { dark++; CHECK(fabsf(r-5.0f*Sim::FILM_HUSH)<1e-4f); }
+            else { mid++; CHECK(fabsf(r-5.0f)<1e-4f); }
+        }
+        CHECK(loud>40 && dark>10 && mid>40);
+        // A blackout stops the projector; outside the room there is no film.
+        sim.blackoutEnd=1e9; sim.updateFilm(6000.0); CHECK(sim.filmLevel<0 && sim.ambience.film==0);
+        sim.blackoutEnd=-1; sim.px=a.rect[0]-5.0f; sim.updateFilm(6000.0); CHECK(sim.filmLevel<0);
+        CHECK(fabsf(sim.loudestNoise(nx,nz)-5.0f)<1e-4f);
+        sim.applyLevel(0,GetTime());
+    }
+    printf("PASS the theater's film: loud shots cover footsteps, dark shots carry them, nothing outside or in a blackout\n");
+
     // ---- exits can be heard: the nearest exit within EXIT_HEAR_M sets the
     // loop cue's level by distance and its pan by bearing, and the ambience
     // bed plays it on that side.

@@ -423,6 +423,12 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         coverCol = { 190, 180, 150, 140 };
     } else if (sim.squeezing) {
         coverLine = "[ squeezing ]";
+    } else if (sim.filmLevel >= Sim::FILM_LOUD) {   // the theater: the soundtrack covers footsteps
+        coverLine = "[ loud scene · it covers your steps ]";
+        coverCol = { 200, 180, 150, 150 };
+    } else if (sim.filmLevel >= 0 && sim.filmLevel <= FILM_DARK) {
+        coverLine = "[ quiet scene · your steps carry ]";
+        coverCol = { 220, 150, 120, 170 };
     } else if (sim.inShadow()) {   // a hunter is out and cannot see this spot from far
         coverLine = sim.crouchCur > 0.5f ? "[ crouched · in shadow ]" : "[ in shadow ]";
         coverCol = { 150, 170, 200, 150 };

@@ -315,6 +315,15 @@ struct Auditorium {
     uint32_t seed;        // per auditorium: what it is showing
 };
 
+// The shot an auditorium is showing at time t (s): FILM_SHOT s each, hashed
+// from its seed, so the screen, its light (port's filmFrame) and the rules
+// (the soundtrack covering footsteps, Sim::updateFilm) agree. `colour` is
+// 0..5; `level` is 0.45..1, or FILM_DARK for the one shot in nine that is
+// black between scenes.
+constexpr float FILM_SHOT = 3.4f, FILM_DARK = 0.04f;
+struct FilmShot { int colour; float level; };
+FilmShot filmShot(uint32_t seed, float t);
+
 // ChunkData::elev is stored in decimetres so it fits in an int8_t.
 constexpr float ELEV_UNIT = 0.1f;
 // The tallest rise or drop a body walks without leaving the floor. Taller is
