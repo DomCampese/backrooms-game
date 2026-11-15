@@ -169,6 +169,12 @@ struct Sim {
     static constexpr float DRAG_SANITY = 0.03f;
     static constexpr uint32_t COUGH_ODDS = 4;
     static constexpr float COUGH_NOISE = 14.0f, COUGH_TIME = 0.7f;
+    // The paper is CIG_PAPER_M long and burns down by CIG_BURNS of it over
+    // SMOKE_TIME. What burns stays on the tip as ash (Smoke::ash). R (LOAD on
+    // touch) flicks it off: a flick of FLICK_TIME, the ash dropping at its
+    // middle. Left past ASH_MAX, it drops by itself.
+    static constexpr float CIG_PAPER_M = 0.062f, CIG_BURNS = 0.85f;
+    static constexpr float ASH_MAX = 0.022f, FLICK_TIME = 0.35f;
     static constexpr float MUZZLE_FLASH = 0.09f;   // s the muzzle flash lights the room
     // Hiding stops the hunter seeing the player and blocks the catch, so it
     // requires standing still. Two thresholds, so hiding does not flicker on and
@@ -438,6 +444,10 @@ struct Sim {
         bool cough = false;          // this drag ends in a cough
         float coughT = 0;            // s left of the cough's noise
         float exhaleT = 0;           // s since the last breath out, for the cloud; large: none
+        float ash = 0;               // m of ash on the tip
+        float flickT = 0;            // s left of a flick of the ash
+        float ashFallT = 99;         // s since ash last dropped, for the falling flakes
+        float ashFallen = 0;         // m of ash that dropped then
     } smoke;
     Rng smokeRng{1};                 // its own stream, like slotRng
     int ammo = MAXAMMO;
@@ -782,6 +792,8 @@ struct Sim {
     bool weaponAvailable(int w) const;   // the wheel and the number keys skip what is not
     void updateSmoking(const InputFrame &in, float dt);
     void putOutCigarette();
+    void growAsh(float burnS);      // burnS seconds of burning, as ash on the tip
+    void dropAsh();
     void bulletHitsUsher();
 
     // ---- the run's shape
