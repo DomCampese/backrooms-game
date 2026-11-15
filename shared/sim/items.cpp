@@ -397,10 +397,12 @@ void Sim::buySnack() {
     play(Sfx::Vend);
 }
 
-// E uses a crate, the Manila notes, a slot machine, a vending machine, a locked
-// door, or a deck that was set down. They never share a cell.
+// E answers a ringing phone, or uses a crate, the Manila notes, a slot
+// machine, a vending machine, a locked door, or a deck that was set down. They
+// never share a cell.
 void Sim::useWhatIsNear() {
     int pci = cellOf(px), pck = cellOf(pz);
+    if (phone.ringing && portableHypot(phone.x - px, phone.z - pz) < PHONE_REACH) { answerPhone(); return; }
     if (bedInReach()) { trySleep(); return; }   // Level 94's beds
     int ta, tb;
     if (truckInReach(ta, tb)) { takeFromTruck(ta, tb); return; }   // and its almond water trucks

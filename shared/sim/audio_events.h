@@ -40,6 +40,8 @@ enum class Sfx : uint8_t {
     Shutter,          // 3: a camera's shutter and film advance, one per Animation pose (Level 94)
     Cackle,           // the Animation's laugh as it starts a chase: a cartoon laugh on warped film
     HoldBreath,       // a quick breath in through the mouth, held (Sim::holdingBreath)
+    PhoneRing,        // one burst of a wall phone's bells (Sim::updatePhone)
+    PhoneVoice,       // an answered phone: the handset lifted, a voice down the line, the line going dead
 };
 
 // What the ambience synth (audio.cpp) chases. The rules write each field where

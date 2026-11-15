@@ -280,6 +280,24 @@ struct Sim {
     static constexpr float PHANTOM_CLOSE = 6.0f, PHANTOM_LIFE = 6.0f;
     static constexpr float PHANTOM_GAP_MAX = 40.0f, PHANTOM_GAP_MIN = 14.0f, PHANTOM_GAP_JITTER = 12.0f;
     static constexpr float PHANTOM_FADE_IN = 0.5f, PHANTOM_FADE_OUT = 0.3f;
+    // Wall telephones (core's wallPhone; Sim::updatePhone), Levels 0 and 1.
+    // PHONE_FIRST + 0..PHONE_FIRST_SPAN s of sim time after arriving, then
+    // every PHONE_GAP + 0..PHONE_GAP_SPAN s, the nearest phone PHONE_PICK_MIN to
+    // PHONE_PICK_MAX m from the player rings for PHONE_RING_TIME s: a burst
+    // (Sfx::PhoneRing) every PHONE_BELL_GAP s, heard to PHONE_HEAR_M, and a
+    // PHONE_NOISE m noise the hunter hears. With none in range it tries again
+    // PHONE_RETRY s later. The use key within PHONE_REACH answers: the voice
+    // talks for PHONE_VOICE s while the nearest exit to the phone is searched
+    // for, PHONE_SEARCH_CHUNKS chunks a tick, out to PHONE_SEARCH_RINGS chunks.
+    // Found, its distance and direction show for PHONE_HINT_TIME s and a chalk
+    // arrow by the phone points to it.
+    static constexpr float PHONE_FIRST = 25.0f, PHONE_FIRST_SPAN = 35.0f;
+    static constexpr float PHONE_GAP = 50.0f, PHONE_GAP_SPAN = 60.0f, PHONE_RETRY = 5.0f;
+    static constexpr float PHONE_PICK_MIN = 6.0f, PHONE_PICK_MAX = 26.0f;
+    static constexpr float PHONE_RING_TIME = 21.0f, PHONE_BELL_GAP = 3.5f;
+    static constexpr float PHONE_HEAR_M = 40.0f, PHONE_NOISE = 18.0f;
+    static constexpr float PHONE_REACH = 1.55f, PHONE_VOICE = 3.4f, PHONE_HINT_TIME = 60.0f;
+    static constexpr int   PHONE_SEARCH_RINGS = 4, PHONE_SEARCH_CHUNKS = 2;
     // Walls shift within this many cells of the player, more often as the slide
     // deepens.
     static constexpr int   SHIFT_RING = 8;
@@ -466,6 +484,31 @@ struct Sim {
     double nextPhantom = 0;
     unsigned phantomEntry = ~0u;  // the levelEntries the phantom's state was reset for
     float phantomAlpha() const;   // 0..1: fading in, shown, or fading out
+    // The ringing phone, the call once answered, and the exit it points to
+    // (PHONE_*). Its own RNG, reseeded each level entry, so it does not shift
+    // grng; its clock is sim time, so a capture or trace sees the same rings.
+    struct PhoneCall {
+        bool ringing = false;
+        float x = 0, y = 0, z = 0, nx = 0, nz = 0;   // the phone's face and its normal
+        int storey = 0;
+        float ringT = 0, bellT = 0;   // s left ringing; s to the next burst
+        float voiceT = 0;             // s left of the voice after an answer
+        bool searching = false;       // looking for the exit nearest the phone
+        int ring = 0, next = 0;       // the chunk ring being searched, and the next chunk in it
+        int ocx = 0, ocz = 0;         // the phone's chunk
+        bool found = false;
+        float exitX = 0, exitZ = 0, exitD = 0;
+        float hintT = 0;              // s left showing the way; 0 with found false is a dead line
+        bool dead = false;            // answered, and no exit within the search
+    };
+    PhoneCall phone;
+    Rng phoneRng{1};
+    float phoneWait = 0;          // s of sim time to the next ring
+    unsigned phoneEntry = ~0u;    // the levelEntries the phone's state was reset for
+    bool phoneNear = false;       // the ringing phone is in reach of the use key
+    // The answered call's exit from the player now: metres, and its direction
+    // as eighths of a turn clockwise from ahead (0 ahead, 2 right, 4 behind).
+    bool phoneWay(float &dist, int &eighth) const;
     // Separate RNG for distant sounds, so they do not shift grng (blackouts,
     // spawns).
     double nextDistant = 0;
@@ -698,6 +741,10 @@ struct Sim {
     static float sanityDrain(int lv);   // meter-fraction per second
     bool updateSanity(float dt, bool blackout, double now);   // true if it ended the run
     void updatePhantom(float dt, double now);
+    void updatePhone(float dt);
+    bool ringAPhone();            // starts the nearest phone in range ringing
+    void answerPhone();
+    void searchForExit();         // PHONE_SEARCH_CHUNKS more chunks of the answered call's search
     bool placePhantom();
     void updateRoomSound(bool blackout);
     bool shiftAWall();               // close one doorway the player cannot see

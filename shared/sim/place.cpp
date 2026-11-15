@@ -2,6 +2,7 @@
 // Manila Room, and the distant one-shots.
 #include "../core/fp_strict.h"
 #include "sim.h"
+#include "../core/layout.h"
 #include <cmath>
 
 // Full to empty in about 9 / 7.5 / 6.5 / 4 / 5.3 / 6 / 7 minutes, standing in
@@ -36,6 +37,7 @@ void Sim::updateAmbience(float dt, double now) {
     updateDistant(now);
     if (updateSanity(dt, blackout, now)) return;
     updatePhantom(dt, now);
+    updatePhone(dt);
 
     // During the slide, walls start to shift.
     if (level != 2 && slide > 0.0f && now > nextShift && !inMenu) {
@@ -417,4 +419,136 @@ float Sim::phantomAlpha() const {
     if (p.fadeT > 0) return clampf(p.fadeT / PHANTOM_FADE_OUT, 0.0f, 1.0f);
     if (!p.active) return 0.0f;
     return clampf(p.life / PHANTOM_FADE_IN, 0.0f, 1.0f);
+}
+
+// A wall telephone rings now and then (PHONE_*). Ringing is a noise the
+// hunter hears (loudestNoise); answering it gives the way to the nearest exit.
+void Sim::updatePhone(float dt) {
+    PhoneCall &c = phone;
+    if (phoneEntry != levelEntries) {   // a new level or visit: start over
+        phoneEntry = levelEntries;
+        c = PhoneCall{};
+        phoneRng = Rng(hash64((uint64_t)world.seed ^ ((uint64_t)level << 40) ^ ((uint64_t)world.visit << 48) ^ 0x7E1E40ULL));
+        phoneWait = PHONE_FIRST + PHONE_FIRST_SPAN * phoneRng.f01();
+    }
+    phoneNear = false;
+    if (inMenu || deathT > 0) return;
+    if (c.ringing && c.storey != world.storey) c.ringing = false;   // left on another floor
+    if (c.searching) {
+        if (c.storey != world.storey) { c.searching = false; c.dead = true; c.hintT = PHONE_HINT_TIME; }
+        else searchForExit();
+    }
+    c.voiceT = fmaxf(0.0f, c.voiceT - dt);
+    if (!c.searching && c.voiceT <= 0) c.hintT = fmaxf(0.0f, c.hintT - dt);
+    if (c.ringing) {
+        c.ringT -= dt;
+        c.bellT -= dt;
+        float dx = c.x - px, dz = c.z - pz, d = sqrtf(dx * dx + dz * dz);
+        phoneNear = d < PHONE_REACH;
+        if (c.bellT <= 0 && c.ringT > 0) {
+            c.bellT += PHONE_BELL_GAP;
+            if (d < PHONE_HEAR_M) {
+                float near = 1.0f - d / PHONE_HEAR_M;
+                bool seen = world.lineOfSight(px, pz, c.x + c.nx * 0.3f, c.z + c.nz * 0.3f);
+                float inv = d > 0.01f ? 1.0f / d : 0.0f;
+                play(Sfx::PhoneRing)
+                    .atPan(clampf((dx * r2x + dz * r2z) * inv, -1.0f, 1.0f))
+                    .atVolume(near * near * (seen ? 1.0f : 0.5f));
+            }
+        }
+        if (c.ringT <= 0) c.ringing = false;
+        return;
+    }
+    if (!levelHasPhones(level)) return;
+    phoneWait -= dt;
+    if (phoneWait > 0) return;
+    phoneWait = ringAPhone() ? PHONE_RING_TIME + PHONE_GAP + PHONE_GAP_SPAN * phoneRng.f01() : PHONE_RETRY;
+}
+
+// The phone nearest the player between PHONE_PICK_MIN and PHONE_PICK_MAX m.
+bool Sim::ringAPhone() {
+    const int r = (int)(PHONE_PICK_MAX / CELL) + 1, ci = cellOf(px), ck = cellOf(pz);
+    float nearest = PHONE_PICK_MAX;
+    WallPhone pick{};
+    bool any = false;
+    for (int i = ci - r; i <= ci + r; i++) for (int k = ck - r; k <= ck + r; k++)
+        for (int west = 0; west < 2; west++) {
+            WallPhone ph;
+            if (!wallPhone(world, i, k, west != 0, ph)) continue;
+            float d = portableHypot(ph.pos.x - px, ph.pos.z - pz);
+            if (d < PHONE_PICK_MIN || d >= nearest) continue;
+            nearest = d; pick = ph; any = true;
+        }
+    if (!any) return false;
+    PhoneCall &c = phone;
+    c.ringing = true;
+    c.x = pick.pos.x; c.y = pick.pos.y; c.z = pick.pos.z;
+    c.nx = pick.normal.x; c.nz = pick.normal.z;
+    c.storey = world.storey;
+    c.ringT = PHONE_RING_TIME;
+    c.bellT = 0;
+    return true;
+}
+
+// The voice talks; meanwhile the exit nearest the phone is searched for. A
+// chalk arrow by the phone will point to it.
+void Sim::answerPhone() {
+    PhoneCall &c = phone;
+    c.ringing = false;
+    c.voiceT = PHONE_VOICE;
+    c.searching = true;
+    c.found = c.dead = false;
+    c.ring = c.next = 0;
+    c.ocx = fdiv(cellOf(c.x - c.nx * 0.5f), CCELLS);
+    c.ocz = fdiv(cellOf(c.z - c.nz * 0.5f), CCELLS);
+    c.exitD = 1e30f;
+    play(Sfx::PhoneVoice);
+}
+
+// One chunk ring at a time, out from the phone's chunk, stopping after the
+// first ring that holds an exit. Ring r has 8r chunks (1 at r = 0).
+void Sim::searchForExit() {
+    PhoneCall &c = phone;
+    for (int n = 0; n < PHONE_SEARCH_CHUNKS && c.searching; n++) {
+        const int r = c.ring, side = 2 * r + 1, count = r == 0 ? 1 : 8 * r;
+        // The next chunk of the ring's border, walked row by row.
+        int idx = 0, dx = 0, dz = 0;
+        for (int a = 0; a < side && idx <= c.next; a++) for (int b = 0; b < side && idx <= c.next; b++) {
+            if (r > 0 && a != 0 && a != side - 1 && b != 0 && b != side - 1) continue;
+            if (idx == c.next) { dx = a - r; dz = b - r; }
+            idx++;
+        }
+        const int cx = c.ocx + dx, cz = c.ocz + dz;
+        for (int i = 0; i < CCELLS; i++) for (int k = 0; k < CCELLS; k++)
+            for (int west = 0; west < 2; west++) {
+                int gi = cx * CCELLS + i, gk = cz * CCELLS + k;
+                if ((west ? world.wallWVal(gi, gk) : world.wallNVal(gi, gk)) != WALL_EXIT) continue;
+                float ex = gi * CELL + (west ? 0.0f : CELL * 0.5f), ez = gk * CELL + (west ? CELL * 0.5f : 0.0f);
+                float d = portableHypot(ex - c.x, ez - c.z);
+                if (d < c.exitD) { c.exitD = d; c.exitX = ex; c.exitZ = ez; c.found = true; }
+            }
+        if (++c.next < count) continue;
+        c.next = 0;
+        if (c.found || ++c.ring > PHONE_SEARCH_RINGS) {
+            c.searching = false;
+            c.dead = !c.found;
+            c.hintT = PHONE_HINT_TIME;
+            if (c.found) {
+                float mx = c.x + c.nx * 0.7f, mz = c.z + c.nz * 0.7f;
+                chalk[level].insert(chalk[level].begin(),
+                                    ChalkMark{ { mx, world.groundAt(mx, mz, 0.0f) + 0.016f, mz },
+                                               portableAtan2(c.exitZ - mz, c.exitX - mx), false, world.storey });
+            }
+        }
+    }
+}
+
+bool Sim::phoneWay(float &dist, int &eighth) const {
+    const PhoneCall &c = phone;
+    if (!c.found || c.hintT <= 0 || c.voiceT > 0 || c.storey != world.storey) return false;
+    float dx = c.exitX - px, dz = c.exitZ - pz;
+    dist = portableHypot(dx, dz);
+    float a = portableAtan2(dx * r2x + dz * r2z, dx * f2x + dz * f2z);   // clockwise from ahead
+    eighth = ((int)floorf(a / (TAU / 8.0f) + 0.5f) + 8) % 8;
+    return true;
 }

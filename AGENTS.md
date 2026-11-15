@@ -500,7 +500,7 @@ shared/sim/player.cpp; the find in `hunterChase`).
   cannot be held again until it is back over `HOLD_AGAIN` (0.5), 1.5 s later.
   Letting go earlier is a quiet `Exhale`.
 - While held a heartbeat plays, 0.95 s apart at full breath and 0.45 s empty.
-  The start is `Sfx::HoldBreath`, the last `Sfx` value, synthesized in
+  The start is `Sfx::HoldBreath`, appended to `Sfx` and synthesized in
   port/sounds.cpp, so both builds load it with no platform code.
 - The HUD's cover line says "hold SPACE (JUMP) to hold your breath" while a
   hunter is out, and sits above the breath bar when the bar shows; they
@@ -560,6 +560,46 @@ noise where it lands, so a searching hunter goes there.
   one") while hands are out.
 - walk-l0-l2.trace never fires with empty hands and a doubloon, and plays
   back unchanged.
+
+# Wall phones (November 2026)
+
+Level 0 and Level 1 have wall telephones. One rings now and then; answering
+it shows the way to the nearest exit (`Sim::updatePhone`, shared/sim/place.cpp).
+
+- **Where a phone is, is core's `wallPhone(world, gi, gk, west)`**
+  (core/layout.h). The layout lists it as `FixtureKind::Phone` and the sim
+  scans it, so the two cannot disagree. One solid edge in `PHONE_RATE` (100),
+  on the face bit 4 of the hash picks, only where that side has floor and no
+  prop, pillar or pool, and the edge has no other wall fitting, scrawl, lift
+  or spall. `levelHasPhones` reads the `phones` column of `DECOR`. About 0.95
+  a chunk on Level 0 and 0.72 on Level 1 (seed 1337, 64 chunks). At 150 it was
+  0.55, and a ring often found no phone in range.
+- **The mesher builds it from boxes** (`addPhone`, chunk_mesh.cpp): plate,
+  body, keypad, a darker handset on its left and a coiled cord. Each part
+  stands at least 8 mm off the one behind it (see the vending machine).
+- **The schedule is sim time** (`phoneWait` counts down `dt`), from
+  `phoneRng`, reseeded when `levelEntries` changes. The first ring is
+  `PHONE_FIRST` + 0..`PHONE_FIRST_SPAN` (25-60 s) after arriving. walk-l0-l2.trace
+  spends about 19 s of sim time on Levels 0 and 1, so it never hears one and
+  plays back unchanged. Scheduled on `now`, a trace recorded at 1.4 fps would
+  have rung several.
+- **A ring picks the nearest phone `PHONE_PICK_MIN`..`MAX` (6-26 m) away**
+  (`ringAPhone`), or retries in `PHONE_RETRY` s. It rings `PHONE_RING_TIME`
+  (21 s): `Sfx::PhoneRing` every `PHONE_BELL_GAP` (3.5 s), level
+  `(1 - d / 40)^2`, halved without line of sight. `loudestNoise` returns
+  `PHONE_NOISE` (18 m) at the phone while it rings. A storey change stops it.
+- **Answering** (E within `PHONE_REACH`, 1.55 m, first in
+  `useWhatIsNear`) plays `Sfx::PhoneVoice` and searches for the exit nearest
+  the phone (`searchForExit`): `PHONE_SEARCH_CHUNKS` (2) chunks a tick, ring
+  by ring out to `PHONE_SEARCH_RINGS` (4), stopping after the first ring with
+  an exit. At most 0.3 ms a tick in the scratch test. Found, a chalk arrow
+  (not the player's) goes 0.7 m out from the phone, and `phoneWay` gives the
+  distance and the direction in eighths of a turn for `PHONE_HINT_TIME` (60 s).
+- Both sounds are synthesized in port/sounds.cpp and are the last two `Sfx`
+  values, so both builds load them with no platform code. The HUD lines are in
+  `hudDraws`. No platform code changed.
+- The contract golden gained only phone lines (and their chunks' fixture
+  counts).
 
 # Exits can be heard (November 2026)
 

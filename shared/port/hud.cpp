@@ -251,6 +251,23 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
             textC("the music stopped · stand still", sw / 2, sh - hud(190), hud(18),
                   fade({ 236, 214, 160, 220 }, fminf(1.0f, sim.music.stopped * 3.0f)));
     }
+    if (sim.deathT <= 0 && sim.winT <= 0) {   // a wall phone (Levels 0 and 1)
+        static const char *const WAY[8] = { "ahead", "ahead, to your right", "to your right", "behind you, to the right",
+                                            "behind you", "behind you, to the left", "to your left", "ahead, to your left" };
+        const Sim::PhoneCall &c = sim.phone;
+        float dist;
+        int eighth;
+        if (c.voiceT > 0 || c.searching)
+            textC("a voice on the line, too faint to make out", sw / 2, sh - hud(190), hud(18), { 200, 196, 170, 220 });
+        else if (sim.phoneWay(dist, eighth))
+            textC(fmt("the way out · %.0f m · %s", dist, WAY[eighth]), sw / 2, sh - hud(190), hud(18),
+                  fade({ 214, 222, 190, 230 }, fminf(1.0f, c.hintT / 3.0f)));
+        else if (c.dead && c.hintT > Sim::PHONE_HINT_TIME - 4.0f)
+            textC("the line went dead", sw / 2, sh - hud(190), hud(18), { 190, 180, 160, 210 });
+        else if (c.ringing && !sim.phoneNear &&
+                 (c.x - sim.px) * (c.x - sim.px) + (c.z - sim.pz) * (c.z - sim.pz) < Sim::PHONE_HEAR_M * Sim::PHONE_HEAR_M)
+            textC("a phone is ringing", sw / 2, sh - hud(190), hud(18), { 214, 200, 160, 200 });
+    }
     if (sim.level == MOTION && sim.deathT <= 0 && sim.winT <= 0) {   // Level 94's night
         // Falling asleep fades out to black; waking fades back in.
         const float dark = sim.sleepT > 0 ? clampf(sim.sleepT / (Sim::SLEEP_FADE * 0.8f), 0, 1) : clampf(sim.wakeT / 2.0f, 0, 1);
@@ -450,7 +467,9 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
     // Above the breath bar when it shows, or the two overlap.
     const bool breathBar = (sim.headUnder || sim.breath < 0.995f) && sim.deathT <= 0;
     if (coverLine) textC(coverLine, sw / 2, sh - hud(breathBar ? 82 : 62), hud(14), coverCol);
-    if (sim.bedNear) {   // a bed the use key would sleep in (Level 94); it comes before a door
+    if (sim.phoneNear) {   // a ringing phone the use key would answer; it comes first in useWhatIsNear too
+        textC(fmt("%s · answer the phone", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14), { 214, 200, 160, 170 });
+    } else if (sim.bedNear) {   // a bed the use key would sleep in (Level 94); it comes before a door
         textC(fmt("%s · sleep until morning", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14), { 200, 190, 160, 150 });
     } else if (sim.truckNear) {   // an almond water truck with a can on its counter (Level 94)
         textC(fmt("%s · take the almond water", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14), { 200, 214, 220, 160 });
