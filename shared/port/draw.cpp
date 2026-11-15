@@ -788,25 +788,40 @@ static void cigaretteDraws(const Sim &sim, const SimView &view, float now, std::
         raise = el < Sim::DRAG_IN ? fminf(1.0f, el / 0.3f) : fmaxf(0.0f, 1.0f - (el - Sim::DRAG_IN) / 0.4f);
         raise = raise * raise * (3 - 2 * raise);
     }
-    const Vec3 rest = add(view.eye, add(scale(F, 0.24f), add(scale(R, 0.085f), scale(U, -0.085f))));
+    // A flick of the ash jerks the hand down and back, once.
+    const float jolt = sm.flickT > 0 ? sinf((1.0f - sm.flickT / Sim::FLICK_TIME) * 3.14159f) : 0.0f;
+    const Vec3 rest = add(view.eye, add(scale(F, 0.24f), add(scale(R, 0.085f), scale(U, -0.085f - 0.012f * jolt))));
     const Vec3 lips = add(view.eye, add(scale(F, 0.07f), scale(U, -0.055f)));
     const Vec3 filterEnd = add(scale(rest, 1 - raise), scale(lips, raise));
     // Away from the hand, a little left and up; pointing out of the mouth when raised.
-    const Vec3 dir = normalize(add(scale(F, 0.55f + 0.4f * raise), add(scale(R, -0.65f * (1 - raise)), scale(U, 0.12f))));
+    const Vec3 dir = normalize(add(scale(F, 0.55f + 0.4f * raise), add(scale(R, -0.65f * (1 - raise)), scale(U, 0.12f - 0.35f * jolt))));
     const bool lit = sm.burnT > 0;
     const float burnt = lit ? 1.0f - sm.burnT / Sim::SMOKE_TIME : 0.0f;
-    const float filterLen = 0.024f, paperLen = 0.062f * (1.0f - 0.85f * burnt), r = 0.0042f;
+    const float filterLen = 0.024f, paperLen = Sim::CIG_PAPER_M * (1.0f - Sim::CIG_BURNS * burnt), r = 0.0042f;
     const Vec3 filterTip = add(filterEnd, scale(dir, filterLen));
     const Vec3 tip = add(filterTip, scale(dir, paperLen));
     put(out, cylinderEx(filterEnd, filterTip, r, r, 8, { 206, 132, 66, 255 }));
     put(out, cylinderEx(filterTip, tip, r, r, 8, { 236, 232, 222, 255 }));
+    for (int i = 0; i < 3 && sm.ashFallT < 0.6f && sm.ashFallen > 0.002f; i++) {   // ash that just came off, falling
+        const float t = sm.ashFallT, size = 0.004f + sm.ashFallen * (0.25f + 0.15f * i);
+        const Vec3 p = add(tip, add(scale(U, -4.9f * t * t - 0.004f * i), scale(R, (i - 1) * 0.006f * t * 4.0f)));
+        Shape flake = billboardWhole(ShapeTex::Particle, p, size, { 120, 116, 110, cl8(230 * (1.0f - t / 0.6f)) });
+        flake.depthWrite = false;
+        put(out, flake);
+    }
     if (!lit) return;
     const bool inhaling = sm.dragT > Sim::DRAG_TIME - Sim::DRAG_IN;
-    const Vec3 ashEnd = add(tip, scale(dir, 0.006f));
-    put(out, cylinderEx(tip, ashEnd, r, r * 0.9f, 8, { 96, 92, 88, 255 }));
-    const float glow = inhaling ? 1.0f : 0.45f + 0.1f * sinf(now * 7.0f);
-    Shape ember = billboardWhole(ShapeTex::Particle, ashEnd, 0.022f + 0.022f * glow, { 255, 110, 30, cl8(255 * glow) });
-    Shape coal = billboardWhole(ShapeTex::Particle, ashEnd, 0.008f + 0.006f * glow, { 255, 220, 150, 255 });
+    // Grey ash from the burning end, drooping as it lengthens; it shades the ember.
+    const float ashShare = sm.ash / Sim::ASH_MAX;
+    const Vec3 ashDir = normalize(add(dir, scale(U, -0.3f * ashShare)));
+    const Vec3 ashEnd = add(tip, scale(ashDir, 0.0038f + sm.ash));
+    const Vec3 charEnd = add(tip, scale(ashDir, 0.0018f));   // the charred ring the ember burns in
+    put(out, cylinderEx(tip, charEnd, r, r, 8, { 52, 40, 32, 255 }));
+    put(out, cylinderEx(charEnd, ashEnd, r, r * 0.92f, 8, { 84, 80, 76, 255 }));
+    const float glow = (inhaling ? 1.0f : 0.45f + 0.1f * sinf(now * 7.0f)) * (1.0f - 0.4f * ashShare);
+    const Vec3 emberAt = add(tip, scale(ashDir, 0.002f));   // where the paper meets the ash
+    Shape ember = billboardWhole(ShapeTex::Particle, emberAt, 0.022f + 0.022f * glow, { 255, 110, 30, cl8(255 * glow) });
+    Shape coal = billboardWhole(ShapeTex::Particle, emberAt, 0.008f + 0.006f * glow, { 255, 220, 150, 255 });
     ember.additive = coal.additive = true;
     ember.depthWrite = coal.depthWrite = false;
     put(out, ember);

@@ -382,9 +382,11 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
                 16, sh - 50, 16, sim.weapon == WEAPON_REVOLVER ? selc : dimc);
         raw(fmt("2  flare  ×%d", sim.flares), 16, sh - 72, 16, sim.weapon == WEAPON_FLARE ? selc : dimc);
         if (sim.hasCigs)   // not listed until found; only lit in the casino
-            text(sim.level != CASINO ? fmt("6  cigarettes  ×%d  · casino only", sim.cigs)
-                 : sim.smoke.burnT > 0 ? fmt("6  cigarettes  ×%d  · lit  · %s a drag", sim.cigs, in.touch ? "tap" : "click")
-                 : fmt("6  cigarettes  ×%d  · %s to light", sim.cigs, in.touch ? "tap" : "click"),
+            // On touch, ITEM cycles to it (there is no 6), FIRE lights and drags, LOAD flicks the ash.
+            text(sim.level != CASINO ? fmt("%s  cigarettes  ×%d  · casino only", in.touch ? "ITEM" : "6", sim.cigs)
+                 : sim.smoke.burnT > 0 ? fmt("%s  cigarettes  ×%d  · lit  · %s a drag  · %s taps the ash",
+                                             in.touch ? "ITEM" : "6", sim.cigs, in.touch ? "FIRE" : "click", in.touch ? "LOAD" : "R")
+                 : fmt("%s  cigarettes  ×%d  · %s to light", in.touch ? "ITEM" : "6", sim.cigs, in.touch ? "FIRE" : "click"),
                  hud(16), sh - hud(182), hud(16), sim.weapon == WEAPON_CIGS ? selc : dimc);
         raw(!sim.deck.carried
                 ? (sim.deck.playing ? "4  tape player  [running · left behind]"

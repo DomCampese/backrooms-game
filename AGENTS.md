@@ -2210,6 +2210,17 @@ revolver. They only work in the casino.
   breath out. Both builds draw it with no platform code.
 - **Sounds, synthesized in port/sounds.cpp**: `Lighter`, `Drag` (its length
   is `Sim::DRAG_IN`), `Exhale`, `Cough` (3 variants).
+- **Ash** (`Smoke::ash`, `growAsh`, `dropAsh`): every second of burning,
+  drags included, adds `CIG_PAPER_M * CIG_BURNS / SMOKE_TIME` (1.17 mm) of
+  ash, the same length the paper loses in `cigaretteDraws`, so the ash never
+  outgrows what burnt. The reload input (R, touch LOAD) while lit and not
+  dragging starts a flick of `FLICK_TIME` (0.35 s); at its middle the ash
+  drops and `Sfx::AshTap` plays. Past `ASH_MAX` (22 mm, about 19 s) it drops
+  silently. A drag cannot start during a flick. The ember sits where the
+  paper meets the ash and dims by up to 40% under a long ash; the ash droops
+  as it grows. Fallen ash is three flakes for 0.6 s in the view's frame. It
+  changes nothing else: `inShadow` still counts any lit cigarette. The
+  touch HUD names ITEM, FIRE and LOAD instead of 6, click and R.
 
 # Level 94 (November 2026)
 

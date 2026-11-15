@@ -42,6 +42,7 @@ enum class Sfx : uint8_t {
     HoldBreath,       // a quick breath in through the mouth, held (Sim::holdingBreath)
     PhoneRing,        // one burst of a wall phone's bells (Sim::updatePhone)
     PhoneVoice,       // an answered phone: the handset lifted, a voice down the line, the line going dead
+    AshTap,           // a finger tapping a cigarette, and the ash coming off (Sim::Smoke::flickT)
 };
 
 // What the ambience synth (audio.cpp) chases. The rules write each field where

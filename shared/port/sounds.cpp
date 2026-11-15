@@ -1350,6 +1350,34 @@ Pcm makePhoneVoice()
     return toPcm(d, 0.75f);
 }
 
+// AshTap: a finger tapping a cigarette, 0.18 s. Two taps 70 ms apart, each a
+// 4 ms burst of noise through a resonator at 2.1 kHz (the paper) over a
+// 180 Hz thump decaying at 60 per second (the finger), then the ash's fall:
+// 40 ms of quiet high-passed noise at 0.11 s. Peak 0.7.
+Pcm makeAshTap()
+{
+    Rng r(0xA5A7ULL);
+    std::vector<float> d((int)(0.18f * SAMPLE_RATE));
+    float y1 = 0, y2 = 0, prev = 0, hp = 0;
+    const float w = TAU * 2100.0f / SAMPLE_RATE, rr = 0.93f;
+    for (int i = 0; i < (int)d.size(); i++) {
+        const float t = (float)i / SAMPLE_RATE;
+        const float x = r.f01() * 2.0f - 1.0f;
+        float drive = 0, thump = 0;
+        for (float at : { 0.0f, 0.07f }) {
+            const float u = t - at;
+            if (u >= 0 && u < 0.004f) drive += x * (1.0f - u / 0.004f);
+            if (u >= 0) thump += sinf(TAU * 180.0f * u) * expf(-u * 60.0f) * (at > 0 ? 0.7f : 1.0f);
+        }
+        const float y = drive * (1.0f - rr) * 6.0f + 2.0f * rr * cosf(w) * y1 - rr * rr * y2;
+        y2 = y1; y1 = y;
+        hp = 0.8f * (hp + x - prev); prev = x;
+        const float fall = t > 0.11f && t < 0.15f ? hp * 0.12f * sinf((t - 0.11f) / 0.04f * 3.14159f) : 0.0f;
+        d[i] = y + thump * 0.35f + fall;
+    }
+    return toPcm(d, 0.7f);
+}
+
 // The Animation's laugh: five "ha"s on old film. Each is a sawtooth pulse
 // train through two RBJ band-passes at 700 and 1200 Hz (an "ah"), 0.13 s with a
 // 10 ms rise, 0.06 s apart. The pitch falls from 270 to 140 Hz across the
@@ -1420,6 +1448,7 @@ ClipSpec clipSpec(Sfx sfx) {
     case Sfx::HoldBreath: return { 1, 1.0f, 0.6f };
     case Sfx::PhoneRing:  return { 1, 1.0f, 0.75f };
     case Sfx::PhoneVoice: return { 1, 1.0f, 0.8f };
+    case Sfx::AshTap:     return { 1, 1.0f, 0.8f };
     default:             return { 1, 1.0f, 1.0f };
     }
 }
@@ -1480,6 +1509,7 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::HoldBreath:     return makeHoldBreath();
     case Sfx::PhoneRing:      return makePhoneRing();
     case Sfx::PhoneVoice:     return makePhoneVoice();
+    case Sfx::AshTap:         return makeAshTap();
     }
     return {};
 }

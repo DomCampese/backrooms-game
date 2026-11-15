@@ -78,8 +78,21 @@ bool Sim::cigsAt(int a, int b) {
 }
 
 void Sim::putOutCigarette() {
-    smoke.burnT = smoke.dragT = smoke.coughT = 0;
+    smoke.burnT = smoke.dragT = smoke.coughT = smoke.ash = smoke.flickT = 0;
     smoke.cough = false;
+}
+
+// The ash on the tip comes off: flicked, or too long to hold together.
+void Sim::dropAsh() {
+    smoke.ashFallen = smoke.ash;
+    smoke.ashFallT = 0;
+    smoke.ash = 0;
+}
+
+// Seconds of burning turned into ash on the tip, which drops off past ASH_MAX.
+void Sim::growAsh(float burnS) {
+    smoke.ash += burnS * CIG_PAPER_M * CIG_BURNS / SMOKE_TIME;
+    if (smoke.ash > ASH_MAX) dropAsh();
 }
 
 // With a cigarette in hand, the fire button lights one, then takes a drag.
@@ -87,12 +100,22 @@ void Sim::putOutCigarette() {
 void Sim::updateSmoking(const InputFrame &in, float dt) {
     smoke.coughT = fmaxf(0, smoke.coughT - dt);
     smoke.exhaleT += dt;
+    smoke.ashFallT += dt;
+    if (smoke.flickT > 0) {
+        float before = smoke.flickT;
+        smoke.flickT = fmaxf(0, smoke.flickT - dt);
+        if (before > FLICK_TIME * 0.5f && smoke.flickT <= FLICK_TIME * 0.5f && smoke.ash > 0) {
+            dropAsh();
+            play(Sfx::AshTap);
+        }
+    }
     if (weapon != WEAPON_CIGS) {
         if (smoke.burnT > 0) { putOutCigarette(); deckNoteT = 1.8f; deckNote = "you stub it out."; }
         return;
     }
     if (smoke.burnT > 0) {
         smoke.burnT -= dt;
+        growAsh(dt);
         if (smoke.burnT <= 0) { putOutCigarette(); deckNoteT = 1.8f; deckNote = "it burns down to the filter."; }
     }
     if (smoke.dragT > 0) {
@@ -109,7 +132,9 @@ void Sim::updateSmoking(const InputFrame &in, float dt) {
             }
         }
     }
-    if (!in.playing || !in.fire || deathT > 0 || drinkT > 0 || smoke.dragT > 0) return;
+    if (in.playing && in.reload && smoke.burnT > 0 && smoke.dragT <= 0 && smoke.flickT <= 0 && deathT <= 0)
+        smoke.flickT = FLICK_TIME;
+    if (!in.playing || !in.fire || deathT > 0 || drinkT > 0 || smoke.dragT > 0 || smoke.flickT > 0) return;
     if (smoke.burnT <= 0) {
         if (cigs <= 0) { deckNoteT = 1.8f; deckNote = "the pack is empty."; return; }
         cigs--;
@@ -118,7 +143,9 @@ void Sim::updateSmoking(const InputFrame &in, float dt) {
         return;
     }
     smoke.dragT = DRAG_TIME;
-    smoke.burnT = fmaxf(0.5f, smoke.burnT - DRAG_BURN);
+    float burnt = smoke.burnT - fmaxf(0.5f, smoke.burnT - DRAG_BURN);
+    smoke.burnT -= burnt;
+    growAsh(burnt);
     smoke.cough = smokeRng.next() % COUGH_ODDS == 0;
     sanity = clampf(sanity + DRAG_SANITY, 0.0f, 1.0f);
     fear *= 0.6f;
