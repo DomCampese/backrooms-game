@@ -68,6 +68,7 @@ enum class FixtureKind : uint8_t {
     Auditorium,     // an auditorium's fittings: screen frame, curtains, aisle lights, booth port, exit signs (the theater)
     Poster,         // a backlit film poster on a corridor wall (the theater)
     House,          // a house storey's plank floor, outside trim and (on its top storey) pitched roof (Level 94)
+    Phone,          // a wall telephone (Levels 0 and 1); the sim rings it (Sim::updatePhone)
 };
 
 // One fixture. What each field means depends on the kind:
@@ -86,6 +87,7 @@ enum class FixtureKind : uint8_t {
 // | Auditorium            | screen centre, on its face            |                |                    | variant: dir (World::auditorium has the rest) |
 // | Poster                | centre, on the face                   |                | half extents       | seed: its colours and layout |
 // | House                 | floor centre; y is its ceiling        |                | half extents, x z  | variant: 1 ridge along z; tone: 0 one storey, 1 the ground floor of two, 2 the upper floor (no door); normal: out of the door's wall; seed |
+// | Phone                 | its back plate's centre, on the face  |                |                    | |
 //
 // `normal` points out of the face a fixture is on. A face is the wall's
 // surface, WT off its centreline; decals stand off it by the renderer's own
@@ -192,6 +194,23 @@ ChunkLayout chunkLayout(World &w, int cx, int cz);
 // storey above). Always true on a level that is one floorplan.
 bool cellHasFloor(World &w, int gi, int gk);
 bool cellHasCeiling(World &w, int gi, int gk);
+
+// A wall telephone: one solid wall edge in PHONE_RATE on a level whose decor
+// has them, on the face bit 4 of the edge's hash picks, PHONE_Y above that
+// side's floor at the edge's middle. Only where that side has floor and no
+// prop, pillar or pool, and the edge has no other wall fitting, scrawl, lift
+// or spall. The layout lists it as FixtureKind::Phone and the sim rings it,
+// both through this function. Reads the chunk the edge is in and its
+// neighbours, generating them as needed.
+constexpr uint32_t PHONE_RATE = 100;
+constexpr float PHONE_Y = 1.42f;
+struct WallPhone {
+    Vec3 pos;      // the back plate's centre on the wall face
+    Vec3 normal;   // out of the face
+    int ci, ck;    // the cell it faces into
+};
+bool wallPhone(World &w, int gi, int gk, bool west, WallPhone &out);
+bool levelHasPhones(int level);
 
 // The tube hash the shader's lhash() and lightAtCPU use, 0..1:
 // fract(sin(gx * TUBE_HASH_X + gz * TUBE_HASH_Z) * TUBE_HASH_SCALE). A storey's

@@ -1259,6 +1259,97 @@ Pcm makeShutter(int variant)
     return toPcm(d, 0.6f);
 }
 
+// PhoneRing: one 1.5 s burst of a wall phone's bells, 2.0 s with the tail.
+// A clapper strikes two bells in turn at 20 Hz; each strike starts three
+// partials per bell (1050/2630/4170 Hz and 1110/2790/4410 Hz) decaying at
+// 7/11/16 per second, plus a 2 ms high-passed noise tick. roomTail (0.6 s,
+// a fifth wet) for the corridor. Peak 0.8.
+Pcm makePhoneRing()
+{
+    const int n = (int)(2.0f * SAMPLE_RATE);
+    const float BELL[2][3] = { { 1050.0f, 2630.0f, 4170.0f }, { 1110.0f, 2790.0f, 4410.0f } };
+    const float AMP[3] = { 1.0f, 0.55f, 0.3f }, DECAY[3] = { 7.0f, 11.0f, 16.0f };
+    Rng r(0x7E1E1ULL);
+    std::vector<float> near(n, 0.0f);
+    float prev = 0;
+    for (int s = 0; s < 30; s++) {
+        const float ts = s / 20.0f;
+        const int bell = s & 1, i0 = (int)(ts * SAMPLE_RATE);
+        const float hit = 0.85f + 0.15f * r.f01();
+        for (int i = i0; i < n; i++) {
+            const float u = (float)(i - i0) / SAMPLE_RATE;
+            if (u > 0.6f) break;
+            float v = 0;
+            for (int m = 0; m < 3; m++) v += AMP[m] * sinf(TAU * BELL[bell][m] * u) * expf(-u * DECAY[m]);
+            if (u < 0.002f) { float x = r.f01() * 2.0f - 1.0f; v += (x - prev) * 0.6f; prev = x; }
+            near[i] += v * hit * 0.25f;
+        }
+    }
+    const std::vector<float> room = roomTail(near, 0.6f);
+    std::vector<float> mix(n);
+    for (int i = 0; i < n; i++) mix[i] = near[i] * 0.8f + room[i] * 0.2f;
+    return toPcm(mix, 0.8f);
+}
+
+// PhoneVoice: 3.4 s down a phone line. The handset's lift (two clicks 50 ms
+// apart), line hiss, then 2.6 s of speech-like syllables: a 105-150 Hz
+// sawtooth with a falling contour through two RBJ band-passes at one of five
+// vowels' formants, 0.11-0.22 s each with gaps of 0.03-0.1 s and a 0.25 s
+// pause between words. All of it through the line: one-pole high-pass at
+// 300 Hz and two low-passes at 3.4 kHz. The line clicks dead at 3.2 s.
+Pcm makePhoneVoice()
+{
+    const int n = (int)(3.4f * SAMPLE_RATE);
+    const float VOWEL[5][2] = { { 700, 1220 }, { 300, 2300 }, { 500, 1000 }, { 400, 1900 }, { 600, 1700 } };
+    Rng r(0x7E1E2ULL);
+    std::vector<float> d(n, 0.0f);
+    float t0 = 0.4f, phase = 0;
+    int syl = 0;
+    while (t0 < 3.0f) {
+        const float len = 0.11f + 0.11f * r.f01();
+        const int v = (int)(r.f01() * 4.99f);
+        const float pitch = 150.0f - 45.0f * (t0 / 3.0f) + 12.0f * (r.f01() - 0.5f);
+        float b[2][3];
+        for (int f = 0; f < 2; f++) {
+            float w = TAU * VOWEL[v][f] / SAMPLE_RATE, alpha = sinf(w) / (2.0f * (f ? 6.0f : 4.0f)), a0 = 1.0f + alpha;
+            b[f][0] = alpha / a0; b[f][1] = -2.0f * cosf(w) / a0; b[f][2] = (1.0f - alpha) / a0;
+        }
+        float st[2][4] = {};
+        const int i0 = (int)(t0 * SAMPLE_RATE), i1 = std::min(n, i0 + (int)(len * SAMPLE_RATE));
+        for (int i = i0; i < i1; i++) {
+            const float u = (float)(i - i0) / SAMPLE_RATE;
+            phase += pitch * (1.0f - 0.1f * u / len) / SAMPLE_RATE;
+            phase -= floorf(phase);
+            const float x = 2.0f * phase - 1.0f;
+            float out = 0;
+            for (int f = 0; f < 2; f++) {   // st: x1, x2, y1, y2
+                float y = b[f][0] * x - b[f][0] * st[f][1] - b[f][1] * st[f][2] - b[f][2] * st[f][3];
+                st[f][1] = st[f][0]; st[f][0] = x; st[f][3] = st[f][2]; st[f][2] = y;
+                out += y * (f ? 0.7f : 1.0f);
+            }
+            const float env = fminf(1.0f, u / 0.015f) * fminf(1.0f, (len - u) / 0.03f);
+            d[i] += out * env;
+        }
+        t0 += len + 0.03f + 0.07f * r.f01();
+        if (++syl % 3 == 0) t0 += 0.25f;   // between words
+    }
+    float lp1 = 0, lp2 = 0, hpPrev = 0, hp = 0, hiss = 0;
+    const float aLow = 1.0f - expf(-TAU * 3400.0f / SAMPLE_RATE), aHigh = expf(-TAU * 300.0f / SAMPLE_RATE);
+    for (int i = 0; i < n; i++) {
+        const float t = (float)i / SAMPLE_RATE;
+        float x = d[i];
+        hiss += 0.3f * ((r.f01() * 2.0f - 1.0f) - hiss);
+        if (t > 0.05f && t < 3.2f) x += hiss * 0.06f;
+        for (float click : { 0.0f, 0.05f, 3.2f })
+            if (t >= click && t < click + 0.003f) x += (r.f01() * 2.0f - 1.0f) * 1.2f;
+        hp = aHigh * (hp + x - hpPrev); hpPrev = x;
+        lp1 += aLow * (hp - lp1);
+        lp2 += aLow * (lp1 - lp2);
+        d[i] = lp2;
+    }
+    return toPcm(d, 0.75f);
+}
+
 // The Animation's laugh: five "ha"s on old film. Each is a sawtooth pulse
 // train through two RBJ band-passes at 700 and 1200 Hz (an "ah"), 0.13 s with a
 // 10 ms rise, 0.06 s apart. The pitch falls from 270 to 140 Hz across the
@@ -1327,6 +1418,8 @@ ClipSpec clipSpec(Sfx sfx) {
     case Sfx::Drag:      return { 1, 1.0f, 0.5f };
     case Sfx::Exhale:    return { 1, 1.0f, 0.5f };
     case Sfx::HoldBreath: return { 1, 1.0f, 0.6f };
+    case Sfx::PhoneRing:  return { 1, 1.0f, 0.75f };
+    case Sfx::PhoneVoice: return { 1, 1.0f, 0.8f };
     default:             return { 1, 1.0f, 1.0f };
     }
 }
@@ -1385,6 +1478,8 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::Shutter:        return makeShutter(variant);
     case Sfx::Cackle:         return makeCackle();
     case Sfx::HoldBreath:     return makeHoldBreath();
+    case Sfx::PhoneRing:      return makePhoneRing();
+    case Sfx::PhoneVoice:     return makePhoneVoice();
     }
     return {};
 }

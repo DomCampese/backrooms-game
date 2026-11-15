@@ -17,16 +17,17 @@ struct LevelDecor {
     bool pipes;       // service pipes under the ceiling along solid walls
     bool streamers;
     bool posters;     // backlit film posters on walls facing a corridor
+    bool phones;      // wall telephones (wallPhone)
 };
 const LevelDecor DECOR[NLEVELS] = {
-    //  fittings scrawl lifts  spalls pipes  streamers posters
-    { true,  true,  false, false, false, false, false },   // Level 0
-    { true,  true,  true,  true,  true,  false, false },   // Level 1
-    { false, false, false, false, false, false, false },   // the Poolrooms
-    { true,  true,  false, false, false, true,  false },   // LEVEL FUN
-    { true,  true,  false, false, false, false, true  },   // the theater
-    { true,  false, false, false, false, false, false },   // the casino
-    { false, false, false, false, false, false, false },   // Level 94
+    //  fittings scrawl lifts  spalls pipes  streamers posters phones
+    { true,  true,  false, false, false, false, false, true  },   // Level 0
+    { true,  true,  true,  true,  true,  false, false, true  },   // Level 1
+    { false, false, false, false, false, false, false, false },   // the Poolrooms
+    { true,  true,  false, false, false, true,  false, false },   // LEVEL FUN
+    { true,  true,  false, false, false, false, true,  false },   // the theater
+    { true,  false, false, false, false, false, false, false },   // the casino
+    { false, false, false, false, false, false, false, false },   // Level 94
 };
 // One wall edge in POSTER_RATE facing a corridor carries a poster.
 constexpr uint32_t POSTER_RATE = 3;
@@ -360,6 +361,14 @@ void cellFixtures(World &w, const ChunkData &d, const LevelDecor &decor, int cx,
             if (rh % 4 == 0) pipe(rh, true, gk0);
         }
     }
+    for (int west = 0; west < 2; west++) {
+        WallPhone ph;
+        if (!decor.phones || !wallPhone(w, gi0, gk0, west != 0, ph)) continue;
+        Fixture f = fixture(FixtureKind::Phone, i, kk);
+        f.pos = ph.pos;
+        f.normal = ph.normal;
+        out.push_back(f);
+    }
 }
 
 // Crepe streamers, three to six a chunk, each sagging between two points under
@@ -441,6 +450,35 @@ LightFitting fittingAt(World &w, int gx, int gz) {
     float ls = LEVEL_RULES[w.level].ls;
     int cx = (int)floorf((gx * ls + ls * 0.5f) / CHUNK), cz = (int)floorf((gz * ls + ls * 0.5f) / CHUNK);
     return fittingFor(w, w.data(cx, cz), cx, cz, gx, gz);
+}
+
+bool levelHasPhones(int level) { return level >= 0 && level < NLEVELS && DECOR[level].phones; }
+
+bool wallPhone(World &w, int gi, int gk, bool west, WallPhone &out) {
+    if (!DECOR[w.level].phones) return false;
+    if ((west ? w.wallWVal(gi, gk) : w.wallNVal(gi, gk)) != WALL_SOLID) return false;
+    const unsigned seed = w.sseed();
+    const uint32_t ugi = (uint32_t)gi, ugk = (uint32_t)gk;   // hashed unsigned, as the fittings are
+    uint32_t h = ih(ugi, ugk, seed ^ (west ? 0x9409u : 0x9407u));
+    if (h % PHONE_RATE != 0) return false;
+    // Nothing else on the edge: a fitting, scrawl, lift or spall would overlap it.
+    FixtureKind other;
+    float oy;
+    if (pickWallFitting(ih(ugi, ugk, seed ^ (west ? 0x71F9u : 0x71F0u)), other, oy)) return false;
+    if (DECOR[w.level].scrawl && ih(ugi, ugk, seed ^ (west ? 0x5C2Du : 0x5C1Bu)) % SCRAWL_RATE == 0) return false;
+    if (DECOR[w.level].lifts && !west && liftHash(gi, gk, seed)) return false;
+    if (DECOR[w.level].spalls && ih(gi, gk, seed ^ (west ? 0x5BA3u : 0x5BA2u)) % 13 == 0) return false;
+    const bool plus = (h & 16) != 0;
+    int ci = gi, ck = gk;
+    if (!plus) (west ? ci : ck) -= 1;
+    if (!cellHasFloor(w, ci, ck) || w.propAt(ci, ck) != PROP_NONE || w.pillarAt(ci, ck) || w.poolAt(ci, ck)) return false;
+    const float y = w.floorY(ci, ck) + PHONE_Y, sgn = plus ? 1.0f : -1.0f;
+    const float ex = gi * CELL, ez = gk * CELL;
+    out.pos = west ? Vec3{ ex + sgn * WT, y, ez + CELL * 0.5f } : Vec3{ ex + CELL * 0.5f, y, ez + sgn * WT };
+    out.normal = west ? Vec3{ sgn, 0, 0 } : Vec3{ 0, 0, sgn };
+    out.ci = ci;
+    out.ck = ck;
+    return true;
 }
 
 bool cellHasFloor(World &w, int gi, int gk) {

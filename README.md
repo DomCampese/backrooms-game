@@ -370,6 +370,14 @@ AGENTS.md has the module map file by file.
   toss a doubloon ahead of you. It clinks where it lands, and a hunter that
   is searching for you and within 16 m of that spot goes to look there. It
   costs the doubloon until you walk over it and pick it up again.
+- **Wall phones.** Level 0 and Level 1 have beige wall telephones, about
+  one in every 32 m square. Every minute or two the nearest phone 6-26 m
+  away rings for 21 s. A hunter that is out hears the ringing from 18 m, the
+  same as a slammed door. Press E (USE on touch) beside a ringing phone to
+  answer it. A voice talks for about 3 s; then the HUD shows how far the
+  nearest exit is and which way it is from where you face, for 60 s, and a
+  chalk arrow by the phone points to it. If no exit is within about 130 m of
+  the phone, the line goes dead.
 - **Flares.** Throw one (Q, or left click when selected). It bounces off
   walls and burns for 9 s as a point light in the shader. The hunter will not
   come within 6 m of a burning flare and runs from one. You carry up to three

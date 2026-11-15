@@ -1479,6 +1479,41 @@ static void addHouse(MB &pr, const Fixture &f, const ChunkLayout &L, const Chunk
     addSolidBox(pr, std::min(c0.x, c1.x), c0.y, std::min(c0.z, c1.z), std::max(c0.x, c1.x), c1.y, std::max(c0.z, c1.z), brick);
 }
 
+// A wall telephone: back plate, body, keypad, the handset hung on its left and
+// a coiled cord. Each part stands at least 8 mm off the one behind it, so no two
+// faces are near enough to fight on a phone's depth buffer.
+static void addPhone(MB &pr, const Fixture &pf) {
+    // u to the right as seen from in front, y about the centre, d out of the face.
+    const Vec3 n = pf.normal, right = { n.z, 0.0f, -n.x };
+    auto box = [&](float u0, float u1, float y0, float y1, float d0, float d1, Rgba c) {
+        float xa = pf.pos.x + right.x * u0 + n.x * d0, xb = pf.pos.x + right.x * u1 + n.x * d1;
+        float za = pf.pos.z + right.z * u0 + n.z * d0, zb = pf.pos.z + right.z * u1 + n.z * d1;
+        addSolidBox(pr, std::min(xa, xb), pf.pos.y + y0, std::min(za, zb),
+                    std::max(xa, xb), pf.pos.y + y1, std::max(za, zb), c);
+    };
+    const Rgba plate = { 196, 186, 160, 254 }, body = { 216, 206, 180, 254 }, panel = { 104, 98, 86, 254 },
+               key = { 232, 228, 216, 254 }, handset = { 112, 100, 82, 254 };
+    box(-0.12f, 0.12f, -0.20f, 0.19f, 0.0f, 0.012f, plate);
+    box(-0.10f, 0.10f, -0.17f, 0.16f, 0.012f, 0.070f, body);
+    box(0.0f, 0.085f, -0.12f, 0.02f, 0.070f, 0.078f, panel);
+    for (int r = 0; r < 4; r++) for (int c = 0; c < 3; c++) {
+        float u = 0.0145f + c * 0.028f, y = -0.103f + r * 0.032f;
+        box(u - 0.009f, u + 0.009f, y - 0.009f, y + 0.009f, 0.078f, 0.086f, key);
+    }
+    box(0.005f, 0.08f, 0.05f, 0.11f, 0.070f, 0.078f, panel);         // the number card
+    box(-0.085f, -0.045f, -0.13f, 0.12f, 0.070f, 0.100f, handset);
+    box(-0.097f, -0.033f, 0.08f, 0.155f, 0.100f, 0.125f, handset);   // earpiece
+    box(-0.097f, -0.033f, -0.165f, -0.09f, 0.100f, 0.125f, handset); // mouthpiece
+    // The coiled cord hangs in a loop from the mouthpiece to the body's foot.
+    const int LINKS = 28;
+    for (int link = 0; link < LINKS; link++) {
+        float t = (link + 0.5f) / LINKS;
+        float u = -0.065f + 0.115f * t + 0.03f * sinf(t * 3.14159f);
+        float y = -0.17f - 0.22f * sinf(t * 3.14159f);
+        box(u - 0.009f, u + 0.009f, y - 0.009f, y + 0.009f, 0.035f, 0.055f, handset);
+    }
+}
+
 struct FixtureMeshes { MB &pr, &fx, &scr, &ao; };
 
 // Build one fixture. bakeChunk calls this at the point in its cell walk where
@@ -1501,6 +1536,7 @@ static void addFixture(const FixtureMeshes &m, const Fixture &f) {
     case FixtureKind::Auditorium:  addAuditorium(m.pr, m.fx, f); break;
     case FixtureKind::Poster:      addPoster(m.pr, f); break;
     case FixtureKind::House:       break;   // bakeChunkGeometry builds it with the layout's openings
+    case FixtureKind::Phone:       addPhone(m.pr, f); break;
     }
 }
 
