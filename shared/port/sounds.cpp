@@ -1116,6 +1116,26 @@ Pcm makeLighter()
     return toPcm(d, 0.55f);
 }
 
+// LighterSpark: 0.25 s. The flint wheel of makeLighter (a dozen sharp clicks
+// over 60 ms) and a thin hiss of spark that dies in 0.1 s, with no flame.
+Pcm makeLighterSpark()
+{
+    Rng r(0x11A9ULL);
+    std::vector<float> d((int)(0.25f * SAMPLE_RATE));
+    float hp = 0, prev = 0;
+    for (int i = 0; i < (int)d.size(); i++) {
+        float t = (float)i / SAMPLE_RATE;
+        float x = r.f01() * 2.0f - 1.0f;
+        hp = 0.5f * (hp + x - prev); prev = x;
+        float s = 0;
+        if (t < 0.06f) s += hp * expf(-fmodf(t * 200.0f, 1.0f) * 12.0f) * 0.9f;
+        float u = t - 0.05f;
+        if (u > 0) s += hp * 0.35f * expf(-u * 30.0f);
+        d[i] = s;
+    }
+    return toPcm(d, 0.32f);   // the clicks are the peak here, with no flame to scale against
+}
+
 // Drag: 1.1 s, Sim::DRAG_IN. Air drawn in (band noise rising slowly) and the
 // paper crackling as the ember brightens: sparse clicks, denser midway.
 Pcm makeDrag()
@@ -1449,6 +1469,7 @@ ClipSpec clipSpec(Sfx sfx) {
     case Sfx::PhoneRing:  return { 1, 1.0f, 0.75f };
     case Sfx::PhoneVoice: return { 1, 1.0f, 0.8f };
     case Sfx::AshTap:     return { 1, 1.0f, 0.8f };
+    case Sfx::LighterSpark: return { 1, 1.0f, 0.6f };
     default:             return { 1, 1.0f, 1.0f };
     }
 }
@@ -1510,6 +1531,7 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::PhoneRing:      return makePhoneRing();
     case Sfx::PhoneVoice:     return makePhoneVoice();
     case Sfx::AshTap:         return makeAshTap();
+    case Sfx::LighterSpark:   return makeLighterSpark();
     }
     return {};
 }

@@ -362,6 +362,7 @@ void Sim::collectPickups() {
         case Pickup::Cigarettes:
             hasCigs = true;
             cigs = CIGS_PER_PACK;
+            luckyLeft = true;
             weapon = WEAPON_CIGS;
             cigsFoundT = CIGS_FOUND;
             play(Sfx::TapeChime).atPitch(0.9f);

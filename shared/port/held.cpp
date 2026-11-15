@@ -21,7 +21,7 @@ Held heldItem(const Sim &sim) {
     if (sim.weapon == WEAPON_DECK) return sim.deck.carried ? Held::Deck : Held::None;
     if (sim.weapon == WEAPON_REVOLVER) return Held::Revolver;
     if (sim.weapon == WEAPON_FLARE && sim.flares > 0) return Held::Flare;
-    if (sim.weapon == WEAPON_CIGS && (sim.cigs > 0 || sim.smoke.burnT > 0)) return Held::Cigarette;
+    if (sim.weapon == WEAPON_CIGS && (sim.cigs > 0 || sim.smoke.burnT > 0 || sim.smoke.buttT > 0)) return Held::Cigarette;
     return Held::None;
 }
 
