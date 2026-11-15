@@ -173,8 +173,18 @@ struct Sim {
     // SMOKE_TIME. What burns stays on the tip as ash (Smoke::ash). R (LOAD on
     // touch) flicks it off: a flick of FLICK_TIME, the ash dropping at its
     // middle. Left past ASH_MAX, it drops by itself.
-    static constexpr float CIG_PAPER_M = 0.062f, CIG_BURNS = 0.85f;
+    static constexpr float CIG_PAPER_M = 0.062f, CIG_BURNS = 0.97f;
     static constexpr float ASH_MAX = 0.022f, FLICK_TIME = 0.35f;
+    // Walking faster than ASH_SHAKE_SPEED m/s shakes the ash off at ASH_MAX_SHAKEN.
+    static constexpr float ASH_SHAKE_SPEED = 4.0f, ASH_MAX_SHAKEN = 0.008f;
+    // Burnt down, the butt smoulders at the filter for BUTT_TIME s; the fire
+    // button then lights the next from it, with no lighter.
+    static constexpr float BUTT_TIME = 4.0f;
+    // One strike of the lighter in LIGHTER_FAIL_ODDS only sparks, never more
+    // than LIGHTER_FAILS_MAX in a row. The spark shows for SPARK_TIME s.
+    static constexpr uint32_t LIGHTER_FAIL_ODDS = 3;
+    static constexpr int LIGHTER_FAILS_MAX = 2;
+    static constexpr float SPARK_TIME = 0.12f;
     static constexpr float MUZZLE_FLASH = 0.09f;   // s the muzzle flash lights the room
     // Hiding stops the hunter seeing the player and blocks the catch, so it
     // requires standing still. Two thresholds, so hiding does not flicker on and
@@ -438,6 +448,11 @@ struct Sim {
     bool hasRevolver = false;        // found this run; until then key 5 and the wheel skip it
     bool hasCigs = false;            // the casino's pack, found this run
     int cigs = 0;                    // left in it
+    // A new pack has one cigarette turned upside down, smoked last for luck.
+    // Lighting it sets `charmed`: the next hit that would land (hurtPlayer)
+    // misses instead. beginDescent clears both.
+    bool luckyLeft = false;
+    bool charmed = false;
     struct Smoke {
         float burnT = 0;             // s the lit one has left; 0: none lit
         float dragT = 0;             // s left of the drag being taken
@@ -448,6 +463,10 @@ struct Sim {
         float flickT = 0;            // s left of a flick of the ash
         float ashFallT = 99;         // s since ash last dropped, for the falling flakes
         float ashFallen = 0;         // m of ash that dropped then
+        float buttT = 0;             // s left of the butt smouldering after it burnt down
+        float sparkT = 0;            // s left of a lighter's spark that did not catch
+        int fails = 0;               // strikes in a row that only sparked
+        bool lucky = false;          // the lit one is the pack's lucky one
     } smoke;
     Rng smokeRng{1};                 // its own stream, like slotRng
     int ammo = MAXAMMO;
@@ -793,6 +812,7 @@ struct Sim {
     void updateSmoking(const InputFrame &in, float dt);
     void putOutCigarette();
     void growAsh(float burnS);      // burnS seconds of burning, as ash on the tip
+    void lightCigarette();
     void dropAsh();
     void bulletHitsUsher();
 

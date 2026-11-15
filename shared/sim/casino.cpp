@@ -78,8 +78,23 @@ bool Sim::cigsAt(int a, int b) {
 }
 
 void Sim::putOutCigarette() {
-    smoke.burnT = smoke.dragT = smoke.coughT = smoke.ash = smoke.flickT = 0;
-    smoke.cough = false;
+    if (smoke.ash > 0) dropAsh();
+    smoke.burnT = smoke.dragT = smoke.coughT = smoke.flickT = smoke.buttT = 0;
+    smoke.cough = smoke.lucky = false;
+}
+
+// A fresh cigarette is lit: from the lighter, or from the butt of the last.
+// The pack's lucky one is its last, and lighting it brings the luck.
+void Sim::lightCigarette() {
+    cigs--;
+    smoke.burnT = SMOKE_TIME;
+    smoke.buttT = 0;
+    smoke.lucky = luckyLeft && cigs == 0;
+    if (smoke.lucky) {
+        luckyLeft = false;
+        charmed = true;
+        deckNoteT = 2.6f; deckNote = "the lucky one, smoked last.";
+    }
 }
 
 // The ash on the tip comes off: flicked, or too long to hold together.
@@ -92,7 +107,8 @@ void Sim::dropAsh() {
 // Seconds of burning turned into ash on the tip, which drops off past ASH_MAX.
 void Sim::growAsh(float burnS) {
     smoke.ash += burnS * CIG_PAPER_M * CIG_BURNS / SMOKE_TIME;
-    if (smoke.ash > ASH_MAX) dropAsh();
+    const bool shaken = velx * velx + velz * velz > ASH_SHAKE_SPEED * ASH_SHAKE_SPEED;
+    if (smoke.ash > (shaken ? ASH_MAX_SHAKEN : ASH_MAX)) dropAsh();
 }
 
 // With a cigarette in hand, the fire button lights one, then takes a drag.
@@ -101,6 +117,7 @@ void Sim::updateSmoking(const InputFrame &in, float dt) {
     smoke.coughT = fmaxf(0, smoke.coughT - dt);
     smoke.exhaleT += dt;
     smoke.ashFallT += dt;
+    smoke.sparkT = fmaxf(0, smoke.sparkT - dt);
     if (smoke.flickT > 0) {
         float before = smoke.flickT;
         smoke.flickT = fmaxf(0, smoke.flickT - dt);
@@ -110,13 +127,23 @@ void Sim::updateSmoking(const InputFrame &in, float dt) {
         }
     }
     if (weapon != WEAPON_CIGS) {
-        if (smoke.burnT > 0) { putOutCigarette(); deckNoteT = 1.8f; deckNote = "you stub it out."; }
+        if (smoke.burnT > 0 || smoke.buttT > 0) { putOutCigarette(); deckNoteT = 1.8f; deckNote = "you stub it out."; }
         return;
+    }
+    if (smoke.buttT > 0) {
+        smoke.buttT -= dt;
+        if (smoke.buttT <= 0) { putOutCigarette(); deckNoteT = 1.8f; deckNote = "the butt goes out."; }
     }
     if (smoke.burnT > 0) {
         smoke.burnT -= dt;
         growAsh(dt);
-        if (smoke.burnT <= 0) { putOutCigarette(); deckNoteT = 1.8f; deckNote = "it burns down to the filter."; }
+        if (smoke.burnT <= 0) {   // down to the filter: it smoulders there a moment
+            if (smoke.ash > 0) dropAsh();
+            smoke.burnT = smoke.flickT = 0;
+            smoke.buttT = BUTT_TIME;
+            deckNoteT = 1.8f;
+            deckNote = cigs > 0 ? "down to the filter. light the next from it?" : "down to the filter.";
+        }
     }
     if (smoke.dragT > 0) {
         float before = smoke.dragT;
@@ -137,8 +164,20 @@ void Sim::updateSmoking(const InputFrame &in, float dt) {
     if (!in.playing || !in.fire || deathT > 0 || drinkT > 0 || smoke.dragT > 0 || smoke.flickT > 0) return;
     if (smoke.burnT <= 0) {
         if (cigs <= 0) { deckNoteT = 1.8f; deckNote = "the pack is empty."; return; }
-        cigs--;
-        smoke.burnT = SMOKE_TIME;
+        if (smoke.buttT > 0) {   // lit from the butt of the last
+            lightCigarette();
+            play(Sfx::Drag).atVolume(0.6f);
+            if (!smoke.lucky) { deckNoteT = 1.8f; deckNote = "you light the next from the last."; }
+            return;
+        }
+        if (smoke.fails < LIGHTER_FAILS_MAX && smokeRng.next() % LIGHTER_FAIL_ODDS == 0) {
+            smoke.fails++;
+            smoke.sparkT = SPARK_TIME;
+            play(Sfx::LighterSpark);
+            return;
+        }
+        smoke.fails = 0;
+        lightCigarette();
         play(Sfx::Lighter);
         return;
     }

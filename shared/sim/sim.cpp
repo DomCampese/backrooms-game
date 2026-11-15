@@ -137,7 +137,7 @@ void Sim::beginDescent(double now) {
     yaw = 0.8f; pitch = 0.0f;
     coins = 0; almond = 0; tapes = 0; keys = 0; flares = MAXFLARES; ammo = MAXAMMO; reloadT = 0; battery = 1.0f;
     weapon = WEAPON_HANDS; hasRevolver = false; revolverFoundT = 0;
-    hasCigs = false; cigs = 0; cigsFoundT = 0; smoke = Smoke{};
+    hasCigs = false; cigs = 0; cigsFoundT = 0; smoke = Smoke{}; luckyLeft = charmed = false;
     deck = TapeDeck{}; stopVoice();
     escapeCount = 0; killCount = 0; distWalked = 0;
     deepest = level;
@@ -259,13 +259,20 @@ void Sim::dieRun(double now, const char *by, const char *title) {
 }
 
 bool Sim::hurtPlayer(double now, float dmg, const char *by, float fromX, float fromZ) {
-    health -= dmg;
-    if (health <= 0.001f) { health = 0; dieRun(now, by); return true; }
-    hurtT = HURT_GRACE; sinceHurt = 0;
+    const bool missed = charmed && dmg > 0;   // the lucky cigarette: this one misses
+    if (missed) {
+        charmed = false;
+        deckNoteT = 2.6f; deckNote = "it should have hit you. lucky.";
+    } else {
+        health -= dmg;
+        if (health <= 0.001f) { health = 0; dieRun(now, by); return true; }
+    }
+    hurtT = HURT_GRACE; sinceHurt = missed ? sinceHurt : 0;
     // Pushed away, so the attacker is not overlapping the player when the grace ends.
     float dx = px - fromX, dz = pz - fromZ, d = portableHypot(dx, dz);
     if (d > 0.01f) { velx = dx / d * 6.0f; velz = dz / d * 6.0f; }
-    play(Sfx::Hurt);
+    if (missed) play(Sfx::Scare).atPitch(1.3f).atVolume(0.6f);
+    else play(Sfx::Hurt);
     fear = fmaxf(fear, 0.9f);
     return false;
 }

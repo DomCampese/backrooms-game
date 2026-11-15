@@ -383,10 +383,15 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         raw(fmt("2  flare  ×%d", sim.flares), 16, sh - 72, 16, sim.weapon == WEAPON_FLARE ? selc : dimc);
         if (sim.hasCigs)   // not listed until found; only lit in the casino
             // On touch, ITEM cycles to it (there is no 6), FIRE lights and drags, LOAD flicks the ash.
-            text(sim.level != CASINO ? fmt("%s  cigarettes  ×%d  · casino only", in.touch ? "ITEM" : "6", sim.cigs)
+            // The lucky one is listed while it is still in the pack, and the luck while it holds.
+            text(fmt("%s%s%s", (sim.level != CASINO ? fmt("%s  cigarettes  ×%d  · casino only", in.touch ? "ITEM" : "6", sim.cigs)
                  : sim.smoke.burnT > 0 ? fmt("%s  cigarettes  ×%d  · lit  · %s a drag  · %s taps the ash",
                                              in.touch ? "ITEM" : "6", sim.cigs, in.touch ? "FIRE" : "click", in.touch ? "LOAD" : "R")
-                 : fmt("%s  cigarettes  ×%d  · %s to light", in.touch ? "ITEM" : "6", sim.cigs, in.touch ? "FIRE" : "click"),
+                 : sim.smoke.buttT > 0 && sim.cigs > 0
+                     ? fmt("%s  cigarettes  ×%d  · %s lights the next from the butt", in.touch ? "ITEM" : "6", sim.cigs, in.touch ? "FIRE" : "click")
+                 : fmt("%s  cigarettes  ×%d  · %s to light", in.touch ? "ITEM" : "6", sim.cigs, in.touch ? "FIRE" : "click")).c_str(),
+                     sim.luckyLeft && sim.cigs > 0 ? "  · the lucky one is last" : "",
+                     sim.charmed ? "  · lucky" : ""),
                  hud(16), sh - hud(182), hud(16), sim.weapon == WEAPON_CIGS ? selc : dimc);
         raw(!sim.deck.carried
                 ? (sim.deck.playing ? "4  tape player  [running · left behind]"

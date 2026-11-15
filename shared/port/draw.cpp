@@ -795,8 +795,8 @@ static void cigaretteDraws(const Sim &sim, const SimView &view, float now, std::
     const Vec3 filterEnd = add(scale(rest, 1 - raise), scale(lips, raise));
     // Away from the hand, a little left and up; pointing out of the mouth when raised.
     const Vec3 dir = normalize(add(scale(F, 0.55f + 0.4f * raise), add(scale(R, -0.65f * (1 - raise)), scale(U, 0.12f - 0.35f * jolt))));
-    const bool lit = sm.burnT > 0;
-    const float burnt = lit ? 1.0f - sm.burnT / Sim::SMOKE_TIME : 0.0f;
+    const bool lit = sm.burnT > 0, butt = sm.buttT > 0;
+    const float burnt = lit ? 1.0f - sm.burnT / Sim::SMOKE_TIME : butt ? 1.0f : 0.0f;
     const float filterLen = 0.024f, paperLen = Sim::CIG_PAPER_M * (1.0f - Sim::CIG_BURNS * burnt), r = 0.0042f;
     const Vec3 filterTip = add(filterEnd, scale(dir, filterLen));
     const Vec3 tip = add(filterTip, scale(dir, paperLen));
@@ -808,6 +808,27 @@ static void cigaretteDraws(const Sim &sim, const SimView &view, float now, std::
         Shape flake = billboardWhole(ShapeTex::Particle, p, size, { 120, 116, 110, cl8(230 * (1.0f - t / 0.6f)) });
         flake.depthWrite = false;
         put(out, flake);
+    }
+    if (sm.sparkT > 0) {   // the lighter struck and did not catch
+        Shape spark = billboardWhole(ShapeTex::Particle, add(tip, scale(dir, 0.012f)), 0.018f, { 255, 236, 170, 255 });
+        spark.additive = true;
+        spark.depthWrite = false;
+        put(out, spark);
+    }
+    if (butt) {   // burnt down: the char at the filter, its last glow fading, a thread of smoke
+        const float fade = sm.buttT / Sim::BUTT_TIME;
+        put(out, cylinderEx(tip, add(tip, scale(dir, 0.0018f)), r, r * 0.9f, 8, { 46, 34, 26, 255 }));
+        Shape glow = billboardWhole(ShapeTex::Particle, add(tip, scale(dir, 0.001f)), 0.008f + 0.01f * fade,
+                                    { 255, 100, 30, cl8(200 * fade) });
+        glow.additive = true;
+        glow.depthWrite = false;
+        put(out, glow);
+        float ph = fmodf(now * 0.5f, 1.0f);
+        Shape wisp = billboardWhole(ShapeTex::Particle, add(tip, { 0, ph * 0.1f, 0 }), 0.01f + ph * 0.03f,
+                                    { 190, 190, 196, cl8(70 * fade * (1 - ph)) });
+        wisp.depthWrite = false;
+        put(out, wisp);
+        return;
     }
     if (!lit) return;
     const bool inhaling = sm.dragT > Sim::DRAG_TIME - Sim::DRAG_IN;

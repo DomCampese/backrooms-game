@@ -2221,6 +2221,25 @@ revolver. They only work in the casino.
   as it grows. Fallen ash is three flakes for 0.6 s in the view's frame. It
   changes nothing else: `inShadow` still counts any lit cigarette. The
   touch HUD names ITEM, FIRE and LOAD instead of 6, click and R.
+- **It burns to the filter** (`CIG_BURNS` 0.97; it was 0.85, which left 9 mm
+  of paper when it went out). Burnt down, the butt smoulders for
+  `BUTT_TIME` (4 s, `Smoke::buttT`) and the fire button lights the next from
+  it (`lightCigarette`), with no lighter. Any ash left drops as it ends.
+  `heldItem` keeps the hand up while the butt smoulders, or the last
+  cigarette vanished from the hand the moment it burnt down.
+- **The lighter can fail**: one strike in `LIGHTER_FAIL_ODDS` (3), never
+  more than `LIGHTER_FAILS_MAX` (2) in a row, only sparks
+  (`Sfx::LighterSpark`, a spark drawn at the tip for `SPARK_TIME`). Drawn
+  from `smokeRng`.
+- **Moving faster than `ASH_SHAKE_SPEED` (4 m/s, so a sprint) breaks the ash
+  off at `ASH_MAX_SHAKEN` (8 mm).** `growAsh` reads the velocity the movement
+  step left.
+- **The lucky cigarette.** A found pack sets `luckyLeft`; the last one
+  lit from it (`cigs` reaching 0) is the lucky one (`Smoke::lucky`), and
+  lighting it sets `charmed`. `hurtPlayer` turns the next hit with damage
+  into a miss: grace and push as usual, no damage, `Sfx::Scare` high instead
+  of `Hurt`, and a HUD note. `beginDescent` clears both. The inventory line
+  says "the lucky one is last" and "lucky".
 
 # Level 94 (November 2026)
 
