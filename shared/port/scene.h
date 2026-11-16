@@ -26,6 +26,7 @@ enum class SceneKind : uint8_t {
     Confetti,                                    // variant: its party colour; `amount` its life
     Impact,                                      // a round's mark; `normal` the face it hit
     Hunter,                                      // variant: its EState
+    Blood,                                       // a drop on the floor; `amount` its age 0..1, `yaw` and `variant` its shape
     Count,
 };
 

@@ -366,6 +366,12 @@ AGENTS.md has the module map file by file.
   1.4 m with a clear line to you, which it does when it checks your cover, it
   finds you: you hear it, and you cannot hide again for 2 s. Hide away from
   where it lost you, more than 8 m off, and it does not check there.
+- **Bleeding.** Below 85% health you bleed: a drop of blood on the floor
+  every 1.2 m you walk, or every 4 s standing still. Drops stay for 90 s.
+  A hunter searching for you that sees a drop within 7 m newer than the last
+  one it followed goes to it, so it tracks the trail to you, hiding or not.
+  Drinking almond water stops the bleeding until you are hit again. Healing
+  back over 85% stops it too. The HUD says when you are bleeding.
 - **Tossing a doubloon.** With empty hands (1), click (FIRE on touch) to
   toss a doubloon ahead of you. It clinks where it lands, and a hunter that
   is searching for you and within 16 m of that spot goes to look there. It

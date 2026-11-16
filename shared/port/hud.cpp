@@ -437,7 +437,11 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
     // there was no cover.
     const char *coverLine = nullptr;
     Rgba coverCol = { 140, 210, 165, 160 };
-    if (sim.hidden && sim.hideBreakT > 0) {   // hidden, but moving too fast
+    if (sim.bleeding()) {   // a hunter that is out can follow the blood
+        coverLine = sim.ent.st != EState::Hidden ? "[ bleeding · it can follow the blood ]"
+                                                 : "[ bleeding · almond water stops it ]";
+        coverCol = { 220, 110, 100, 200 };
+    } else if (sim.hidden && sim.hideBreakT > 0) {   // hidden, but moving too fast
         coverLine = "[ hidden · you're giving it away ]";
         coverCol = { 228, 196, 128, 200 };
     } else if (sim.sheltered) {   // Level 94: a house hides the player whatever they do

@@ -50,6 +50,7 @@ void Sim::step(const InputFrame &in, float dt, double now) {
 void Sim::updateTimers(float dt) {
     deathT = fmaxf(0, deathT - dt);
     updateHealth(dt);
+    updateBleeding(dt);
     escapeT = fmaxf(0, escapeT - dt);
     shoveT += dt;
     killT = fmaxf(0, killT - dt);
@@ -67,6 +68,23 @@ void Sim::updateHealth(float dt) {
     hurtT = fmaxf(0, hurtT - dt);
     sinceHurt += dt;
     if (sinceHurt > REGEN_DELAY) health = fminf(1, health + REGEN_RATE * dt);
+}
+
+// A wounded player leaves blood: a drop each BLEED_STEP m walked, or each
+// BLEED_STILL s standing. Not in water. Old drops dry up after BLOOD_LIFE.
+void Sim::updateBleeding(float dt) {
+    bloodClock += dt;
+    while (!blood.empty() && bloodClock - blood.front().t > BLOOD_LIFE) blood.erase(blood.begin());
+    if (!bleeding() || inMenu || swimming || world.poolAt(cellOf(px), cellOf(pz))) return;
+    const float speed = sqrtf(velx * velx + velz * velz);
+    bleedAcc += speed > 0.3f ? speed * dt : dt * BLEED_STEP / BLEED_STILL;
+    if (bleedAcc < BLEED_STEP) return;
+    bleedAcc = 0;
+    const uint32_t seed = (uint32_t)hash64((uint64_t)world.seed ^ ((uint64_t)blood.size() << 20) ^ (uint64_t)(bloodClock * 1000.0f));
+    const float ox = ((seed & 255) / 255.0f - 0.5f) * 0.4f, oz = (((seed >> 8) & 255) / 255.0f - 0.5f) * 0.4f;
+    const float x = px + ox, z = pz + oz;
+    blood.push_back({ { x, world.groundAt(x, z, py) + 0.004f, z }, bloodClock, world.storey, seed });
+    if ((int)blood.size() > BLOOD_MAX) blood.erase(blood.begin());
 }
 
 void Sim::menuDrift(float dt, double now) {
@@ -151,6 +169,7 @@ void Sim::beginDescent(double now) {
     sanity = 1.0f; sanityStage = 0; sanityWarnT = 0; sanityLine = "";
     migraine = 0; migraineWarned = false; notesRead = false; manilaSeen = false; noteT = 0;
     drinkT = 0; drinkLanded = false; nextHeartbeat = now + 20;
+    stanched = false;
     ent.st = EState::Hidden; ent.nextSpawn = now + 30;
     for (auto &c : chalk) c.clear();
     for (bool &b : chalkSeeded) b = false;
@@ -221,6 +240,7 @@ void Sim::applyLevel(int lv, double now) {
     distantRng = Rng(hash64((uint64_t)world.seed ^ ((uint64_t)lv << 40) ^ ((uint64_t)world.visit << 48) ^ 0xD157A47ULL));
     nextDistant = now + DISTANT_LEAD + distantRng.f01() * DISTANT_SPAN;
     taken.clear(); coinsWorld.clear(); coinsFlying.clear(); coinNoiseT = 0; trucksServed.clear();
+    blood.clear(); bleedAcc = 0; ent.trailT = -1;
     // Chalk is kept per level for the whole descent; beginDescent clears it.
     chalkSeedPending = !chalkSeeded[lv];
     // Left set, a Manila Room on the previous level would keep restoring sanity here.
@@ -265,6 +285,7 @@ bool Sim::hurtPlayer(double now, float dmg, const char *by, float fromX, float f
         deckNoteT = 2.6f; deckNote = "it should have hit you. lucky.";
     } else {
         health -= dmg;
+        if (dmg > 0) stanched = false;   // a fresh wound bleeds again
         if (health <= 0.001f) { health = 0; dieRun(now, by); return true; }
     }
     hurtT = HURT_GRACE; sinceHurt = missed ? sinceHurt : 0;
