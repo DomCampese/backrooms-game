@@ -157,6 +157,18 @@ std::vector<SceneItem> simScene(Sim &sim) {
         it.variant = m.mine ? 1 : 0;
         out.push_back(it);
     }
+    // Blood, drawn on its own storey only.
+    for (const Sim::BloodDrop &b : sim.blood) {
+        if (b.storey != sim.world.storey) continue;
+        if (fabsf(b.pos.x - sim.px) > SCENE_CHALK_M || fabsf(b.pos.z - sim.pz) > SCENE_CHALK_M) continue;
+        SceneItem it;
+        it.kind = SceneKind::Blood;
+        it.pos = b.pos;
+        it.amount = clampf((sim.bloodClock - b.t) / Sim::BLOOD_LIFE, 0.0f, 1.0f);
+        it.yaw = (b.seed >> 16) / 65535.0f * TAU;
+        it.variant = (uint8_t)((b.seed >> 4) & 3);
+        out.push_back(it);
+    }
     for (const FlareProj &f : sim.litFlares) {
         if (!f.active) continue;
         SceneItem it;
