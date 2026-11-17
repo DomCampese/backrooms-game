@@ -370,6 +370,12 @@ AGENTS.md has the module map file by file.
   toss a doubloon ahead of you. It clinks where it lands, and a hunter that
   is searching for you and within 16 m of that spot goes to look there. It
   costs the doubloon until you walk over it and pick it up again.
+- **The Smiler keeps to the dark.** On Level 1, in the theater and in the
+  casino the Smiler will not step into light. Stand under a working tube and
+  it waits at the edge of the light, and it cannot lunge at you there. A
+  blackout or a dead tube takes the light away, and then it comes. If the
+  tubes come back on while it stands in the open, it goes. The HUD says when
+  you are standing where it will not come.
 - **Wall phones.** Level 0 and Level 1 have beige wall telephones, about
   one in every 32 m square. Every minute or two the nearest phone 6-26 m
   away rings for 21 s. A hunter that is out hears the ringing from 18 m, the

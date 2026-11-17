@@ -46,6 +46,7 @@ struct Entity {
     float checkT = 0;
     bool atCover = false;
     float dispY = 0;   // smoothed floor height, so he does not jump on stairs
+    float litT = 0;      // s a Smiler has stood in light; past SMILER_BURN it goes
     float lunge = 0;     // s left in a lunge (LUNGE_TIME); only a lunge can catch the player
     float lungeCd = 0;   // s before he can lunge again
     float stagger = 0; // s of slowdown after being shot; he does not flee

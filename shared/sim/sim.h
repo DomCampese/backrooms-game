@@ -494,6 +494,7 @@ struct Sim {
     float entDist = 1e9f;            // to the hunter, this tick
     float entPrevX = 0, entPrevZ = 0;   // his position last tick, for his velocity
     float playerLight = 1;           // lightAtPlayer, smoothed; kept up only while a hunter is out
+    bool inSmilerLight = false;      // a Smiler is out and the player stands where it will not come
     float entDarkCur = 0;            // how much the hunter dims nearby lights
     double nextBlackout = 0, blackoutEnd = -1;
     float blackoutCur = 1.0f, fear = 0.0f;
@@ -779,12 +780,22 @@ struct Sim {
     bool shiftAWall();               // close one doorway the player cannot see
     void updateFilm(double now);     // the theater's film: filmLevel and the soundtrack
     bool clarkLevel() const { return level == 0; }
+    // The Smiler keeps to the dark (Level 1, the theater, the casino): it
+    // does not dim the lights near it, it will not step into a spot lit to
+    // SMILER_LIGHT or more, and it cannot lunge at a player standing in one.
+    // Caught in light for SMILER_BURN s (the tubes came back on), it goes and
+    // returns SMILER_RETURN s later.
+    bool smilerLevel() const { return level == 1 || level == THEATER || level == CASINO; }
+    static constexpr float SMILER_LIGHT = 0.35f, SMILER_BURN = 0.6f, SMILER_RETURN = 8.0f;
+    bool smilerBarred(float x, float z);   // a Smiler will not step to (x, z)
     const char *hunterName() const {
         return level == LEVEL_FUN ? "THE PARTYGOER" : level == 0 ? "PIRATE CLARK" : level == MOTION ? "AN ANIMATION" : "A SMILER";
     }
     bool wayOpen() const { return coins >= ESCAPE_COST; }
     void spawnHunter();
     float lightAtPlayer();   // 0 dark .. 1 under a working fitting
+    // The same at any point; `hunterDims` applies the hunter's dark area.
+    float lightAt(float x, float z, bool hunterDims);
     bool inShadow() const {
         return ent.st != EState::Hidden && playerLight < SHADOW_LIT && flashCur < 0.5f && smoke.burnT <= 0;
     }
