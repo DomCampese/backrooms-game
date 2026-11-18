@@ -69,6 +69,7 @@ enum class FixtureKind : uint8_t {
     Poster,         // a backlit film poster on a corridor wall (the theater)
     House,          // a house storey's plank floor, outside trim and (on its top storey) pitched roof (Level 94)
     Phone,          // a wall telephone (Levels 0 and 1); the sim rings it (Sim::updatePhone)
+    Breaker,        // a breaker panel (the levels with blackouts); the use key cuts or restores the power (Sim::throwBreaker)
 };
 
 // One fixture. What each field means depends on the kind:
@@ -88,6 +89,7 @@ enum class FixtureKind : uint8_t {
 // | Poster                | centre, on the face                   |                | half extents       | seed: its colours and layout |
 // | House                 | floor centre; y is its ceiling        |                | half extents, x z  | variant: 1 ridge along z; tone: 0 one storey, 1 the ground floor of two, 2 the upper floor (no door); normal: out of the door's wall; seed |
 // | Phone                 | its back plate's centre, on the face  |                |                    | |
+// | Breaker               | its back's centre, on the face        |                | h: conduit from its top to the ceiling | |
 //
 // `normal` points out of the face a fixture is on. A face is the wall's
 // surface, WT off its centreline; decals stand off it by the renderer's own
@@ -211,6 +213,20 @@ struct WallPhone {
 };
 bool wallPhone(World &w, int gi, int gk, bool west, WallPhone &out);
 bool levelHasPhones(int level);
+
+// A breaker panel: one solid wall edge in BREAKER_RATE on a level whose decor
+// has them (Levels 0 and 1, LEVEL FUN, the theater and the casino: the levels
+// with blackouts), or BREAKER_RATE_OPEN in the theater and the casino, which
+// have fewer walls. BREAKER_Y above the floor of the side bit 4 of the edge's
+// hash picks, 0.35 of the way along the edge. The same exclusions as a phone,
+// plus a poster's edge, a phone's edge and an auditorium. The layout lists it
+// as FixtureKind::Breaker and the sim finds it (Sim::breakerInReach), both
+// through this function. `out` is a WallPhone because the fields are the same.
+constexpr uint32_t BREAKER_RATE = 130, BREAKER_RATE_OPEN = 55;
+constexpr float BREAKER_Y = 1.45f;
+constexpr float BREAKER_HALF_W = 0.19f, BREAKER_HALF_H = 0.26f;   // the cabinet, metres
+bool wallBreaker(World &w, int gi, int gk, bool west, WallPhone &out);
+bool levelHasBreakers(int level);
 
 // The tube hash the shader's lhash() and lightAtCPU use, 0..1:
 // fract(sin(gx * TUBE_HASH_X + gz * TUBE_HASH_Z) * TUBE_HASH_SCALE). A storey's

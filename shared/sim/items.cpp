@@ -404,6 +404,8 @@ void Sim::buySnack() {
 void Sim::useWhatIsNear() {
     int pci = cellOf(px), pck = cellOf(pz);
     if (phone.ringing && portableHypot(phone.x - px, phone.z - pz) < PHONE_REACH) { answerPhone(); return; }
+    float bx, bz;
+    if (breakerInReach(bx, bz)) { throwBreaker(bx, bz); return; }   // a breaker panel
     if (bedInReach()) { trySleep(); return; }   // Level 94's beds
     int ta, tb;
     if (truckInReach(ta, tb)) { takeFromTruck(ta, tb); return; }   // and its almond water trucks

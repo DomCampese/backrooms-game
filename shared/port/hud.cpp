@@ -476,6 +476,13 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
     if (coverLine) textC(coverLine, sw / 2, sh - hud(breathBar ? 82 : 62), hud(14), coverCol);
     if (sim.phoneNear) {   // a ringing phone the use key would answer; it comes first in useWhatIsNear too
         textC(fmt("%s · answer the phone", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14), { 214, 200, 160, 170 });
+    } else if (sim.breakerNear != Sim::BreakerUse::None) {   // a breaker panel; second in useWhatIsNear too
+        const char *what = sim.breakerNear == Sim::BreakerUse::Cut ? "cut the power"
+                         : sim.breakerNear == Sim::BreakerUse::Restore ? "turn the power back on"
+                         : "the breaker will not hold yet";
+        textC(sim.breakerNear == Sim::BreakerUse::Resting ? std::string(what)
+                                                         : fmt("%s · %s", in.touch ? "USE" : "E", what),
+              sw / 2, sh / 2 + hud(46), hud(14), { 200, 196, 176, 160 });
     } else if (sim.bedNear) {   // a bed the use key would sleep in (Level 94); it comes before a door
         textC(fmt("%s · sleep until morning", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14), { 200, 190, 160, 150 });
     } else if (sim.truckNear) {   // an almond water truck with a can on its counter (Level 94)

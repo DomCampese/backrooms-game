@@ -314,6 +314,16 @@ struct Sim {
     static constexpr float PHONE_HEAR_M = 40.0f, PHONE_NOISE = 18.0f;
     static constexpr float PHONE_REACH = 1.55f, PHONE_VOICE = 3.4f, PHONE_HINT_TIME = 60.0f;
     static constexpr int   PHONE_SEARCH_RINGS = 4, PHONE_SEARCH_CHUNKS = 2;
+    // Breaker panels (core's wallBreaker; Sim::throwBreaker), on the levels
+    // with blackouts. The use key within BREAKER_REACH of one, in front of it:
+    // with the lights on, a blackout of BREAKER_CUT s (powerCut); in any
+    // blackout, the lights back on at once. Either way a BREAKER_NOISE m noise
+    // for BREAKER_NOISE_TIME s at the panel. For BREAKER_REST s after the
+    // lights come back, a breaker will not cut them again. A cut pushes the
+    // next scheduled blackout to at least BREAKER_AFTER s after it ends,
+    // without a draw from grng.
+    static constexpr float BREAKER_REACH = 1.4f, BREAKER_CUT = 30.0f, BREAKER_REST = 40.0f;
+    static constexpr float BREAKER_NOISE = 18.0f, BREAKER_NOISE_TIME = 0.5f, BREAKER_AFTER = 45.0f;
     // Walls shift within this many cells of the player, more often as the slide
     // deepens.
     static constexpr int   SHIFT_RING = 8;
@@ -538,6 +548,12 @@ struct Sim {
     // The answered call's exit from the player now: metres, and its direction
     // as eighths of a turn clockwise from ahead (0 ahead, 2 right, 4 behind).
     bool phoneWay(float &dist, int &eighth) const;
+    // The breaker panels (BREAKER_*). Kept off the trace digest.
+    bool powerCut = false;           // the blackout running was made by a breaker
+    double breakerRestUntil = 0;     // no cut before this clock time
+    float breakerNoiseT = 0, breakerNoiseX = 0, breakerNoiseZ = 0;
+    enum class BreakerUse : uint8_t { None, Cut, Restore, Resting };
+    BreakerUse breakerNear = BreakerUse::None;   // what the use key would do at the panel in reach
     // Separate RNG for distant sounds, so they do not shift grng (blackouts,
     // spawns).
     double nextDistant = 0;
@@ -774,6 +790,9 @@ struct Sim {
     bool ringAPhone();            // starts the nearest phone in range ringing
     void answerPhone();
     void searchForExit();         // PHONE_SEARCH_CHUNKS more chunks of the answered call's search
+    void updateBreakers(float dt, double now);
+    bool breakerInReach(float &bx, float &bz);   // the nearest panel the use key reaches
+    void throwBreaker(float bx, float bz);
     bool placePhantom();
     void updateRoomSound(bool blackout);
     bool shiftAWall();               // close one doorway the player cannot see
