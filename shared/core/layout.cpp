@@ -18,16 +18,17 @@ struct LevelDecor {
     bool streamers;
     bool posters;     // backlit film posters on walls facing a corridor
     bool phones;      // wall telephones (wallPhone)
+    bool breakers;    // breaker panels (wallBreaker)
 };
 const LevelDecor DECOR[NLEVELS] = {
-    //  fittings scrawl lifts  spalls pipes  streamers posters phones
-    { true,  true,  false, false, false, false, false, true  },   // Level 0
-    { true,  true,  true,  true,  true,  false, false, true  },   // Level 1
-    { false, false, false, false, false, false, false, false },   // the Poolrooms
-    { true,  true,  false, false, false, true,  false, false },   // LEVEL FUN
-    { true,  true,  false, false, false, false, true,  false },   // the theater
-    { true,  false, false, false, false, false, false, false },   // the casino
-    { false, false, false, false, false, false, false, false },   // Level 94
+    //  fittings scrawl lifts  spalls pipes  streamers posters phones breakers
+    { true,  true,  false, false, false, false, false, true,  true  },   // Level 0
+    { true,  true,  true,  true,  true,  false, false, true,  true  },   // Level 1
+    { false, false, false, false, false, false, false, false, false },   // the Poolrooms
+    { true,  true,  false, false, false, true,  false, false, true  },   // LEVEL FUN
+    { true,  true,  false, false, false, false, true,  false, true  },   // the theater
+    { true,  false, false, false, false, false, false, false, true  },   // the casino
+    { false, false, false, false, false, false, false, false, false },   // Level 94
 };
 // One wall edge in POSTER_RATE facing a corridor carries a poster.
 constexpr uint32_t POSTER_RATE = 3;
@@ -369,6 +370,15 @@ void cellFixtures(World &w, const ChunkData &d, const LevelDecor &decor, int cx,
         f.normal = ph.normal;
         out.push_back(f);
     }
+    for (int west = 0; west < 2; west++) {
+        WallPhone bk;
+        if (!decor.breakers || !wallBreaker(w, gi0, gk0, west != 0, bk)) continue;
+        Fixture f = fixture(FixtureKind::Breaker, i, kk);
+        f.pos = bk.pos;
+        f.normal = bk.normal;
+        f.h = fmaxf(0.0f, w.ceilY(bk.ci, bk.ck) - (bk.pos.y + BREAKER_HALF_H));   // the conduit up to the ceiling
+        out.push_back(f);
+    }
 }
 
 // Crepe streamers, three to six a chunk, each sagging between two points under
@@ -475,6 +485,47 @@ bool wallPhone(World &w, int gi, int gk, bool west, WallPhone &out) {
     const float y = w.floorY(ci, ck) + PHONE_Y, sgn = plus ? 1.0f : -1.0f;
     const float ex = gi * CELL, ez = gk * CELL;
     out.pos = west ? Vec3{ ex + sgn * WT, y, ez + CELL * 0.5f } : Vec3{ ex + CELL * 0.5f, y, ez + sgn * WT };
+    out.normal = west ? Vec3{ sgn, 0, 0 } : Vec3{ 0, 0, sgn };
+    out.ci = ci;
+    out.ck = ck;
+    return true;
+}
+
+bool levelHasBreakers(int level) { return level >= 0 && level < NLEVELS && DECOR[level].breakers; }
+
+bool wallBreaker(World &w, int gi, int gk, bool west, WallPhone &out) {
+    if (!DECOR[w.level].breakers) return false;
+    if ((west ? w.wallWVal(gi, gk) : w.wallNVal(gi, gk)) != WALL_SOLID) return false;
+    const unsigned seed = w.sseed();
+    const uint32_t ugi = (uint32_t)gi, ugk = (uint32_t)gk;
+    uint32_t h = ih(ugi, ugk, seed ^ (west ? 0xB4E3u : 0xB4E1u));
+    if (h % (w.level == THEATER || w.level == CASINO ? BREAKER_RATE_OPEN : BREAKER_RATE) != 0) return false;
+    // Nothing else on the edge, as for a phone, and not a phone's edge.
+    FixtureKind other;
+    float oy;
+    if (pickWallFitting(ih(ugi, ugk, seed ^ (west ? 0x71F9u : 0x71F0u)), other, oy)) return false;
+    if (DECOR[w.level].scrawl && ih(ugi, ugk, seed ^ (west ? 0x5C2Du : 0x5C1Bu)) % SCRAWL_RATE == 0) return false;
+    if (DECOR[w.level].lifts && !west && liftHash(gi, gk, seed)) return false;
+    if (DECOR[w.level].spalls && ih(gi, gk, seed ^ (west ? 0x5BA3u : 0x5BA2u)) % 13 == 0) return false;
+    if (DECOR[w.level].posters && ih(ugi, ugk, seed ^ (west ? 0x9058u : 0x9057u)) % POSTER_RATE == 0) return false;
+    WallPhone ph;
+    if (wallPhone(w, gi, gk, west, ph)) return false;
+    const bool plus = (h & 16) != 0;
+    int ci = gi, ck = gk;
+    if (!plus) (west ? ci : ck) -= 1;
+    if (!cellHasFloor(w, ci, ck) || w.propAt(ci, ck) != PROP_NONE || w.pillarAt(ci, ck) || w.poolAt(ci, ck)) return false;
+    // Not in an auditorium: its walls carry the screen, the curtains and the
+    // exit signs, and its floor steps down away from the wall.
+    const int ocx = fdiv(ci, CCELLS), ocz = fdiv(ck, CCELLS);
+    if (w.data(ocx, ocz).audDir >= 0) {
+        const int li = ci - ocx * CCELLS, lk = ck - ocz * CCELLS;
+        if (li >= AUD_LO && li < AUD_LO + AUD_N && lk >= AUD_LO && lk < AUD_LO + AUD_N) return false;
+    }
+    const float y = w.floorY(ci, ck) + BREAKER_Y, sgn = plus ? 1.0f : -1.0f;
+    const float ex = gi * CELL, ez = gk * CELL;
+    // A third of the way along the edge, so a phone on the far face of the
+    // same wall cannot sit back to back with it.
+    out.pos = west ? Vec3{ ex + sgn * WT, y, ez + CELL * 0.35f } : Vec3{ ex + CELL * 0.35f, y, ez + sgn * WT };
     out.normal = west ? Vec3{ sgn, 0, 0 } : Vec3{ 0, 0, sgn };
     out.ci = ci;
     out.ck = ck;

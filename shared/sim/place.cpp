@@ -38,6 +38,7 @@ void Sim::updateAmbience(float dt, double now) {
     if (updateSanity(dt, blackout, now)) return;
     updatePhantom(dt, now);
     updatePhone(dt);
+    updateBreakers(dt, now);
 
     // During the slide, walls start to shift.
     if (level != 2 && slide > 0.0f && now > nextShift && !inMenu) {
@@ -551,4 +552,61 @@ bool Sim::phoneWay(float &dist, int &eighth) const {
     float a = portableAtan2(dx * r2x + dz * r2z, dx * f2x + dz * f2z);   // clockwise from ahead
     eighth = ((int)floorf(a / (TAU / 8.0f) + 0.5f) + 8) % 8;
     return true;
+}
+
+// Breaker panels. A cut is a blackout like any other (the tubes, the hum, the
+// sanity drain, crates moving on Level 1 when it ends); it only lasts longer,
+// and the player chose where and when.
+void Sim::updateBreakers(float dt, double now) {
+    breakerNoiseT = fmaxf(0.0f, breakerNoiseT - dt);
+    if (powerCut && now >= blackoutEnd) {   // the breaker reset itself
+        powerCut = false;
+        breakerRestUntil = now + BREAKER_REST;
+    }
+    breakerNear = BreakerUse::None;
+    float bx, bz;
+    if (inMenu || deathT > 0 || !breakerInReach(bx, bz)) return;
+    if (now < blackoutEnd) breakerNear = BreakerUse::Restore;
+    else breakerNear = now < breakerRestUntil ? BreakerUse::Resting : BreakerUse::Cut;
+}
+
+bool Sim::breakerInReach(float &bx, float &bz) {
+    if (!levelHasBreakers(level)) return false;
+    const int pci = cellOf(px), pck = cellOf(pz);
+    float nearest = BREAKER_REACH;
+    bool found = false;
+    for (int a = pci - 1; a <= pci + 2; a++) for (int b = pck - 1; b <= pck + 2; b++)
+        for (int west = 0; west < 2; west++) {
+            WallPhone w;
+            if (!wallBreaker(world, a, b, west != 0, w)) continue;
+            float dx = px - w.pos.x, dz = pz - w.pos.z;
+            if (dx * w.normal.x + dz * w.normal.z <= 0.0f) continue;   // behind the wall
+            float d = sqrtf(dx * dx + dz * dz);
+            if (d >= nearest) continue;
+            nearest = d; bx = w.pos.x; bz = w.pos.z; found = true;
+        }
+    return found;
+}
+
+void Sim::throwBreaker(float bx, float bz) {
+    const double now = stepNow;
+    if (now < blackoutEnd) {   // any blackout, the breaker's or the building's: the lights come back
+        blackoutEnd = now;
+        powerCut = false;
+        breakerRestUntil = now + BREAKER_REST;
+        play(Sfx::Breaker).atPitch(1.12f);
+        deckNoteT = 2.4f; deckNote = "the power comes back on.";
+    } else if (now < breakerRestUntil) {   // the handle springs back
+        play(Sfx::Click).atPitch(0.6f);
+        deckNoteT = 2.4f; deckNote = "the breaker will not hold yet.";
+        return;
+    } else {
+        blackoutEnd = now + BREAKER_CUT;
+        powerCut = true;
+        nextBlackout = fmax(nextBlackout, blackoutEnd + BREAKER_AFTER);
+        play(Sfx::Breaker);
+        deckNoteT = 2.4f; deckNote = "the lights die. the breaker will reset itself.";
+    }
+    breakerNoiseT = BREAKER_NOISE_TIME;
+    breakerNoiseX = bx; breakerNoiseZ = bz;
 }

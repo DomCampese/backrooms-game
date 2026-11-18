@@ -601,6 +601,51 @@ it shows the way to the nearest exit (`Sim::updatePhone`, shared/sim/place.cpp).
 - The contract golden gained only phone lines (and their chunks' fixture
   counts).
 
+# Breaker panels (November 2026)
+
+The levels with blackouts (Levels 0 and 1, LEVEL FUN, the theater and the
+casino) have breaker panels. The use key at one cuts the power or turns it
+back on (`Sim::throwBreaker`, shared/sim/place.cpp).
+
+- **Where a panel is, is core's `wallBreaker(world, gi, gk, west)`**
+  (core/layout.h), as for the phones: one solid edge in `BREAKER_RATE`
+  (130), or `BREAKER_RATE_OPEN` (55) in the theater and the casino, whose
+  open floors have fewer walls. Its own hash salt; the phone's exclusions
+  plus a poster's edge, a phone's edge and an auditorium cell. The layout
+  lists it as `FixtureKind::Breaker` with `h` the conduit's length to the
+  ceiling (`ceilY` of the cell it faces), and the sim scans it, so the two
+  cannot disagree. Seeds 1337, 7 and 99 over 64 chunks: 0.41-0.64 a chunk on
+  Levels 0, 1 and LEVEL FUN, 0.25-0.34 in the theater, 0.56-0.72 in the
+  casino. The `breakers` column of `DECOR` turns them on.
+- **The mesher builds it from boxes** (`addBreaker`, chunk_mesh.cpp):
+  cabinet, door, hinges, latch, a yellow label, the switch handle on its
+  right side (always up: the mesh does not change with the power) and the
+  conduit. Each part stands at least 8 mm off the one behind it.
+- **A cut is an ordinary blackout that lasts `BREAKER_CUT` (30 s)**:
+  `blackoutEnd` is set and `powerCut` marks it as the breaker's. Everything
+  that follows a blackout follows it: the tubes and the hum, `inShadow`
+  (the hunter's `DARK_SIGHT`), the 2.2x sanity drain, the migraine easing,
+  the theater's projector, and Level 1's crates moving when it ends.
+- **The use key in any blackout ends it at once**, the building's too.
+- **`breakerRestUntil`**: for `BREAKER_REST` (40 s) after the lights come
+  back, by the key or by the cut running out, a breaker will not cut them;
+  the handle clicks back and the HUD says so. `setPaused` shifts it.
+- **A throw is a noise**: `BREAKER_NOISE` (18 m) at the panel for
+  `BREAKER_NOISE_TIME` (0.5 s) in `loudestNoise`. A refused throw is not.
+- **A cut pushes `nextBlackout` to at least `BREAKER_AFTER` (45 s) after it
+  ends, with `fmax`, not `blackoutIn`**, so it draws nothing from `grng`.
+- **Reach** (`breakerInReach`): `BREAKER_REACH` (1.4 m) from the panel's
+  face point, on the side it faces; the 4 x 4 cells from one behind to two
+  ahead of the player's, both edges each. It is second in `useWhatIsNear`,
+  after a ringing phone, and the HUD line ("E · cut the power", "turn the
+  power back on", "the breaker will not hold yet") is second in the same
+  chain.
+- `Sfx::Breaker` (`makeBreaker`, port/sounds.cpp) is the last `Sfx` value,
+  so both builds load it with no platform code. Restoring plays it at 1.12.
+- The new fields are not in the trace digest, and walk-l0-l2.trace presses
+  no use key by a panel, so it plays back unchanged. The contract golden
+  gained only breaker lines (`kind 19`) and their chunks' fixture counts.
+
 # Exits can be heard (November 2026)
 
 Exits are rare (mapdump finds one in a 258 m square on Levels 0, 1 and LEVEL

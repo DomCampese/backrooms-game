@@ -1514,6 +1514,37 @@ static void addPhone(MB &pr, const Fixture &pf) {
     }
 }
 
+// A breaker panel: a grey steel cabinet with a door, the main switch's handle
+// on its right side (up, as the power is on when the chunk is baked), a
+// yellow warning label, and a conduit from its top to the ceiling. Each part
+// stands at least 8 mm off the face behind it (see the vending machine).
+static void addBreaker(MB &pr, const Fixture &pf) {
+    const Vec3 n = pf.normal, right = { n.z, 0.0f, -n.x };
+    auto box = [&](float u0, float u1, float y0, float y1, float d0, float d1, Rgba c) {
+        float xa = pf.pos.x + right.x * u0 + n.x * d0, xb = pf.pos.x + right.x * u1 + n.x * d1;
+        float za = pf.pos.z + right.z * u0 + n.z * d0, zb = pf.pos.z + right.z * u1 + n.z * d1;
+        addSolidBox(pr, std::min(xa, xb), pf.pos.y + y0, std::min(za, zb),
+                    std::max(xa, xb), pf.pos.y + y1, std::max(za, zb), c);
+    };
+    const float W = BREAKER_HALF_W, H = BREAKER_HALF_H;
+    const Rgba body = { 132, 136, 132, 254 }, door = { 150, 154, 148, 254 }, dark = { 46, 46, 44, 254 },
+               label = { 214, 178, 40, 254 }, ink = { 30, 28, 24, 254 }, handle = { 168, 30, 26, 254 };
+    box(-W, W, -H, H, 0.0f, 0.105f, body);                          // the cabinet
+    box(-W + 0.02f, W - 0.02f, -H + 0.02f, H - 0.02f, 0.105f, 0.115f, door);
+    box(-W + 0.008f, -W + 0.02f, -H + 0.06f, -H + 0.12f, 0.105f, 0.125f, dark);   // hinges
+    box(-W + 0.008f, -W + 0.02f, H - 0.12f, H - 0.06f, 0.105f, 0.125f, dark);
+    box(W - 0.06f, W - 0.035f, -0.03f, 0.03f, 0.115f, 0.135f, dark);   // the door's latch
+    box(-0.09f, 0.07f, 0.10f, 0.19f, 0.115f, 0.123f, label);          // the warning label
+    box(-0.075f, 0.055f, 0.155f, 0.172f, 0.123f, 0.131f, ink);        // and its lettering, two bars
+    box(-0.075f, 0.02f, 0.12f, 0.134f, 0.123f, 0.131f, ink);
+    // The switch handle on the right side: a pivot block and the lever, up.
+    box(W, W + 0.035f, -0.05f, 0.03f, 0.03f, 0.08f, dark);
+    box(W + 0.035f, W + 0.055f, -0.03f, 0.16f, 0.045f, 0.065f, handle);
+    box(W + 0.03f, W + 0.06f, 0.14f, 0.19f, 0.04f, 0.07f, handle);   // its grip
+    if (pf.h > 0.02f)   // the feed conduit up the wall
+        box(-0.035f, 0.035f, H, H + pf.h, 0.02f, 0.07f, { 120, 122, 118, 254 });
+}
+
 struct FixtureMeshes { MB &pr, &fx, &scr, &ao; };
 
 // Build one fixture. bakeChunk calls this at the point in its cell walk where
@@ -1537,6 +1568,7 @@ static void addFixture(const FixtureMeshes &m, const Fixture &f) {
     case FixtureKind::Poster:      addPoster(m.pr, f); break;
     case FixtureKind::House:       break;   // bakeChunkGeometry builds it with the layout's openings
     case FixtureKind::Phone:       addPhone(m.pr, f); break;
+    case FixtureKind::Breaker:     addBreaker(m.pr, f); break;
     }
 }
 

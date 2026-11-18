@@ -1398,6 +1398,47 @@ Pcm makeAshTap()
     return toPcm(d, 0.7f);
 }
 
+// Breaker: a main switch thrown, 0.9 s. The lever's impact at 0: a 6 ms
+// noise burst into three resonators at 410, 1130 and 2380 Hz (decay 22, 35
+// and 60 per second) over a 75 Hz thump decaying at 25 per second. The
+// contactor at 55 ms: a 2 ms burst through a 3.2 kHz resonator. From the
+// contactor, 100 Hz mains buzz (harmonics 1-3 at 1, 0.5, 0.33, clipped at
+// 0.6) decaying at 5 per second, at 0.12. Then roomTail (0.7 s), a fifth
+// wet. Peak 0.8.
+Pcm makeBreaker()
+{
+    Rng r(0xB4E1ULL);
+    const int n = (int)(0.9f * SAMPLE_RATE);
+    std::vector<float> near(n);
+    const float fr[3] = { 410.0f, 1130.0f, 2380.0f }, dk[3] = { 22.0f, 35.0f, 60.0f };
+    float y1[4] = {}, y2[4] = {};
+    auto reson = [&](int k, float f, float decay, float x) {
+        const float rr = expf(-decay / SAMPLE_RATE), w = TAU * f / SAMPLE_RATE;
+        const float y = x * (1.0f - rr) * 8.0f + 2.0f * rr * cosf(w) * y1[k] - rr * rr * y2[k];
+        y2[k] = y1[k]; y1[k] = y;
+        return y;
+    };
+    for (int i = 0; i < n; i++) {
+        const float t = (float)i / SAMPLE_RATE, x = r.f01() * 2.0f - 1.0f;
+        const float hit = t < 0.006f ? x * (1.0f - t / 0.006f) : 0.0f;
+        float metal = 0;
+        for (int k = 0; k < 3; k++) metal += reson(k, fr[k], dk[k], hit) * (k == 0 ? 1.0f : 0.6f);
+        const float thump = sinf(TAU * 75.0f * t) * expf(-t * 25.0f);
+        const float u = t - 0.055f;
+        const float snap = reson(3, 3200.0f, 120.0f, u >= 0 && u < 0.002f ? x : 0.0f);
+        float buzz = 0;
+        if (u >= 0) {
+            float b = sinf(TAU * 100.0f * u) + 0.5f * sinf(TAU * 200.0f * u) + 0.33f * sinf(TAU * 300.0f * u);
+            buzz = clampf(b, -0.6f, 0.6f) * expf(-u * 5.0f) * 0.12f;
+        }
+        near[i] = metal + thump * 0.5f + snap * 0.7f + buzz;
+    }
+    const std::vector<float> room = roomTail(near, 0.7f);
+    std::vector<float> d(n);
+    for (int i = 0; i < n; i++) d[i] = near[i] * 0.8f + room[i] * 0.2f * 2.2f;
+    return toPcm(d, 0.8f);
+}
+
 // The Animation's laugh: five "ha"s on old film. Each is a sawtooth pulse
 // train through two RBJ band-passes at 700 and 1200 Hz (an "ah"), 0.13 s with a
 // 10 ms rise, 0.06 s apart. The pitch falls from 270 to 140 Hz across the
@@ -1470,6 +1511,7 @@ ClipSpec clipSpec(Sfx sfx) {
     case Sfx::PhoneVoice: return { 1, 1.0f, 0.8f };
     case Sfx::AshTap:     return { 1, 1.0f, 0.8f };
     case Sfx::LighterSpark: return { 1, 1.0f, 0.6f };
+    case Sfx::Breaker:    return { 1, 1.0f, 0.8f };
     default:             return { 1, 1.0f, 1.0f };
     }
 }
@@ -1532,6 +1574,7 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::PhoneVoice:     return makePhoneVoice();
     case Sfx::AshTap:         return makeAshTap();
     case Sfx::LighterSpark:   return makeLighterSpark();
+    case Sfx::Breaker:        return makeBreaker();
     }
     return {};
 }
