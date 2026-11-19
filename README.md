@@ -301,7 +301,12 @@ AGENTS.md has the module map file by file.
 - **Props.** Carton stacks, filing cabinets, folding tables and fallen ceiling
   tiles, placed by the generator. All are solid.
 - **Pirate Clark** (Level 0): tricorn hat, one glowing eye, a hook and a peg
-  leg.
+  leg. He carries a flintlock pistol. After 5 s of a chase, if he can see you
+  from 6-18 m away, he stops and aims for 1 s: you hear the hammer cock, a
+  light shows at his hand and the HUD says "he is aiming at you". Get out of
+  his line of sight and he lowers it. If he fires, the ball takes 0.3 of your
+  health. Inside 9 m it always hits; further out, sprinting dodges it. He
+  stands in the smoke for 0.6 s, then comes on, and reloads for 14 s.
 - **The Smiler** (Levels 1 and 3, and the theater), from the
   [Backrooms wiki](https://backrooms.fandom.com/wiki/Entity_3): a dark shape
   with two glowing eyes and a glowing grin, drawn unlit so it shows in dark
