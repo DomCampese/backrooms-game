@@ -44,7 +44,8 @@ enum WallKind : uint8_t {
     WALL_RAIL   = 6,
     // A doorway whose leaf the player has shut. Never stored in a chunk: the
     // shutDoors overlay turns a WALL_DOOR into this in wallNVal/wallWVal. Blocks
-    // bodies, light and sight like a locked door.
+    // bodies, light and sight like a locked door. The lockedDoors overlay turns
+    // a shut one the player has locked into WALL_LOCKED.
     WALL_SHUT   = 7,
 };
 
@@ -577,6 +578,9 @@ struct World {
     // Doorways whose leaf is shut (WALL_SHUT), in the same edge-key space.
     // Cleared with the level (unloadAll).
     std::unordered_set<uint64_t> shutDoors;
+    // Shut doorways the player has locked with a key: a WALL_SHUT edge in this
+    // set reads as WALL_LOCKED. Cleared with the level (unloadAll).
+    std::unordered_set<uint64_t> lockedDoors;
     // Edges are per storey: the edge directly above is a different edge. Storey
     // 0 keys as a one-storey world did.
     uint64_t edgeKey(int ci, int ck, bool west) const {
@@ -586,6 +590,12 @@ struct World {
     void unlockEdge(int ci, int ck, bool west);  // open a locked door for good, and rebake
     // Shut or open a doorway's leaf, and rebake both chunks that draw it.
     void shutEdge(int ci, int ck, bool west, bool shut);
+    // Lock or unlock a shut doorway's leaf (lockedDoors), and rebake both
+    // chunks that draw it.
+    void lockEdge(int ci, int ck, bool west, bool lock);
+    bool playerLocked(int ci, int ck, bool west) const {
+        return !lockedDoors.empty() && lockedDoors.count(edgeKey(ci, ck, west)) != 0;
+    }
     // Is the next edge along this one's wall line a doorway (open or shut)?
     // Two such doorways share one opening with no jamb between them, so neither
     // takes a leaf.

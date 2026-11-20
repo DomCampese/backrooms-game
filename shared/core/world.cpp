@@ -1280,7 +1280,8 @@ uint8_t World::wallNVal(int ci, int ck) {
     uint8_t v = data(cx, cz).wallN[ci - cx * CCELLS][ck - cz * CCELLS];
     if (v == WALL_LOCKED && !unlockedDoors.empty() &&
         unlockedDoors.count(edgeKey(ci, ck, false))) v = WALL_DOOR;
-    if (v == WALL_DOOR && !shutDoors.empty() && shutDoors.count(edgeKey(ci, ck, false))) return WALL_SHUT;
+    if (v == WALL_DOOR && !shutDoors.empty() && shutDoors.count(edgeKey(ci, ck, false)))
+        return playerLocked(ci, ck, false) ? WALL_LOCKED : WALL_SHUT;
     return v;
 }
 uint8_t World::wallWVal(int ci, int ck) {
@@ -1289,7 +1290,8 @@ uint8_t World::wallWVal(int ci, int ck) {
     uint8_t v = data(cx, cz).wallW[ci - cx * CCELLS][ck - cz * CCELLS];
     if (v == WALL_LOCKED && !unlockedDoors.empty() &&
         unlockedDoors.count(edgeKey(ci, ck, true))) v = WALL_DOOR;
-    if (v == WALL_DOOR && !shutDoors.empty() && shutDoors.count(edgeKey(ci, ck, true))) return WALL_SHUT;
+    if (v == WALL_DOOR && !shutDoors.empty() && shutDoors.count(edgeKey(ci, ck, true)))
+        return playerLocked(ci, ck, true) ? WALL_LOCKED : WALL_SHUT;
     return v;
 }
 
@@ -1612,6 +1614,15 @@ void World::unlockEdge(int ci, int ck, bool west) {
 void World::shutEdge(int ci, int ck, bool west, bool shut) {
     uint64_t k = edgeKey(ci, ck, west);
     if (shut ? !shutDoors.insert(k).second : shutDoors.erase(k) == 0) return;
+    int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
+    rebuildChunk(cx, cz);
+    int nx = fdiv(west ? ci - 1 : ci, CCELLS), nz = fdiv(west ? ck : ck - 1, CCELLS);
+    if (nx != cx || nz != cz) rebuildChunk(nx, nz);
+}
+
+void World::lockEdge(int ci, int ck, bool west, bool lock) {
+    uint64_t k = edgeKey(ci, ck, west);
+    if (lock ? !lockedDoors.insert(k).second : lockedDoors.erase(k) == 0) return;
     int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
     rebuildChunk(cx, cz);
     int nx = fdiv(west ? ci - 1 : ci, CCELLS), nz = fdiv(west ? ck : ck - 1, CCELLS);
@@ -2142,6 +2153,7 @@ void World::unloadFar(int pcx, int pcz, int radius) {
 void World::unloadAll() {
     shifted.clear();   // a new level starts with no shifted walls and every door open
     shutDoors.clear();
+    lockedDoors.clear();
     for (auto &kv : chunks) staleChunks.push_back({ storey, keyX(kv.first), keyZ(kv.first) });
     chunks.clear();
     for (auto &lv : layers)

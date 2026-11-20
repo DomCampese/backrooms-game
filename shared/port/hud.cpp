@@ -490,8 +490,16 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
                   { 230, 170, 120, 180 });
         }
     } else if (sim.doorReach.ok) {   // the doorway the use key would shut or open
-        const char *verb = sim.doorReach.shut ? "open the door" : "shut the door";
-        textC(fmt("%s · %s", in.touch ? "USE" : "E", verb), sw / 2, sh / 2 + hud(46), hud(14), { 200, 190, 160, 150 });
+        const char *use = in.touch ? "USE" : "E";
+        const char *verb = sim.doorReach.locked ? "unlock it, take the key back"
+                         : sim.canLockDoor() ? (sim.doorReach.shut ? "lock the door" : "shut and lock the door")
+                         : sim.doorReach.shut ? "open the door" : "shut the door";
+        textC(fmt("%s · %s", use, verb), sw / 2, sh / 2 + hud(46), hud(14), { 200, 190, 160, 150 });
+        if (sim.doorReach.locked)
+            textC("locked · he cannot open it", sw / 2, sh / 2 + hud(64), hud(13), { 200, 190, 160, 120 });
+        else if (sim.keys > 0 && !sim.canLockDoor())
+            textC(fmt("crouch (%s) to lock it with a key", in.touch ? "DUCK" : "CTRL"), sw / 2, sh / 2 + hud(64), hud(13),
+                  { 200, 190, 160, 110 });
     } else if (sim.slotNear) {   // a slot machine the use key would play
         textC(fmt("%s · pull the handle · one doubloon", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14),
               { 220, 190, 120, 160 });
