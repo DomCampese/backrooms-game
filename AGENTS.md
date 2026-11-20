@@ -228,6 +228,29 @@ shared/sim/items.cpp). A shut door is `WALL_SHUT`, which no chunk stores: the
 - `useHeld` is a new trace input. Older traces omit it and replay with it
   false; walk-l0-l2.trace has no hunter at a shut door and plays back
   unchanged.
+- **Crouched with a key, the use key locks the door in reach** (November
+  2026; `Sim::canLockDoor`, `useDoor`, `World::lockEdge`). Crouched past
+  `LOCK_CROUCH` (0.5 of `crouchCur`), an open doorway is shut and locked in
+  one press; a shut one is locked. It costs the key, makes the door noise,
+  and works on a door the hunter is pushing (that ends his push). The
+  `World::lockedDoors` overlay turns that WALL_SHUT into `WALL_LOCKED` in
+  `wallNVal`/`wallWVal`, so `canStep` refuses it even with `throughShut`,
+  `hunterOpensDoor` never sees it, and it blocks light and sight.
+  `lockEdge` rebakes both chunks; `unloadAll` clears the set, so a key left
+  in a lock is lost with the level.
+- **The player's own lock is not a found lock.** `findDoor` reports it
+  (`DoorReach::locked`), and the use key at it unlocks it and gives the key
+  back, leaving the door shut. The found-lock loop in `useWhatIsNear`
+  skips `playerLocked` edges; without that skip, the press that locked a
+  door also spent a second key on `unlockEdge`, which only applies to
+  stored `WALL_LOCKED` and left the door locked. `hunterAtDoor` is false at
+  a locked door, or the HUD offered "hold the door shut" on it.
+- The HUD says "E · lock the door" (or "shut and lock the door") when it
+  would lock, "crouch (CTRL) to lock it with a key" under the door line when
+  a key is carried and the player stands, and "unlock it, take the key
+  back" with "locked · he cannot open it" at the player's lock. The mesher
+  builds it as any locked door. No new `Sfx` or input; walk-l0-l2.trace
+  plays back unchanged.
 
 # The theater: backstage, lobbies, snack machines and the Usher (November 2026)
 
