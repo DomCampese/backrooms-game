@@ -478,6 +478,12 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         textC(fmt("%s · answer the phone", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14), { 214, 200, 160, 170 });
     } else if (sim.bedNear) {   // a bed the use key would sleep in (Level 94); it comes before a door
         textC(fmt("%s · sleep until morning", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14), { 200, 190, 160, 150 });
+    } else if (sim.usherNear) {   // the theater's Usher, in reach of a tip
+        if (sim.usher.paidT > 0)
+            textC("tipped · it looks the other way", sw / 2, sh / 2 + hud(46), hud(14), { 214, 196, 150, 150 });
+        else
+            textC(fmt("%s · tip the usher · one doubloon", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14),
+                  { 214, 196, 150, 170 });
     } else if (sim.truckNear) {   // an almond water truck with a can on its counter (Level 94)
         textC(fmt("%s · take the almond water", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14), { 200, 214, 220, 160 });
     } else if (sim.hunterAtDoor(sim.doorReach)) {   // the hunter pushing the shut door in reach

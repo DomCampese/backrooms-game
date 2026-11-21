@@ -381,6 +381,13 @@ struct Sim {
     static constexpr float USHER_REST = 25.0f;     // s before it can whistle again
     static constexpr float USHER_HEAR_M = 12.0f;   // a sprint or a lit torch this close turns its beam
     static constexpr float USHER_TORCH_Y = 1.25f;  // the torch above its feet
+    // A tip (Sim::tipUsher): the use key within USHER_TIP_REACH m of the Usher,
+    // patrolling or holding its beam on the player, costs USHER_TIP
+    // doubloons. For USHER_PAID s its beam does not see the player and points
+    // away from them, and a sprint or a light does not turn it. A tip while it
+    // holds the beam ends the hold; the whistle already blown still stands.
+    static constexpr float USHER_TIP_REACH = 1.8f, USHER_PAID = 60.0f;
+    static constexpr int USHER_TIP = 1;
 
     // ---- configuration, set by the platform before the first step
     bool noBlackout = false;     // never schedule a blackout (headless captures)
@@ -491,6 +498,7 @@ struct Sim {
     Usher usher;
     float usherDist = 1e9f;          // to the Usher, this tick
     Rng usherRng{1};                 // its own stream, so it does not shift grng on other levels
+    bool usherNear = false;          // the Usher is in reach of a tip, this tick
     float entDist = 1e9f;            // to the hunter, this tick
     float entPrevX = 0, entPrevZ = 0;   // his position last tick, for his velocity
     float playerLight = 1;           // lightAtPlayer, smoothed; kept up only while a hunter is out
@@ -803,6 +811,8 @@ struct Sim {
     void spawnUsher(double now);
     void usherRoamTarget(double now);
     bool inUsherBeam();        // the player is lit by its torch and it can see them
+    bool usherInReach() const;  // close enough to tip it (USHER_TIP_REACH)
+    void tipUsher(double now);
     void usherWhistle();
     void callHunter();               // spawned if hidden, chasing the player either way
     bool slotInReach(int &a, int &b);   // the slot machine cell the use key would pull
