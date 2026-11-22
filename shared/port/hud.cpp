@@ -495,6 +495,22 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
     } else if (sim.slotNear) {   // a slot machine the use key would play
         textC(fmt("%s · pull the handle · one doubloon", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14),
               { 220, 190, 120, 160 });
+    } else if (sim.cardsNear) {   // a card table with no hand running (the casino)
+        textC(fmt("%s · deal a hand of blackjack · one doubloon", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14),
+              { 200, 220, 190, 160 });
+    }
+    if (sim.level == CASINO && (sim.cards.active || sim.cards.showT > 0) && sim.deathT <= 0) {   // the hand on the table
+        static const char *const RANK[14] = { "?", "A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K" };
+        const Sim::CardHand &c = sim.cards;
+        std::string you, dealer;
+        for (int i = 0; i < c.nYou; i++) you += std::string(i ? " " : "") + RANK[c.you[i]];
+        for (int i = 0; i < c.nDealer; i++) dealer += std::string(i ? " " : "") + ((i == 1 && !c.revealed) ? "?" : RANK[c.dealer[i]]);
+        std::string line = fmt("you %s (%d)    dealer %s", you.c_str(), Sim::handValue(c.you, c.nYou), dealer.c_str());
+        if (c.revealed) line += fmt(" (%d)", Sim::handValue(c.dealer, c.nDealer));
+        textC(line, sw / 2, sh / 2 + hud(68), hud(16), { 236, 232, 214, 220 });
+        if (c.active)
+            textC(fmt("%s · take a card    %s · stand", in.touch ? "USE" : "E", in.touch ? "JUMP" : "SPACE"),
+                  sw / 2, sh / 2 + hud(90), hud(13), { 200, 220, 190, 160 });
     }
     if (sim.paused) {
         rect(0, 0, sw, sh, fade(BLACK_RGBA, 0.55f));

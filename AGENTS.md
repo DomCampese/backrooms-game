@@ -2176,6 +2176,25 @@ so CREDITS.md has no row for it.
   `casinowall` (gold flock damask on oxblood, no dado so it tiles at any
   height). The ceiling is the theater's `cinemaceil`. The skirting is gilt.
 
+- **Blackjack at the card tables** (November 2026; `Sim::dealCards`,
+  `hitCards`, `standCards`, `updateCards`, casino.cpp; `CARDS_*` and
+  `CardHand` in sim.h). The use key within `CARDS_REACH` (1.6 m) of a
+  `PROP_CARD_TABLE` cell's centre deals for `CARDS_BET` (1); the use key at
+  that table takes a card; `InputFrame::jumpPressed`, moving `CARDS_LEAVE`
+  (2.4 m) away, leaving the level or dying stands. The dealer draws to 17
+  (an ace counts 11 where that does not bust; soft 17 stands). Win 2, push
+  1, two-card 21 pays 3 unless the dealer also has one. An endless shoe:
+  13 ranks at equal odds from `cardRng`, reseeded when `levelEntries`
+  changes (checked in `updateCards`, so `applyLevel` is untouched), so
+  `grng` is not moved. Hitting below 17 returned 0.95 a doubloon over 1,200
+  hands in the scratch test. No noise and no new `Sfx` (`Click` per card,
+  `SlotWin` on a win). The hand is drawn in `sceneDraws` as 63 x 88 mm cubes
+  on the felt, on the player's side and the far side of the table's centre
+  (axis-aligned, the long side on the axis nearer the player's line), face
+  down in dark red; the HUD prints both hands with totals. The card table
+  comes before the slot machines in `useWhatIsNear`; the two never share a
+  cell. The casino is not in walk-l0-l2.trace.
+
 # The casino's cigarettes (November 2026)
 
 A gold pack of cigarettes is the casino's find, placed and drawn like the

@@ -588,6 +588,38 @@ struct Sim {
     bool sheltered = false;          // Level 94: inside a house, where the Animation cannot find you
     Rng slotRng{1};                  // its own stream, so the casino does not shift grng
     bool slotNear = false;           // a slot machine is in reach of the use key, for the HUD
+    // Blackjack at a card table (Sim::updateCards, casino.cpp). The use key
+    // within CARDS_REACH m of a PROP_CARD_TABLE cell's centre deals a hand for
+    // CARDS_BET doubloon: two cards each, one of the dealer's face down. The
+    // use key again takes a card; the jump key stands, as does stepping
+    // CARDS_LEAVE m from the table. Over 21 loses at once. Standing, the
+    // dealer draws to 17 or more (aces count 11 where that does not bust).
+    // A win returns 2, a push 1, a two-card 21 3 (unless the dealer has one
+    // too: a push). Cards are drawn from an endless shoe (13 ranks, equal
+    // odds) out of cardRng, reseeded each level entry, so grng is not moved.
+    // Unlike the slots, a hand makes no noise.
+    static constexpr float CARDS_REACH = 1.6f, CARDS_LEAVE = 2.4f, CARDS_SHOW = 3.0f;
+    static constexpr int CARDS_BET = 1, CARDS_MAX = 11;
+    enum class CardResult : uint8_t { None, Win, Push, Lose, Bust, Blackjack };
+    struct CardHand {
+        bool active = false;          // a hand is being played
+        int a = 0, b = 0;             // its table's cell
+        uint8_t you[CARDS_MAX] = {}, dealer[CARDS_MAX] = {};   // ranks 1..13
+        int nYou = 0, nDealer = 0;
+        bool revealed = false;        // the dealer's second card is face up
+        CardResult result = CardResult::None;
+        float showT = 0;              // s the result stays on the HUD and the table
+    };
+    CardHand cards;
+    Rng cardRng{1};
+    unsigned cardsEntry = ~0u;        // the levelEntries cardRng was seeded for
+    bool cardsNear = false;           // a card table with no hand running is in reach, for the HUD
+    bool cardTableInReach(int &a, int &b);
+    void dealCards(int a, int b);
+    void hitCards();
+    void standCards();
+    void updateCards(const InputFrame &in, float dt);
+    static int handValue(const uint8_t *ranks, int n);
     float boostT = 0;                // s of almond-water speed left
     float sanity = 1.0f;
     int sanityStage = 0;             // deepest threshold crossed, so each warning fires once

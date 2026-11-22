@@ -425,6 +425,9 @@ void Sim::useWhatIsNear() {
             if (!notesRead) { notesRead = true; markWayOut(); }
         }
     }
+    int ca, cb;   // a card table: hit the hand running there, or deal one
+    if (cards.active && cardTableInReach(ca, cb) && ca == cards.a && cb == cards.b) { hitCards(); return; }
+    if (!cards.active && cardTableInReach(ca, cb)) { dealCards(ca, cb); return; }
     int sa, sb;
     if (slotInReach(sa, sb)) pullSlot(sa, sb);
     for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {   // vending: three doubloons a can
