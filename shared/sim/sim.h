@@ -149,6 +149,42 @@ struct Sim {
     static constexpr uint32_t SUNKEN_COIN_RATE = 23;
     static constexpr uint32_t SUNKEN_ALMOND_RATE = 71;
     static constexpr float SUNKEN_REACH = 0.7f;
+    // The Poolrooms' drains (World::poolDrain; Sim::updateDrains, drains.cpp).
+    // Each runs DRAIN_ON s of every DRAIN_CYCLE, from a phase hashed from its
+    // cell, on sim time counted from arrival. Running, it pulls a body in the
+    // water within DRAIN_REACH m toward its centre, at DRAIN_DRAG m/s2 times
+    // the pull (1 at the centre, 0 at DRAIN_REACH; the water's drag makes that
+    // about 2 m/s of drift at the centre against 2.4 m/s of swimming), and
+    // takes DRAIN_SINK m/s off a swimmer's rise, so a swimmer within about
+    // 1.5 m cannot keep their head above water. It spins up and down over
+    // DRAIN_SPIN s. Heard within DRAIN_HEAR m.
+    static constexpr float DRAIN_ON = 8.0f;
+    static constexpr float DRAIN_CYCLE = 18.0f;
+    static constexpr float DRAIN_SPIN = 1.5f;
+    static constexpr float DRAIN_REACH = 3.5f;
+    static constexpr float DRAIN_DRAG = 8.0f;
+    static constexpr float DRAIN_SINK = 1.6f;
+    static constexpr float DRAIN_HEAR = 16.0f;
+    static constexpr float DRAIN_SCAN_GAP = 0.25f;   // s between searches for the nearest drain
+    static constexpr float DRAIN_GURGLE_GAP = 1.4f;  // s between plays of Sfx::DrainRun (1.6 s each)
+    // The nearest drain within DRAIN_HEAR (found every DRAIN_SCAN_GAP), how
+    // hard it runs now (0..1) and its pull on the player (0..1, toward dirx,
+    // dirz). `grip` is the pull before it fades over the grate, for the HUD.
+    // Reset on every level entry, with the clock.
+    struct Drain {
+        bool found = false;
+        int ci = 0, ck = 0;
+        float x = 0, z = 0, floorY = 0;   // the grate's centre
+        float dist = 0, run = 0;
+        float pull = 0, dirx = 0, dirz = 0, grip = 0;
+    };
+    Drain drainNear;
+    float drainClock = 0;      // sim s since arrival, wrapped at DRAIN_CYCLE
+    float drainScanT = 0, drainGurgleT = 0;
+    int drainGurgleVar = 0;
+    unsigned drainEntry = ~0u;
+    float drainRun(int ci, int ck) const;   // how hard the drain in this cell runs now, 0..1
+    void updateDrains(float dt);
     // One empty floor cell in this many holds the revolver: about one every
     // dozen chunks, so most runs find it on Level 0 or the theater.
     static constexpr uint32_t REVOLVER_ODDS = 2003;

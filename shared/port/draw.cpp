@@ -590,6 +590,36 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             break;
         }
     }
+    // A running drain (Sim::updateDrains): 28 bubbles, 6-10 cm, rising from the
+    // grate to the surface at 0.8 m/s on a spiral that widens from 0.05 to 0.4 m, and a
+    // ring of 14 flecks of foam turning on the surface over it, all additive and
+    // writing no depth, faded by how hard it runs. The bubbles
+    // under the water are marked sunken, so the Web build draws them first.
+    if (sim.level == 2 && sim.drainNear.found && sim.drainNear.run > 0.01f) {
+        const Sim::Drain &dr = sim.drainNear;
+        const float depth = WATER_Y - dr.floorY, run = dr.run;
+        const float lum = propLum(dr.x, WATER_Y - 0.5f, dr.z);
+        for (int i = 0; i < 28; i++) {
+            const float h = fmodf(now * 0.8f + i * 0.377f * depth, depth);
+            const float u = h / depth, r = 0.05f + 0.35f * u, ang = now * 2.6f + i * 2.4f + u * 3.0f;
+            const Vec3 p{ dr.x + r * cosf(ang), dr.floorY + h, dr.z + r * sinf(ang) };
+            const float size = (0.06f + 0.04f * (float)((i * 7) % 5) / 4.0f) * (0.7f + 0.6f * u);
+            Rgba c = lit({ 150, 175, 175, 255 }, lum * run * fminf(h / 0.15f, 1.0f));
+            Shape s = billboardWhole(ShapeTex::Particle, p, size, c);
+            s.additive = true;
+            s.depthWrite = false;
+            put(out, s);
+            out.back().sunken = true;
+        }
+        for (int i = 0; i < 14; i++) {
+            const float ang = now * 1.8f + i * (TAU / 14), r = 0.45f + 0.25f * (float)(i % 3) / 2.0f;
+            const Vec3 p{ dr.x + r * cosf(ang), WATER_Y + 0.012f, dr.z + r * sinf(ang) };
+            Shape s = billboardWhole(ShapeTex::Particle, p, 0.16f, lit({ 120, 135, 135, 255 }, lum * run));
+            s.additive = true;
+            s.depthWrite = false;
+            put(out, s);
+        }
+    }
     if (sim.mannequin.active && sim.mannequin.storey == sim.world.storey) {
         const auto &m = sim.mannequin;
         Vec3 forward{cosf(m.yaw),0,sinf(m.yaw)}, side{-forward.z,0,forward.x};

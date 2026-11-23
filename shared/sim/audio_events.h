@@ -40,6 +40,11 @@ enum class Sfx : uint8_t {
     Shutter,          // 3: a camera's shutter and film advance, one per Animation pose (Level 94)
     Cackle,           // the Animation's laugh as it starts a chase: a cartoon laugh on warped film
     HoldBreath,       // a quick breath in through the mouth, held (Sim::holdingBreath)
+    // The drains sit here, not at the end, so this branch and the open ones
+    // that append do not touch the same line. Nothing after them plays in
+    // walk-l0-l2.trace, so the renumbering leaves its audioHash unchanged.
+    DrainRun,         // 2: a running pool drain: water rushing and bubbling (Sim::updateDrains)
+    DrainStart,       // a pool drain's valve opening: a steel clunk and the rush rising
     PhoneRing,        // one burst of a wall phone's bells (Sim::updatePhone)
     PhoneVoice,       // an answered phone: the handset lifted, a voice down the line, the line going dead
     AshTap,           // a finger tapping a cigarette, and the ash coming off (Sim::Smoke::flickT)

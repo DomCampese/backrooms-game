@@ -1658,6 +1658,23 @@ static void addFitting(MB &pr, MB &ce, const LightFitting &lf, int level) {
             {0,0},{0,1},{1,1},{1,0},panel);
 }
 
+// A drain in a pool floor (World::poolDrain): a black sump plate, a steel
+// frame round it and seven bars across it, 2 * DRAIN_HALF square. The bars
+// stand on the plate and the frame on the tile, so no two faces share a plane.
+static void addDrain(MB &pr, float cx, float fy, float cz) {
+    const Rgba sump{ 14, 17, 19, 254 }, steel{ 150, 158, 160, 254 };
+    const float h = DRAIN_HALF, rim = 0.06f, in = h - rim;
+    addSolidBox(pr, cx - in, fy, cz - in, cx + in, fy + 0.006f, cz + in, sump);
+    addSolidBox(pr, cx - h, fy, cz - h, cx + h, fy + 0.035f, cz - in, steel);
+    addSolidBox(pr, cx - h, fy, cz + in, cx + h, fy + 0.035f, cz + h, steel);
+    addSolidBox(pr, cx - h, fy, cz - in, cx - in, fy + 0.035f, cz + in, steel);
+    addSolidBox(pr, cx + in, fy, cz - in, cx + h, fy + 0.035f, cz + in, steel);
+    for (int n = 0; n < 7; n++) {
+        float z = cz - in + (2 * in) * (n + 0.5f) / 7;
+        addSolidBox(pr, cx - in, fy + 0.006f, z - 0.015f, cx + in, fy + 0.028f, z + 0.015f, steel);
+    }
+}
+
 void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
     const ChunkLayout L = chunkLayout(w, cx, cz);
     const ChunkFloorplan F = chunkFloorplan(w, cx, cz);
@@ -1696,6 +1713,7 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
             if (c.pool)
                 wt.quad({gx,WATER_Y,gz},{gx+CELL,WATER_Y,gz},{gx+CELL,WATER_Y,gz+CELL},{gx,WATER_Y,gz+CELL},{0,1,0},
                         {0,0},{1,0},{1,1},{0,1},water);
+            if (c.drain) addDrain(pr, gx + CELL * 0.5f, fy, gz + CELL * 0.5f);
         }
         // Elliptical vaults over the openings in the central partitions, lowest point
         // ARCH_SPRING up, where the floorplan has them. Collision is the full-height

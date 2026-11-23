@@ -433,6 +433,8 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         rect(x, y, (int)(w * sim.breath), th, low ? Rgba{ 210, 90, 70, 200 } : Rgba{ 150, 200, 225, 170 });
         if (sim.breath <= 0) text("out of air · surface", x + hud(44), y - hud(16), hud(12), { 225, 120, 100, 210 });
     }
+    if (sim.drainNear.grip > 0.08f && sim.deathT <= 0)   // a running drain has hold of the player (Sim::updateDrains)
+        textC("[ a drain is pulling you down · swim away from it ]", sw / 2, sh - hud(100), hud(14), { 150, 215, 230, 200 });
     // The hiding hint, one per state. It used to say "hold still" even when
     // there was no cover.
     const char *coverLine = nullptr;

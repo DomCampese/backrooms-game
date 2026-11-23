@@ -324,6 +324,60 @@ and the deep floors hold loot (`Sim::updateBreath`, shared/sim/player.cpp;
   (1.3-1.7): lit by the room it was a dark 5 px dot at 10 m.
 - walk-l0-l2.trace never puts the eye under water and plays back unchanged.
 
+# Drains in the Poolrooms (November 2026)
+
+Deep pools have drains that pull a swimmer down and toward them while they run
+(`World::poolDrain`, core/world.cpp; `Sim::updateDrains`, shared/sim/drains.cpp).
+
+- **Where a drain is, is core's `World::poolDrain(ci, ck)`**: a pool cell
+  with no pillar whose floor is at `DRAIN_DEPTH` (-2.4 m) or lower, one in
+  `DRAIN_RATE` (40) by hash, and none in the eight cells round another, so
+  two pulls never add up. 300 in 256 chunks at seed 1337 (273 and 321 at
+  seeds 7 and 99). The floorplan carries it (`FloorCell::drain`) and the mesher
+  builds the grate into the props slot (`addDrain`): a black plate, a steel
+  frame and seven bars, `2 * DRAIN_HALF` (0.9 m) square, each part standing on
+  the one below so no two faces share a plane. No drain is in a cell with a
+  pillar: the first version put grates inside the grand halls' columns.
+- **The contract golden prints ` drain 1` only on a drain's cell**, and only
+  that cell's line goes into the hash differently, so no other line changed.
+  Two Level 2 chunks in the golden gained one each.
+- **When a drain runs is sim time**: `drainClock` counts from arrival
+  (reset when `levelEntries` changes, checked in `updateDrains`, so
+  `applyLevel` is untouched) and wraps at `DRAIN_CYCLE` (18 s). Each drain runs
+  for the first `DRAIN_ON` (8 s) of its cycle, offset by a hash of its cell,
+  spinning up and down over `DRAIN_SPIN` (1.5 s). No RNG, so `grng` is not
+  moved.
+- **The pull**: every `DRAIN_SCAN_GAP` (0.25 s) the sim finds the nearest
+  drain within `DRAIN_HEAR` (16 m). If the player is in the water within
+  `DRAIN_REACH` (3.5 m) of it, `grip` is run x (1 - d / 3.5), and `pull` is
+  the grip faded to zero over the last 0.3 m, so a body over the grate settles
+  instead of jittering. Movement adds `DRAIN_DRAG` (8 m/s2) x pull toward
+  the grate, after the water's drag, and `updateSwimming` takes `DRAIN_SINK`
+  (1.6 m/s) x pull off the rise. So a swimmer holding rise within about 1.5 m
+  has their head under, and one swimming straight out from 1 m clears it in
+  about 2.3 s. Wading in a shallow cell next to the deep water also drifts
+  toward it.
+- **`updateDrains` runs before `updateMovement`** in `Sim::step`, so the
+  pull is this tick's.
+- **The Sim member is `drainNear`, not `drain`.** place.cpp has a local
+  `float drain = sanityDrain(level)`, and a member of that name failed
+  `tools/unreal-check.sh` (`-Wshadow -Werror`).
+- **Sounds, synthesized in port/sounds.cpp**: `Sfx::DrainStart` (the valve
+  opening, played when the nearest drain starts) and `Sfx::DrainRun` (2
+  variants, alternated every `DRAIN_GURGLE_GAP`, 1.4 s, while it runs), panned
+  by bearing, at a level of (1 - d / 16)^2. **They sit before `PhoneRing` in
+  the enum, not at the end**, so they do not touch the line that open PRs
+  append to. Nothing after them plays in walk-l0-l2.trace, so its
+  `audioHash` is unchanged. `SFX_COUNT` still follows `LighterSpark`.
+- **Drawing is shared** (`sceneDraws`, port/draw.cpp): over the nearest
+  running drain, 28 bubbles (6-10 cm) rise at 0.8 m/s on a spiral widening
+  from 0.05 to 0.4 m, marked `sunken`, and 14 flecks of foam turn in a ring on
+  the surface. All are additive and write no depth, scaled by `run` and lit by
+  `propLum`. Alpha-blended, they were nearly invisible over the white tile.
+- The HUD says "[ a drain is pulling you down · swim away from it ]" while
+  `grip` is over 0.08.
+- walk-l0-l2.trace replays unchanged.
+
 # LEVEL FUN's music stops (November 2026)
 
 LEVEL FUN had nothing to play around but the Partygoer. Now its music stops

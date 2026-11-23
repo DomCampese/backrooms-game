@@ -27,6 +27,13 @@ A dry walkway runs round every chunk, so the pieces always connect, and openings
 
 Deep water uses damped buoyancy and water drag. Hold SPACE/JUMP to rise and float at the surface; release it to sink, which is the dive. SHIFT swims faster. Surface swimmers climb onto shelves with eased camera motion; submerged swimmers are stopped by risers. Breath lasts 18 s under water and refills in 3 s at the surface; empty, the player loses about a quarter of their health a second (AGENTS.md, "Breath and sunken loot in the Poolrooms"). Doubloons and almond water lie on floors 2.4 m deep or more, in reach only after a dive. Underwater tint and subtle distortion distinguish diving, and slow stroke sounds replace footsteps while afloat.
 
+Drains (AGENTS.md, "Drains in the Poolrooms"): about one deep cell in 40, none beside another or under a column, has a steel grate in its floor. Each runs 8 s of every 18 s. While it runs it pulls a body in the water within 3.5 m toward the grate and down, so a swimmer within about 1.5 m cannot hold the surface. It is heard within 16 m: a valve clunk when it starts, then rushing water. Bubbles spiral up from the grate to a ring of foam on the surface. A drain view, seed 1337 (the drain at cell -26,18 runs for the first 5.6 s after arrival):
+
+```sh
+tools/shot.sh pool-drain.png BACKROOMS_SEED=1337 BACKROOMS_LEVEL=2 \
+    BACKROOMS_POS=-51,32.5,1.5708,-0.6 BACKROOMS_SHOTFRAME=60 BACKROOMS_CLEAN=1
+```
+
 ## Verification
 
 `make regression` checks stable floating at 30, 60 and 144 updates per second, diving, resurfacing, bottom bounds, leaving water, submerged risers, assisted climbs, full-height wall collision, entity suppression and sanity recovery. It also captures surface and underwater views, and finds and captures a window gallery, a submerged staircase and a flooded tunnel (`pool-windows.png`, `pool-stairs.png`, `pool-tunnel.png`), failing if any room type is missing or the level stops being mostly water.

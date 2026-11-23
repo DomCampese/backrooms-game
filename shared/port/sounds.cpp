@@ -1279,6 +1279,72 @@ Pcm makeShutter(int variant)
     return toPcm(d, 0.6f);
 }
 
+// DrainRun: 1.6 s of a pool drain running, played every Sim::DRAIN_GURGLE_GAP
+// s on alternating variants. Noise through two one-pole low-passes at 320 Hz,
+// its level swaying at 2.6 Hz (0.6 to 1.0), and 14 bubbles at random times:
+// each a sine rising from 250-700 Hz to 1.6 times that over 40 ms, decaying
+// at 60 per second. 0.15 s fades at both ends, so overlapping plays join.
+// roomTail (0.9 s, 0.3 wet) for a tiled hall. Peak 0.6.
+Pcm makeDrainRun(int variant)
+{
+    const int n = (int)(1.6f * SAMPLE_RATE);
+    Rng r(0xD4A10ULL + variant);
+    std::vector<float> near(n, 0.0f);
+    const float k = 1.0f - expf(-TAU * 320.0f / SAMPLE_RATE);
+    float a = 0, b = 0;
+    for (int i = 0; i < n; i++) {
+        const float t = (float)i / SAMPLE_RATE;
+        a += k * ((r.f01() * 2.0f - 1.0f) - a);
+        b += k * (a - b);
+        near[i] = b * 2.2f * (0.8f + 0.2f * sinf(TAU * 2.6f * t + variant * 1.7f));
+    }
+    for (int m = 0; m < 14; m++) {
+        const float t0 = 0.05f + 1.45f * r.f01(), f0 = 250.0f + 450.0f * r.f01(), amp = 0.12f + 0.12f * r.f01();
+        const int i0 = (int)(t0 * SAMPLE_RATE);
+        float ph = 0;
+        for (int i = i0; i < n; i++) {
+            const float u = (float)(i - i0) / SAMPLE_RATE;
+            if (u > 0.09f) break;
+            ph += TAU * f0 * (1.0f + 0.6f * fminf(u / 0.04f, 1.0f)) / SAMPLE_RATE;
+            near[i] += amp * sinf(ph) * expf(-u * 60.0f) * fminf(u / 0.002f, 1.0f);
+        }
+    }
+    const std::vector<float> room = roomTail(near, 0.9f);
+    std::vector<float> mix(n);
+    for (int i = 0; i < n; i++) {
+        const float t = (float)i / SAMPLE_RATE, edge = fminf(fminf(t, 1.6f - t) / 0.15f, 1.0f);
+        mix[i] = (near[i] * 0.7f + room[i] * 0.3f) * edge;
+    }
+    return toPcm(mix, 0.6f);
+}
+
+// DrainStart: 1.3 s, a drain's valve opening. A steel clunk (75 Hz decaying
+// at 9 per second, 820 and 1370 Hz at 14 per second, 3 ms of noise) and noise
+// through a one-pole low-pass sweeping 150 to 600 Hz, rising over 0.8 s and
+// fading over the last 0.3 s. roomTail (0.9 s, 0.35 wet). Peak 0.75.
+Pcm makeDrainStart()
+{
+    const int n = (int)(1.3f * SAMPLE_RATE);
+    Rng r(0xD4A12ULL);
+    std::vector<float> near(n, 0.0f);
+    float lp = 0;
+    for (int i = 0; i < n; i++) {
+        const float t = (float)i / SAMPLE_RATE;
+        float v = 0.9f * sinf(TAU * 75.0f * t) * expf(-t * 9.0f)
+                + 0.35f * sinf(TAU * 820.0f * t) * expf(-t * 14.0f)
+                + 0.2f * sinf(TAU * 1370.0f * t) * expf(-t * 14.0f);
+        if (t < 0.003f) v += (r.f01() * 2.0f - 1.0f) * 0.8f;
+        const float cut = 150.0f + 450.0f * fminf(t / 0.8f, 1.0f);
+        lp += (1.0f - expf(-TAU * cut / SAMPLE_RATE)) * ((r.f01() * 2.0f - 1.0f) - lp);
+        const float rush = fminf(t / 0.8f, 1.0f) * fminf((1.3f - t) / 0.3f, 1.0f);
+        near[i] = v * fminf(t / 0.0005f, 1.0f) + lp * rush * 2.5f;
+    }
+    const std::vector<float> room = roomTail(near, 0.9f);
+    std::vector<float> mix(n);
+    for (int i = 0; i < n; i++) mix[i] = near[i] * 0.65f + room[i] * 0.35f;
+    return toPcm(mix, 0.75f);
+}
+
 // PhoneRing: one 1.5 s burst of a wall phone's bells, 2.0 s with the tail.
 // A clapper strikes two bells in turn at 20 Hz; each strike starts three
 // partials per bell (1050/2630/4170 Hz and 1110/2790/4410 Hz) decaying at
@@ -1466,6 +1532,8 @@ ClipSpec clipSpec(Sfx sfx) {
     case Sfx::Drag:      return { 1, 1.0f, 0.5f };
     case Sfx::Exhale:    return { 1, 1.0f, 0.5f };
     case Sfx::HoldBreath: return { 1, 1.0f, 0.6f };
+    case Sfx::DrainRun:   return { 2, 1.0f, 0.6f };
+    case Sfx::DrainStart: return { 1, 1.0f, 0.7f };
     case Sfx::PhoneRing:  return { 1, 1.0f, 0.75f };
     case Sfx::PhoneVoice: return { 1, 1.0f, 0.8f };
     case Sfx::AshTap:     return { 1, 1.0f, 0.8f };
@@ -1528,6 +1596,8 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::Shutter:        return makeShutter(variant);
     case Sfx::Cackle:         return makeCackle();
     case Sfx::HoldBreath:     return makeHoldBreath();
+    case Sfx::DrainRun:       return makeDrainRun(variant);
+    case Sfx::DrainStart:     return makeDrainStart();
     case Sfx::PhoneRing:      return makePhoneRing();
     case Sfx::PhoneVoice:     return makePhoneVoice();
     case Sfx::AshTap:         return makeAshTap();

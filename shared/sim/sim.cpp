@@ -17,6 +17,7 @@ void Sim::step(const InputFrame &in, float dt, double now) {
         still.look = {};
     }
     updateLook(still);
+    updateDrains(dt);   // before movement, which takes its pull
     updateMovement(still, dt, now);
     updateBreath(still.jumpHeld, dt, now);
     updateDevKeys(in.dev, now);
