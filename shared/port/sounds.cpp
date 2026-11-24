@@ -971,6 +971,91 @@ static float coinClink(float hz, float t) {
     return env * (sinf(TAU * hz * t) + 0.6f * sinf(TAU * hz * 1.47f * t) + 0.35f * sinf(TAU * hz * 2.13f * t));
 }
 
+// GiftOpen: 0.55 s, wrapping paper torn off. Four rips starting at 0, 90,
+// 200 and 330 ms, 60-110 ms each: noise through an RBJ band-pass at 2.8 kHz
+// (Q 0.8), plus crackle (single-sample impulses 2-6 ms apart) through a
+// one-pole high-pass at 1.5 kHz, with a 3 ms attack and a decay to e^-3 at
+// the rip's end. roomTail (0.5 s, 0.15 wet). Peak 0.6.
+Pcm makeGiftOpen()
+{
+    const int n = (int)(0.55f * SAMPLE_RATE);
+    Rng r(0x61F70ULL);
+    std::vector<float> near(n, 0.0f);
+    const float w = TAU * 2800.0f / SAMPLE_RATE, alpha = sinf(w) / (2.0f * 0.8f), a0 = 1.0f + alpha;
+    const float b0 = alpha / a0, a1 = -2.0f * cosf(w) / a0, a2 = (1.0f - alpha) / a0;
+    const float hp = expf(-TAU * 1500.0f / SAMPLE_RATE);
+    const float START[4] = { 0.0f, 0.09f, 0.2f, 0.33f };
+    for (int rip = 0; rip < 4; rip++) {
+        const float len = 0.06f + 0.05f * r.f01();
+        const int i0 = (int)(START[rip] * SAMPLE_RATE), i1 = std::min(n, i0 + (int)(len * SAMPLE_RATE));
+        float x1 = 0, x2 = 0, y1 = 0, y2 = 0, hx = 0, hy = 0;
+        int nextTick = i0;
+        for (int i = i0; i < i1; i++) {
+            const float u = (float)(i - i0) / SAMPLE_RATE;
+            const float env = fminf(u / 0.003f, 1.0f) * expf(-3.0f * u / len);
+            const float x = r.f01() * 2.0f - 1.0f;
+            const float y = b0 * x - b0 * x2 - a1 * y1 - a2 * y2;
+            x2 = x1; x1 = x; y2 = y1; y1 = y;
+            float tick = 0;
+            if (i >= nextTick) { tick = (r.f01() * 2.0f - 1.0f) * 1.5f; nextTick = i + (int)((0.002f + 0.004f * r.f01()) * SAMPLE_RATE); }
+            hy = hp * (hy + tick - hx); hx = tick;
+            near[i] += (y * 2.0f + hy) * env;
+        }
+    }
+    const std::vector<float> room = roomTail(near, 0.5f);
+    std::vector<float> mix(n);
+    for (int i = 0; i < n; i++) mix[i] = near[i] * 0.85f + room[i] * 0.15f;
+    return toPcm(mix, 0.6f);
+}
+
+// JackInBox: 1.9 s. Seven music-box plinks 0.13 s apart (1046.5, 1318.5,
+// 1568, 1046.5, 1318.5, 1568, 1760 Hz; a sine plus its octave at 0.3,
+// decaying at 12 per second). At 0.95 s a 15 ms low-passed noise pop, then
+// the spring: a sine at 160 Hz whose pitch swings +-50% at 9 Hz, the swing
+// and the level decaying at 2.5 and 3 per second over 0.7 s; and at 1.05 s a
+// squeak, a sine rising from 900 to 1700 Hz over 0.18 s with a 30 Hz
+// vibrato. roomTail (0.6 s, 0.2 wet). Peak 0.85.
+Pcm makeJackInBox()
+{
+    const int n = (int)(1.9f * SAMPLE_RATE);
+    Rng r(0x7AC40ULL);
+    std::vector<float> near(n, 0.0f);
+    const float NOTE[7] = { 1046.5f, 1318.5f, 1568.0f, 1046.5f, 1318.5f, 1568.0f, 1760.0f };
+    for (int k = 0; k < 7; k++) {
+        const int i0 = (int)(k * 0.13f * SAMPLE_RATE);
+        for (int i = i0; i < n; i++) {
+            const float u = (float)(i - i0) / SAMPLE_RATE;
+            if (u > 0.5f) break;
+            near[i] += 0.3f * (sinf(TAU * NOTE[k] * u) + 0.3f * sinf(TAU * 2.0f * NOTE[k] * u)) * expf(-u * 12.0f)
+                     * fminf(u / 0.001f, 1.0f);
+        }
+    }
+    const int pop = (int)(0.95f * SAMPLE_RATE);
+    float lp = 0, ph = 0;
+    for (int i = pop; i < n; i++) {
+        const float u = (float)(i - pop) / SAMPLE_RATE;
+        if (u < 0.015f) { lp += 0.3f * ((r.f01() * 2.0f - 1.0f) - lp); near[i] += lp * 2.5f * (1.0f - u / 0.015f); }
+        if (u < 0.7f) {
+            const float f = 160.0f * (1.0f + 0.5f * sinf(TAU * 9.0f * u) * expf(-2.5f * u));
+            ph += TAU * f / SAMPLE_RATE;
+            near[i] += 0.7f * sinf(ph) * expf(-3.0f * u) * fminf(u / 0.002f, 1.0f);
+        }
+    }
+    const int sq = (int)(1.05f * SAMPLE_RATE);
+    float sph = 0;
+    for (int i = sq; i < n; i++) {
+        const float u = (float)(i - sq) / SAMPLE_RATE;
+        if (u > 0.18f) break;
+        const float f = (900.0f + 800.0f * u / 0.18f) * (1.0f + 0.04f * sinf(TAU * 30.0f * u));
+        sph += TAU * f / SAMPLE_RATE;
+        near[i] += 0.3f * sinf(sph) * sinf(0.5f * TAU * u / 0.18f);
+    }
+    const std::vector<float> room = roomTail(near, 0.6f);
+    std::vector<float> mix(n);
+    for (int i = 0; i < n; i++) mix[i] = near[i] * 0.8f + room[i] * 0.2f;
+    return toPcm(mix, 0.85f);
+}
+
 // CoinDrop: 0.6 s. A doubloon landing: four strikes of coinClink at
 // 3.3 kHz (partials 1, 1.47 and 2.13 times), 0, 0.12, 0.21 and 0.27 s
 // apart as its bounces shorten, each 0.55 times the last, then a 6 ms tap
@@ -1461,6 +1546,8 @@ ClipSpec clipSpec(Sfx sfx) {
     case Sfx::SlotSpin:  return { 1, 1.0f, 0.55f };
     case Sfx::SlotWin:   return { 1, 1.0f, 0.65f };
     case Sfx::Jackpot:   return { 1, 1.0f, 0.85f };
+    case Sfx::GiftOpen:  return { 1, 1.0f, 0.65f };
+    case Sfx::JackInBox: return { 1, 1.0f, 0.9f };
     case Sfx::CoinDrop:  return { 1, 1.0f, 0.7f };
     case Sfx::Lighter:   return { 1, 1.0f, 0.6f };
     case Sfx::Drag:      return { 1, 1.0f, 0.5f };
@@ -1524,6 +1611,8 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::Exhale:         return makeExhale();
     case Sfx::Cough:          return makeCough(variant);
     case Sfx::StepGrass:      return makeGrassStep(800 + variant * 31);
+    case Sfx::GiftOpen:       return makeGiftOpen();
+    case Sfx::JackInBox:      return makeJackInBox();
     case Sfx::CoinDrop:       return makeCoinDrop();
     case Sfx::Shutter:        return makeShutter(variant);
     case Sfx::Cackle:         return makeCackle();

@@ -480,6 +480,8 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         textC(fmt("%s · sleep until morning", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14), { 200, 190, 160, 150 });
     } else if (sim.truckNear) {   // an almond water truck with a can on its counter (Level 94)
         textC(fmt("%s · take the almond water", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14), { 200, 214, 220, 160 });
+    } else if (sim.presentNear) {   // a wrapped present beside a party table (LEVEL FUN); first in useWhatIsNear
+        textC(fmt("%s · open the present", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14), { 230, 190, 210, 170 });
     } else if (sim.hunterAtDoor(sim.doorReach)) {   // the hunter pushing the shut door in reach
         // Each shove is paid from the sprint bar, which shows below.
         if (sim.bracing) {
