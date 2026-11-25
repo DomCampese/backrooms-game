@@ -486,6 +486,13 @@ AGENTS.md has the module map file by file.
 
 ## Smaller details
 
+- **A house on Level 94 is safe for 20 seconds, not all night.** If an
+  Animation follows you to a house, it waits outside the door knocking and
+  does not lose track of you. After 12 s it rattles the windows ("it is trying
+  the windows"); after 20 s it breaks the glass and comes in, and that house
+  cannot hide you until morning. Get out before then, run to another house,
+  or keep it back with a flare. Broken glass lies on the ground where it broke
+  in.
 - **The Partygoer** (LEVEL FUN): pale yellow, a painted smile and a striped
   party hat. It uses the same rules as the other hunters.
 - **Balloons.** Shooting a balloon in LEVEL FUN pops it with a sound and a

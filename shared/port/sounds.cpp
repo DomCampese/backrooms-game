@@ -1247,6 +1247,48 @@ Pcm makeGrassStep(uint32_t seed)
     return toPcm(d, 0.62f);
 }
 
+// GlassBreak: 1.4 s, a window pane smashed. An 8 ms noise burst through a
+// one-pole high-pass at 2 kHz and a 90 Hz thump decaying at 20 per second;
+// then 40 shards landing over 0.9 s, more of them early, each three sines at
+// 1, 2.32 and 4.25 times a random 2.5-6 kHz, decaying at 40-80 per second and
+// quieter the later they land. roomTail (0.6 s, 0.2 wet). Peak 0.9.
+Pcm makeGlassBreak()
+{
+    const int n = (int)(1.4f * SAMPLE_RATE);
+    Rng r(0x61A55ULL);
+    std::vector<float> near(n, 0.0f);
+    const float hp = expf(-TAU * 2000.0f / SAMPLE_RATE);
+    float hx = 0, hy = 0;
+    for (int i = 0; i < n; i++) {
+        const float t = (float)i / SAMPLE_RATE;
+        float v = 0.8f * sinf(TAU * 90.0f * t) * expf(-20.0f * t) * fminf(t / 0.001f, 1.0f);
+        if (t < 0.008f) {
+            const float x = (r.f01() * 2.0f - 1.0f) * (1.0f - t / 0.008f);
+            hy = hp * (hy + x - hx); hx = x;
+            v += hy * 2.5f;
+        }
+        near[i] += v;
+    }
+    const float RATIO[3] = { 1.0f, 2.32f, 4.25f }, AMP[3] = { 1.0f, 0.5f, 0.25f };
+    for (int s = 0; s < 40; s++) {
+        const float u0 = r.f01(), t0 = 0.004f + 0.9f * u0 * u0;
+        const float f0 = 2500.0f + 3500.0f * r.f01(), decay = 40.0f + 40.0f * r.f01();
+        const float amp = (0.12f + 0.1f * r.f01()) * (1.0f - 0.7f * t0 / 0.9f);
+        const int i0 = (int)(t0 * SAMPLE_RATE);
+        for (int i = i0; i < n; i++) {
+            const float u = (float)(i - i0) / SAMPLE_RATE;
+            if (u > 0.12f) break;
+            float v = 0;
+            for (int m = 0; m < 3; m++) v += AMP[m] * sinf(TAU * f0 * RATIO[m] * u);
+            near[i] += amp * v * expf(-decay * u) * fminf(u / 0.0005f, 1.0f);
+        }
+    }
+    const std::vector<float> room = roomTail(near, 0.6f);
+    std::vector<float> mix(n);
+    for (int i = 0; i < n; i++) mix[i] = near[i] * 0.8f + room[i] * 0.2f;
+    return toPcm(mix, 0.9f);
+}
+
 // The Animation's stop-motion camera: the shutter (white noise through an RBJ
 // band-pass at 3.2 kHz, Q 1.2, decaying at 900/s), then the film advancing:
 // three ratchet clicks 22-30 ms apart at 2.2 kHz, each at 0.45 of the one
@@ -1450,6 +1492,7 @@ ClipSpec clipSpec(Sfx sfx) {
     case Sfx::FarBoom: case Sfx::FarJingle:
     case Sfx::DoorShut: case Sfx::DoorKnock: case Sfx::Choke: case Sfx::Cough:
     case Sfx::Shutter: return { 3, 1.0f, 1.0f };
+    case Sfx::GlassBreak: return { 1, 1.0f, 0.9f };
     case Sfx::Hit:       return { 1, 1.7f, 0.40f };
     case Sfx::Kill:      return { 1, 0.55f, 0.80f };
     case Sfx::Heartbeat: return { 1, 1.0f, 0.55f };
@@ -1527,6 +1570,7 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::CoinDrop:       return makeCoinDrop();
     case Sfx::Shutter:        return makeShutter(variant);
     case Sfx::Cackle:         return makeCackle();
+    case Sfx::GlassBreak:     return makeGlassBreak();
     case Sfx::HoldBreath:     return makeHoldBreath();
     case Sfx::PhoneRing:      return makePhoneRing();
     case Sfx::PhoneVoice:     return makePhoneVoice();

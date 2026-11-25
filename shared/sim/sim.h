@@ -346,6 +346,16 @@ struct Sim {
     static constexpr float SHUTTER_HEAR = 18.0f;
     // Waiting outside a house it knocks on the walls every KNOCK_GAP..+0.8 s.
     static constexpr float KNOCK_GAP = 1.1f;
+    // A siege (Sim::updateSiege, motion.cpp): while it waits outside the house
+    // the player is in, within SIEGE_NEAR m, it does not lose them
+    // (hunterChase keeps lostT at 0) and a clock runs. From SIEGE_WARN s it
+    // rattles the windows every SIEGE_RATTLE_GAP s; at SIEGE_TIME s it breaks
+    // the glass, and that house shelters nobody until dawn. Out of the house,
+    // or the Animation away, the clock runs back down at half speed.
+    static constexpr float SIEGE_NEAR = 14.0f;
+    static constexpr float SIEGE_WARN = 12.0f;
+    static constexpr float SIEGE_TIME = 20.0f;
+    static constexpr float SIEGE_RATTLE_GAP = 1.3f;
     // A bed (PROP_BED) within BED_REACH m of its cell's centre: E sleeps in it
     // at night, with nothing hunting nearby, fading out over SLEEP_FADE s and
     // waking at dawn, healed, with SLEEP_SANITY back.
@@ -578,6 +588,17 @@ struct Sim {
     } stopPose;
     float knockT = 0;                // s to the Animation's next knock on a house
     float knockedT = 0;              // s since it last knocked, for the HUD
+    float siegeT = 0, rattleT = 0;   // the siege's clock, and s to its next rattle
+    // Houses the Animation has broken into tonight (by houseKey), each with
+    // where the glass fell and the storey it fell on, for the scene.
+    struct BrokenHouse { uint64_t key; float x, z, y; int storey; };
+    std::vector<BrokenHouse> brokenHouses;
+    unsigned siegeEntry = ~0u;
+    bool inBrokenHouse = false;      // the player is in a house the Animation has broken into, for the HUD
+    uint64_t houseKey(float x, float z);         // the Level 94 house at (x, z), or 0 out of doors
+    bool houseBroken(uint64_t key) const;
+    bool shutOut(float x, float z);              // indoors, in a house still whole: the Animation waits outside
+    void updateSiege(float dt);
     float sleepT = 0;                // s into falling asleep; 0 awake
     float wakeT = 0;                 // s of waking up left, for the HUD's fade back in
     bool bedNear = false;            // a bed is in reach of the use key, for the HUD

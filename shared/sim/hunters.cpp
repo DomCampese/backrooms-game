@@ -244,9 +244,13 @@ bool Sim::hunterChase(float dt, double now, float &fearT) {
     hunterWaypoint(tx, tz, dt, true);
     if (hunterOpensDoor(dt)) chaseSpd = 0;
     if (world.indoors(cellOf(ent.wpx), cellOf(ent.wpz))) {   // Level 94: it waits outside, knocking
-        chaseSpd = 0;
+        if (shutOut(ent.wpx, ent.wpz)) chaseSpd = 0;   // until it breaks in (updateSiege)
+        // It knows the player is in this house, so it does not lose them while
+        // it waits; without this it gave up after SEARCH_TIME and a house was
+        // always safe.
+        if (entDist < SIEGE_NEAR && houseKey(px, pz) == houseKey(ent.wpx, ent.wpz)) ent.lostT = 0;
         knockT -= dt;
-        if (knockT <= 0 && entDist < 30.0f) {
+        if (knockT <= 0 && entDist < 30.0f && chaseSpd == 0) {
             knockT = KNOCK_GAP + grng.f01() * 0.8f;
             knockedT = 0;
             const float inv = entDist > 0.01f ? 1.0f / entDist : 0.0f;
