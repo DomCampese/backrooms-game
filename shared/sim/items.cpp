@@ -439,6 +439,7 @@ void Sim::useWhatIsNear() {
     if (phone.ringing && portableHypot(phone.x - px, phone.z - pz) < PHONE_REACH) { answerPhone(); return; }
     float bx, bz;
     if (breakerInReach(bx, bz)) { throwBreaker(bx, bz); return; }   // a breaker panel
+    if (atmInReach(bx, bz)) { useAtm(bx, bz, crouchCur > 0.5f); return; }   // an ATM; crouched, a withdrawal
     if (bedInReach()) { trySleep(); return; }   // Level 94's beds
     int ta, tb;
     if (truckInReach(ta, tb)) { takeFromTruck(ta, tb); return; }   // and its almond water trucks

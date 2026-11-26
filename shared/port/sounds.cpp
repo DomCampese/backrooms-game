@@ -1699,6 +1699,81 @@ Pcm makeRouletteSpin()
     return toPcm(mix, 0.7f);
 }
 
+// One keypad beep: a sine at f with a fifth of its octave, 10 ms in and out.
+static float atmTone(float f, float u, float len) {
+    if (u < 0 || u >= len) return 0.0f;
+    const float env = fminf(u / 0.01f, 1.0f) * fminf((len - u) / 0.01f, 1.0f);
+    return (sinf(TAU * f * u) + 0.2f * sinf(TAU * 2.0f * f * u)) * env;
+}
+
+// AtmBeep: an ATM's keypad, 0.75 s. Three key beeps at 1250 Hz, 70 ms each,
+// 0.11 s apart, then the machine's two-note answer at 1660 and 2090 Hz from
+// 0.38 s. roomTail (0.4 s), 0.15 wet. Peak 0.55. Played at 0.7 for a
+// refusal, which lowers it.
+Pcm makeAtmBeep()
+{
+    const int n = (int)(0.75f * SAMPLE_RATE);
+    std::vector<float> near(n);
+    for (int i = 0; i < n; i++) {
+        const float t = (float)i / SAMPLE_RATE;
+        float s = 0;
+        for (int k = 0; k < 3; k++) s += atmTone(1250.0f, t - k * 0.11f, 0.07f);
+        s += atmTone(1660.0f, t - 0.38f, 0.12f) + atmTone(2090.0f, t - 0.52f, 0.16f);
+        near[i] = s;
+    }
+    const std::vector<float> room = roomTail(near, 0.4f);
+    std::vector<float> d(n);
+    for (int i = 0; i < n; i++) d[i] = near[i] * 0.85f + room[i] * 0.15f;
+    return toPcm(d, 0.55f);
+}
+
+// AtmCash: an ATM counting doubloons out, 1.9 s. Two key beeps, then from
+// 0.3 s the dispenser's motor (90 Hz with its second and third harmonics,
+// clipped at 0.7) under a band-passed rattle at 1.8 kHz pulsing at 22 Hz,
+// rising over 50 ms and stopping at 1.25 s. From 1.15 s nine doubloons land in
+// the tray: a 3 ms burst into resonators at 2900 and 4700 Hz each, 55-90 ms
+// apart. roomTail (0.6 s), a fifth wet. Peak 0.7.
+Pcm makeAtmCash()
+{
+    const int n = (int)(1.9f * SAMPLE_RATE);
+    Rng r(0xA7A3ULL);
+    std::vector<float> near(n, 0.0f);
+    const float w = TAU * 1800.0f / SAMPLE_RATE, alpha = sinf(w) / (2.0f * 2.0f), a0 = 1.0f + alpha;
+    const float b0 = alpha / a0, a1 = -2.0f * cosf(w) / a0, a2 = (1.0f - alpha) / a0;
+    float x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+    for (int i = 0; i < n; i++) {
+        const float t = (float)i / SAMPLE_RATE;
+        float s = 0.6f * (atmTone(1250.0f, t, 0.07f) + atmTone(1250.0f, t - 0.11f, 0.07f));
+        const float x = r.f01() * 2.0f - 1.0f;
+        const float y = b0 * x - b0 * x2 - a1 * y1 - a2 * y2;
+        x2 = x1; x1 = x; y2 = y1; y1 = y;
+        const float u = t - 0.3f;
+        if (u >= 0 && u < 0.95f) {
+            const float env = fminf(u / 0.05f, 1.0f) * fminf((0.95f - u) / 0.05f, 1.0f);
+            const float m = sinf(TAU * 90.0f * u) + 0.5f * sinf(TAU * 180.0f * u) + 0.3f * sinf(TAU * 270.0f * u);
+            const float pulse = 0.55f + 0.45f * sinf(TAU * 22.0f * u);
+            s += env * (clampf(m, -0.7f, 0.7f) * 0.35f + y * 2.2f * pulse);
+        }
+        near[i] = s;
+    }
+    float ct = 1.15f;
+    for (int k = 0; k < 9; k++) {
+        const int i0 = (int)(ct * SAMPLE_RATE);
+        const float amp = 0.8f - k * 0.05f;
+        for (int i = i0; i < n && i < i0 + (int)(0.15f * SAMPLE_RATE); i++) {
+            const float u = (float)(i - i0) / SAMPLE_RATE;
+            const float hit = u < 0.003f ? (r.f01() * 2.0f - 1.0f) * (1.0f - u / 0.003f) : 0.0f;
+            near[i] += amp * (hit * 0.5f + 0.4f * sinf(TAU * 2900.0f * u) * expf(-u * 45.0f)
+                              + 0.3f * sinf(TAU * 4700.0f * u) * expf(-u * 70.0f));
+        }
+        ct += 0.055f + r.f01() * 0.035f;
+    }
+    const std::vector<float> room = roomTail(near, 0.6f);
+    std::vector<float> d(n);
+    for (int i = 0; i < n; i++) d[i] = near[i] * 0.8f + room[i] * 0.2f;
+    return toPcm(d, 0.7f);
+}
+
 // Breaker: a main switch thrown, 0.9 s. The lever's impact at 0: a 6 ms
 // noise burst into three resonators at 410, 1130 and 2380 Hz (decay 22, 35
 // and 60 per second) over a 75 Hz thump decaying at 25 per second. The
@@ -1821,6 +1896,8 @@ ClipSpec clipSpec(Sfx sfx) {
     case Sfx::LighterSpark: return { 1, 1.0f, 0.6f };
     case Sfx::Breaker:    return { 1, 1.0f, 0.8f };
     case Sfx::RouletteSpin: return { 1, 1.0f, 0.7f };
+    case Sfx::AtmBeep:    return { 1, 1.0f, 0.6f };
+    case Sfx::AtmCash:    return { 1, 1.0f, 0.7f };
     default:             return { 1, 1.0f, 1.0f };
     }
 }
@@ -1892,6 +1969,8 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::LighterSpark:   return makeLighterSpark();
     case Sfx::Breaker:        return makeBreaker();
     case Sfx::RouletteSpin:   return makeRouletteSpin();
+    case Sfx::AtmBeep:        return makeAtmBeep();
+    case Sfx::AtmCash:        return makeAtmCash();
     }
     return {};
 }

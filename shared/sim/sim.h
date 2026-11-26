@@ -401,6 +401,13 @@ struct Sim {
     // without a draw from grng.
     static constexpr float BREAKER_REACH = 1.4f, BREAKER_CUT = 30.0f, BREAKER_REST = 40.0f;
     static constexpr float BREAKER_NOISE = 18.0f, BREAKER_NOISE_TIME = 0.5f, BREAKER_AFTER = 45.0f;
+    // Cash machines (core's wallAtm; atm.cpp), on every level. The use key
+    // within ATM_REACH of one, in front of it, banks every doubloon carried;
+    // crouched, it draws the balance out less ATM_FEE, which is an ATM_NOISE m
+    // noise at the machine for ATM_NOISE_TIME s. The balance (`bank`) is kept
+    // when a run ends; carried doubloons are not.
+    static constexpr float ATM_REACH = 1.4f, ATM_NOISE = 10.0f, ATM_NOISE_TIME = 1.2f;
+    static constexpr int   ATM_FEE = 1;
     // Walls shift within this many cells of the player, more often as the slide
     // deepens.
     static constexpr int   SHIFT_RING = 8;
@@ -656,6 +663,11 @@ struct Sim {
     float breakerNoiseT = 0, breakerNoiseX = 0, breakerNoiseZ = 0;
     enum class BreakerUse : uint8_t { None, Cut, Restore, Resting };
     BreakerUse breakerNear = BreakerUse::None;   // what the use key would do at the panel in reach
+    // The ATM balance. beginDescent leaves it alone: it is what a death does
+    // not take.
+    int bank = 0;
+    bool atmNear = false;   // an ATM is in reach of the use key
+    float atmNoiseT = 0, atmNoiseX = 0, atmNoiseZ = 0;
     // Separate RNG for distant sounds, so they do not shift grng (blackouts,
     // spawns).
     double nextDistant = 0;
@@ -1061,6 +1073,9 @@ struct Sim {
     void updateBreakers(float dt, double now);
     bool breakerInReach(float &bx, float &bz);   // the nearest panel the use key reaches
     void throwBreaker(float bx, float bz);
+    void updateAtm(float dt);
+    bool atmInReach(float &ax, float &az);   // the nearest ATM the use key reaches
+    void useAtm(float ax, float az, bool withdraw);
     bool placePhantom();
     void updateRoomSound(bool blackout);
     bool shiftAWall();               // close one doorway the player cannot see

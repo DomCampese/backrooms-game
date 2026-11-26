@@ -70,6 +70,7 @@ enum class FixtureKind : uint8_t {
     House,          // a house storey's plank floor, outside trim and (on its top storey) pitched roof (Level 94)
     Phone,          // a wall telephone (Levels 0 and 1); the sim rings it (Sim::updatePhone)
     Breaker,        // a breaker panel (the levels with blackouts); the use key cuts or restores the power (Sim::throwBreaker)
+    Atm,            // a cash machine set into a wall (every level); the use key banks or draws doubloons (Sim::useAtm)
 };
 
 // One fixture. What each field means depends on the kind:
@@ -90,6 +91,7 @@ enum class FixtureKind : uint8_t {
 // | House                 | floor centre; y is its ceiling        |                | half extents, x z  | variant: 1 ridge along z; tone: 0 one storey, 1 the ground floor of two, 2 the upper floor (no door); normal: out of the door's wall; seed |
 // | Phone                 | its back plate's centre, on the face  |                |                    | |
 // | Breaker               | its back's centre, on the face        |                | h: conduit from its top to the ceiling | |
+// | Atm                   | its back's centre, on the face        |                |                    | |
 //
 // `normal` points out of the face a fixture is on. A face is the wall's
 // surface, WT off its centreline; decals stand off it by the renderer's own
@@ -227,6 +229,19 @@ constexpr float BREAKER_Y = 1.45f;
 constexpr float BREAKER_HALF_W = 0.19f, BREAKER_HALF_H = 0.26f;   // the cabinet, metres
 bool wallBreaker(World &w, int gi, int gk, bool west, WallPhone &out);
 bool levelHasBreakers(int level);
+
+// A cash machine (ATM): one solid wall edge in ATM_RATE[level], on every
+// level, ATM_Y above the floor of the side bit 4 of the edge's hash picks,
+// 0.65 of the way along the edge. The same exclusions as a breaker panel, plus
+// a breaker's edge; on Level 94 only facing into a house, the only walls there
+// that are not a house's outside. The layout lists it as FixtureKind::Atm and
+// the sim finds it (Sim::atmInReach), both through this function. The rates
+// are per level because the levels have very different numbers of walls: each
+// gives about one ATM in two or three chunks (ATM_RATE in layout.cpp).
+uint32_t atmRate(int level);
+constexpr float ATM_Y = 1.15f;
+constexpr float ATM_HALF_W = 0.34f, ATM_HALF_H = 0.56f;   // the surround, metres
+bool wallAtm(World &w, int gi, int gk, bool west, WallPhone &out);
 
 // The tube hash the shader's lhash() and lightAtCPU use, 0..1:
 // fract(sin(gx * TUBE_HASH_X + gz * TUBE_HASH_Z) * TUBE_HASH_SCALE). A storey's

@@ -1545,6 +1545,55 @@ static void addBreaker(MB &pr, const Fixture &pf) {
         box(-0.035f, 0.035f, H, H + pf.h, 0.02f, 0.07f, { 120, 122, 118, 254 });
 }
 
+// A cash machine set into a wall: a dark blue surround with a lit sign on
+// top, a steel fascia, a hood over a lit screen with four buttons either side,
+// a keypad, a card slot with a green light, and the cash slot. The screen,
+// the sign and the light use vertex alpha 60, the shader's plain emissive
+// path, so the machine shows in the dark. Each part stands at least 8 mm off
+// the one behind it (see the vending machine).
+static void addAtm(MB &pr, const Fixture &pf) {
+    const Vec3 n = pf.normal, right = { n.z, 0.0f, -n.x };
+    auto box = [&](float u0, float u1, float y0, float y1, float d0, float d1, Rgba c) {
+        float xa = pf.pos.x + right.x * u0 + n.x * d0, xb = pf.pos.x + right.x * u1 + n.x * d1;
+        float za = pf.pos.z + right.z * u0 + n.z * d0, zb = pf.pos.z + right.z * u1 + n.z * d1;
+        addSolidBox(pr, std::min(xa, xb), pf.pos.y + y0, std::min(za, zb),
+                    std::max(xa, xb), pf.pos.y + y1, std::max(za, zb), c);
+    };
+    const float W = ATM_HALF_W, H = ATM_HALF_H;
+    const Rgba surround = { 34, 48, 86, 254 }, steel = { 158, 162, 166, 254 }, dark = { 30, 32, 36, 254 },
+               key = { 196, 198, 200, 254 }, screen = { 96, 196, 214, 60 }, sign = { 236, 196, 70, 60 },
+               green = { 80, 240, 110, 60 }, red = { 176, 40, 36, 254 };
+    box(-W, W, -H, H, 0.0f, 0.03f, surround);                          // the surround on the wall
+    box(-W + 0.03f, W - 0.03f, H - 0.15f, H - 0.03f, 0.03f, 0.04f, sign);   // the lit sign across its top
+    {   // "ATM" on it in block letters 0.08 m tall, 8 mm proud of the sign
+        const float y0 = H - 0.13f, y1 = H - 0.05f, t = 0.016f, d0 = 0.04f, d1 = 0.048f;
+        auto bar = [&](float u0, float u1, float ya, float yb) { box(u0, u1, ya, yb, d0, d1, surround); };
+        bar(-0.16f, -0.16f + t, y0, y1); bar(-0.10f - t, -0.10f, y0, y1);   // A
+        bar(-0.16f, -0.10f, y1 - t, y1); bar(-0.16f, -0.10f, y0 + 0.032f, y0 + 0.032f + t);
+        bar(-0.07f, 0.0f, y1 - t, y1); bar(-0.035f - t / 2, -0.035f + t / 2, y0, y1 - t);   // T
+        bar(0.03f, 0.03f + t, y0, y1); bar(0.11f - t, 0.11f, y0, y1);    // M
+        bar(0.03f + t, 0.11f - t, y1 - t, y1); bar(0.07f - t / 2, 0.07f + t / 2, y0 + 0.03f, y1 - t);
+    }
+    box(-W + 0.04f, W - 0.04f, -H + 0.04f, H - 0.19f, 0.03f, 0.11f, steel);   // the fascia
+    box(-W + 0.05f, W - 0.05f, 0.30f, 0.34f, 0.11f, 0.22f, surround);        // the hood over the screen
+    box(-0.17f, 0.17f, 0.06f, 0.28f, 0.11f, 0.12f, dark);                 // the screen's bezel
+    box(-0.15f, 0.15f, 0.08f, 0.26f, 0.12f, 0.13f, screen);               // and the screen
+    for (int side = 0; side < 2; side++)                                  // four buttons either side
+        for (int b = 0; b < 4; b++) {
+            const float u = side ? 0.215f : -0.215f, y = 0.10f + b * 0.045f;
+            box(u - 0.022f, u + 0.022f, y - 0.012f, y + 0.012f, 0.11f, 0.125f, key);
+        }
+    box(-0.15f, 0.03f, -0.24f, -0.03f, 0.11f, 0.12f, dark);               // the keypad
+    for (int r = 0; r < 4; r++) for (int c = 0; c < 3; c++) {
+        const float u = -0.12f + c * 0.05f, y = -0.205f + r * 0.05f;
+        box(u - 0.017f, u + 0.017f, y - 0.015f, y + 0.015f, 0.12f, 0.13f, key);
+    }
+    box(0.07f, 0.13f, -0.205f, -0.175f, 0.12f, 0.13f, red);               // the cancel key
+    box(0.07f, 0.23f, -0.08f, -0.03f, 0.11f, 0.135f, dark);               // the card slot
+    box(0.12f, 0.18f, -0.02f, -0.008f, 0.11f, 0.12f, green);              // and its light
+    box(-0.18f, 0.18f, -0.40f, -0.33f, 0.11f, 0.14f, dark);               // the cash slot
+}
+
 struct FixtureMeshes { MB &pr, &fx, &scr, &ao; };
 
 // Build one fixture. bakeChunk calls this at the point in its cell walk where
@@ -1569,6 +1618,7 @@ static void addFixture(const FixtureMeshes &m, const Fixture &f) {
     case FixtureKind::House:       break;   // bakeChunkGeometry builds it with the layout's openings
     case FixtureKind::Phone:       addPhone(m.pr, f); break;
     case FixtureKind::Breaker:     addBreaker(m.pr, f); break;
+    case FixtureKind::Atm:         addAtm(m.pr, f); break;
     }
 }
 

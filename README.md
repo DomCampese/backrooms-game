@@ -504,6 +504,14 @@ AGENTS.md has the module map file by file.
   and 21 in your first two cards pays three. The cards lie on the felt and
   the HUD shows both hands with their totals. Unlike the slot machines, a
   hand makes no noise.
+- **ATMs.** Every level has cash machines in its walls. E banks the
+  doubloons you carry; CTRL + E (DUCK + USE on touch) draws the balance
+  out, less a one-doubloon fee. Banked doubloons are kept when you die, and
+  carried ones are not, but they do not count toward the way out until you
+  draw them. The machine counting them out is loud enough for the hunter
+  to hear.
+
+  <p align="center"><img src="docs/atm.png" width="420" alt="An ATM set into a Level 0 wall"></p>
 - **Three card poker and roulette.** The casino's card tables hold one of
   three games. At a poker table E antes one doubloon and deals three
   cards; E again plays one more doubloon and shows the dealer's hand, and

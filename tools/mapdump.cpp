@@ -69,9 +69,9 @@ static_assert(sizeof(PROP_NAME) / sizeof(PROP_NAME[0]) == PROP_KINDS, "a name fo
 const char *FIXTURE_NAME[] = {
     "outlet", "broken outlet", "switch", "grille", "exit sign", "diffuser", "sprinkler", "conduit",
     "scrawl", "lift door", "spall", "pillar spall", "pipe", "streamer", "manila room",
-    "auditorium", "poster", "house", "phone", "breaker",
+    "auditorium", "poster", "house", "phone", "breaker", "atm",
 };
-static_assert(sizeof(FIXTURE_NAME) / sizeof(FIXTURE_NAME[0]) == (int)FixtureKind::Breaker + 1, "a name for every FixtureKind");
+static_assert(sizeof(FIXTURE_NAME) / sizeof(FIXTURE_NAME[0]) == (int)FixtureKind::Atm + 1, "a name for every FixtureKind");
 const char *OPENING_NAME[] = { "doorway", "locked door", "exit", "window", "rail", "shut door" };
 
 // Which way a normal points, as +x, -z, down.

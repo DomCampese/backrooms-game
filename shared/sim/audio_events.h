@@ -64,6 +64,8 @@ enum class Sfx : uint8_t {
     LighterSpark,     // a lighter's flint wheel striking a spark that does not catch
     Breaker,          // a breaker panel's main switch thrown (Sim::throwBreaker)
     RouletteSpin,     // a roulette ball circling the wheel and dropping into a pocket (Sim::betRoulette)
+    AtmBeep,          // an ATM's keypad: a deposit, or (pitched down) a refusal (Sim::useAtm)
+    AtmCash,          // an ATM counting doubloons out into its tray (Sim::useAtm)
 };
 
 // What the ambience synth (audio.cpp) chases. The rules write each field where
