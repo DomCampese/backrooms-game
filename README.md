@@ -359,6 +359,12 @@ AGENTS.md has the module map file by file.
   refill while you hold. It gives up after three to six shoves. If your
   stamina runs out first, the door bursts open, knocks you back and hurts
   you.
+- **Locking a door.** Crouch (CTRL, DUCK on touch) and press E at a doorway
+  while you carry a key: it shuts and locks, and the key goes into the lock.
+  The hunter cannot open a locked door or route through it, so it has to find
+  another way round. Press E at it again to unlock it and take the key back;
+  the door stays shut. Locks are cleared when you leave the level, along with
+  the key in them.
 - **Darkness around the hunter.** Ceiling lights go dark in a radius around
   the hunter and the dark area moves with it: partly while it stalks, fully
   while it chases. The flashlight and flares are not affected, so they show

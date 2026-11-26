@@ -243,7 +243,8 @@ bool Sim::findDoor(DoorReach &d) {
         int a = pci + dx, b = pck + dz;
         for (int west = 0; west < 2; west++) {
             uint8_t v = west ? world.wallWVal(a, b) : world.wallNVal(a, b);
-            if (v != WALL_DOOR && v != WALL_SHUT) continue;
+            const bool mine = v == WALL_LOCKED && world.playerLocked(a, b, west != 0);   // locked by the player
+            if (v != WALL_DOOR && v != WALL_SHUT && !mine) continue;
             float ex = a * CELL + (west ? 0.0f : 1.0f), ez = b * CELL + (west ? 1.0f : 0.0f);
             float ddx = ex - px, ddz = ez - pz, d2 = ddx * ddx + ddz * ddz;
             if (d2 >= nearest) continue;
@@ -251,7 +252,7 @@ bool Sim::findDoor(DoorReach &d) {
             if (dl > 0.7f && (ddx * f2x + ddz * f2z) / dl < 0.35f) continue;   // behind or beside the player
             if (world.doorJoined(a, b, west != 0)) continue;
             nearest = d2;
-            d.ok = true; d.i = a; d.k = b; d.west = west != 0; d.shut = v == WALL_SHUT;
+            d.ok = true; d.i = a; d.k = b; d.west = west != 0; d.shut = v == WALL_SHUT || mine; d.locked = mine;
         }
     }
     return d.ok;
@@ -283,16 +284,43 @@ void Sim::updateBracing(bool held) {
 
 // True when the hunter is at the door in reach, pushing it.
 bool Sim::hunterAtDoor(const DoorReach &d) const {
-    return d.ok && d.shut && ent.st != EState::Hidden && ent.doorT > 0 &&
+    return d.ok && d.shut && !d.locked && ent.st != EState::Hidden && ent.doorT > 0 &&
            ent.doorI == d.i && ent.doorK == d.k && ent.doorWest == d.west;
+}
+
+bool Sim::canLockDoor() const {
+    const DoorReach &d = doorReach;
+    return d.ok && !d.locked && keys > 0 && crouchCur > LOCK_CROUCH && !hunterAtDoor(d);
 }
 
 void Sim::useDoor() {
     const DoorReach &d = doorReach;
     if (!d.ok) return;
-    if (hunterAtDoor(d)) return;   // he is pushing it: the key holds it shut instead (bracing)
+    if (d.locked) {   // the player's own lock: the key comes back out, the door stays shut
+        world.lockEdge(d.i, d.k, d.west, false);
+        keys++;
+        doorReach.locked = false;
+        play(Sfx::Click).atPitch(0.7f);
+        deckNoteT = 2.2f; deckNote = "you unlock it and take the key back.";
+        return;
+    }
+    if (hunterAtDoor(d) && !canLockDoor()) return;   // he is pushing it: the key holds it shut instead (bracing)
     if (!d.shut && bodyInDoorway(d.i, d.k, d.west)) {
         deckNoteT = 1.6f; deckNote = "something is in the doorway.";
+        return;
+    }
+    if (canLockDoor()) {   // crouched with a key: shut it if it is open, and lock it
+        if (!d.shut) {
+            world.shutEdge(d.i, d.k, d.west, true);
+            play(Sfx::DoorShut, 0);
+        }
+        world.lockEdge(d.i, d.k, d.west, true);
+        keys--;
+        shadowsStale = true;
+        doorNoiseT = DOOR_NOISE_TIME;
+        play(Sfx::Click).atPitch(0.6f);
+        doorReach.shut = doorReach.locked = true;
+        deckNoteT = 2.2f; deckNote = "locked. he cannot open it.";
         return;
     }
     world.shutEdge(d.i, d.k, d.west, !d.shut);
@@ -447,6 +475,7 @@ void Sim::useWhatIsNear() {
         int a = pci + dx, b = pck + dz;
         for (int west = 0; west < 2 && !opened; west++) {
             if ((west ? world.wallWVal(a, b) : world.wallNVal(a, b)) != WALL_LOCKED) continue;
+            if (world.playerLocked(a, b, west != 0)) continue;   // the player's own lock: useDoor
             float ex = a * CELL + (west ? 0.0f : 1.0f), ez = b * CELL + (west ? 1.0f : 0.0f);   // the opening's middle
             float ddx = px - ex, ddz = pz - ez;
             if (ddx * ddx + ddz * ddz > 1.9f * 1.9f) continue;

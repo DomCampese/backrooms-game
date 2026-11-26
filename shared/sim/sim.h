@@ -264,6 +264,11 @@ struct Sim {
     // DOOR_OPEN_TIME s, knocking on it every DOOR_KNOCK s.
     static constexpr float DOOR_REACH = 1.6f;
     static constexpr float DOOR_NOISE = 14.0f, DOOR_NOISE_TIME = 0.5f;
+    // Crouched past LOCK_CROUCH (crouchCur) with a key, the use key shuts and
+    // locks the door in reach (World::lockEdge): it reads as WALL_LOCKED, so the
+    // hunter can neither open nor route through it. The use key at it again
+    // unlocks it and gives the key back; the door stays shut.
+    static constexpr float LOCK_CROUCH = 0.5f;
     // A tossed doubloon (Sim::tossCoin): fire with empty hands throws one at
     // TOSS_SPEED m/s along the view, plus TOSS_LIFT m/s up, every TOSS_GAP s.
     // Each landing faster than 2 m/s is heard COIN_NOISE m from where it hits
@@ -706,7 +711,8 @@ struct Sim {
     const char *deckNote = "";       // one-line notes: the deck, keys, crates, a new floor
     // The doorway the use key would shut or open, found each tick (findDoor),
     // for the HUD's hint.
-    struct DoorReach { bool ok = false; int i = 0, k = 0; bool west = false, shut = false; };
+    // locked: a shut door the player locked with a key (World::lockedDoors).
+    struct DoorReach { bool ok = false; int i = 0, k = 0; bool west = false, shut = false, locked = false; };
     DoorReach doorReach;
     bool bracing = false;            // holding doorReach's shut door (BRACE_COST)
     double stepNow = 0;              // the clock step() was given, for rules called without it
@@ -867,7 +873,10 @@ struct Sim {
     bool hunterChase(float dt, double now, float &fearT);   // true if it ended the run
     bool findDoor(DoorReach &d);            // the doorway in reach and in front, if any
     bool bodyInDoorway(int ci, int ck, bool west) const;   // anyone standing where its leaf swings
-    void useDoor();                               // shut or open doorReach
+    // Shut or open doorReach; crouched with a key, shut it and lock it; at a
+    // door the player locked, unlock it and take the key back.
+    void useDoor();
+    bool canLockDoor() const;   // the use key would lock doorReach now
     bool nextCover(Vec2 &spot);                    // the next cover to check while searching
     bool hunterOpensDoor(float dt);              // true while he stands at a shut door, knocking on it
     void updateBracing(bool held);
