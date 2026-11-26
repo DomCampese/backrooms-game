@@ -940,6 +940,78 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
         for (int i = 0; i < c.nYou; i++) card(i, c.nYou, 0.26f, true);
         for (int i = 0; i < c.nDealer; i++) card(i, c.nDealer, -0.26f, i != 1 || c.revealed);
     }
+    if (sim.level == CASINO && (sim.poker.active || sim.poker.showT > 0)) {   // three card poker: both hands on the felt
+        const Sim::PokerHand &c = sim.poker;
+        const float cx = c.a * CELL + 1.0f, cz = c.b * CELL + 1.0f;
+        float ux = sim.px - cx, uz = sim.pz - cz;
+        const float ul = sqrtf(ux * ux + uz * uz);
+        if (ul > 0.01f) { ux /= ul; uz /= ul; } else { ux = 0; uz = -1; }
+        const float rx = -uz, rz = ux;
+        const float top = sim.world.floorY(c.a, c.b) + PROP_SHAPES[PROP_CARD_TABLE].top + 0.002f;
+        const float lum = propLum(cx, top, cz);
+        const bool longX = fabsf(ux) > fabsf(uz);
+        // As blackjack's, with a pip in the suit's colour on a card face up
+        // (hearts and diamonds red, spades and clubs black), standing 1 mm
+        // proud of the card.
+        auto card = [&](int i, uint8_t v, float along, bool faceUp) {
+            const float off = (i - 1) * 0.075f;
+            const Vec3 p = { cx + ux * along + rx * off, top, cz + uz * along + rz * off };
+            const Rgba col = faceUp ? Rgba{ cl8(236 * lum), cl8(234 * lum), cl8(226 * lum), 255 }
+                                    : Rgba{ cl8(128 * lum), cl8(28 * lum), cl8(34 * lum), 255 };
+            put(out, cube(p, longX ? 0.088f : 0.063f, 0.003f, longX ? 0.063f : 0.088f, col));
+            if (!faceUp) return;
+            const int suit = v / 13;
+            const Rgba pip = suit == 1 || suit == 2 ? Rgba{ cl8(170 * lum), cl8(26 * lum), cl8(30 * lum), 255 }
+                                                    : Rgba{ cl8(24 * lum), cl8(24 * lum), cl8(26 * lum), 255 };
+            put(out, cube({ p.x, p.y + 0.002f, p.z }, 0.018f, 0.001f, 0.018f, pip));
+        };
+        for (int i = 0; i < 3; i++) card(i, c.you[i], 0.26f, true);
+        for (int i = 0; i < 3; i++) card(i, c.dealer[i], -0.26f, c.revealed);
+    }
+    if (sim.level == CASINO) {   // roulette wheels (World::tableGame) within 12 m, the one being spun turning
+        // A wooden bowl 0.68 m across on the felt, the rotor in it, 37 pockets
+        // in Sim::ROULETTE_ORDER round a 0.23 m ring (green zero, red and
+        // black), a brass turret, and while a spin runs or its result shows,
+        // the ball. The rotor turns at 4 rad/s falling to rest at
+        // ROULETTE_SPIN; the ball runs the other way round the rim at 0.31 m
+        // and is at its pocket's angle when it drops, from 5.2 s, bouncing in
+        // to 0.23 m by 6.3 s, as Sfx::RouletteSpin times its rattle.
+        const int pci = cellOf(sim.px), pck = cellOf(sim.pz);
+        const Sim::RouletteSpin &w = sim.wheel;
+        const float T = Sim::ROULETTE_SPIN;
+        for (int dx = -6; dx <= 6; dx++) for (int dz = -6; dz <= 6; dz++) {
+            const int a = pci + dx, b = pck + dz;
+            if (sim.world.tableGame(a, b) != TableGame::Roulette) continue;
+            const float cx = a * CELL + 1.0f, cz = b * CELL + 1.0f;
+            const float top = sim.world.floorY(a, b) + PROP_SHAPES[PROP_CARD_TABLE].top;
+            const float lum = propLum(cx, top + 0.1f, cz);
+            // The last table spun keeps its rotor where it stopped; the ball
+            // shows while the spin runs and its result is on the HUD.
+            const bool last = w.result >= 0 && w.a == a && w.b == b;
+            const bool mine = last && (w.spinning || w.showT > 0);
+            const float t = last ? (w.spinning ? w.t : T) : 0.0f;
+            const float rotor = 4.0f * (t - t * t / (2.0f * T));
+            put(out, cylinder({ cx, top, cz }, 0.34f, 0.34f, 0.05f, 24, lit({ 70, 42, 26, 255 }, lum)));
+            put(out, cylinder({ cx, top + 0.05f, cz }, 0.27f, 0.27f, 0.008f, 24, lit({ 44, 32, 26, 255 }, lum)));
+            int resultIdx = 0;
+            for (int i = 0; i < 37; i++) {
+                const int num = Sim::ROULETTE_ORDER[i];
+                if (mine && num == w.result) resultIdx = i;
+                const float ang = rotor + i * (TAU / 37.0f);
+                const Rgba col = num == 0 ? Rgba{ 22, 112, 52, 255 } : Sim::rouletteRed(num) ? Rgba{ 168, 26, 26, 255 } : Rgba{ 22, 22, 24, 255 };
+                put(out, cube({ cx + 0.23f * cosf(ang), top + 0.061f, cz + 0.23f * sinf(ang) }, 0.034f, 0.006f, 0.034f, lit(col, lum)));
+            }
+            put(out, cylinder({ cx, top + 0.058f, cz }, 0.035f, 0.045f, 0.05f, 12, lit({ 196, 156, 74, 255 }, lum)));
+            if (!mine) continue;
+            const float pocket = rotor + resultIdx * (TAU / 37.0f);
+            const float rel = -TAU * 7.0f * (1.0f - fminf(t / 6.3f, 1.0f)) * (1.0f - fminf(t / 6.3f, 1.0f));
+            const float drop = clampf((t - 5.2f) / 1.1f, 0.0f, 1.0f);
+            const float radius = 0.31f + (0.23f - 0.31f) * drop;
+            const float hop = drop > 0.0f && drop < 1.0f ? 0.012f * fabsf(sinf(drop * 18.0f)) * (1.0f - drop) : 0.0f;
+            const float ang = pocket + rel;
+            put(out, sphere({ cx + radius * cosf(ang), top + 0.075f + hop, cz + radius * sinf(ang) }, 0.012f, lit({ 240, 238, 232, 255 }, lum)));
+        }
+    }
     for (const Sim::BulletImpact &impact : sim.bulletImpacts) {
         float age = 0.24f - impact.life;
         Rgba color = impact.body ? Rgba{ 125, 32, 24, 190 } : Rgba{ 211, 188, 144, 190 };

@@ -749,6 +749,67 @@ struct Sim {
     void standCards();
     void updateCards(const InputFrame &in, float dt);
     static int handValue(const uint8_t *ranks, int n);
+    // A card table runs one game (World::tableGame): blackjack (above), three
+    // card poker or roulette, a third each.
+    //
+    // Three card poker (Sim::dealPoker, playPoker, foldPoker). The use key at
+    // a poker table antes POKER_ANTE (it needs POKER_ANTE + POKER_PLAY in
+    // hand) and deals three cards each from one 52-card deck; the dealer's
+    // are face down. The use key again plays (POKER_PLAY more) and shows; the
+    // jump key or stepping CARDS_LEAVE m away folds and loses the ante. The
+    // dealer qualifies with a queen high or better. Not qualifying: the ante
+    // pays 1 to 1 and the play bet comes back. Qualifying: the better hand
+    // wins both bets at 1 to 1, a tie returns both. Whatever the dealer has,
+    // a straight pays an ante bonus of 1, three of a kind 4, a straight flush
+    // 5. Hands rank straight flush, three of a kind, straight, flush, pair,
+    // high card (in three cards a straight is rarer than a flush). A card is
+    // 0..51: rank c % 13 + 1 (1 the ace), suit c / 13.
+    static constexpr int POKER_ANTE = 1, POKER_PLAY = 1;
+    enum class PokerResult : uint8_t { None, Fold, NoQualify, Win, Push, Lose };
+    struct PokerHand {
+        bool active = false;
+        int a = 0, b = 0;
+        uint8_t you[3] = {}, dealer[3] = {};
+        bool revealed = false;
+        PokerResult result = PokerResult::None;
+        int bonus = 0;                // ante bonus paid, doubloons
+        float showT = 0;
+    };
+    PokerHand poker;
+    bool pokerNear = false;           // a poker table with no hand running is in reach, for the HUD
+    void dealPoker(int a, int b);
+    void playPoker();
+    void foldPoker();
+    // A three-card hand's class (5 straight flush, 4 trips, 3 straight, 2
+    // flush, 1 pair, 0 high card) and its ranks for breaking ties, best first,
+    // aces high except in A-2-3.
+    static int pokerRank(const uint8_t *cards, int tiebreak[3]);
+    static int comparePoker(const uint8_t *a, const uint8_t *b);   // >0 if a wins
+    //
+    // Roulette (Sim::betRoulette, updateRoulette). The use key at a roulette
+    // table bets ROULETTE_BET doubloon on red, with crouch held on black (as
+    // crouch and the use key lock a door). The ball is drawn from cardRng at
+    // once: 0..36, one zero, so red or black wins 18 in 37. The wheel turns
+    // for ROULETTE_SPIN s, a ROULETTE_NOISE m noise at the table, then a win
+    // returns 2. ROULETTE_ORDER is the European wheel's pocket order, which
+    // port/draw.cpp lays the pockets out by.
+    static constexpr int ROULETTE_BET = 1;
+    static constexpr float ROULETTE_SPIN = 7.0f, ROULETTE_NOISE = 12.0f;
+    static constexpr int ROULETTE_ORDER[37] = { 0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10,
+                                                5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26 };
+    static bool rouletteRed(int n);
+    struct RouletteSpin {
+        bool spinning = false;
+        int a = 0, b = 0;
+        bool onBlack = false;
+        int result = -1;              // the pocket the ball lands in
+        float t = 0;                  // s into the spin
+        float showT = 0;              // s the result stays on the HUD
+        bool won = false;
+    };
+    RouletteSpin wheel;
+    bool wheelNear = false;           // a roulette table with no spin running is in reach, for the HUD
+    void betRoulette(int a, int b, bool black);
     float boostT = 0;                // s of almond-water speed left
     float sanity = 1.0f;
     int sanityStage = 0;             // deepest threshold crossed, so each warning fires once

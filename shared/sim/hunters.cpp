@@ -350,6 +350,7 @@ float Sim::loudestNoise(float &x, float &z) const {
     if (doorNoiseT > 0 && DOOR_NOISE > noise) { noise = DOOR_NOISE; x = px; z = pz; }   // a door shut or opened
     if (liftNoiseT > 0 && LIFT_NOISE > noise) { noise = LIFT_NOISE; x = liftNoiseX; z = liftNoiseZ; }   // a lift arriving
     if (slotSpin.t > 0 && SLOT_NOISE > noise) { noise = SLOT_NOISE; x = slotSpin.x; z = slotSpin.z; }   // reels turning
+    if (wheel.spinning && ROULETTE_NOISE > noise) { noise = ROULETTE_NOISE; x = wheel.a * CELL + 1.0f; z = wheel.b * CELL + 1.0f; }   // a ball on the wheel
     if (smoke.coughT > 0 && COUGH_NOISE > noise) { noise = COUGH_NOISE; x = px; z = pz; }   // a smoker's cough
     if (slotSpin.bellsT > 0 && SLOT_BELLS_NOISE > noise) { noise = SLOT_BELLS_NOISE; x = slotSpin.x; z = slotSpin.z; }
     if (coinNoiseT > 0 && COIN_NOISE > noise) { noise = COIN_NOISE; x = coinNoiseX; z = coinNoiseZ; }   // a tossed doubloon landing

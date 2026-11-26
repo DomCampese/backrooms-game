@@ -2500,6 +2500,32 @@ so CREDITS.md has no row for it.
   down in dark red; the HUD prints both hands with totals. The card table
   comes before the slot machines in `useWhatIsNear`; the two never share a
   cell. The casino is not in walk-l0-l2.trace.
+- **Three card poker and roulette** (November 2026; `dealPoker`,
+  `playPoker`, `foldPoker`, `pokerRank`, `betRoulette`, casino.cpp). Which
+  game a card table holds is core's `World::tableGame(ci, ck)` (a hash
+  with `sseed()`, a third each), so the sim and the drawing agree; about
+  150 of each within 48 cells of spawn at seed 1337. Poker antes
+  `POKER_ANTE` (it needs `POKER_PLAY` more in hand) and deals three cards
+  each; E again plays and shows, SPACE, leaving or dying folds. Ranks are
+  three card poker's: straight flush, trips, straight, flush, pair, high
+  card, ace high or in A-2-3. The dealer qualifies with queen high: if not,
+  the ante pays 1 to 1 and the play pushes; otherwise both pay 1 to 1 on a
+  win. A straight or better pays an ante bonus (1, 4, 5) whatever the
+  dealer holds. Roulette is one doubloon on red, or on black with crouch
+  held; the European wheel (`ROULETTE_ORDER`, 37 pockets) settles after
+  `ROULETTE_SPIN` (7 s) and pays 2. The ball is drawn at the start, so the
+  sim knows the pocket the whole spin. A spin is a `ROULETTE_NOISE` (12 m)
+  noise and plays `Sfx::RouletteSpin`, appended to the enum. Both draw
+  from `cardRng`. Over the scratch test poker returned 0.984 of what was
+  staked and roulette 0.971 (the true odds are 0.973); blackjack's 1,200
+  hands came out the same as before the change. The wheel is drawn by
+  `sceneDraws` on every roulette table within 6 cells: bowl, rotor, 37
+  pocket blocks and a brass turret, with the ball falling into its pocket
+  over the last 1.8 s. Poker cards are drawn like blackjack's with a pip.
+- **A capture cannot stand within reach of a table.** `simPlace` puts the
+  start at `findOpenSpot`, a cell's centre, 2 m from the table's, past
+  `CARDS_REACH`. The capture hook moved the player 0.8 m in before pressing
+  E.
 
 # The casino's cigarettes (November 2026)
 

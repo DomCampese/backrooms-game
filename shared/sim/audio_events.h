@@ -63,6 +63,7 @@ enum class Sfx : uint8_t {
     AshTap,           // a finger tapping a cigarette, and the ash coming off (Sim::Smoke::flickT)
     LighterSpark,     // a lighter's flint wheel striking a spark that does not catch
     Breaker,          // a breaker panel's main switch thrown (Sim::throwBreaker)
+    RouletteSpin,     // a roulette ball circling the wheel and dropping into a pocket (Sim::betRoulette)
 };
 
 // What the ambience synth (audio.cpp) chases. The rules write each field where

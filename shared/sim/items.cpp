@@ -462,9 +462,18 @@ void Sim::useWhatIsNear() {
             if (!notesRead) { notesRead = true; markWayOut(); }
         }
     }
-    int ca, cb;   // a card table: hit the hand running there, or deal one
-    if (cards.active && cardTableInReach(ca, cb) && ca == cards.a && cb == cards.b) { hitCards(); return; }
-    if (!cards.active && cardTableInReach(ca, cb)) { dealCards(ca, cb); return; }
+    int ca, cb;   // a card table: play the hand running there, or start its game
+    if (cardTableInReach(ca, cb)) {
+        if (cards.active) { if (ca == cards.a && cb == cards.b) hitCards(); return; }
+        if (poker.active) { if (ca == poker.a && cb == poker.b) playPoker(); return; }
+        if (wheel.spinning) return;
+        switch (world.tableGame(ca, cb)) {
+        case TableGame::Blackjack: dealCards(ca, cb); return;
+        case TableGame::Poker:     dealPoker(ca, cb); return;
+        case TableGame::Roulette:  betRoulette(ca, cb, crouchCur > 0.5f); return;
+        default: break;
+        }
+    }
     int sa, sb;
     if (slotInReach(sa, sb)) pullSlot(sa, sb);
     for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {   // vending: three doubloons a can
