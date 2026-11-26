@@ -348,6 +348,7 @@ float Sim::loudestNoise(float &x, float &z) const {
     if (slotSpin.bellsT > 0 && SLOT_BELLS_NOISE > noise) { noise = SLOT_BELLS_NOISE; x = slotSpin.x; z = slotSpin.z; }
     if (coinNoiseT > 0 && COIN_NOISE > noise) { noise = COIN_NOISE; x = coinNoiseX; z = coinNoiseZ; }   // a tossed doubloon landing
     if (phone.ringing && PHONE_NOISE > noise) { noise = PHONE_NOISE; x = phone.x; z = phone.z; }   // a phone ringing
+    if (breakerNoiseT > 0 && BREAKER_NOISE > noise) { noise = BREAKER_NOISE; x = breakerNoiseX; z = breakerNoiseZ; }   // a breaker thrown
     if (muzzleT > 0 || gunCd > SHOT_INTERVAL - 0.07f) { noise = 45.0f; x = px; z = pz; }   // a shot
     bool justStruck = false;   // a flare's strike, whichever flare
     for (const FlareProj &f : litFlares) if (f.active && f.burn > FLAREBURN - 0.6f) justStruck = true;

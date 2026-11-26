@@ -119,6 +119,7 @@ void Sim::setPaused(bool on, double now) {
         nextFlareRegen += held;
         nextBlackout += held;
         if (blackoutEnd > 0) blackoutEnd += held;   // -1: no blackout running
+        breakerRestUntil += held;
         nextWhisper += held;
         nextDistant += held;
         runStart += held;
@@ -222,6 +223,7 @@ void Sim::applyLevel(int lv, double now) {
     stopPose = StopPose{};
     sleepT = wakeT = 0; knockT = 0; knockedT = 1e3f; bedNear = false;
     blackoutEnd = -1;
+    powerCut = false; breakerRestUntil = 0; breakerNoiseT = 0; breakerNear = BreakerUse::None;
     mannequin = {};
     mannequin.nextSpawn = now + 150;
     shadowsStale = true;

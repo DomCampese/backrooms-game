@@ -2,7 +2,7 @@
 # layout's order. Kinds are the enums' values (PropKind, FixtureKind, FittingGap,
 # OpeningKind). Fitting dead/output/faulty/stutter follow tubeHash, which calls sinf.
 
-chunk L0 v0 s0 (0,0) layout: 7 props, 86 fixtures, 64 fittings, 35 openings
+chunk L0 v0 s0 (0,0) layout: 7 props, 87 fixtures, 64 fittings, 35 openings
 prop kind 1 cell 1,3 global 1,3 at 3 7 floor 0 turn 0 yaw 0 against 0 hash 27ffcb1d 809917e8
 prop kind 1 cell 4,11 global 4,11 at 9 23 floor 0 turn 1 yaw 1.57079995 against 0 hash 8f80fef9 83e277aa
 prop kind 1 cell 5,11 global 5,11 at 11 23 floor 0 turn 2 yaw 3.14159989 against 0 hash e04d1f14 1f7456fa
@@ -17,6 +17,7 @@ fixture kind 6 cell 0,8 pos 1 3 17 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 
 fixture kind 5 cell 0,14 pos 1 3 29 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 5 cell 1,0 pos 3 3 1 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 1,1 pos 3 3 3 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 19 cell 1,1 pos 2.70000005 1.45000005 1.88999999 end 0 0 0 normal 0 0 -1 w 0 h 1.28999996 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 1,2 pos 3 3 5 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 1 cell 1,3 pos 1.88999999 0.319999993 6.44999981 end 0 0 0 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 8 cell 1,5 pos 1.88999999 1.51999998 11 end 0 0 0 normal -1 0 0 w 0.720000267 h 0.329999983 angle -0.0127500007 seed 00000000 variant 6 tone 0
@@ -390,7 +391,7 @@ opening kind 0 cell 14,6 west 1 line 1308 e0 -1172 a -1171.65002..-1170.34998 wa
 opening kind 0 cell 14,7 west 1 line 1308 e0 -1170 a -1169.65002..-1168.34998 wall 0..3 head 2.29999995 sill 0 floor 0 join 10 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
 opening kind 0 cell 14,11 west 1 line 1308 e0 -1162 a -1161.65002..-1160.34998 wall 0..3 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
 
-chunk L0 v1 s0 (0,0) layout: 7 props, 70 fixtures, 64 fittings, 31 openings
+chunk L0 v1 s0 (0,0) layout: 7 props, 72 fixtures, 64 fittings, 31 openings
 prop kind 1 cell 0,3 global 0,3 at 1 7 floor 0 turn 2 yaw 3.14159989 against 0 hash 9e96a86b d4716205
 prop kind 4 cell 6,4 global 6,4 at 13 9 floor 0 turn 2 yaw 3.14159989 against 0 hash ddbea57f 17ecd51a
 prop kind 1 cell 11,3 global 11,3 at 23 7 floor 0 turn 1 yaw 1.57079995 against 0 hash f5de9512 251d8eba
@@ -405,6 +406,7 @@ fixture kind 6 cell 0,8 pos 1 3 17 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 
 fixture kind 5 cell 0,14 pos 1 3 29 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 5 cell 1,0 pos 3 3 1 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 1,1 pos 3 3 3 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 19 cell 1,1 pos 2.70000005 1.45000005 1.88999999 end 0 0 0 normal 0 0 -1 w 0 h 1.28999996 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 1,2 pos 3 3 5 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 1 cell 1,3 pos 1.88999999 0.319999993 6.44999981 end 0 0 0 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 8 cell 1,5 pos 1.88999999 1.51999998 11 end 0 0 0 normal -1 0 0 w 0.720000267 h 0.329999983 angle -0.0127500007 seed 00000000 variant 6 tone 0
@@ -423,6 +425,7 @@ fixture kind 0 cell 3,8 pos 6.11000013 0.319999993 16.6050014 end 0 0 0 normal 1
 fixture kind 6 cell 3,12 pos 7 3 25 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 3 cell 3,13 pos 6.11000013 2.0999999 26.9150009 end 0 0 0 normal 1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 2 cell 4,1 pos 8.10999966 1.22000003 3.38000011 end 0 0 0 normal 1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 19 cell 4,3 pos 7.88999987 1.45000005 6.69999981 end 0 0 0 normal -1 0 0 w 0 h 1.28999996 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 4 cell 4,5 pos 8.10999966 2.44000006 11.5349998 end 0 0 0 normal 1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 4,5 pos 9 3 11 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 4 cell 4,8 pos 8.10999966 2.44000006 17.2250004 end 0 0 0 normal 1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
@@ -878,7 +881,7 @@ opening kind 0 cell 14,4 west 1 line -4 e0 8 a 8.35000038..9.64999962 wall 0..3 
 opening kind 0 cell 14,8 west 1 line -4 e0 16 a 16.3500004..17.6499996 wall 0..3 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
 opening kind 0 cell 14,13 west 1 line -4 e0 26 a 26.3500004..27.6499996 wall 0..3 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
 
-chunk L0 v1 s1 (-1,0) layout: 6 props, 70 fixtures, 64 fittings, 31 openings
+chunk L0 v1 s1 (-1,0) layout: 6 props, 73 fixtures, 64 fittings, 31 openings
 prop kind 4 cell 1,0 global -15,0 at -29 1 floor 0 turn 0 yaw 0 against 0 hash c6ce6760 26e45591
 prop kind 4 cell 5,3 global -11,3 at -21 7 floor 0 turn 3 yaw 4.71239996 against 0 hash 44dbe22f a77022e9
 prop kind 1 cell 9,13 global -7,13 at -13 27 floor 0 turn 1 yaw 1.57079995 against 0 hash aac1fb10 02a7d422
@@ -923,6 +926,7 @@ fixture kind 5 cell 6,15 pos -19 3 31 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 se
 fixture kind 0 cell 7,1 pos -16.4650002 0.319999993 2.1099999 end 0 0 0 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 7,1 pos -17 3 3 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 3 cell 7,5 pos -17.8899994 2.0999999 10.6049995 end 0 0 0 normal 1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 19 cell 7,6 pos -17.8899994 1.45000005 12.6999998 end 0 0 0 normal 1 0 0 w 0 h 1.28999996 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 0 cell 7,7 pos -17.8899994 0.319999993 14.915 end 0 0 0 normal 1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 7,11 pos -17 3 23 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 7,14 pos -17 3 29 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
@@ -936,6 +940,7 @@ fixture kind 8 cell 9,3 pos -13.8900003 1.27999997 7 end 0 0 0 normal 1 0 0 w 0.
 fixture kind 5 cell 9,6 pos -13 3 13 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 0 cell 9,7 pos -13.8900003 0.319999993 15.2249994 end 0 0 0 normal 1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 2 cell 9,8 pos -13.8900003 1.22000003 17.0700016 end 0 0 0 normal 1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 19 cell 9,12 pos -13.8900003 1.45000005 24.7000008 end 0 0 0 normal 1 0 0 w 0 h 1.28999996 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 5 cell 10,1 pos -11 3 3 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 5 cell 11,1 pos -9 3 3 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 11,8 pos -9 3 17 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
@@ -947,6 +952,7 @@ fixture kind 6 cell 12,6 pos -7 3 13 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 see
 fixture kind 0 cell 12,14 pos -6.93000031 0.319999993 28.1100006 end 0 0 0 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 12,14 pos -7 3 29 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 5 cell 13,0 pos -5 3 1 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 19 cell 13,1 pos -5.30000019 1.45000005 1.88999999 end 0 0 0 normal 0 0 -1 w 0 h 1.28999996 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 4 cell 14,7 pos -3.8900001 2.44000006 14.915 end 0 0 0 normal 1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 0 cell 14,8 pos -3.24000001 0.319999993 15.8900003 end 0 0 0 normal 0 0 -1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 14,9 pos -3 3 19 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
@@ -1278,7 +1284,7 @@ opening kind 0 cell 14,4 west 1 line 60 e0 -56 a -55.6500015..-54.3499985 wall 0
 opening kind 0 cell 14,7 west 1 line 60 e0 -50 a -49.6500015..-48.3499985 wall 0..3 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
 opening kind 0 cell 14,10 west 1 line 60 e0 -44 a -43.6500015..-42.3499985 wall 0..3 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
 
-chunk L0 v1 s1 (1,-2) layout: 6 props, 86 fixtures, 64 fittings, 45 openings
+chunk L0 v1 s1 (1,-2) layout: 6 props, 87 fixtures, 64 fittings, 45 openings
 prop kind 1 cell 0,10 global 16,-22 at 33 -43 floor 0 turn 0 yaw 0 against 0 hash 0025fbf5 d755ee28
 prop kind 1 cell 2,1 global 18,-31 at 37 -61 floor 0 turn 0 yaw 0 against 0 hash e66b586c 54c2121e
 prop kind 1 cell 4,15 global 20,-17 at 41 -33 floor 0 turn 0 yaw 0 against 0 hash 18fe6b4b 5c36688b
@@ -1302,6 +1308,7 @@ fixture kind 6 cell 3,0 pos 39 3 -63 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 see
 fixture kind 0 cell 3,1 pos 39.2250023 0.319999993 -62.1100006 end 0 0 0 normal 0 0 -1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 7 cell 3,6 pos 37.8899994 2.84500003 -52.1100006 end 37.8899994 2.84500003 -49.8899994 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 7 cell 3,7 pos 37.8899994 2.84500003 -50.1100006 end 37.8899994 2.84500003 -47.8899994 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 19 cell 3,7 pos 38.1100006 1.45000005 -49.2999992 end 0 0 0 normal 1 0 0 w 0 h 1.28999996 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 7 cell 3,8 pos 37.8899994 2.84500003 -48.1100006 end 37.8899994 2.84500003 -45.8899994 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 7 cell 3,9 pos 37.8899994 2.84500003 -46.1100006 end 37.8899994 2.84500003 -43.8899994 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 3,15 pos 39 3 -33 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
@@ -1481,7 +1488,7 @@ opening kind 0 cell 14,6 west 1 line 60 e0 -52 a -51.6500015..-50.3499985 wall 0
 opening kind 0 cell 14,7 west 1 line 60 e0 -50 a -49.6500015..-48.3499985 wall 0..3 head 2.29999995 sill 0 floor 0 join 10 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
 opening kind 0 cell 14,10 west 1 line 60 e0 -44 a -43.6500015..-42.3499985 wall 0..3 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
 
-chunk L0 v1 s0 (0,-1) layout: 6 props, 92 fixtures, 64 fittings, 43 openings
+chunk L0 v1 s0 (0,-1) layout: 6 props, 94 fixtures, 64 fittings, 43 openings
 prop kind 1 cell 7,9 global 7,-7 at 15 -13 floor 0 turn 0 yaw 0 against 0 hash 23b7700f 653a75cd
 prop kind 4 cell 11,1 global 11,-15 at 23 -29 floor 0 turn 1 yaw 1.57079995 against 0 hash b2305b32 11faf2eb
 prop kind 1 cell 13,4 global 13,-12 at 27 -23 floor 0 turn 2 yaw 3.14159989 against 0 hash 734353f6 446f5ee3
@@ -1536,6 +1543,7 @@ fixture kind 2 cell 7,10 pos 14.915 1.22000003 -12.1099997 end 0 0 0 normal 0 0 
 fixture kind 1 cell 7,12 pos 14.4499998 0.319999993 -8.10999966 end 0 0 0 normal 0 0 -1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 7 cell 7,14 pos 13.8900003 2.84500003 -3.8900001 end 16.1100006 2.84500003 -3.8900001 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 8,0 pos 17 3 -31 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 19 cell 8,4 pos 16.7000008 1.45000005 -24.1100006 end 0 0 0 normal 0 0 -1 w 0 h 1.28999996 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 8,5 pos 17 3 -21 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 3 cell 8,6 pos 16.1100006 2.0999999 -19.5499992 end 0 0 0 normal 1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 0 cell 8,9 pos 16.1100006 0.319999993 -12.4650002 end 0 0 0 normal 1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
@@ -1580,6 +1588,7 @@ fixture kind 6 cell 14,4 pos 29 3 -23 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 se
 fixture kind 6 cell 14,7 pos 29 3 -17 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 0 cell 14,9 pos 28.6050014 0.319999993 -14.1099997 end 0 0 0 normal 0 0 -1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 14,10 pos 29 3 -11 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 19 cell 14,10 pos 27.8899994 1.45000005 -11.3000002 end 0 0 0 normal -1 0 0 w 0 h 1.28999996 angle 0 seed 00000000 variant 0 tone 0
 fitting grid 0,-8 pos 2 2.88000011 -30 ceiling 3 gap 0 turned 0 dead 0 output 0.726507545 faulty 1 stutter 0.409408569
 fitting grid 0,-7 pos 2 2.88000011 -26 ceiling 3 gap 0 turned 1 dead 1 output 0.815429688 faulty 0 stutter 0.105272293
 fitting grid 0,-6 pos 2 2.88000011 -22 ceiling 3 gap 0 turned 1 dead 0 output 0.88220346 faulty 1 stutter 0.549766541
@@ -1688,7 +1697,7 @@ opening kind 0 cell 14,9 west 1 line 28 e0 -14 a -13.6499996..-12.3500004 wall 0
 opening kind 0 cell 14,11 west 1 line 28 e0 -10 a -9.64999962..-8.35000038 wall 0..3 head 2.29999995 sill 0 floor 0 join 01 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
 opening kind 0 cell 14,12 west 1 line 28 e0 -8 a -7.6500001..-6.3499999 wall 0..3 head 2.29999995 sill 0 floor 0 join 10 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
 
-chunk L0 v1 s1 (0,-1) layout: 7 props, 89 fixtures, 64 fittings, 54 openings
+chunk L0 v1 s1 (0,-1) layout: 7 props, 90 fixtures, 64 fittings, 54 openings
 prop kind 4 cell 4,11 global 4,-5 at 9 -9 floor 0 turn 2 yaw 3.14159989 against 0 hash cd9d8fb0 5608730e
 prop kind 1 cell 9,12 global 9,-4 at 19 -7 floor 0 turn 0 yaw 0 against 0 hash b9b0c08a 4020ad89
 prop kind 1 cell 11,6 global 11,-10 at 23 -19 floor 0 turn 3 yaw 4.71239996 against 0 hash 2d1ad7c5 6d43bcc7
@@ -1757,6 +1766,7 @@ fixture kind 5 cell 10,6 pos 21 3 -19 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 se
 fixture kind 6 cell 10,8 pos 21 3 -15 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 1 cell 10,11 pos 20.7600002 0.319999993 -9.89000034 end 0 0 0 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 3 cell 11,1 pos 23.0700016 2.0999999 -29.8899994 end 0 0 0 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 19 cell 11,4 pos 22.7000008 1.45000005 -24.1100006 end 0 0 0 normal 0 0 -1 w 0 h 1.28999996 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 7 cell 11,5 pos 21.8899994 2.84500003 -21.8899994 end 24.1100006 2.84500003 -21.8899994 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 11,6 pos 23 3 -19 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 11,12 pos 23 3 -7 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
@@ -2219,7 +2229,7 @@ opening kind 0 cell 14,8 west 1 line 1308 e0 -1168 a -1167.65002..-1166.34998 wa
 opening kind 0 cell 14,10 west 1 line 1308 e0 -1164 a -1163.65002..-1162.34998 wall 0..4.19999981 head 2.29999995 sill 0 floor 0 join 01 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
 opening kind 0 cell 14,11 west 1 line 1308 e0 -1162 a -1161.65002..-1160.34998 wall 0..4.19999981 head 2.29999995 sill 0 floor 0 join 10 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
 
-chunk L1 v1 s0 (0,0) layout: 17 props, 93 fixtures, 9 fittings, 36 openings
+chunk L1 v1 s0 (0,0) layout: 17 props, 95 fixtures, 9 fittings, 36 openings
 prop kind 2 cell 0,5 global 0,5 at 1 11 floor 0 turn 3 yaw 4.71239996 against 0 hash 274bce3f c6fcedf9
 prop kind 1 cell 0,10 global 0,10 at 1 21 floor 0 turn 0 yaw 0 against 0 hash 8a3b4641 16baac83
 prop kind 2 cell 0,11 global 0,11 at 1 23 floor 0 turn 2 yaw 3.14159989 against 0 hash b3479969 da0855db
@@ -2244,6 +2254,7 @@ fixture kind 6 cell 0,8 pos 1 4.19999981 17 end 0 0 0 normal 0 -1 0 w 0 h 0 angl
 fixture kind 5 cell 0,14 pos 1 4.19999981 29 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 5 cell 1,0 pos 3 4.19999981 1 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 1,1 pos 3 4.19999981 3 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 19 cell 1,1 pos 2.70000005 1.45000005 1.88999999 end 0 0 0 normal 0 0 -1 w 0 h 2.48999977 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 1,2 pos 3 4.19999981 5 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 1 cell 1,3 pos 1.88999999 0.319999993 6.44999981 end 0 0 0 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 8 cell 1,5 pos 1.88999999 1.51999998 11 end 0 0 0 normal -1 0 0 w 0.720000267 h 0.329999983 angle -0.0127500007 seed 00000000 variant 6 tone 0
@@ -2262,6 +2273,7 @@ fixture kind 6 cell 3,5 pos 7 4.19999981 11 end 0 0 0 normal 0 -1 0 w 0 h 0 angl
 fixture kind 6 cell 3,7 pos 7 4.19999981 15 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 12 cell 3,10 pos 6 3.7099998 20.3400002 end 8 3.7099998 20.3400002 normal 0 0 0 w 0.0649999976 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 3,12 pos 7 4.19999981 25 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 19 cell 4,3 pos 7.88999987 1.45000005 6.69999981 end 0 0 0 normal -1 0 0 w 0 h 2.48999977 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 1 cell 4,4 pos 8.10999966 0.319999993 8.76000023 end 0 0 0 normal 1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 4 cell 4,5 pos 8.10999966 2.44000006 11.5349998 end 0 0 0 normal 1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 4,5 pos 9 4.19999981 11 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
@@ -2552,7 +2564,7 @@ fitting grid 163,-147 pos 1308 7.38000011 -1172 ceiling 7.5 gap 0 turned 1 dead 
 fitting grid 163,-146 pos 1308 7.38000011 -1164 ceiling 7.5 gap 0 turned 1 dead 0 output 1 faulty 0 stutter 0.573123932
 fitting grid 163,-145 pos 1308 7.38000011 -1156 ceiling 7.5 gap 0 turned 1 dead 0 output 1 faulty 1 stutter 0.882362366
 
-chunk L3 v0 s0 (0,0) layout: 12 props, 80 fixtures, 16 fittings, 38 openings
+chunk L3 v0 s0 (0,0) layout: 12 props, 82 fixtures, 16 fittings, 38 openings
 prop kind 1 cell 1,1 global 1,1 at 3 3 floor 0 turn 0 yaw 0 against 0 hash 80483ffd 91a0b1de
 prop kind 7 cell 2,0 global 2,0 at 5 1 floor 0 turn 3 yaw 4.71239996 against 0 hash 9d734108 73181190
 prop kind 1 cell 2,1 global 2,1 at 5 3 floor 0 turn 0 yaw 0 against 0 hash 821541c4 81f02bf0
@@ -2572,6 +2584,7 @@ fixture kind 6 cell 0,8 pos 1 3 17 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 
 fixture kind 5 cell 0,14 pos 1 3 29 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 5 cell 1,0 pos 3 3 1 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 1,1 pos 3 3 3 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 19 cell 1,1 pos 2.70000005 1.45000005 1.88999999 end 0 0 0 normal 0 0 -1 w 0 h 1.28999996 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 1,2 pos 3 3 5 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 1 cell 1,3 pos 1.88999999 0.319999993 6.44999981 end 0 0 0 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 0 cell 1,5 pos 3.2249999 0.319999993 10.1099997 end 0 0 0 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
@@ -2618,6 +2631,7 @@ fixture kind 7 cell 9,4 pos 17.8899994 2.84500003 7.88999987 end 20.1100006 2.84
 fixture kind 6 cell 9,5 pos 19 3 11 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 9,7 pos 19 3 15 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 0 cell 9,11 pos 19.0700016 0.319999993 22.1100006 end 0 0 0 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 19 cell 9,11 pos 17.8899994 1.45000005 22.7000008 end 0 0 0 normal -1 0 0 w 0 h 1.28999996 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 5 cell 9,15 pos 19 3 31 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 10,1 pos 21 3 3 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 5 cell 10,2 pos 21 3 5 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
@@ -2860,7 +2874,7 @@ opening kind 0 cell 14,6 west 1 line 1308 e0 -1172 a -1171.65002..-1170.34998 wa
 opening kind 1 cell 14,9 west 1 line 1308 e0 -1166 a -1165.65002..-1164.34998 wall 0..3 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
 opening kind 0 cell 14,11 west 1 line 1308 e0 -1162 a -1161.65002..-1160.34998 wall 0..3 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
 
-chunk L3 v1 s0 (0,0) layout: 11 props, 78 fixtures, 16 fittings, 37 openings
+chunk L3 v1 s0 (0,0) layout: 11 props, 80 fixtures, 16 fittings, 37 openings
 prop kind 7 cell 1,6 global 1,6 at 3 13 floor 0 turn 3 yaw 4.71239996 against 0 hash 2f443d5d a61015f8
 prop kind 7 cell 3,15 global 3,15 at 7 31 floor 0 turn 2 yaw 3.14159989 against 0 hash 2e6f74e9 c732092b
 prop kind 7 cell 5,1 global 5,1 at 11 3 floor 0 turn 3 yaw 4.71239996 against 0 hash 7665f5f3 d20e8167
@@ -2879,6 +2893,7 @@ fixture kind 6 cell 0,8 pos 1 3 17 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 
 fixture kind 5 cell 0,14 pos 1 3 29 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 5 cell 1,0 pos 3 3 1 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 1,1 pos 3 3 3 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 19 cell 1,1 pos 2.70000005 1.45000005 1.88999999 end 0 0 0 normal 0 0 -1 w 0 h 1.28999996 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 1,2 pos 3 3 5 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 1 cell 1,3 pos 2.91499996 0.319999993 6.11000013 end 0 0 0 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 1 cell 1,3 pos 1.88999999 0.319999993 6.44999981 end 0 0 0 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
@@ -2900,6 +2915,7 @@ fixture kind 6 cell 3,7 pos 7 3 15 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 
 fixture kind 6 cell 3,12 pos 7 3 25 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 2 cell 4,1 pos 8.10999966 1.22000003 3.38000011 end 0 0 0 normal 1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 0 cell 4,3 pos 9.53499985 0.319999993 6.11000013 end 0 0 0 normal 0 0 1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 19 cell 4,3 pos 7.88999987 1.45000005 6.69999981 end 0 0 0 normal -1 0 0 w 0 h 1.28999996 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 1 cell 4,4 pos 8.10999966 0.319999993 8.76000023 end 0 0 0 normal 1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 4,5 pos 9 3 11 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 0 cell 4,7 pos 8.60499954 0.319999993 13.8900003 end 0 0 0 normal 0 0 -1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
@@ -3466,7 +3482,7 @@ opening kind 0 cell 14,4 west 1 line 28 e0 8 a 8.35000038..9.64999962 wall 0..5 
 opening kind 0 cell 14,8 west 1 line 28 e0 16 a 16.3500004..17.6499996 wall 0..5 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
 opening kind 0 cell 14,11 west 1 line 28 e0 22 a 22.3500004..23.6499996 wall 0..5 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
 
-chunk L4 v1 s0 (40,-37) layout: 17 props, 75 fixtures, 16 fittings, 17 openings
+chunk L4 v1 s0 (40,-37) layout: 17 props, 76 fixtures, 16 fittings, 17 openings
 prop kind 6 cell 3,9 global 643,-583 at 1287 -1164.55005 floor 0 turn 0 yaw 0 against 1 hash 310d9b6e 265b8c4b
 prop kind 5 cell 3,11 global 643,-581 at 1287 -1161 floor 0 turn 2 yaw 3.14159989 against 0 hash 5441e691 786acb49
 prop kind 5 cell 3,12 global 643,-580 at 1287 -1159 floor 0 turn 1 yaw 1.57079995 against 0 hash 7c885370 d596e07f
@@ -3545,6 +3561,7 @@ fixture kind 6 cell 13,10 pos 1307 5 -1163 end 0 0 0 normal 0 -1 0 w 0 h 0 angle
 fixture kind 16 cell 13,10 pos 1307 1.54999995 -1163.89001 end 0 0 0 normal 0 0 1 w 0.419999987 h 0.600000024 angle 0 seed 2dbed11b variant 0 tone 0
 fixture kind 0 cell 13,14 pos 1307.38 0.319999993 -1156.10999 end 0 0 0 normal 0 0 -1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 5 cell 14,0 pos 1309 5 -1183 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 19 cell 14,1 pos 1308.10999 1.45000005 -1181.30005 end 0 0 0 normal 1 0 0 w 0 h 3.28999996 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 1 cell 14,3 pos 1307.89001 0.319999993 -1177.39502 end 0 0 0 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 16 cell 14,3 pos 1308.10999 1.54999995 -1177 end 0 0 0 normal 1 0 0 w 0.419999987 h 0.600000024 angle 0 seed d568c19c variant 0 tone 0
 fixture kind 16 cell 14,5 pos 1308.10999 1.54999995 -1173 end 0 0 0 normal 1 0 0 w 0.419999987 h 0.600000024 angle 0 seed 40ae970a variant 0 tone 0
@@ -3729,7 +3746,7 @@ opening kind 0 cell 14,1 west 1 line 28 e0 2 a 2.3499999..3.6500001 wall 0..4 he
 opening kind 0 cell 14,4 west 1 line 28 e0 8 a 8.35000038..9.64999962 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
 opening kind 0 cell 14,7 west 1 line 28 e0 14 a 14.3500004..15.6499996 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
 
-chunk L5 v0 s0 (40,-37) layout: 61 props, 56 fixtures, 16 fittings, 10 openings
+chunk L5 v0 s0 (40,-37) layout: 61 props, 57 fixtures, 16 fittings, 10 openings
 prop kind 16 cell 2,3 global 642,-589 at 1285 -1177 floor 0 turn 0 yaw 0 against 0 hash b95b7096 2bce5d72
 prop kind 16 cell 2,4 global 642,-588 at 1285 -1175 floor 0 turn 2 yaw 3.14159989 against 0 hash 1b08488f 228d5241
 prop kind 16 cell 2,7 global 642,-585 at 1285 -1169 floor 0 turn 0 yaw 0 against 0 hash 0d357ce1 497011b5
@@ -3837,6 +3854,7 @@ fixture kind 6 cell 13,5 pos 1307 4 -1173 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 
 fixture kind 6 cell 13,10 pos 1307 4 -1163 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 0 cell 13,14 pos 1307.38 0.319999993 -1156.10999 end 0 0 0 normal 0 0 -1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 5 cell 14,0 pos 1309 4 -1183 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 19 cell 14,1 pos 1308.10999 1.45000005 -1181.30005 end 0 0 0 normal 1 0 0 w 0 h 2.28999996 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 1 cell 14,3 pos 1307.89001 0.319999993 -1177.39502 end 0 0 0 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 0 cell 14,6 pos 1307.89001 0.319999993 -1171.39502 end 0 0 0 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 14,6 pos 1309 4 -1171 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
@@ -4014,7 +4032,7 @@ opening kind 0 cell 14,4 west 1 line 28 e0 8 a 8.35000038..9.64999962 wall 0..4 
 opening kind 0 cell 14,8 west 1 line 28 e0 16 a 16.3500004..17.6499996 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
 opening kind 0 cell 14,12 west 1 line 28 e0 24 a 24.3500004..25.6499996 wall 0..4 head 2.29999995 sill 0 floor 0 join 00 leafRoom 0 glyph rail 0 0 overVoid 0 underside 0 voidSide 0
 
-chunk L5 v1 s0 (40,-37) layout: 61 props, 54 fixtures, 16 fittings, 13 openings
+chunk L5 v1 s0 (40,-37) layout: 61 props, 55 fixtures, 16 fittings, 13 openings
 prop kind 16 cell 2,3 global 642,-589 at 1285 -1177 floor 0 turn 0 yaw 0 against 0 hash b95b7096 2bce5d72
 prop kind 16 cell 2,4 global 642,-588 at 1285 -1175 floor 0 turn 2 yaw 3.14159989 against 0 hash 1b08488f 228d5241
 prop kind 16 cell 2,7 global 642,-585 at 1285 -1169 floor 0 turn 0 yaw 0 against 0 hash 0d357ce1 497011b5
@@ -4122,6 +4140,7 @@ fixture kind 6 cell 13,5 pos 1307 4 -1173 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 
 fixture kind 6 cell 13,10 pos 1307 4 -1163 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 0 cell 13,14 pos 1307.38 0.319999993 -1156.10999 end 0 0 0 normal 0 0 -1 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 5 cell 14,0 pos 1309 4 -1183 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
+fixture kind 19 cell 14,1 pos 1308.10999 1.45000005 -1181.30005 end 0 0 0 normal 1 0 0 w 0 h 2.28999996 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 1 cell 14,3 pos 1307.89001 0.319999993 -1177.39502 end 0 0 0 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 6 cell 14,6 pos 1309 4 -1171 end 0 0 0 normal 0 -1 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0
 fixture kind 7 cell 14,7 pos 1307.89001 3.84500003 -1170.10999 end 1307.89001 3.84500003 -1167.89001 normal -1 0 0 w 0 h 0 angle 0 seed 00000000 variant 0 tone 0

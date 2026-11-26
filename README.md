@@ -390,6 +390,15 @@ AGENTS.md has the module map file by file.
   nearest exit is and which way it is from where you face, for 60 s, and a
   chalk arrow by the phone points to it. If no exit is within about 130 m of
   the phone, the line goes dead.
+- **Breaker panels.** Level 0, Level 1, LEVEL FUN, the theater's lobbies and
+  the casino have grey breaker panels on the walls, with a red switch handle
+  and a conduit to the ceiling: about one per 45 m square (one per 60 m
+  square in the theater). Press E (USE on touch) in front of one to cut the
+  power: a blackout for 30 s, after which the breaker resets itself. In the
+  dark a chasing hunter sees you from 9 m instead of 30, but sanity drains
+  2.2 times as fast, and throwing the switch is heard from 18 m. Press E at a
+  panel during any blackout to turn the power back on at once. For 40 s
+  after the lights come back a breaker will not cut them again.
 - **Flares.** Throw one (Q, or left click when selected). It bounces off
   walls and burns for 9 s as a point light in the shader. The hunter will not
   come within 6 m of a burning flare and runs from one. You carry up to three
