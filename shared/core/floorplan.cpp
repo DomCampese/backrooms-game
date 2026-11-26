@@ -200,6 +200,7 @@ ChunkFloorplan chunkFloorplan(World &w, int cx, int cz) {
             c.floor = floorKindOf(w, d, i, k, gi, gk);
             c.y = w.floorY(gi, gk);
             c.pool = w.poolAt(gi, gk);
+            c.drain = c.pool && w.poolDrain(gi, gk);
             c.ceiling = cellHasCeiling(w, gi, gk);
             c.ceilY = w.ceilY(gi, gk);
             c.pillar = d.pillar[i][k] != 0;

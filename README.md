@@ -642,4 +642,13 @@ Pools have shallow shelves and deep centres. In deep water, hold **SPACE** to sw
 
 With your head under water a breath bar appears above the sprint bar. It empties in 18 s and refills in 3 s at the surface. Empty, you lose about a quarter of your health each second until you surface, so staying under ends the run in about 4 s. Surfacing short of breath plays a gasp. The floors of the deepest water (2.4 m and below) hold doubloons, about one in 23 cells, and an occasional carton of almond water. They are out of reach from the surface; dive to the floor to pick them up.
 
+Some of the deep pools have a drain: a steel grate in the floor, about one a
+chunk. Each runs for 8 s of every 18 s. It opens with a clunk, then you hear
+water rushing and see a column of bubbles spiralling up from the grate to a
+ring of foam on the surface. While it runs it pulls anyone in the water within
+3.5 m toward the grate and down. From about 1.5 m you cannot keep your head
+above water, so your breath runs down. Swim straight away from it: from 1 m out
+it takes about 2.3 s to get clear. Doubloons near a drain are best picked up
+while it is off.
+
 See [the Poolrooms implementation and visual checks](docs/poolrooms.md).

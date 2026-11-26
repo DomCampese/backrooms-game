@@ -1310,6 +1310,14 @@ bool World::snackAt(int ci, int ck) {
     return level == THEATER && propAt(ci, ck) == PROP_VENDING && ih(ci, ck, sseed() ^ 0x5AC1u) % 3 != 0;
 }
 
+bool World::poolDrain(int ci, int ck) {
+    if (level != 2 || !poolAt(ci, ck) || pillarAt(ci, ck) || floorY(ci, ck) > DRAIN_DEPTH + 0.01f) return false;
+    auto picked = [&](int a, int b) { return ih(a, b, sseed() ^ 0xD4A1u) % DRAIN_RATE == 0; };
+    // Not beside another: two pulls would add up to more than one can swim out of.
+    return picked(ci, ck) && !picked(ci - 1, ck) && !picked(ci, ck - 1) && !picked(ci - 1, ck - 1)
+        && !picked(ci + 1, ck - 1);
+}
+
 // Two wave trains: a checker of hills and valleys, and a ridge on the
 // diagonal. Their slope is at most 0.3 * MOTION_WAVE_A + 0.2 * MOTION_WAVE_B
 // of the field per cell, so with the plateau and MOTION_VALLEY it is under

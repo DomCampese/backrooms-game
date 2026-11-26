@@ -11,6 +11,9 @@
 #include <vector>
 
 constexpr float WATER_Y = -0.12f;       // shared surface for rendering and swimming
+constexpr float DRAIN_DEPTH = -2.4f;    // a pool floor this deep or deeper can hold a drain (World::poolDrain)
+constexpr uint32_t DRAIN_RATE = 40;     // one deep cell in this many
+constexpr float DRAIN_HALF = 0.45f;     // the grate's half-width, m
 constexpr float CELL = 2.0f;           // metres per grid cell
 constexpr int   CCELLS = 16;           // cells per chunk side
 constexpr float CHUNK = CELL * CCELLS;
@@ -608,6 +611,10 @@ struct World {
     // A vending machine that sells snacks: two in three in the theater, none
     // elsewhere.
     bool snackAt(int ci, int ck);
+    // The Poolrooms: a drain grate in the floor of deep water (floor at
+    // DRAIN_DEPTH or lower), one such cell in DRAIN_RATE. The sim runs it
+    // (Sim::updateDrains) and the mesher builds its grate (FloorCell::drain).
+    bool poolDrain(int ci, int ck);
     // Level 94: the ground's height in metres at (u, v) cells (world metres /
     // CELL), and a cell's floor in elev units, its centre's height rounded
     // (generate stores it in elev). Out of doors on the ground storey, floorY

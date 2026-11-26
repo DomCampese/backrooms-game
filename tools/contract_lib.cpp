@@ -13,8 +13,8 @@
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
+#include <cstdlib>
 #include <fstream>
 #include <functional>
 #include <sstream>
@@ -678,6 +678,8 @@ void floorplanChunk(Golden &g, World &w, int level, unsigned visit, int storey, 
             char buf[160];
             snprintf(buf, sizeof buf, "cell %d,%d floor %d y %.9g ceiling %d %.9g pool %d pillar %d", i, k,
                      (int)c.floor, c.y, c.ceiling ? 1 : 0, c.ceilY, c.pool ? 1 : 0, c.pillar ? 1 : 0);
+            // Printed and hashed only where there is one, so no other line moves.
+            if (c.drain) snprintf(buf + strlen(buf), sizeof buf - strlen(buf), " drain 1");
             // The hash takes every field; the printed line leaves out a plain edge.
             std::string line = buf, shown = buf;
             putEdge(line, "N", c.north);

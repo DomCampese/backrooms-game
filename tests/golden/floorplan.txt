@@ -2665,7 +2665,7 @@ cell 10,7 floor 0 y 0 ceiling 1 7.5 pool 0 pillar 0 N wall 0 -2.4000001..7.5 bur
 cell 10,8 floor 0 y -2.4000001 ceiling 1 7.5 pool 1 pillar 0 N wall 1 -2.4000001..7.5 buried 1 void 0 floor 0 -2.4000001 ceil 7.5 7.5 has 1111 W wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 -2.4000001 ceil 7.5 7.5 has 1111
 cell 10,9 floor 0 y -2.4000001 ceiling 1 7.5 pool 1 pillar 0 N wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 -2.4000001 ceil 7.5 7.5 has 1111 W wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 -2.4000001 ceil 7.5 7.5 has 1111
 cell 10,10 floor 0 y 0 ceiling 1 7.5 pool 0 pillar 0 N wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 0 ceil 7.5 7.5 has 1111 W wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 0 ceil 7.5 7.5 has 1111
-cell 10,11 floor 0 y -2.4000001 ceiling 1 7.5 pool 1 pillar 0 N wall 0 -2.4000001..7.5 buried 0 void 0 floor 0 -2.4000001 ceil 7.5 7.5 has 1111 W wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 -2.4000001 ceil 7.5 7.5 has 1111
+cell 10,11 floor 0 y -2.4000001 ceiling 1 7.5 pool 1 pillar 0 drain 1 N wall 0 -2.4000001..7.5 buried 0 void 0 floor 0 -2.4000001 ceil 7.5 7.5 has 1111 W wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 -2.4000001 ceil 7.5 7.5 has 1111
 cell 10,12 floor 0 y -2.4000001 ceiling 1 7.5 pool 1 pillar 0 N wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 -2.4000001 ceil 7.5 7.5 has 1111 W wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 -2.4000001 ceil 7.5 7.5 has 1111
 cell 10,13 floor 0 y -2.4000001 ceiling 1 7.5 pool 1 pillar 0 N wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 -2.4000001 ceil 7.5 7.5 has 1111 W wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 -2.4000001 ceil 7.5 7.5 has 1111
 cell 10,14 floor 0 y -2.4000001 ceiling 1 7.5 pool 1 pillar 0 N wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 -2.4000001 ceil 7.5 7.5 has 1111 W wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 -2.4000001 ceil 7.5 7.5 has 1111
@@ -2736,7 +2736,7 @@ cell 15,9 floor 0 y 0 ceiling 1 7.5 pool 0 pillar 0 W wall 0 -2.4000001..7.5 bur
 cell 15,11 floor 0 y 0 ceiling 1 7.5 pool 0 pillar 0 W wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 0 ceil 7.5 7.5 has 1111
 cell 15,12 floor 0 y 0 ceiling 1 7.5 pool 0 pillar 0 W wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 0 ceil 7.5 7.5 has 1111
 cell 15,13 floor 0 y 0 ceiling 1 7.5 pool 0 pillar 0 W wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 0 ceil 7.5 7.5 has 1111
-cells hash=744a5adc07ca8fed plain=61
+cells hash=421088dfb3d04a10 plain=61
 riser cell 0,1 1282 -1182 -> 1282 -1180 y -0.600000024..0 facing 1 0
 riser cell 0,2 1282 -1180 -> 1282 -1178 y -0.600000024..0 facing 1 0
 riser cell 0,3 1282 -1178 -> 1282 -1176 y -0.600000024..0 facing 1 0
@@ -3385,7 +3385,7 @@ cell 10,7 floor 0 y 0 ceiling 1 7.5 pool 0 pillar 0 N wall 0 -2.4000001..7.5 bur
 cell 10,8 floor 0 y -2.4000001 ceiling 1 7.5 pool 1 pillar 0 N wall 1 -2.4000001..7.5 buried 1 void 0 floor 0 -2.4000001 ceil 7.5 7.5 has 1111 W wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 -2.4000001 ceil 7.5 7.5 has 1111
 cell 10,9 floor 0 y -2.4000001 ceiling 1 7.5 pool 1 pillar 0 N wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 -2.4000001 ceil 7.5 7.5 has 1111 W wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 -2.4000001 ceil 7.5 7.5 has 1111
 cell 10,10 floor 0 y 0 ceiling 1 7.5 pool 0 pillar 0 N wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 0 ceil 7.5 7.5 has 1111 W wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 0 ceil 7.5 7.5 has 1111
-cell 10,11 floor 0 y -2.4000001 ceiling 1 7.5 pool 1 pillar 0 N wall 0 -2.4000001..7.5 buried 0 void 0 floor 0 -2.4000001 ceil 7.5 7.5 has 1111 W wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 -2.4000001 ceil 7.5 7.5 has 1111
+cell 10,11 floor 0 y -2.4000001 ceiling 1 7.5 pool 1 pillar 0 drain 1 N wall 0 -2.4000001..7.5 buried 0 void 0 floor 0 -2.4000001 ceil 7.5 7.5 has 1111 W wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 -2.4000001 ceil 7.5 7.5 has 1111
 cell 10,12 floor 0 y -2.4000001 ceiling 1 7.5 pool 1 pillar 0 N wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 -2.4000001 ceil 7.5 7.5 has 1111 W wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 -2.4000001 ceil 7.5 7.5 has 1111
 cell 10,13 floor 0 y -2.4000001 ceiling 1 7.5 pool 1 pillar 0 N wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 -2.4000001 ceil 7.5 7.5 has 1111 W wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 -2.4000001 ceil 7.5 7.5 has 1111
 cell 10,14 floor 0 y -2.4000001 ceiling 1 7.5 pool 1 pillar 0 N wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 -2.4000001 ceil 7.5 7.5 has 1111 W wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 -2.4000001 ceil 7.5 7.5 has 1111
@@ -3456,7 +3456,7 @@ cell 15,9 floor 0 y 0 ceiling 1 7.5 pool 0 pillar 0 W wall 0 -2.4000001..7.5 bur
 cell 15,11 floor 0 y 0 ceiling 1 7.5 pool 0 pillar 0 W wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 0 ceil 7.5 7.5 has 1111
 cell 15,12 floor 0 y 0 ceiling 1 7.5 pool 0 pillar 0 W wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 0 ceil 7.5 7.5 has 1111
 cell 15,13 floor 0 y 0 ceiling 1 7.5 pool 0 pillar 0 W wall 0 -2.4000001..7.5 buried 0 void 0 floor -2.4000001 0 ceil 7.5 7.5 has 1111
-cells hash=744a5adc07ca8fed plain=61
+cells hash=421088dfb3d04a10 plain=61
 riser cell 0,1 1282 -1182 -> 1282 -1180 y -0.600000024..0 facing 1 0
 riser cell 0,2 1282 -1180 -> 1282 -1178 y -0.600000024..0 facing 1 0
 riser cell 0,3 1282 -1178 -> 1282 -1176 y -0.600000024..0 facing 1 0

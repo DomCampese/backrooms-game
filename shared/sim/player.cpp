@@ -48,7 +48,7 @@ bool Sim::updateSwimming(float dt, bool rise) {
     swimming = world.poolAt(cellOf(px), cellOf(pz)) && bottom < WATER_Y - 1.4f && py < WATER_Y - 0.35f;
     if (!swimming) return false;
     grounded = false;
-    float desired = rise ? clampf((FLOAT_PY - py) * 3.0f, -1.5f, 2.2f) : -1.2f;
+    float desired = (rise ? clampf((FLOAT_PY - py) * 3.0f, -1.5f, 2.2f) : -1.2f) - DRAIN_SINK * drainNear.pull;
     vy += (desired - vy) * (1 - portableExp(-5.0f * dt));
     py += vy * dt;
     if (py < bottom) { py = bottom; vy = fmaxf(vy, 0); }
@@ -108,6 +108,10 @@ void Sim::updateMovement(const InputFrame &in, float dt, double now) {
     float drag = inWater ? 1 - portableExp(-accel * dt) : fminf(1, accel * dt);
     velx += (tvx - velx) * drag;
     velz += (tvz - velz) * drag;
+    if (drainNear.pull > 0) {   // a running drain (updateDrains): the water's drag above holds it to a drift
+        velx += drainNear.dirx * DRAIN_DRAG * drainNear.pull * dt;
+        velz += drainNear.dirz * DRAIN_DRAG * drainNear.pull * dt;
+    }
     if (squeezing) { float v = portableHypot(velx, velz); if (v > speed) { velx *= speed / v; velz *= speed / v; } }
     float oldX = px, oldZ = pz;
     px += velx * dt; pz += velz * dt;
