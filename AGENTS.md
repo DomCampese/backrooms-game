@@ -455,6 +455,32 @@ shared/sim/hunters.cpp), on every level with a hunter.
   shifts everything after it. walk-l0-l2.trace has a stalk at frame 21 and
   was re-recorded.
 
+# The Smiler keeps to the dark (November 2026)
+
+On the Smiler's levels (`smilerLevel`: Level 1, the theater, the casino) the
+hunter will not come into light (`Sim::smilerBarred`, shared/sim/hunters.cpp).
+Clark, the Partygoer and the Animation are unchanged.
+
+- **Light is `Sim::lightAt(x, z, hunterDims)`**, `lightAtPlayer`'s sum taken
+  at any point (`lightAtPlayer` is `lightAt(px, pz, true)`). The rule passes
+  `hunterDims` false. A point at `SMILER_LIGHT` (0.35) or more is barred.
+  Faulty tubes count as on; a blackout scales everything by `blackoutCur`, so
+  in a blackout nothing is barred. The flashlight does not count.
+- **It does not dim the lights near it**: `darkT` is 0 on these levels, so
+  `entDarkCur`, the shader's `uEntDark` and Unreal's lights see no dark area.
+  With it, the tubes went out as it came and nothing would have stayed lit.
+- **In a chase it stops when its next waypoint is barred** (`chaseSpd` 0,
+  lunge cancelled), so it waits at the edge of the light. On Level 1 a
+  working batten bars a circle of about 6 m. It cannot start a lunge at a
+  player who stands in a barred spot. Stalking, it does not step into one.
+- **Caught in light for `SMILER_BURN` (0.6 s)** (its own spot barred, as when
+  the tubes come back after a blackout, or a spawn in a lit spot), it goes
+  `Hidden` and is due back `SMILER_RETURN` (8 s) later (`Entity::litT`).
+- `inSmilerLight` (set in `updateEntity` while the hunter is out) drives the
+  HUD's cover line "[ in the light · it will not come in ]".
+- walk-l0-l2.trace plays back unchanged: its Level 1 stretch has no hunter
+  near a lit edge.
+
 # The searching hunter checks cover (November 2026)
 
 When the hunter loses the player it walks to the last-known spot and then

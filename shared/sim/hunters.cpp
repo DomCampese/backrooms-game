@@ -5,6 +5,7 @@
 #include <cmath>
 
 void Sim::updateEntity(float dt, double now, bool forceSpawn) {
+    inSmilerLight = false;
     if (mannequin.active) {
         ent.st = EState::Hidden; ent.nextSpawn = now + 30;
         entDarkCur = 0; entDist = 1e9f;
@@ -35,6 +36,7 @@ void Sim::updateEntity(float dt, double now, bool forceSpawn) {
     } else {
         float gaitFromX = ent.x, gaitFromZ = ent.z;
         playerLight += (lightAtPlayer() - playerLight) * fminf(1, 4 * dt);
+        inSmilerLight = smilerBarred(px, pz);
         float ex = ent.x - px, ez = ent.z - pz;
         entDist = sqrtf(ex * ex + ez * ez);
         float dirDot = (entDist > 0.01f) ? (fwd.x * ex + fwd.z * ez) / entDist : 1;
@@ -50,6 +52,14 @@ void Sim::updateEntity(float dt, double now, bool forceSpawn) {
                 if (fx * fx + fz * fz < 6.0f * 6.0f) {
                     ent.st = EState::Flee; ent.life = 0; ent.gaze = 0;
                 }
+            }
+        }
+        if ((ent.st == EState::Stalk || ent.st == EState::Chase) && smilerLevel()) {   // caught in light, it goes
+            ent.litT = smilerBarred(ent.x, ent.z) ? ent.litT + dt : 0.0f;
+            if (ent.litT > SMILER_BURN) {
+                ent.st = EState::Hidden;
+                ent.nextSpawn = now + SMILER_RETURN;
+                ent.litT = 0;
             }
         }
         if (ent.st == EState::Stalk) {
@@ -124,6 +134,7 @@ void Sim::updateEntity(float dt, double now, bool forceSpawn) {
                 : (ent.st == EState::Stalk)  ? 0.45f
                 : (ent.st == EState::Flee)   ? 0.2f : 0.0f;
     if (level == 2) darkT *= 0.5f;
+    if (smilerLevel()) darkT = 0;   // the Smiler keeps to the dark; it does not put lights out
     entDarkCur += (darkT - entDarkCur) * fminf(1, 1.6f * dt);
     // No growl: his state must not be audible through walls. Only his
     // footsteps and the lunge make sound.
@@ -210,7 +221,8 @@ bool Sim::hunterChase(float dt, double now, float &fearT) {
     ent.lungeCd = fmaxf(0, ent.lungeCd - dt);
     // Ignore a catch across a large height difference on stairs.
     bool level2 = fabsf(ent.dispY - py) < 1.4f;
-    if (sees && entDist < LUNGE_REACH && level2 && ent.lunge <= 0 && ent.lungeCd <= 0) {
+    const bool playerLit = smilerBarred(px, pz);   // a Smiler cannot reach into the light
+    if (sees && entDist < LUNGE_REACH && level2 && ent.lunge <= 0 && ent.lungeCd <= 0 && !playerLit) {
         ent.lunge = LUNGE_TIME;
         ent.lungeCd = LUNGE_TIME + 1.2f;   // pause between lunges
         play(Sfx::Scare).atPitch(0.62f).atVolume(0.85f);
@@ -243,6 +255,7 @@ bool Sim::hunterChase(float dt, double now, float &fearT) {
     }
     hunterWaypoint(tx, tz, dt, true);
     if (hunterOpensDoor(dt)) chaseSpd = 0;
+    if (smilerBarred(ent.wpx, ent.wpz)) { chaseSpd = 0; ent.lunge = 0; }   // it waits at the edge of the light
     if (world.indoors(cellOf(ent.wpx), cellOf(ent.wpz))) {   // Level 94: it waits outside, knocking
         chaseSpd = 0;
         knockT -= dt;
@@ -304,7 +317,7 @@ void Sim::hunterWaypoint(float tx, float tz, float dt, bool throughShut) {
 bool Sim::hunterStalk(float dt, bool watched) {
     if (watched || hidden || ent.stagger > 0) return false;
     hunterWaypoint(px, pz, dt, false);
-    if (world.indoors(cellOf(ent.wpx), cellOf(ent.wpz))) return false;
+    if (world.indoors(cellOf(ent.wpx), cellOf(ent.wpz)) || smilerBarred(ent.wpx, ent.wpz)) return false;
     float sx = ent.wpx - ent.x, sz = ent.wpz - ent.z, sl = sqrtf(sx * sx + sz * sz) + 1e-4f;
     float step = fminf(STALK_SPEED * dt, sl);
     ent.x += sx / sl * step;
@@ -459,19 +472,23 @@ bool Sim::hunterOpensDoor(float dt) {
 // each gives its output, falling to nothing at 0.55 of the grid pitch plus
 // 1.5 m, if no wall is in between. The hunter's dark area and a blackout dim
 // them as the shader does (shaders.cpp, uEntDark). Faulty tubes count as on.
-float Sim::lightAtPlayer() {
+float Sim::lightAtPlayer() { return lightAt(px, pz, true); }
+
+bool Sim::smilerBarred(float x, float z) { return smilerLevel() && lightAt(x, z, false) >= SMILER_LIGHT; }
+
+float Sim::lightAt(float x, float z, bool hunterDims) {
     if (level == MOTION) return clampf(blackoutCur, 0.0f, 1.0f);   // the sky: daylight, or night
     float ls = LEVEL_RULES[level].ls, reach = 0.55f * ls + 1.5f;
-    int gx0 = (int)floorf(px / ls), gz0 = (int)floorf(pz / ls);
+    int gx0 = (int)floorf(x / ls), gz0 = (int)floorf(z / ls);
     float lit = 0;
     for (int dx = -1; dx <= 1; dx++)
         for (int dz = -1; dz <= 1; dz++) {
             LightFitting f = fittingAt(world, gx0 + dx, gz0 + dz);
             if (f.gap != FittingGap::None || f.dead) continue;
-            float d = portableHypot(f.pos.x - px, f.pos.z - pz);
-            if (d >= reach || !world.lineOfSight(px, pz, f.pos.x, f.pos.z)) continue;
+            float d = portableHypot(f.pos.x - x, f.pos.z - z);
+            if (d >= reach || !world.lineOfSight(x, z, f.pos.x, f.pos.z)) continue;
             float k = f.output * (1.0f - d / reach);
-            if (ent.st != EState::Hidden && entDarkCur > 0.01f) {
+            if (hunterDims && ent.st != EState::Hidden && entDarkCur > 0.01f) {
                 float t = clampf((portableHypot(f.pos.x - ent.x, f.pos.z - ent.z) - 2.0f) / 7.0f, 0.0f, 1.0f);
                 k *= 1.0f + (t * t * (3.0f - 2.0f * t) - 1.0f) * entDarkCur;
             }

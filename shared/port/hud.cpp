@@ -468,6 +468,9 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
     } else if (sim.filmLevel >= 0 && sim.filmLevel <= FILM_DARK) {
         coverLine = "[ quiet scene · your steps carry ]";
         coverCol = { 220, 150, 120, 170 };
+    } else if (sim.inSmilerLight) {   // the Smiler will not come into the light
+        coverLine = "[ in the light · it will not come in ]";
+        coverCol = { 236, 224, 170, 190 };
     } else if (sim.inShadow()) {   // a hunter is out and cannot see this spot from far
         coverLine = sim.crouchCur > 0.5f ? "[ crouched · in shadow ]" : "[ in shadow ]";
         coverCol = { 150, 170, 200, 150 };
