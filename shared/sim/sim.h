@@ -186,6 +186,33 @@ struct Sim {
     static constexpr int LIGHTER_FAILS_MAX = 2;
     static constexpr float SPARK_TIME = 0.12f;
     static constexpr float MUZZLE_FLASH = 0.09f;   // s the muzzle flash lights the room
+    // Clark's flintlock (Level 0; Sim::updateFlintlock, flintlock.cpp). In a
+    // chase, after PISTOL_FIRST s, with the player PISTOL_NEAR..PISTOL_FAR m
+    // away in his line of sight, not hidden and within 1.4 m of his height, he
+    // stops and aims for PISTOL_AIM s (Sfx::Click low: the cock). Sight lost
+    // while aiming lowers it, and he aims again PISTOL_REAIM s later. At the
+    // end of the aim he fires (Sfx::Shot low): the ball hits inside
+    // PISTOL_SURE m, and beyond it only a player slower than PISTOL_DODGE m/s,
+    // for PISTOL_HIT of health. He stands PISTOL_RECOVER s more, then comes on
+    // and reloads for PISTOL_RELOAD s. The flash
+    // lights the room for PISTOL_FLASH s through the flare light; the smoke
+    // shows for PISTOL_SMOKE s. No rng.
+    static constexpr float PISTOL_FIRST = 5.0f, PISTOL_AIM = 1.0f, PISTOL_REAIM = 1.5f, PISTOL_RELOAD = 14.0f;
+    static constexpr float PISTOL_NEAR = 6.0f, PISTOL_FAR = 18.0f, PISTOL_SURE = 9.0f, PISTOL_DODGE = 4.2f;
+    static constexpr float PISTOL_HIT = 0.3f, PISTOL_FLASH = 0.1f, PISTOL_SMOKE = 1.6f, PISTOL_RECOVER = 0.6f;
+    struct Flintlock {
+        float readyT = PISTOL_FIRST;  // s of chase before he can aim
+        bool aiming = false;
+        float aimT = 0;               // s left of the aim
+        float recoverT = 0;           // s left standing after the shot
+        float holdX = 0, holdZ = 0;   // where he stands while he aims
+        float flashT = 0, smokeT = 0;
+        Vec3 muzzle{};                // where the last shot left the barrel
+    };
+    Flintlock pistol;
+    unsigned pistolEntry = ~0u;       // the levelEntries the pistol was reset for
+    void updateFlintlock(float dt, double now);
+    Vec3 pistolMuzzle() const;        // his pistol's muzzle now, toward the player
     // Hiding stops the hunter seeing the player and blocks the catch, so it
     // requires standing still. Two thresholds, so hiding does not flicker on and
     // off while the player slows down.

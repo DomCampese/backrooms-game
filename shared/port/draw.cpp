@@ -337,6 +337,10 @@ FrameLight frameLight(Sim &sim, float now) {
         l.flareInt = sim.muzzleT / Sim::MUZZLE_FLASH * 1.3f;
         l.flarePos = { sim.px + sim.f2x * 0.6f, sim.eyeY - 0.05f, sim.pz + sim.f2z * 0.6f };
     }
+    if (!lead && sim.muzzleT <= 0 && sim.pistol.flashT > 0) {   // so does Clark's flintlock
+        l.flareInt = sim.pistol.flashT / Sim::PISTOL_FLASH * 1.6f;
+        l.flarePos = sim.pistol.muzzle;
+    }
     // the hunter dims lights around him and casts a shadow
     l.entPos = { sim.ent.x, sim.ent.dispY + 1.0f, sim.ent.z };
     l.entDark = (sim.ent.st == EState::Hidden) ? 0.0f : sim.entDarkCur;
@@ -683,6 +687,31 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             unsigned char ga = cl8(255 * clampf(fogf * 2.2f, 0, 1) * sp.fade);
             spriteDraw(out, ShapeTex::SmilerGlow, sp, sp.frame0, { 255, 255, 255, cl8(ga * (1.0f - sp.blend)) });
             spriteDraw(out, ShapeTex::SmilerGlow, sp, sp.frame1, { 255, 255, 255, cl8(ga * sp.blend) });
+        }
+    }
+    if (sim.clarkLevel() && sim.ent.st != EState::Hidden) {   // Clark's flintlock: the glint of the aim, the flash, the smoke
+        const Sim::Flintlock &g = sim.pistol;
+        if (g.aiming) {
+            float pulse = 0.5f + 0.5f * sinf(now * 9.0f);
+            Shape glint = billboardWhole(ShapeTex::Particle, sim.pistolMuzzle(), 0.06f + 0.05f * pulse, { 255, 214, 150, cl8(150 + 90 * pulse) });
+            glint.additive = true;
+            put(out, glint);
+        }
+        if (g.flashT > 0) {
+            float life = g.flashT / Sim::PISTOL_FLASH;
+            Shape outer = billboardWhole(ShapeTex::Particle, g.muzzle, 0.55f * life, { 255, 175, 70, 230 });
+            Shape core = billboardWhole(ShapeTex::Particle, g.muzzle, 0.2f * life, { 255, 245, 190, 255 });
+            outer.additive = core.additive = true;
+            put(out, outer);
+            put(out, core);
+        }
+        if (g.smokeT > 0) {   // black powder: a grey cloud that rises and spreads
+            float age = 1.0f - g.smokeT / Sim::PISTOL_SMOKE;
+            for (int i = 0; i < 4; ++i) {
+                Vec3 puff = add(g.muzzle, { 0.05f * (float)(i - 1), age * 0.5f + i * 0.06f, 0.05f * (float)((i * 3) % 4 - 1) });
+                put(out, billboardWhole(ShapeTex::Particle, puff, 0.25f + age * 0.6f + i * 0.06f,
+                                        { 214, 210, 200, cl8((1.0f - age) * (190 - i * 30)) }));
+            }
         }
     }
     if (ActorSprite sp; phantomSprite(sim, sp)) {   // lit as the hunter is, with no dark area of its own

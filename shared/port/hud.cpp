@@ -251,6 +251,8 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
             textC("the music stopped · stand still", sw / 2, sh - hud(190), hud(18),
                   fade({ 236, 214, 160, 220 }, fminf(1.0f, sim.music.stopped * 3.0f)));
     }
+    if (sim.pistol.aiming && sim.deathT <= 0 && sim.winT <= 0)   // Clark aims his flintlock (Level 0)
+        textC("he is aiming at you · get out of his sight", sw / 2, sh / 2 - hud(72), hud(16), { 230, 150, 120, 220 });
     if (sim.deathT <= 0 && sim.winT <= 0) {   // a wall phone (Levels 0 and 1)
         static const char *const WAY[8] = { "ahead", "ahead, to your right", "to your right", "behind you, to the right",
                                             "behind you", "behind you, to the left", "to your left", "ahead, to your left" };

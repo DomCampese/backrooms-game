@@ -729,6 +729,41 @@ Now the nearest exit within `EXIT_HEAR_M` (64 m) sounds a tone
   once the casino made six (`want[5]` read as `Sfx::Step`). It lists
   `FarJingle` now.
 
+# Clark's flintlock (November 2026)
+
+On Level 0 a chasing Clark can shoot the player (`Sim::updateFlintlock`,
+shared/sim/flintlock.cpp; `PISTOL_*` and `Sim::Flintlock` in sim.h).
+
+- **When he aims**: in a chase, after `PISTOL_FIRST` (5 s; any state but
+  Chase puts the wait back to it), with the player `PISTOL_NEAR`..`PISTOL_FAR`
+  (6-18 m) away, not hidden, within 1.4 m of his height and in his line of
+  sight, and with no lunge or stagger running. The aim lasts `PISTOL_AIM`
+  (1 s): `Sfx::Click` at 0.45 (the cock), a fear spike, a glint at
+  `pistolMuzzle()` and the HUD line "he is aiming at you · get out of his
+  sight". Sight lost during the aim lowers it; he aims again `PISTOL_REAIM`
+  (1.5 s) later.
+- **He stands still while he aims and for `PISTOL_RECOVER` (0.6 s) after the
+  shot**: `updateFlintlock` puts him back at `holdX/holdZ` after
+  `hunterChase` has moved him, and runs before the gait in `updateEntity`,
+  so his walk cycle and footsteps stop too. Without the stand after the shot
+  he walked through his own smoke at once and his billboard, which writes
+  depth over its whole quad, hid it.
+- **The shot**: `Sfx::Shot` at 0.62. Inside `PISTOL_SURE` (9 m) it hits;
+  beyond, a player moving at `PISTOL_DODGE` (4.2 m/s, a sprint) or faster
+  dodges it. A hit is `hurtPlayer(PISTOL_HIT)` (0.3), with its push and
+  grace; a hit during the grace, or a dodge, is a miss ("the ball goes past
+  you."). Then `PISTOL_RELOAD` (14 s). No rng, so `grng` is not moved.
+- **Drawing is shared** (port/draw.cpp, after the hunter's sprite): the
+  glint, the flash (`PISTOL_FLASH`, 0.1 s) and four smoke puffs
+  (`PISTOL_SMOKE`, 1.6 s). The flash lights the room through the flare light
+  in `frameLight` when no flare burns and the player's own muzzle flash is
+  out. Both builds draw it with no platform code.
+- **It resets per level entry** in `updateFlintlock` (`pistolEntry`), not in
+  `applyLevel`, so a chase's first tick on a new level starts with
+  `PISTOL_FIRST`.
+- No new `Sfx`, no new input, and the new fields are not in the trace
+  digest. walk-l0-l2.trace has no chase and plays back unchanged.
+
 # Phantoms at low sanity (November 2026)
 
 Below `PHANTOM_BELOW` (0.6) sanity, with the hunter `Hidden`, the level's
@@ -1870,7 +1905,7 @@ build's, in `web/src/`.
 | `main.cpp` | `init()`, the `while (!WindowShouldClose())` loop, `shutdown()` |
 | `sim/` | game state and rules (`Sim`), stepped once a tick by `Sim::step` |
 | `sim/sim.cpp` | tick order, levels, descents, death and escape |
-| `sim/player.cpp`, `weapons.cpp`, `items.cpp`, `hunters.cpp`, `usher.cpp`, `casino.cpp`, `motion.cpp`, `place.cpp` | the player; held items; pickups, the deck and the use key; the hunter; the theater's Usher; the casino's slot machines and cigarettes; Level 94's day and night and the Animation's pose; blackouts, sanity, exits, the Manila Room |
+| `sim/player.cpp`, `weapons.cpp`, `items.cpp`, `hunters.cpp`, `flintlock.cpp`, `usher.cpp`, `casino.cpp`, `motion.cpp`, `place.cpp` | the player; held items; pickups, the deck and the use key; the hunter; Clark's pistol; the theater's Usher; the casino's slot machines and cigarettes; Level 94's day and night and the Animation's pose; blackouts, sanity, exits, the Manila Room |
 | `sim/input_frame.h`, `audio_events.h` | what the platform tells the sim, and the sounds the sim requests |
 | `game.{h,cpp}` | the platform: window, assets, input into an `InputFrame`, chunk streaming, the occupancy grid; `Game::tick` |
 | `game_audio.{h,cpp}` | every `Sound`/`Music` handle and the synth; plays the sim's `AudioEvent`s in order |

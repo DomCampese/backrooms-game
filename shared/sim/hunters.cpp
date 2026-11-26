@@ -88,6 +88,7 @@ void Sim::updateEntity(float dt, double now, bool forceSpawn) {
             world.collideCircle(ent.x, ent.z, 0.38f, ent.dispY);
             if (ent.life > 3.0f) { ent.st = EState::Hidden; ent.nextSpawn = now + 25 + grng.f01() * 35; }
         }
+        updateFlintlock(dt, now);   // before the gait, so he stands still while he aims
         // His gait counts footfalls by distance covered, in every state. An
         // integer is a footfall, used for both the sound here and the
         // walk-cycle frame render.cpp draws.
