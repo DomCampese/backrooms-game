@@ -431,6 +431,10 @@ void Sim::buySnack() {
 // machine, a vending machine, a locked door, or a deck that was set down. They
 // never share a cell.
 void Sim::useWhatIsNear() {
+    {
+        int ga, gb;   // LEVEL FUN's presents, beside the party tables
+        if (presentInReach(ga, gb)) { openPresent(ga, gb); return; }
+    }
     int pci = cellOf(px), pck = cellOf(pz);
     if (phone.ringing && portableHypot(phone.x - px, phone.z - pz) < PHONE_REACH) { answerPhone(); return; }
     float bx, bz;

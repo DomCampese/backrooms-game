@@ -39,6 +39,7 @@ void Sim::step(const InputFrame &in, float dt, double now) {
     observation.observationCos = portableCos(in.screenFov * 0.00872664626f);
     updateMannequin(observation, dt, now);
     updatePartyMusic(dt);
+    updatePresents(dt);
     updateSky(dt);
     updateSleep(dt);
     updateEntity(dt, now, in.forceSpawn);

@@ -18,6 +18,7 @@ enum class SceneKind : uint8_t {
     Revolver,                                    // the revolver, until the player has one
     Cigarettes,                                  // the casino's gold pack, until the player has it
     Crate, CrateOpen,                            // Level 1's supply crates
+    Present,                                     // LEVEL FUN's presents (Sim::presentAt); `index` 0 wrapped, 1 opened, 2 a jack-in-the-box sprung
     Deck,                                        // the tape deck, set down (variant 1: playing)
     Coin,                                        // a doubloon spilled by the hunter
     Flare,                                       // burning; `amount` is its burn left, 0..1

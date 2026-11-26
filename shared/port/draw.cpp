@@ -491,6 +491,56 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
                 put(out, ObjMesh::CrateLid, then(then(rotX(1.35f), translate(0, 0.02f, 0.42f)), xf));
             break;
         }
+        case SceneKind::Present: {
+            // A box in party paper with a ribbon of the next colour round it
+            // both ways and a bow on top. Opened, its walls are cut to 55% of
+            // the height with pale tissue showing at the top, and the lid lies
+            // beside it; a jack-in-the-box has a spring
+            // and a head standing out of it. At full height with a pale
+            // bottom, an opened box looked closed from eye height: the far
+            // wall hid the bottom.
+            const float hw = it.amount, hh = it.normal.y;
+            const float pl = propLum(x, gy + hh, z);
+            const Rgba paper = lit(PARTY_RGBA[it.variant], pl);
+            const Rgba ribbon = lit(PARTY_RGBA[(it.variant + 1) % PARTY_COLOURS], pl);
+            const Rgba inside = lit({ 244, 236, 240, 255 }, pl);   // white tissue paper
+            const float rw = 0.022f;   // the ribbon's width
+            if (it.index == 0) {
+                put(out, cube({ x, gy + hh, z }, 2 * hw, 2 * hh, 2 * hw, paper));
+                // The ribbon stands 3 mm proud of the paper on each face it crosses.
+                put(out, cube({ x, gy + hh, z }, 2 * hw + 0.006f, 2 * hh + 0.006f, rw, ribbon));
+                put(out, cube({ x, gy + hh, z }, rw, 2 * hh + 0.006f, 2 * hw + 0.006f, ribbon));
+                const float by = gy + 2 * hh + 0.03f;
+                put(out, cube({ x - 0.035f, by, z }, 0.06f, 0.05f, 0.016f, ribbon));
+                put(out, cube({ x + 0.035f, by, z }, 0.06f, 0.05f, 0.016f, ribbon));
+                break;
+            }
+            const float t = 0.008f, wh = 1.1f * hh;   // wall thickness and height
+            put(out, cube({ x, gy + 0.5f * (wh - 0.01f), z }, 2 * hw - 2 * t, wh - 0.01f, 2 * hw - 2 * t, inside));   // the tissue
+            put(out, cube({ x - hw + t / 2, gy + wh / 2, z }, t, wh, 2 * hw, paper));
+            put(out, cube({ x + hw - t / 2, gy + wh / 2, z }, t, wh, 2 * hw, paper));
+            put(out, cube({ x, gy + wh / 2, z - hw + t / 2 }, 2 * hw - 2 * t, wh, t, paper));
+            put(out, cube({ x, gy + wh / 2, z + hw - t / 2 }, 2 * hw - 2 * t, wh, t, paper));
+            // The lid, on the floor beside it along the table's side, so it
+            // stays clear of the table and of a wall on the cell's edge.
+            const float dx = x - (a * CELL + 1.0f), dz = z - (b * CELL + 1.0f), dl = fmaxf(sqrtf(dx * dx + dz * dz), 1e-3f);
+            const float lx = x - dz / dl * (2 * hw + 0.06f), lz = z + dx / dl * (2 * hw + 0.06f);
+            put(out, cube({ lx, gy + 0.02f, lz }, 2 * hw + 0.02f, 0.04f, 2 * hw + 0.02f, paper));
+            put(out, cube({ lx, gy + 0.02f, lz }, rw, 0.046f, 2 * hw + 0.026f, ribbon));
+            if (it.index == 2) {   // the jack: a coiled spring and a grinning head on it
+                const float sy = gy + wh - 0.01f, top = gy + 2 * hh + 0.22f;
+                const Rgba steel = lit({ 170, 172, 176, 255 }, pl);
+                for (int c = 0; c < 6; c++) {
+                    const float y0 = sy + (top - sy) * c / 6.0f, y1 = sy + (top - sy) * (c + 1) / 6.0f;
+                    const float ox = (c & 1) ? 0.03f : -0.03f;
+                    put(out, cylinderEx({ x - ox, y0, z }, { x + ox, y1, z }, 0.008f, 0.008f, 6, steel));
+                }
+                put(out, sphere({ x, top + 0.07f, z }, 0.075f, lit({ 238, 214, 190, 255 }, pl)));
+                put(out, cube({ x, top + 0.155f, z }, 0.09f, 0.05f, 0.09f, ribbon));   // its hat
+                put(out, cube({ x, top + 0.055f, z - 0.07f }, 0.07f, 0.014f, 0.01f, lit({ 150, 30, 40, 255 }, pl)));   // its grin
+            }
+            break;
+        }
         case SceneKind::AlmondWater:   // the mesh's base is at y = 0, and pos is on the floor or the shelf
             put(out, ObjMesh::Can, then(rotY(-it.yaw), translate(x, gy, z)));
             break;

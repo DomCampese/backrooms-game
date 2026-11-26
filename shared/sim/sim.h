@@ -769,6 +769,34 @@ struct Sim {
     std::unordered_set<uint64_t> poppedBalloons, poppedTableBunches;
     struct Confetti { Vec3 pos, vel; float life; uint8_t colour; };   // colour: index into the party palette
     std::vector<Confetti> confetti;
+    // LEVEL FUN's presents (presents.cpp): a wrapped box beside one party table
+    // in PRESENT_ODDS (Sim::presentAt). The use key within PRESENT_REACH of the
+    // table's centre opens it. What is inside is hashed from the cell with
+    // pickupSalt, so it is fixed for the visit: doubloons, a flare, almond
+    // water, batteries or a tape, or one in six a jack-in-the-box that is a
+    // PRESENT_NOISE m noise for PRESENT_NOISE_TIME s and calls the Partygoer
+    // (callHunter). Opened presents are kept per visit (`presentsOpened`,
+    // reset when levelEntries changes).
+    static constexpr uint32_t PRESENT_ODDS = 3;
+    static constexpr float PRESENT_REACH = 1.5f;
+    static constexpr float PRESENT_NOISE = 30.0f;
+    static constexpr float PRESENT_NOISE_TIME = 1.5f;
+    enum class Gift : uint8_t { Doubloons, Flare, Almond, Battery, Tape, Jack };
+    struct Present {
+        Vec3 pos;           // the centre of the box's base, on the floor beside the table
+        float hw, hh;       // half its width and its height, m
+        uint8_t colour;     // paper, an index into the party palette; the ribbon is the next one
+        Gift gift;
+        int amount;         // doubloons in it, for Gift::Doubloons: 2-4
+    };
+    bool presentAt(int a, int b, Present &out);
+    std::unordered_set<uint64_t> presentsOpened;
+    unsigned presentEntry = ~0u;
+    bool presentNear = false;          // one is in reach of the use key, for the HUD
+    float presentNoiseT = 0, presentNoiseX = 0, presentNoiseZ = 0;
+    bool presentInReach(int &a, int &b);
+    void openPresent(int a, int b);
+    void updatePresents(float dt);
 
     // ---- tallies and what the HUD shows
     int deathCount = 0, escapeCount = 0, killCount = 0, winCount = 0;

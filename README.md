@@ -531,6 +531,13 @@ AGENTS.md has the module map file by file.
   whole bunch.
 
   <p align="center"><img src="docs/confetti.png" width="440" alt="A popped balloon and its confetti"></p>
+- **Presents.** About one party table in three has a wrapped present on the
+  floor beside it, about two in each chunk. Press E (touch: USE) next to the
+  table to open it. Most hold two to four doubloons, a road flare, almond
+  water, batteries or a tape. One in six is a jack-in-the-box: it plays a
+  tune and springs out, the noise carries 30 m, and the Partygoer comes for
+  you. What is in each present is fixed for the visit, so you cannot open it
+  again for a different result.
 - **Footsteps per floor.** Separate synthesized clips for carpet (Level 0,
   LEVEL FUN and the theater), concrete (Level 1), tile (Level 2) and wood
   (the Manila Room).

@@ -67,6 +67,26 @@ void crates(Sim &sim, int ci, int ck, std::vector<SceneItem> &out) {
         }
 }
 
+void presents(Sim &sim, int ci, int ck, std::vector<SceneItem> &out) {
+    if (sim.level != LEVEL_FUN) return;
+    const int reach = SCENE_CRATE_CELLS;
+    for (int dx = -reach; dx <= reach; dx++)
+        for (int dz = -reach; dz <= reach; dz++) {
+            const int a = ci + dx, b = ck + dz;
+            Sim::Present p;
+            if (!sim.presentAt(a, b, p)) continue;
+            SceneItem it;
+            it.kind = SceneKind::Present;
+            it.pos = p.pos;
+            it.variant = p.colour;
+            it.amount = p.hw;
+            it.normal = { 0, p.hh, 0 };   // its half height, carried in the spare field
+            it.index = !sim.presentsOpened.count(Sim::cellKey2(a, b)) ? 0 : p.gift == Sim::Gift::Jack ? 2 : 1;
+            it.gi = a, it.gk = b;
+            out.push_back(it);
+        }
+}
+
 void balloons(Sim &sim, int ci, int ck, std::vector<SceneItem> &out) {
     if (sim.level != LEVEL_FUN) return;
     const int reach = SCENE_BALLOON_CELLS;
@@ -113,6 +133,7 @@ std::vector<SceneItem> simScene(Sim &sim) {
     std::vector<SceneItem> out;
     const int ci = cellOf(sim.px), ck = cellOf(sim.pz);
     crates(sim, ci, ck, out);
+    presents(sim, ci, ck, out);
     pickups(sim, ci, ck, out);
     if (!sim.deck.carried) {
         SceneItem it;

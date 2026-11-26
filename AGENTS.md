@@ -444,6 +444,56 @@ at intervals and the player has to stand still until it starts again
   changes every digest of the golden trace, which never reaches LEVEL FUN.
 - The HUD line "the music stopped · stand still" is in `hudDraws`.
 
+# LEVEL FUN's presents (November 2026)
+
+LEVEL FUN's party tables have presents beside them. Opening one is a gamble:
+loot, or a jack-in-the-box that brings the Partygoer (`Sim::presentAt`,
+`openPresent`, `updatePresents`, shared/sim/presents.cpp).
+
+- **Where a present is and what is in it is one hash** of the table's cell
+  with `pickupSalt` (level, visit, storey): one `PROP_PARTY_TABLE` in
+  `PRESENT_ODDS` (3), on the floor 0.74 m from the cell's centre on one of
+  the four sides, 0.20-0.28 m across and 0.18-0.30 m tall. 0.74 m keeps it
+  between the table's collision box (0.6 m) and a wall's face (0.89 m); the
+  scratch test checks every one. Under the table, the first place tried, an
+  opened box and a sprung jack could not be seen past the tabletop. 374 in
+  192 chunks over seeds 1337, 7 and 99 (1.95 a chunk).
+- **Contents** (hash >> 16, mod 12): doubloons 4 in 12 (2-4), a flare 2
+  (almond water when the flares are full), almond water 2, batteries 1 (+0.6),
+  a tape 1, a jack-in-the-box 2. The note line (`deckNote`) says what it was.
+- **A jack-in-the-box** plays `Sfx::JackInBox`, sets `presentNoiseT`
+  (`PRESENT_NOISE_TIME`, 1.5 s), which `loudestNoise` returns as
+  `PRESENT_NOISE` (30 m) at the box, raises fear to 0.8, bursts 24 confetti
+  from an Rng seeded from the cell, and calls `callHunter` (spawn if hidden,
+  then chase), as the music stopping does. `callHunter`'s spawn draws from
+  `grng`; the confetti does not.
+- **The use key opens it first** in `useWhatIsNear`, and the HUD says
+  "E · open the present" (`presentNear`). LEVEL FUN has no phones, beds or
+  trucks. The open breaker-panel PR (#225) gives LEVEL FUN panels: with both
+  in reach, E opens the present. The check sits at the top of the function
+  because #225 adds a line after the phone's, and the two edits conflicted
+  there.
+- **Opened presents are kept per visit** in `presentsOpened`, cleared when
+  `levelEntries` changes (checked in `updatePresents`, so `applyLevel` is
+  untouched). A new visit has new presents, since `pickupSalt` has the visit.
+- **The scene lists them** (`SceneKind::Present`, `presents` in
+  port/scene.cpp; `index` 0 wrapped, 1 opened, 2 a sprung jack) and
+  `sceneDraws` draws them from shapes, so both builds show them with no
+  platform code: a box in a party colour with a ribbon of the next colour 3
+  mm proud of it both ways and a bow; opened, four walls cut to 55% of the
+  height round white tissue, and the lid on the floor beside it along the
+  table's side; a jack adds a zig-zag spring and a head with a hat. At full
+  height an opened box looked closed from eye height, because the far wall
+  hid its bottom.
+- **Sounds, synthesized in port/sounds.cpp**: `Sfx::GiftOpen` (four torn
+  rips of band-passed noise and crackle) and `Sfx::JackInBox` (seven
+  music-box notes, a spring and a squeak). **They sit before `CoinDrop` in
+  the enum, not at the end**, so they do not touch the line that open PRs
+  append to. Nothing after them plays in walk-l0-l2.trace, so its
+  `audioHash` is unchanged. `SFX_COUNT` still follows `LighterSpark`.
+- walk-l0-l2.trace never reaches LEVEL FUN and replays unchanged. No core
+  change, so the contract goldens are unchanged.
+
 # LEVEL FUN's play rug and song (November 2026)
 
 LEVEL FUN's floor is a children's city play rug, and its music is an original
