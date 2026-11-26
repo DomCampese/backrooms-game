@@ -504,6 +504,14 @@ AGENTS.md has the module map file by file.
   and 21 in your first two cards pays three. The cards lie on the felt and
   the HUD shows both hands with their totals. Unlike the slot machines, a
   hand makes no noise.
+- **Three card poker and roulette.** The casino's card tables hold one of
+  three games. At a poker table E antes one doubloon and deals three
+  cards; E again plays one more doubloon and shows the dealer's hand, and
+  SPACE folds. At a roulette table E puts a doubloon on red, or CTRL + E
+  on black; the wheel spins for seven seconds and a win pays two. The
+  wheel is loud enough for the hunter to hear.
+
+  <p align="center"><img src="docs/casino_roulette.png" width="420" alt="A roulette wheel spinning on a casino table"> <img src="docs/casino_poker.png" width="420" alt="A three card poker hand on the felt"></p>
 
   <p align="center"><img src="docs/escape_door.png" width="420" alt="A green exit door"> <img src="docs/escape_win.png" width="420" alt="The escape screen"></p>
 - **LEVEL FUN details.** Red carpet with confetti in it, a black ceiling,

@@ -551,6 +551,43 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
     } else if (sim.cardsNear) {   // a card table with no hand running (the casino)
         textC(fmt("%s · deal a hand of blackjack · one doubloon", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14),
               { 200, 220, 190, 160 });
+    } else if (sim.pokerNear) {   // a three card poker table
+        textC(fmt("%s · three card poker · ante one doubloon", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14),
+              { 200, 220, 190, 160 });
+    } else if (sim.wheelNear) {   // a roulette wheel
+        textC(fmt("%s · one doubloon on red    %s + %s · on black", in.touch ? "USE" : "E", in.touch ? "DUCK" : "CTRL",
+                  in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14), { 200, 220, 190, 160 });
+    }
+    if (sim.level == CASINO && (sim.poker.active || sim.poker.showT > 0) && sim.deathT <= 0) {   // the poker hands
+        static const char *const RANK[14] = { "?", "A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K" };
+        static const char *const SUIT = "shdc";
+        static const char *const CLASS[6] = { "high card", "a pair", "a flush", "a straight", "three of a kind", "a straight flush" };
+        const Sim::PokerHand &c = sim.poker;
+        auto hand = [&](const uint8_t *h, bool shown) {
+            std::string s;
+            for (int i = 0; i < 3; i++) {
+                if (i) s += " ";
+                s += shown ? std::string(RANK[h[i] % 13 + 1]) + SUIT[h[i] / 13] : std::string("?");
+            }
+            return s;
+        };
+        int tb[3];
+        std::string line = fmt("you %s (%s)    dealer %s", hand(c.you, true).c_str(), CLASS[Sim::pokerRank(c.you, tb)],
+                               hand(c.dealer, c.revealed).c_str());
+        if (c.revealed) line += fmt(" (%s)", CLASS[Sim::pokerRank(c.dealer, tb)]);
+        textC(line, sw / 2, sh / 2 + hud(68), hud(16), { 236, 232, 214, 220 });
+        if (c.active)
+            textC(fmt("%s · play one more doubloon    %s · fold", in.touch ? "USE" : "E", in.touch ? "JUMP" : "SPACE"),
+                  sw / 2, sh / 2 + hud(90), hud(13), { 200, 220, 190, 160 });
+    }
+    if (sim.level == CASINO && (sim.wheel.spinning || sim.wheel.showT > 0) && sim.deathT <= 0) {   // the roulette spin
+        const Sim::RouletteSpin &w = sim.wheel;
+        const char *bet = w.onBlack ? "black" : "red";
+        if (w.spinning)
+            textC(fmt("one doubloon on %s · the ball goes round", bet), sw / 2, sh / 2 + hud(68), hud(16), { 236, 232, 214, 220 });
+        else
+            textC(fmt("%d %s · %s", w.result, w.result == 0 ? "green" : Sim::rouletteRed(w.result) ? "red" : "black",
+                      w.won ? "you win" : "the house wins"), sw / 2, sh / 2 + hud(68), hud(16), { 236, 232, 214, 220 });
     }
     if (sim.level == CASINO && (sim.cards.active || sim.cards.showT > 0) && sim.deathT <= 0) {   // the hand on the table
         static const char *const RANK[14] = { "?", "A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K" };

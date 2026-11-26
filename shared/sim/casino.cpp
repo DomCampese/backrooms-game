@@ -289,10 +289,148 @@ void Sim::updateCards(const InputFrame &in, float dt) {
         cardRng = Rng(hash64((uint64_t)world.seed ^ ((uint64_t)world.visit << 32) ^ 0xCA2D5ULL));
     }
     cards.showT = fmaxf(0.0f, cards.showT - dt);
+    poker.showT = fmaxf(0.0f, poker.showT - dt);
+    wheel.showT = fmaxf(0.0f, wheel.showT - dt);
     int a, b;
     const bool reach = cardTableInReach(a, b);
-    cardsNear = reach && !cards.active;
-    if (!cards.active) return;
-    const float dx = px - (cards.a * CELL + 1.0f), dz = pz - (cards.b * CELL + 1.0f);
-    if (deathT > 0 || level != CASINO || dx * dx + dz * dz > CARDS_LEAVE * CARDS_LEAVE || in.jumpPressed) standCards();
+    const TableGame game = reach ? world.tableGame(a, b) : TableGame::None;
+    const bool busy = cards.active || poker.active || wheel.spinning;
+    cardsNear = game == TableGame::Blackjack && !busy;
+    pokerNear = game == TableGame::Poker && !busy;
+    wheelNear = game == TableGame::Roulette && !busy;
+    if (wheel.spinning) {
+        wheel.t += dt;
+        if (wheel.t >= ROULETTE_SPIN || level != CASINO) {
+            wheel.spinning = false;
+            wheel.showT = CARDS_SHOW;
+            wheel.won = wheel.result != 0 && rouletteRed(wheel.result) != wheel.onBlack;
+            if (wheel.won) {
+                coins += 2 * ROULETTE_BET;
+                play(Sfx::SlotWin).atPitch(1.15f).atVolume(0.7f);
+                deckNoteT = 2.4f; deckNote = "the ball stops on your colour. two doubloons.";
+            } else {
+                play(Sfx::Click).atPitch(0.6f);
+                deckNoteT = 2.4f;
+                deckNote = wheel.result == 0 ? "zero. the house takes it." : "the ball stops on the other colour.";
+            }
+        }
+    }
+    auto gone = [&](int ta, int tb) {
+        const float dx = px - (ta * CELL + 1.0f), dz = pz - (tb * CELL + 1.0f);
+        return deathT > 0 || level != CASINO || dx * dx + dz * dz > CARDS_LEAVE * CARDS_LEAVE || in.jumpPressed;
+    };
+    if (poker.active && gone(poker.a, poker.b)) foldPoker();
+    if (cards.active && gone(cards.a, cards.b)) standCards();
+}
+
+// Three card poker (POKER_* in sim.h).
+int Sim::pokerRank(const uint8_t *c, int tb[3]) {
+    int r[3];
+    for (int i = 0; i < 3; i++) r[i] = c[i] % 13 == 0 ? 14 : c[i] % 13 + 1;   // ace high
+    for (int i = 0; i < 2; i++) for (int j = i + 1; j < 3; j++) if (r[j] > r[i]) { int t = r[i]; r[i] = r[j]; r[j] = t; }
+    const bool flush = c[0] / 13 == c[1] / 13 && c[1] / 13 == c[2] / 13;
+    bool straight = r[0] == r[1] + 1 && r[1] == r[2] + 1;
+    if (r[0] == 14 && r[1] == 3 && r[2] == 2) { straight = true; r[0] = 3; r[1] = 2; r[2] = 1; }   // A-2-3, the lowest
+    for (int i = 0; i < 3; i++) tb[i] = r[i];
+    if (r[0] == r[1] && r[1] == r[2]) return 4;
+    if (straight && flush) return 5;
+    if (straight) return 3;
+    if (flush) return 2;
+    if (r[0] == r[1] || r[1] == r[2]) {   // the pair first, then the odd card
+        const int pair = r[1], odd = r[0] == r[1] ? r[2] : r[0];
+        tb[0] = tb[1] = pair; tb[2] = odd;
+        return 1;
+    }
+    return 0;
+}
+
+int Sim::comparePoker(const uint8_t *x, const uint8_t *y) {
+    int tx[3], ty[3];
+    const int kx = pokerRank(x, tx), ky = pokerRank(y, ty);
+    if (kx != ky) return kx - ky;
+    for (int i = 0; i < 3; i++) if (tx[i] != ty[i]) return tx[i] - ty[i];
+    return 0;
+}
+
+void Sim::dealPoker(int a, int b) {
+    if (coins < POKER_ANTE + POKER_PLAY) {
+        deckNoteT = 2.2f; deckNote = "two doubloons: one to ante, one to play.";
+        return;
+    }
+    coins -= POKER_ANTE;
+    poker = PokerHand{};
+    poker.active = true;
+    poker.a = a; poker.b = b;
+    uint8_t deck[52];
+    for (int i = 0; i < 52; i++) deck[i] = (uint8_t)i;
+    for (int i = 0; i < 6; i++) {   // six cards off a shuffled deck: you, the dealer, in turn
+        const int j = i + (int)(cardRng.next() % (uint64_t)(52 - i));
+        const uint8_t t = deck[i]; deck[i] = deck[j]; deck[j] = t;
+        (i % 2 == 0 ? poker.you[i / 2] : poker.dealer[i / 2]) = deck[i];
+    }
+    play(Sfx::Click).atPitch(1.7f).atVolume(0.5f);
+}
+
+void Sim::foldPoker() {
+    poker.active = false;
+    poker.revealed = true;
+    poker.result = PokerResult::Fold;
+    poker.showT = CARDS_SHOW;
+    play(Sfx::Click).atPitch(0.6f);
+    deckNoteT = 2.2f; deckNote = "you fold. the ante is gone.";
+}
+
+void Sim::playPoker() {
+    coins -= POKER_PLAY;
+    poker.active = false;
+    poker.revealed = true;
+    poker.showT = CARDS_SHOW;
+    int tb[3];
+    const int mine = pokerRank(poker.you, tb);
+    poker.bonus = mine == 5 ? 5 : mine == 4 ? 4 : mine == 3 ? 1 : 0;   // the ante bonus, paid whatever the dealer holds
+    coins += poker.bonus;
+    int dt3[3];
+    const int theirs = pokerRank(poker.dealer, dt3);
+    const bool qualifies = theirs > 0 || dt3[0] >= 12;   // a queen high or better
+    const int stake = POKER_ANTE + POKER_PLAY;
+    if (!qualifies) {
+        poker.result = PokerResult::NoQualify;
+        coins += 2 * POKER_ANTE + POKER_PLAY;
+    } else {
+        const int c = comparePoker(poker.you, poker.dealer);
+        poker.result = c > 0 ? PokerResult::Win : c == 0 ? PokerResult::Push : PokerResult::Lose;
+        if (c > 0) coins += 2 * stake;
+        else if (c == 0) coins += stake;
+    }
+    const bool up = poker.result != PokerResult::Lose || poker.bonus > 0;
+    if (up) play(Sfx::SlotWin).atPitch(1.1f).atVolume(0.7f);
+    else play(Sfx::Click).atPitch(0.6f);
+    deckNoteT = 2.4f;
+    deckNote = poker.result == PokerResult::NoQualify ? "the dealer does not qualify. the ante pays."
+             : poker.result == PokerResult::Win       ? "your hand wins. both bets pay."
+             : poker.result == PokerResult::Push      ? "a tie. your bets come back."
+                                                      : "the dealer's hand wins.";
+}
+
+// Roulette (ROULETTE_* in sim.h).
+bool Sim::rouletteRed(int n) {
+    static const bool RED[37] = { false, true, false, true, false, true, false, true, false, true, false, false, true,
+                                  false, true, false, true, false, true, true, false, true, false, true, false, true,
+                                  false, true, false, false, true, false, true, false, true, false, true };
+    return n > 0 && n <= 36 && RED[n];
+}
+
+void Sim::betRoulette(int a, int b, bool black) {
+    if (coins < ROULETTE_BET) {
+        deckNoteT = 2.2f; deckNote = "one doubloon a spin.";
+        return;
+    }
+    coins -= ROULETTE_BET;
+    wheel = RouletteSpin{};
+    wheel.spinning = true;
+    wheel.a = a; wheel.b = b;
+    wheel.onBlack = black;
+    wheel.result = (int)(cardRng.next() % 37);
+    play(Sfx::RouletteSpin).atVolume(0.8f);
+    deckNoteT = 2.2f; deckNote = black ? "one doubloon on black. the ball goes round." : "one doubloon on red. the ball goes round.";
 }

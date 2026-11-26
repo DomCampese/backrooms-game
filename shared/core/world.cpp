@@ -1306,6 +1306,15 @@ bool World::audAt(int ci, int ck, int &u, int &v) {
     return u >= 0 && u < AUD_N && v >= 0 && v < AUD_N;
 }
 
+TableGame World::tableGame(int ci, int ck) {
+    if (level != CASINO || propAt(ci, ck) != PROP_CARD_TABLE) return TableGame::None;
+    switch (ih(ci, ck, sseed() ^ 0x7AB1Eu) % 3) {
+    case 0: return TableGame::Blackjack;
+    case 1: return TableGame::Poker;
+    default: return TableGame::Roulette;
+    }
+}
+
 bool World::snackAt(int ci, int ck) {
     return level == THEATER && propAt(ci, ck) == PROP_VENDING && ih(ci, ck, sseed() ^ 0x5AC1u) % 3 != 0;
 }

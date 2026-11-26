@@ -278,6 +278,8 @@ constexpr float MOTION_WAVE_A = 0.0898f, MOTION_WAVE_B = 0.0628f;
 // small room in the back corner away from the bed. Inner doorways are
 // WALL_DOOR. A two-storey house's ground floor is open round its stairwell.
 enum MotionRooms : int { ROOMS_OPEN, ROOMS_BEDROOM, ROOMS_TWO_BACK, ROOMS_CORNER, ROOMS_KINDS };
+enum class TableGame : uint8_t { None, Blackjack, Poker, Roulette };
+
 struct MotionHouse {
     int i0, k0, i1, k1;
     int door;             // the side its door is in: 0 north, 1 east, 2 south, 3 west
@@ -611,6 +613,9 @@ struct World {
     // A vending machine that sells snacks: two in three in the theater, none
     // elsewhere.
     bool snackAt(int ci, int ck);
+    // The game a casino card table runs, by a hash of its cell: one in three
+    // each. TableGame::None anywhere else.
+    TableGame tableGame(int ci, int ck);
     // The Poolrooms: a drain grate in the floor of deep water (floor at
     // DRAIN_DEPTH or lower), one such cell in DRAIN_RATE. The sim runs it
     // (Sim::updateDrains) and the mesher builds its grate (FloorCell::drain).

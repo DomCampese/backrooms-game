@@ -1656,6 +1656,49 @@ Pcm makeAshTap()
     return toPcm(d, 0.7f);
 }
 
+// RouletteSpin: 7 s, Sim::ROULETTE_SPIN. The ball rolling round the rim:
+// noise through an RBJ band-pass at 2.4 kHz (Q 1.5), its level swaying once
+// per lap as the ball passes, the lap rate falling from 3 to 0.8 per second
+// over 5.2 s and the level with it. Then the drop: eight bounces from 5.2 s,
+// each a 4 ms noise burst into resonators at 1100 and 3200 Hz, the gaps
+// shrinking from 0.18 s by 0.78 each and each 0.7 as loud as the last, and
+// the rattle stops by 6.3 s. roomTail (0.7 s, 0.25 wet). Peak 0.7.
+Pcm makeRouletteSpin()
+{
+    const int n = (int)(7.0f * SAMPLE_RATE);
+    Rng r(0x2011E7ULL);
+    std::vector<float> near(n, 0.0f);
+    const float w = TAU * 2400.0f / SAMPLE_RATE, alpha = sinf(w) / (2.0f * 1.5f), a0 = 1.0f + alpha;
+    const float b0 = alpha / a0, a1 = -2.0f * cosf(w) / a0, a2 = (1.0f - alpha) / a0;
+    float x1 = 0, x2 = 0, y1 = 0, y2 = 0, lap = 0;
+    for (int i = 0; i < (int)(5.3f * SAMPLE_RATE); i++) {
+        const float t = (float)i / SAMPLE_RATE, f = clampf(t / 5.2f, 0, 1);
+        const float rate = 3.0f + (0.8f - 3.0f) * f;
+        lap += rate / SAMPLE_RATE;
+        const float x = r.f01() * 2.0f - 1.0f;
+        const float y = b0 * x - b0 * x2 - a1 * y1 - a2 * y2;
+        x2 = x1; x1 = x; y2 = y1; y1 = y;
+        const float sway = 0.6f + 0.4f * sinf(TAU * lap);
+        const float level = (1.0f - 0.6f * f) * fminf(t / 0.2f, 1.0f) * fminf((5.3f - t) / 0.1f, 1.0f);
+        near[i] = y * 3.0f * sway * level;
+    }
+    float bt = 5.2f, gap = 0.18f, amp = 1.0f;
+    for (int k = 0; k < 8 && bt < 6.3f; k++) {
+        const int i0 = (int)(bt * SAMPLE_RATE);
+        for (int i = i0; i < n && i < i0 + (int)(0.12f * SAMPLE_RATE); i++) {
+            const float u = (float)(i - i0) / SAMPLE_RATE;
+            const float hit = u < 0.004f ? (r.f01() * 2.0f - 1.0f) * (1.0f - u / 0.004f) : 0.0f;
+            near[i] += amp * (hit * 0.6f + 0.35f * sinf(TAU * 1100.0f * u) * expf(-u * 60.0f)
+                              + 0.25f * sinf(TAU * 3200.0f * u) * expf(-u * 90.0f));
+        }
+        bt += gap; gap *= 0.78f; amp *= 0.7f;
+    }
+    const std::vector<float> room = roomTail(near, 0.7f);
+    std::vector<float> mix(n);
+    for (int i = 0; i < n; i++) mix[i] = near[i] * 0.75f + room[i] * 0.25f;
+    return toPcm(mix, 0.7f);
+}
+
 // Breaker: a main switch thrown, 0.9 s. The lever's impact at 0: a 6 ms
 // noise burst into three resonators at 410, 1130 and 2380 Hz (decay 22, 35
 // and 60 per second) over a 75 Hz thump decaying at 25 per second. The
@@ -1777,6 +1820,7 @@ ClipSpec clipSpec(Sfx sfx) {
     case Sfx::AshTap:     return { 1, 1.0f, 0.8f };
     case Sfx::LighterSpark: return { 1, 1.0f, 0.6f };
     case Sfx::Breaker:    return { 1, 1.0f, 0.8f };
+    case Sfx::RouletteSpin: return { 1, 1.0f, 0.7f };
     default:             return { 1, 1.0f, 1.0f };
     }
 }
@@ -1847,6 +1891,7 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::AshTap:         return makeAshTap();
     case Sfx::LighterSpark:   return makeLighterSpark();
     case Sfx::Breaker:        return makeBreaker();
+    case Sfx::RouletteSpin:   return makeRouletteSpin();
     }
     return {};
 }
