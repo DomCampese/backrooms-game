@@ -43,6 +43,9 @@ enum class Sfx : uint8_t {
     JackInBox,        // a jack-in-the-box: a crank tune, then the spring and a squeak
     CoinDrop,         // a tossed doubloon landing (Sim::updateTossedCoins)
     Shutter,          // 3: a camera's shutter and film advance, one per Animation pose (Level 94)
+    // Here, not at the end, so this branch and the open ones that append do
+    // not touch the same line. Nothing after it plays in walk-l0-l2.trace.
+    GlassBreak,       // a window pane smashed: the Animation breaking into a house (Sim::updateSiege)
     Cackle,           // the Animation's laugh as it starts a chase: a cartoon laugh on warped film
     HoldBreath,       // a quick breath in through the mouth, held (Sim::holdingBreath)
     // The drains sit here, not at the end, so this branch and the open ones

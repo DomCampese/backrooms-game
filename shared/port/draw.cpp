@@ -713,6 +713,26 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             put(out,cylinderEx(foot,add(foot,scale(forward,0.22f)),0.07f,0.08f,8,ivory));
         }
     }
+    // Broken glass where the Animation broke into a house (Sim::updateSiege):
+    // 24 flat shards, 5-12 cm across and 4 mm thick, within 0.9 m of where it
+    // stood, placed by a hash of the house, each on the ground under it (on a
+    // slope a shard at the centre's height sank into the grass), on the storey
+    // it was on.
+    for (const Sim::BrokenHouse &b : sim.brokenHouses) {
+        if (b.storey != sim.world.storey) continue;
+        if (fabsf(b.x - sim.px) > 40.0f || fabsf(b.z - sim.pz) > 40.0f) continue;
+        const float lum = propLum(b.x, b.y + 0.3f, b.z);
+        for (int s = 0; s < 24; s++) {
+            const uint32_t h = (uint32_t)(b.key * 2654435761ULL) ^ ((uint32_t)s * 2246822519u);
+            const float ang = (float)(h & 1023) / 1023.0f * TAU, r = 0.9f * sqrtf((float)((h >> 10) & 1023) / 1023.0f);
+            const float w = 0.05f + 0.07f * (float)((h >> 20) & 63) / 63.0f;
+            const float sx = b.x + r * cosf(ang), sz = b.z + r * sinf(ang);
+            const float gy = sim.world.groundAt(sx, sz, b.y + 0.5f);
+            const Rgba glass = lit({ 196, 222, 228, 255 }, lum * (0.8f + 0.4f * (float)((h >> 26) & 7) / 7.0f));
+            put(out, cube({ sx, gy + 0.004f + 0.002f * (s & 1), sz },
+                          w, 0.004f, w * (0.4f + 0.6f * (float)((h >> 5) & 15) / 15.0f), glass));
+        }
+    }
     if (sim.wayOpen()) {   // enough doubloons: exits glow green
         float pulse = 0.7f + 0.3f * sinf(now * 3.0f);
         for (int dx = -6; dx <= 6; dx++) for (int dz = -6; dz <= 6; dz++) {

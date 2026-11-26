@@ -277,8 +277,12 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         if (sim.sleepT > 0)
             textC("you sleep.", sw / 2, sh / 2, hud(20), fade({ 200, 190, 170, 255 }, clampf(sim.sleepT - 0.6f, 0, 1)));
         const float toDusk = Sim::DAY_TIME - sim.sky.t;
-        if (sim.sky.night && sim.sheltered && sim.knockedT < 2.5f)
+        if (sim.sky.night && sim.sheltered && sim.siegeT >= Sim::SIEGE_WARN)   // updateSiege: the glass goes at SIEGE_TIME
+            textC("it is trying the windows · get out", sw / 2, sh - hud(190), hud(18), { 246, 96, 80, 245 });
+        else if (sim.sky.night && sim.sheltered && sim.knockedT < 2.5f)
             textC("something is knocking", sw / 2, sh - hud(190), hud(18), { 236, 120, 100, 235 });
+        else if (sim.sky.night && sim.inBrokenHouse)
+            textC("this house is broken into · it cannot hide you", sw / 2, sh - hud(190), hud(18), { 236, 120, 100, 235 });
         else if (sim.sky.night)
             textC(sim.sheltered ? "night · indoors, it cannot find you" : "night · the Animations are out · get indoors",
                   sw / 2, sh - hud(190), hud(18), sim.sheltered ? Rgba{ 200, 190, 160, 200 } : Rgba{ 230, 150, 120, 230 });

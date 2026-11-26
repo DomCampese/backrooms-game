@@ -18,6 +18,7 @@ float Sim::daylight() const {
 // at or under halfway dark.
 void Sim::updateSky(float dt) {
     sheltered = false;
+    inBrokenHouse = false;
     if (level != MOTION) return;
     if (inMenu || deathT > 0) return;
     const float cycle = DAY_TIME + DUSK_TIME + NIGHT_TIME + DAWN_TIME;
@@ -29,8 +30,11 @@ void Sim::updateSky(float dt) {
         deckNote = night ? "it's dark. the Animations come out at night. get inside a house."
                          : "morning. nothing moves out there in the day.";
         if (night) play(Sfx::Scare).atPitch(0.55f).atVolume(0.5f);
+        else brokenHouses.clear();   // the houses are whole again by day
     }
-    sheltered = world.indoors(cellOf(px), cellOf(pz));
+    updateSiege(dt);
+    sheltered = shutOut(px, pz);
+    inBrokenHouse = !sheltered && !brokenHouses.empty() && houseKey(px, pz) != 0;
     bedNear = bedInReach() && sleepT <= 0;
     int ta, tb;
     truckNear = truckInReach(ta, tb) && !trucksServed.count(cellKey2(ta, tb));
@@ -121,4 +125,63 @@ void Sim::updateSleep(float dt) {
     ent.st = EState::Hidden;
     health = 1.0f;
     sanity = clampf(sanity + SLEEP_SANITY, 0.0f, 1.0f);
+}
+
+// The house a point is in: the chunk and quarter of the MotionHouse whose
+// walls hold it, as one key, or 0 out of doors. motionHouse reads only the
+// bare seed, so the key is the same on both storeys of a tall house.
+uint64_t Sim::houseKey(float x, float z) {
+    const int ci = cellOf(x), ck = cellOf(z);
+    if (level != MOTION || !world.indoors(ci, ck)) return 0;
+    const int cx = fdiv(ci, CCELLS), cz = fdiv(ck, CCELLS);
+    const int li = ci - cx * CCELLS, lk = ck - cz * CCELLS;
+    const int q = (li >= CCELLS / 2 ? 1 : 0) + (lk >= CCELLS / 2 ? 2 : 0);
+    MotionHouse h;
+    if (!world.motionHouse(cx, cz, q, h) || li < h.i0 || li > h.i1 || lk < h.k0 || lk > h.k1) return 0;
+    return (((uint64_t)(uint32_t)cx << 32) | (uint32_t)cz) * 4 + (uint64_t)q + 1;
+}
+
+bool Sim::houseBroken(uint64_t key) const {
+    for (const BrokenHouse &b : brokenHouses) if (b.key == key) return true;
+    return false;
+}
+
+bool Sim::shutOut(float x, float z) {
+    if (!world.indoors(cellOf(x), cellOf(z))) return false;
+    return brokenHouses.empty() || !houseBroken(houseKey(x, z));
+}
+
+// The Animation waiting outside the player's house for SIEGE_TIME breaks in.
+// The clock runs only while it chases, its next waypoint is inside a house
+// it cannot enter, it is within SIEGE_NEAR, and the player is in that house.
+void Sim::updateSiege(float dt) {
+    if (siegeEntry != levelEntries) {
+        siegeEntry = levelEntries;
+        brokenHouses.clear();
+        siegeT = rattleT = 0;
+    }
+    const uint64_t home = houseKey(px, pz);
+    const bool waiting = sky.night && home != 0 && !houseBroken(home) && ent.st == EState::Chase &&
+                         shutOut(ent.wpx, ent.wpz) && entDist < SIEGE_NEAR && deathT <= 0 && sleepT <= 0;
+    if (!waiting) { siegeT = fmaxf(0, siegeT - dt * 0.5f); return; }
+    siegeT += dt;
+    const float inv = entDist > 0.01f ? 1.0f / entDist : 0.0f;
+    const float pan = clampf(((ent.x - px) * inv) * r2x + ((ent.z - pz) * inv) * r2z, -1.0f, 1.0f);
+    if (siegeT >= SIEGE_WARN) {
+        rattleT -= dt;
+        if (rattleT <= 0) {   // a pane shaken in its frame: the knock, higher and quicker
+            rattleT = SIEGE_RATTLE_GAP;
+            play(Sfx::DoorKnock, (int)(siegeT * 7.0f) % 3).atPitch(1.7f).atPan(pan).atVolume(0.75f);
+        }
+    }
+    if (siegeT < SIEGE_TIME) return;
+    siegeT = 0;
+    rattleT = 0;
+    brokenHouses.push_back({ home, ent.x, ent.z, ent.dispY, world.storey });
+    play(Sfx::GlassBreak).atPan(pan).atVolume(1.0f);
+    fear = 1.0f;
+    deckNoteT = 2.8f;
+    deckNote = "glass breaks. it is coming in. get out, or find another house.";
+    knockedT = 99.0f;   // the knocking line gives way to the siege's
+    hunterNotice(px, pz);   // and in it comes, through the door
 }

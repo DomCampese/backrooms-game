@@ -2681,6 +2681,30 @@ and the Animation at night.
   indoors (`chaseSpd = 0`), so he waits at the door, knocking every
   `KNOCK_GAP`..+0.8 s (`Sfx::DoorKnock`, and the HUD says "something is
   knocking"). Noise still brings him to the house.
+- **A house is safe for `SIEGE_TIME` (20 s), not all night**
+  (`Sim::updateSiege`, motion.cpp). While the Animation chases with its
+  waypoint inside the house the player is in (`shutOut`), within
+  `SIEGE_NEAR` (14 m), `hunterChase` keeps its `lostT` at 0, so it does not
+  give up, and a clock runs. Before this it lost contact after
+  `SEARCH_TIME` (10 s) and a house was always safe. From `SIEGE_WARN` (12 s)
+  it rattles the windows every `SIEGE_RATTLE_GAP` (1.3 s; `Sfx::DoorKnock`
+  at pitch 1.7) and the HUD says "it is trying the windows · get out". At 20
+  s it plays `Sfx::GlassBreak`, sets fear to 1, adds the house to
+  `brokenHouses` and calls `hunterNotice` at the player, who is no longer
+  `sheltered` there; it walks in through the door. Away from it the clock
+  runs down at half speed. The houses are whole again at dawn
+  (`brokenHouses` is cleared when night ends, and on a level entry).
+- **A house's key is its chunk and quarter** (`Sim::houseKey`, from
+  `World::motionHouse`, which reads only the bare seed), so both storeys of a
+  tall house are one house. `shutOut(x, z)` is `indoors` in a house not
+  broken into; `sheltered` and the waiting test in `hunterChase` use it.
+- **The glass is drawn by `sceneDraws`**: 24 flat shards 5-12 cm across
+  within 0.9 m of where the Animation stood, each on `groundAt` under it (at
+  the centre's height, shards on a slope sank into the grass), on the storey
+  it broke in on. `Sfx::GlassBreak` is synthesized in port/sounds.cpp (an
+  impact, 40 landing shards of inharmonic sines) and sits after `Shutter`
+  in the enum, not at the end, so it does not touch the line open PRs
+  append to; nothing after it plays in walk-l0-l2.trace.
 - **The Animations are plentiful at night** (the lore): one that loses the
   player is back within `NIGHT_RETURN` (10 s). A chase opens with
   `Sfx::Cackle`, a cartoon laugh on warped film; its footsteps are the
