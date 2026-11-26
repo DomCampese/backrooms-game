@@ -1311,6 +1311,71 @@ Pcm makePhoneRing()
     return toPcm(mix, 0.8f);
 }
 
+// LiftCall: 1.2 s. The call button: a 3 ms click through a one-pole
+// high-pass at 1.8 kHz. Then the motor starting far up the shaft: a 52 Hz
+// sawtooth (harmonics 1-6 at 1/n) through two one-pole low-passes at 260 Hz,
+// rising over 0.6 s from 0.1 s and fading over the last 0.3 s, with a 7 Hz
+// wobble of 15%. roomTail (0.8 s, 0.3 wet) for the concrete. Peak 0.6.
+Pcm makeLiftCall()
+{
+    const int n = (int)(1.2f * SAMPLE_RATE);
+    Rng r(0x11F7ULL);
+    std::vector<float> near(n, 0.0f);
+    const float hp = expf(-TAU * 1800.0f / SAMPLE_RATE), k = 1.0f - expf(-TAU * 260.0f / SAMPLE_RATE);
+    float hx = 0, hy = 0, a = 0, b = 0;
+    for (int i = 0; i < n; i++) {
+        const float t = (float)i / SAMPLE_RATE;
+        float click = 0;
+        if (t < 0.003f) { const float x = r.f01() * 2.0f - 1.0f; hy = hp * (hy + x - hx); hx = x; click = hy * 1.5f; }
+        float saw = 0;
+        for (int h = 1; h <= 6; h++) saw += sinf(TAU * 52.0f * h * t) / (float)h;
+        a += k * (saw - a);
+        b += k * (a - b);
+        const float env = clampf((t - 0.1f) / 0.6f, 0, 1) * clampf((1.2f - t) / 0.3f, 0, 1) * (0.85f + 0.15f * sinf(TAU * 7.0f * t));
+        near[i] = click + b * env * 1.2f;
+    }
+    const std::vector<float> room = roomTail(near, 0.8f);
+    std::vector<float> mix(n);
+    for (int i = 0; i < n; i++) mix[i] = near[i] * 0.7f + room[i] * 0.3f;
+    return toPcm(mix, 0.6f);
+}
+
+// LiftDing: 1.6 s. A two-note chime, 1318.5 Hz then 1046.5 Hz 0.35 s later,
+// each partials at 1, 2.76 and 5.4 times (1, 0.4, 0.15) decaying at 3, 6 and
+// 12 per second; then from 0.5 s the doors rolling open, noise through two
+// one-pole low-passes at 180 Hz, rising over 0.15 s and falling over 0.6 s,
+// with a 4 Hz judder of 30%. roomTail (0.8 s, 0.3 wet). Peak 0.8.
+Pcm makeLiftDing()
+{
+    const int n = (int)(1.6f * SAMPLE_RATE);
+    Rng r(0x11F8ULL);
+    std::vector<float> near(n, 0.0f);
+    const float NOTE[2] = { 1318.5f, 1046.5f }, START[2] = { 0.0f, 0.35f };
+    const float RATIO[3] = { 1.0f, 2.76f, 5.4f }, AMP[3] = { 1.0f, 0.4f, 0.15f }, DECAY[3] = { 3.0f, 6.0f, 12.0f };
+    for (int nt = 0; nt < 2; nt++) {
+        const int i0 = (int)(START[nt] * SAMPLE_RATE);
+        for (int i = i0; i < n; i++) {
+            const float u = (float)(i - i0) / SAMPLE_RATE;
+            float v = 0;
+            for (int m = 0; m < 3; m++) v += AMP[m] * sinf(TAU * NOTE[nt] * RATIO[m] * u) * expf(-DECAY[m] * u);
+            near[i] += 0.35f * v * fminf(u / 0.002f, 1.0f);
+        }
+    }
+    const float k = 1.0f - expf(-TAU * 180.0f / SAMPLE_RATE);
+    float a = 0, b = 0;
+    for (int i = (int)(0.5f * SAMPLE_RATE); i < n; i++) {
+        const float u = (float)i / SAMPLE_RATE - 0.5f;
+        a += k * ((r.f01() * 2.0f - 1.0f) - a);
+        b += k * (a - b);
+        const float env = clampf(u / 0.15f, 0, 1) * clampf((0.75f - u) / 0.6f, 0, 1) * (0.7f + 0.3f * sinf(TAU * 4.0f * u));
+        near[i] += b * env * 6.0f;
+    }
+    const std::vector<float> room = roomTail(near, 0.8f);
+    std::vector<float> mix(n);
+    for (int i = 0; i < n; i++) mix[i] = near[i] * 0.7f + room[i] * 0.3f;
+    return toPcm(mix, 0.8f);
+}
+
 // PhoneVoice: 3.4 s down a phone line. The handset's lift (two clicks 50 ms
 // apart), line hiss, then 2.6 s of speech-like syllables: a 105-150 Hz
 // sawtooth with a falling contour through two RBJ band-passes at one of five
@@ -1468,6 +1533,8 @@ ClipSpec clipSpec(Sfx sfx) {
     case Sfx::HoldBreath: return { 1, 1.0f, 0.6f };
     case Sfx::PhoneRing:  return { 1, 1.0f, 0.75f };
     case Sfx::PhoneVoice: return { 1, 1.0f, 0.8f };
+    case Sfx::LiftCall:   return { 1, 1.0f, 0.7f };
+    case Sfx::LiftDing:   return { 1, 1.0f, 0.85f };
     case Sfx::AshTap:     return { 1, 1.0f, 0.8f };
     case Sfx::LighterSpark: return { 1, 1.0f, 0.6f };
     default:             return { 1, 1.0f, 1.0f };
@@ -1530,6 +1597,8 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::HoldBreath:     return makeHoldBreath();
     case Sfx::PhoneRing:      return makePhoneRing();
     case Sfx::PhoneVoice:     return makePhoneVoice();
+    case Sfx::LiftCall:       return makeLiftCall();
+    case Sfx::LiftDing:       return makeLiftDing();
     case Sfx::AshTap:         return makeAshTap();
     case Sfx::LighterSpark:   return makeLighterSpark();
     }

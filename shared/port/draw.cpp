@@ -629,6 +629,20 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             put(out, sphere(gp, 1.35f, { 60, 235, 110, (unsigned char)(40 * pulse) }));     // wide halo
         }
     }
+    // A called lift (Sim::lift): its call button and the floor indicator over
+    // the doors glow (the mesh's lamps are fixed), the indicator pulsing at
+    // 2 Hz as the car comes down. Additive, with no depth write.
+    if (sim.level == 1 && sim.lift.state == Sim::LiftState::Called) {
+        const LiftDoor &d = sim.lift.door;
+        const float face = d.pos.z + d.normal.z * 0.05f, pulse = 0.6f + 0.4f * sinf(now * TAU * 2.0f);
+        Shape button = billboardWhole(ShapeTex::Particle, { d.x0 + 1.91f, d.pos.y + 1.15f, face }, 0.16f, { 255, 236, 180, 255 });
+        Shape lamp = billboardWhole(ShapeTex::Particle, { d.x0 + 1.0f, d.pos.y + 2.61f, face }, 0.45f,
+                                    { (unsigned char)(255 * pulse), (unsigned char)(140 * pulse), (unsigned char)(50 * pulse), 255 });
+        button.additive = lamp.additive = true;
+        button.depthWrite = lamp.depthWrite = false;
+        put(out, button);
+        put(out, lamp);
+    }
     for (const FlareProj &f : sim.litFlares) {   // each flare: core, orange halo, and the stick
         if (!f.active) continue;
         // its own intensity, not the point light's, which belongs to the

@@ -176,12 +176,11 @@ void cellFixtures(World &w, const ChunkData &d, const LevelDecor &decor, int cx,
     const bool clN = cellHasCeiling(w, gi0, gk0), clS = cellHasCeiling(w, gi0, gk0 - 1),
                clW = cellHasCeiling(w, gi0 - 1, gk0);
 
-    if (decor.lifts && nv == WALL_SOLID && liftHash(gi0, gk0, seed) &&
-        w.wallNVal(gi0 - 1, gk0) == WALL_SOLID && w.wallNVal(gi0 + 1, gk0) == WALL_SOLID) {
-        float sgn = (ih(gi0, gk0, seed ^ 0xE1E8u) & 1) ? 1.0f : -1.0f;
+    LiftDoor lift;
+    if (decor.lifts && nv == WALL_SOLID && liftDoor(w, gi0, gk0, lift)) {   // the rule the sim rides by
         Fixture f = fixture(FixtureKind::LiftDoor, i, kk);
-        f.pos = { gx, nb, gz + sgn * WT };
-        f.normal = { 0, 0, sgn };
+        f.pos = { lift.x0, lift.pos.y, lift.pos.z };
+        f.normal = lift.normal;
         out.push_back(f);
     }
     if (decor.spalls) {
@@ -613,4 +612,20 @@ const PropPlacement *ChunkLayout::propIn(int i, int k) const {
 const Opening *ChunkLayout::opening(int i, int k, bool west) const {
     int16_t n = west ? openW[i][k] : openN[i][k];
     return n < 0 ? nullptr : &openings[n];
+}
+
+bool liftDoor(World &w, int gi, int gk, LiftDoor &out) {
+    if (!DECOR[w.level].lifts) return false;
+    const unsigned seed = w.sseed();
+    if (w.wallNVal(gi, gk) != WALL_SOLID || !liftHash(gi, gk, seed) || w.wallNVal(gi - 1, gk) != WALL_SOLID ||
+        w.wallNVal(gi + 1, gk) != WALL_SOLID)
+        return false;
+    const float sgn = (ih(gi, gk, seed ^ 0xE1E8u) & 1) ? 1.0f : -1.0f;
+    const float nb = std::min(w.floorY(gi, gk - 1), w.floorY(gi, gk));
+    out.x0 = gi * CELL;
+    out.pos = { gi * CELL + 1.0f, nb, gk * CELL + sgn * WT };
+    out.normal = { 0, 0, sgn };
+    out.ci = gi;
+    out.ck = sgn > 0 ? gk : gk - 1;
+    return true;
 }

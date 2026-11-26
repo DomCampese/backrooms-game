@@ -42,6 +42,11 @@ enum class Sfx : uint8_t {
     HoldBreath,       // a quick breath in through the mouth, held (Sim::holdingBreath)
     PhoneRing,        // one burst of a wall phone's bells (Sim::updatePhone)
     PhoneVoice,       // an answered phone: the handset lifted, a voice down the line, the line going dead
+    // The lift's two sit here, not at the end, so this branch and the open ones
+    // that append do not touch the same line. Nothing after them plays in
+    // walk-l0-l2.trace, so the renumbering leaves its audioHash unchanged.
+    LiftCall,         // a lift's call button pressed and its motor starting (Sim::callLift)
+    LiftDing,         // a lift arriving: a two-note chime and the doors rolling open (Sim::updateLift)
     AshTap,           // a finger tapping a cigarette, and the ash coming off (Sim::Smoke::flickT)
     LighterSpark,     // a lighter's flint wheel striking a spark that does not catch
 };

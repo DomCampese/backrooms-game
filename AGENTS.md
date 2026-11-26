@@ -1543,6 +1543,37 @@ Level 1 follows the wiki's "Habitable Zone" article (CREDITS.md).
   them.
 - **Exits** are steel doors with a glyph painted over them (`addSymbolDoor`):
   strokes between 3x3 lattice points chosen by the edge hash.
+- **Lifts can be ridden** (November 2026; `Sim::callLift`, `updateLift`,
+  shared/sim/lift.cpp). Where a lift is, is core's `liftDoor(world, gi, gk)`
+  (core/layout.h): the rule `cellFixtures` used, moved into one function
+  that the layout and the sim both call. The contract goldens did not
+  change.
+  - The use key within `LIFT_REACH` (1.6 m) of the point 0.7 m out from the
+    doors, on the side they face, calls it. It arrives `LIFT_WAIT` (5 s)
+    later: `Sfx::LiftDing`, and a `LIFT_NOISE` (22 m) noise at the doors for
+    `LIFT_NOISE_TIME` (1.2 s) in `loudestNoise`.
+  - If the player is then within `LIFT_STAY` (2.4 m) they ride: held at the
+    doors with the screen dark (`hudDraws`) for `LIFT_RIDE` (3 s), then put
+    0.7 m out of another lift facing out. Otherwise the HUD says it came and
+    went.
+  - The destination (`findLiftDest`) is the nearest `liftHash` cell
+    `LIFT_MIN`..`LIFT_MAX` (20-50) cells away whose `liftDoor` holds and
+    whose front cell has no prop, pillar or crate. The hash is tested over
+    the whole square first and only candidates in distance order are
+    checked against the walls, so few chunks are generated. Rides of 43-65
+    m on seeds 1337, 7 and 99.
+  - A hunter that was out goes `Hidden` with `nextSpawn` no sooner than
+    `LIFT_LOSE` (20 s) later.
+  - While called, `sceneDraws` adds two additive glows: the call button and
+    the floor indicator, pulsing at 2 Hz. The doors do not open on screen:
+    the ride is the dark screen.
+  - Sounds, synthesized in port/sounds.cpp: `Sfx::LiftCall` (a click and a
+    52 Hz motor) and `Sfx::LiftDing` (two bell notes and the doors rolling).
+    They sit after `PhoneVoice` in the enum, not at the end, so they do not
+    touch the line open PRs append to; nothing after them plays in
+    walk-l0-l2.trace.
+  - State resets when `levelEntries` changes (checked in `updateLift`, so
+    `applyLevel` is untouched). No RNG.
 - Rebar spalls (`addSpall`), dock safety edging, lift doors and the pipework
   are fixtures or props geometry.
 - **A capture with `BACKROOMS_LEVEL=1` shows Level 1's visit 0** (init

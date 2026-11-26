@@ -268,6 +268,21 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
                  (c.x - sim.px) * (c.x - sim.px) + (c.z - sim.pz) * (c.z - sim.pz) < Sim::PHONE_HEAR_M * Sim::PHONE_HEAR_M)
             textC("a phone is ringing", sw / 2, sh - hud(190), hud(18), { 214, 200, 160, 200 });
     }
+    if (sim.level == 1 && sim.deathT <= 0 && sim.winT <= 0) {   // Level 1's lifts (lift.cpp)
+        if (sim.lift.state == Sim::LiftState::Riding) {   // dark for the ride, fading in over 0.5 s and out over 0.6 s
+            const float t = Sim::LIFT_RIDE - sim.lift.t;
+            const float dark = clampf(fminf(t / 0.5f, sim.lift.t / 0.6f), 0, 1);
+            rect(0, 0, sw, sh, fade(BLACK_RGBA, dark));
+            textC("the lift moves", sw / 2, sh / 2, hud(20), fade({ 200, 196, 180, 255 }, clampf(fminf(t - 0.4f, sim.lift.t - 0.5f), 0, 1)));
+        } else if (sim.lift.state == Sim::LiftState::Called) {
+            textC(fmt("the lift is coming · %.0f s · stay by the doors", ceilf(sim.lift.t)), sw / 2, sh - hud(190), hud(18),
+                  { 214, 200, 160, 210 });
+        } else if (sim.liftNear) {
+            textC(fmt("%s · call the lift", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(68), hud(14), { 214, 200, 160, 170 });
+        }
+        if (sim.liftMissedT > 0)
+            textC("the lift came and went", sw / 2, sh - hud(190), hud(18), fade({ 214, 200, 160, 220 }, clampf(sim.liftMissedT, 0, 1)));
+    }
     if (sim.level == MOTION && sim.deathT <= 0 && sim.winT <= 0) {   // Level 94's night
         // Falling asleep fades out to black; waking fades back in.
         const float dark = sim.sleepT > 0 ? clampf(sim.sleepT / (Sim::SLEEP_FADE * 0.8f), 0, 1) : clampf(sim.wakeT / 2.0f, 0, 1);

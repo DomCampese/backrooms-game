@@ -29,6 +29,7 @@ void Sim::step(const InputFrame &in, float dt, double now) {
     updateSmoking(in, dt);
     updateAmbience(dt, now);
     updateManila(dt, now);
+    updateLift(dt, now);
     updateCrates(now);
     AudioEvent &loops = audioEvent(AudioEvent::LOOPS);
     loops.loops = loopCue();
