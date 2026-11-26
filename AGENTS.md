@@ -469,10 +469,9 @@ loot, or a jack-in-the-box that brings the Partygoer (`Sim::presentAt`,
   `grng`; the confetti does not.
 - **The use key opens it first** in `useWhatIsNear`, and the HUD says
   "E · open the present" (`presentNear`). LEVEL FUN has no phones, beds or
-  trucks. The open breaker-panel PR (#225) gives LEVEL FUN panels: with both
-  in reach, E opens the present. The check sits at the top of the function
-  because #225 adds a line after the phone's, and the two edits conflicted
-  there.
+  trucks, but it has breaker panels: with both in reach, E opens the present.
+  The check sits at the top of the function because the breaker panels add a
+  line after the phone's, and the two edits conflicted there.
 - **Opened presents are kept per visit** in `presentsOpened`, cleared when
   `levelEntries` changes (checked in `updatePresents`, so `applyLevel` is
   untouched). A new visit has new presents, since `pickupSalt` has the visit.
