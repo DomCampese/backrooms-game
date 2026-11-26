@@ -976,11 +976,13 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
         // ROULETTE_SPIN; the ball runs the other way round the rim at 0.31 m
         // and is at its pocket's angle when it drops, from 5.2 s, bouncing in
         // to 0.23 m by 6.3 s, as Sfx::RouletteSpin times its rattle.
-        const int pci = cellOf(sim.px), pck = cellOf(sim.pz);
+        // wci, ox and the like: pci, dx and dz are this function's already
+        // (-Wshadow in the Unreal build).
+        const int wci = cellOf(sim.px), wck = cellOf(sim.pz);
         const Sim::RouletteSpin &w = sim.wheel;
         const float T = Sim::ROULETTE_SPIN;
-        for (int dx = -6; dx <= 6; dx++) for (int dz = -6; dz <= 6; dz++) {
-            const int a = pci + dx, b = pck + dz;
+        for (int ox = -6; ox <= 6; ox++) for (int oz = -6; oz <= 6; oz++) {
+            const int a = wci + ox, b = wck + oz;
             if (sim.world.tableGame(a, b) != TableGame::Roulette) continue;
             const float cx = a * CELL + 1.0f, cz = b * CELL + 1.0f;
             const float top = sim.world.floorY(a, b) + PROP_SHAPES[PROP_CARD_TABLE].top;

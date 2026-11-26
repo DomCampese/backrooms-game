@@ -411,10 +411,12 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         if (sim.keys > 0) text(fmt("keys  ×%d", sim.keys), hud(16), sh - hud(160), hud(16), { 214, 186, 110, 190 });
         // These four lines are placed in unscaled pixels, as the Web build
         // always placed them.
-        if (sim.coins > 0 || sim.wayOpen())   // doubloons pay for the exit (ESCAPE_COST)
+        if (sim.coins > 0 || sim.wayOpen() || sim.bank > 0)   // doubloons pay for the exit (ESCAPE_COST)
             // With empty hands (1) the fire button tosses one (Sim::tossCoin).
-            raw(fmt("doubloons  ×%d / %d%s", sim.coins, Sim::ESCAPE_COST,
-                    sim.weapon == WEAPON_HANDS && sim.coins > 0 ? (in.touch ? "  · FIRE tosses one" : "  · click tosses one") : ""),
+            // Banked doubloons (an ATM's balance) do not count until drawn out.
+            raw(fmt("doubloons  ×%d / %d%s%s", sim.coins, Sim::ESCAPE_COST,
+                    sim.weapon == WEAPON_HANDS && sim.coins > 0 ? (in.touch ? "  · FIRE tosses one" : "  · click tosses one") : "",
+                    sim.bank > 0 ? fmt("  · %d banked", sim.bank).c_str() : ""),
                 16, sh - 116, 16,
                 sim.wayOpen() ? Rgba{ 120, 230, 140, 210 } : Rgba{ 214, 178, 92, 170 });
         raw(fmt("3  almond water  ×%d", sim.almond), 16, sh - 94, 16,
@@ -537,6 +539,16 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         textC(sim.breakerNear == Sim::BreakerUse::Resting ? std::string(what)
                                                          : fmt("%s · %s", in.touch ? "USE" : "E", what),
               sw / 2, sh / 2 + hud(46), hud(14), { 200, 196, 176, 160 });
+    } else if (sim.atmNear) {   // an ATM; third in useWhatIsNear, after the breaker
+        const char *use = in.touch ? "USE" : "E", *crouched = in.touch ? "DUCK + USE" : "CTRL + E";
+        std::string line;
+        if (sim.coins > 0) line = fmt("%s · bank %d doubloon%s", use, sim.coins, sim.coins == 1 ? "" : "s");
+        if (sim.bank > Sim::ATM_FEE)
+            line += fmt("%s%s · withdraw %d (fee %d)", line.empty() ? "" : "    ", crouched,
+                        sim.bank - Sim::ATM_FEE, Sim::ATM_FEE);
+        if (line.empty()) line = sim.bank > 0 ? "ATM · the balance does not cover the fee" : "ATM · nothing to bank";
+        textC(line, sw / 2, sh / 2 + hud(46), hud(14), { 150, 200, 214, 170 });
+        textC(fmt("balance %d · it keeps if you die", sim.bank), sw / 2, sh / 2 + hud(64), hud(12), { 150, 200, 214, 130 });
     } else if (sim.bedNear) {   // a bed the use key would sleep in (Level 94); it comes before a door
         textC(fmt("%s · sleep until morning", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14), { 200, 190, 160, 150 });
     } else if (sim.usherNear) {   // the theater's Usher, in reach of a tip

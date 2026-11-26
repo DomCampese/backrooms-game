@@ -2527,6 +2527,57 @@ so CREDITS.md has no row for it.
   `CARDS_REACH`. The capture hook moved the player 0.8 m in before pressing
   E.
 
+# ATMs (November 2026)
+
+Every level has cash machines set into its walls. The use key banks the
+doubloons carried; crouched, it draws the balance out, less a fee. The
+balance survives death, which carried doubloons do not (`Sim::useAtm`,
+shared/sim/atm.cpp).
+
+- **Where an ATM is, is core's `wallAtm(world, gi, gk, west)`**
+  (core/layout.h), as for the phones and breaker panels: one solid edge in
+  `atmRate(level)` (`ATM_RATE` in layout.cpp, per level), 0.65 of the way
+  along it, `ATM_Y` (1.15 m) over the floor. It refuses the edges a breaker
+  refuses, and the phone's and breaker's own edges, so neither of those
+  moved. On Level 94 it only faces into a house (`World::indoors`): a
+  house's outside walls carry its clapboards. The layout lists it as
+  `FixtureKind::Atm` and the sim finds it through the same function.
+- **The rates are per level** because the levels have very different
+  numbers of walls. At 150 everywhere the Poolrooms had 0.04 a chunk.
+  Measured over 64 chunks at seeds 1337, 7 and 99: 0.35 a chunk in the
+  theater, 0.43-0.57 elsewhere.
+- **The contract golden gained only ATM lines** (`kind 20`) and their
+  chunks' fixture counts.
+- **The mesher builds it from boxes** (`addAtm`, chunk_mesh.cpp): a dark
+  blue surround, a sign lettered "ATM", a steel fascia, a hood, the screen
+  with four buttons either side, a keypad with a red cancel key, a card
+  slot with a green light, and the cash slot. The sign, the screen and the
+  light use vertex alpha 60, the shader's plain emissive path, so an ATM
+  shows in a blackout. Each part stands at least 8 mm off the one behind
+  it. It is 0.22 m deep at the hood, inside the player's radius off the
+  wall, so it needs no collision box.
+- **The use key** within `ATM_REACH` (1.4 m) of one, in front of it and
+  within a metre of its floor, is third in `useWhatIsNear`, after a ringing
+  phone and a breaker panel, so it comes before the door and its crouched
+  lock. Standing, it banks every doubloon carried (`Sfx::AtmBeep`); crouched
+  (`crouchCur` over 0.5, as for roulette's black), it pays out the balance
+  less `ATM_FEE` (1) (`Sfx::AtmCash`), which is an `ATM_NOISE` (10 m) noise
+  for `ATM_NOISE_TIME` (1.2 s) in `loudestNoise`. Nothing to bank, or a
+  balance that does not cover the fee, is a low beep and a note.
+- **`Sim::bank` is not reset by `beginDescent`**, so it outlives a death.
+  It is not in the records file, so it lasts as long as the game is open.
+  Banked doubloons do not count toward `ESCAPE_COST` until drawn out.
+- The HUD line at an ATM names what each key does and the balance; the
+  doubloon line adds "N banked".
+- Both sounds are synthesized in port/sounds.cpp and are the last two `Sfx`
+  values. No rng, the new fields are not in the trace digest, and
+  walk-l0-l2.trace plays back unchanged.
+- **The casino's poker and roulette (#235) failed `tools/unreal-check.sh`**
+  on main: a local `deck` shadowed `Sim::deck`, and the roulette loop in
+  `sceneDraws` redeclared `pci`, `dx` and `dz`. They are `shoe`, `wci`,
+  `ox` and `oz` now. The check was run before the last edits to those
+  lines; run it again after any edit to shared/.
+
 # The casino's cigarettes (November 2026)
 
 A gold pack of cigarettes is the casino's find, placed and drawn like the
