@@ -205,7 +205,7 @@ bool Sim::hunterChase(float dt, double now, float &fearT) {
     float hx = noiseX - ent.x, hz = noiseZ - ent.z;
     if (sees) hunterNotice(px, pz);
     else if (hx * hx + hz * hz < noise * noise) hunterNotice(noiseX, noiseZ);
-    else ent.lostT += dt;
+    else if (!followBlood()) ent.lostT += dt;
     ent.lunge = fmaxf(0, ent.lunge - dt);
     ent.lungeCd = fmaxf(0, ent.lungeCd - dt);
     // Ignore a catch across a large height difference on stairs.
@@ -478,4 +478,22 @@ float Sim::lightAtPlayer() {
             lit += k;
         }
     return clampf(lit * 1.6f * blackoutCur, 0.0f, 1.0f);
+}
+
+// The newest blood drop he can see within BLOOD_SCENT m, if it is newer than
+// the last he followed: he goes to it, which leads him along the trail.
+bool Sim::followBlood() {
+    const BloodDrop *newest = nullptr;
+    for (const BloodDrop &b : blood) {
+        if (b.storey != world.storey || b.t <= ent.trailT) continue;
+        if (newest && b.t <= newest->t) continue;
+        float dx = b.pos.x - ent.x, dz = b.pos.z - ent.z;
+        if (dx * dx + dz * dz > BLOOD_SCENT * BLOOD_SCENT) continue;
+        if (!world.lineOfSight(ent.x, ent.z, b.pos.x, b.pos.z)) continue;
+        newest = &b;
+    }
+    if (!newest) return false;
+    ent.trailT = newest->t;
+    hunterNotice(newest->pos.x, newest->pos.z);
+    return true;
 }

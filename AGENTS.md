@@ -532,6 +532,34 @@ dark spots matter: `Sim::inShadow()` cuts his sight to `DARK_SIGHT` (9 m)
 - The HUD's cover line says "[ in shadow ]" (or "crouched · in shadow").
 - walk-l0-l2.trace has no chase and plays back unchanged.
 
+# Bleeding leaves a trail the hunter follows (November 2026)
+
+Below `BLEED_BELOW` (0.85) health the player bleeds (`Sim::updateBleeding`,
+sim.cpp), and a searching hunter follows the blood (`Sim::followBlood`,
+hunters.cpp).
+
+- **A drop every `BLEED_STEP` (1.2 m) walked, or every `BLEED_STILL` (4 s)
+  standing** (`bleedAcc`), placed within 0.2 m of the feet by a hash of the
+  seed, the count and `bloodClock`. None on a pool cell or swimming. Drops
+  are `Sim::blood` with their storey, kept `BLOOD_LIFE` (90 s), at most
+  `BLOOD_MAX` (160). `applyLevel` clears them. After a 0.6 hit the player
+  bleeds about 13 s (regeneration starts after `REGEN_DELAY`).
+- **Almond water stops it** (`stanched`, set at the swallow in
+  `updateDrink`); `hurtPlayer` clears it on a hit with damage.
+- **The hunter follows only in a chase he has lost**: in `hunterChase`'s
+  branch where he neither sees nor hears the player, the newest drop within
+  `BLOOD_SCENT` (7 m) with line of sight and newer than `Entity::trailT`
+  calls `hunterNotice` on it. Each drop he reaches shows him the next, so he
+  walks the trail to its end, where the player is, and checks the cover
+  there. `trailT` stops him going back to a drop he has followed.
+- **Drawn by `simScene` and `sceneDraws`** as `SceneKind::Blood`: a flat
+  drop and two or three spatters, red when fresh, brown with age, fading over
+  the last fifth of its life. Both builds draw it with no platform code.
+- The HUD's cover line says "[ bleeding · it can follow the blood ]" while a
+  hunter is out, or "[ bleeding · almond water stops it ]".
+- None of it draws from `grng`, and walk-l0-l2.trace never takes damage, so
+  it plays back unchanged.
+
 # A tossed doubloon lures the hunter (November 2026)
 
 With empty hands (key 1) the fire button tosses a doubloon

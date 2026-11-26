@@ -44,6 +44,7 @@ struct Entity {
     uint64_t checked[6] = {};
     int nChecked = 0;
     float checkT = 0;
+    float trailT = -1;   // bloodClock of the newest blood drop he has followed
     bool atCover = false;
     float dispY = 0;   // smoothed floor height, so he does not jump on stairs
     float lunge = 0;     // s left in a lunge (LUNGE_TIME); only a lunge can catch the player

@@ -255,6 +255,14 @@ struct Sim {
     // earns the spare hit back.
     static constexpr float ENTITY_HIT = 0.6f;
     static constexpr float HURT_GRACE = 1.5f;   // s of immunity after a hit
+    // Below BLEED_BELOW health the player bleeds (Sim::updateBleeding): a drop
+    // every BLEED_STEP m walked, or every BLEED_STILL s standing, kept
+    // BLOOD_LIFE s, at most BLOOD_MAX on a level. A searching hunter that can
+    // see a drop within BLOOD_SCENT m newer than the last he followed goes to
+    // it (followBlood). Almond water stops the bleeding until the next hit.
+    static constexpr float BLEED_BELOW = 0.85f, BLEED_STEP = 1.2f, BLEED_STILL = 4.0f;
+    static constexpr float BLOOD_LIFE = 90.0f, BLOOD_SCENT = 7.0f;
+    static constexpr int   BLOOD_MAX = 160;
     static constexpr float REGEN_DELAY = 6.0f;
     static constexpr float REGEN_RATE = 0.06f;  // meter-fraction per second
     // Holding a shut door (Sim::bracing): the use key held at a shut door in
@@ -477,6 +485,12 @@ struct Sim {
     struct Bullet { Vec3 pos, tail, direction; float remaining, fade; };
     struct BulletImpact { Vec3 pos, normal; float life; bool body; };
     std::vector<Bullet> bullets;
+    struct BloodDrop { Vec3 pos; float t; int storey; uint32_t seed; };   // t: bloodClock when it fell
+    std::vector<BloodDrop> blood;    // this level's, oldest first
+    float bloodClock = 0;            // s of sim time, for the drops' ages
+    float bleedAcc = 0;              // m walked (or s still, scaled) toward the next drop
+    bool stanched = false;           // almond water stopped the bleeding; the next hit undoes it
+    bool bleeding() const { return health < BLEED_BELOW && !stanched && deathT <= 0; }
     std::vector<BulletImpact> bulletImpacts;
     int flares = MAXFLARES;          // carried
     double nextFlareRegen = 0;
@@ -701,6 +715,8 @@ struct Sim {
     void updateExits(double now);
     void updateTimers(float dt);
     void updateHealth(float dt);
+    void updateBleeding(float dt);
+    bool followBlood();              // the hunter takes up the trail; true if he found a newer drop
 
     // ---- movement pieces
     void updateSprint(bool requested, bool moving, bool crouched, float dt);

@@ -586,6 +586,20 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             put(out, cylinderEx(tip, sub(shoulder, scale(side, 0.17f)), 0.011f, 0.011f, 4, cc));
             break;
         }
+        case SceneKind::Blood: {
+            // A drop and two or three spatters, flat on the floor. Fresh it is
+            // red; it dries to brown over its life and fades in the last fifth.
+            const float age = it.amount, fade = clampf((1.0f - age) * 5.0f, 0.0f, 1.0f);
+            const float lum = propLum(it.pos.x, it.pos.y + 0.1f, it.pos.z);
+            const Rgba col = lit({ cl8(120 - 60 * age), cl8(14 + 10 * age), cl8(12 + 8 * age), cl8(235 * fade) }, lum);
+            const Vec3 up{ 0, 0.0015f, 0 }, along{ cosf(it.yaw), 0, sinf(it.yaw) }, side{ -along.z, 0, along.x };
+            put(out, cylinderEx(it.pos, add(it.pos, up), 0.035f + 0.008f * it.variant, 0.035f, 10, col));
+            for (int n = 0; n < 2 + (it.variant & 1); n++) {
+                Vec3 p = add(it.pos, add(scale(along, 0.06f + 0.035f * n), scale(side, (n - 1) * 0.025f)));
+                put(out, cylinderEx(p, add(p, up), 0.012f - 0.003f * n, 0.012f - 0.003f * n, 6, col));
+            }
+            break;
+        }
         default:   // flares, impacts and the actors are drawn below, from the sim
             break;
         }

@@ -44,6 +44,7 @@ void Sim::updateDrink(float dt) {
         stamina = 1.0f;
         fear *= 0.35f;
         boostT = 8.0f;
+        stanched = true;   // and the bleeding stops
         sanity = clampf(sanity + 0.34f + 0.04f * level, 0.0f, 1.0f);   // more on deeper levels
         sanityWarnT = 0;
     }
