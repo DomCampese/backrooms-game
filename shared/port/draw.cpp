@@ -804,6 +804,28 @@ void sceneDraws(Sim &sim, const FrameLight &light, float now, std::vector<SceneD
             put(out, s);
         }
     }
+    if (sim.level == CASINO && (sim.cards.active || sim.cards.showT > 0)) {   // blackjack: the hand's cards on the felt
+        const Sim::CardHand &c = sim.cards;
+        const float cx = c.a * CELL + 1.0f, cz = c.b * CELL + 1.0f;
+        float ux = sim.px - cx, uz = sim.pz - cz;
+        const float ul = sqrtf(ux * ux + uz * uz);
+        if (ul > 0.01f) { ux /= ul; uz /= ul; } else { ux = 0; uz = -1; }
+        const float rx = -uz, rz = ux;
+        const float top = sim.world.floorY(c.a, c.b) + PROP_SHAPES[PROP_CARD_TABLE].top + 0.002f;
+        const float lum = propLum(cx, top, cz);
+        // A card is 63 x 88 mm, its long side toward the player; a cube is
+        // axis-aligned, so the long side goes on the axis nearer that line.
+        const bool longX = fabsf(ux) > fabsf(uz);
+        auto card = [&](int i, int n, float along, bool faceUp) {
+            const float off = (i - (n - 1) * 0.5f) * 0.075f;
+            const Vec3 p = { cx + ux * along + rx * off, top, cz + uz * along + rz * off };
+            const Rgba col = faceUp ? Rgba{ cl8(236 * lum), cl8(234 * lum), cl8(226 * lum), 255 }
+                                    : Rgba{ cl8(128 * lum), cl8(28 * lum), cl8(34 * lum), 255 };
+            put(out, cube(p, longX ? 0.088f : 0.063f, 0.003f, longX ? 0.063f : 0.088f, col));
+        };
+        for (int i = 0; i < c.nYou; i++) card(i, c.nYou, 0.26f, true);
+        for (int i = 0; i < c.nDealer; i++) card(i, c.nDealer, -0.26f, i != 1 || c.revealed);
+    }
     for (const Sim::BulletImpact &impact : sim.bulletImpacts) {
         float age = 0.24f - impact.life;
         Rgba color = impact.body ? Rgba{ 125, 32, 24, 190 } : Rgba{ 211, 188, 144, 190 };

@@ -43,6 +43,7 @@ void Sim::step(const InputFrame &in, float dt, double now) {
     updateEntity(dt, now, in.forceSpawn);
     updateUsher(dt, now);
     updateSlots(dt);
+    updateCards(in, dt);
     updateExits(now);
     updateTimers(dt);
 }

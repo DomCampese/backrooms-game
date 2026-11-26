@@ -190,3 +190,109 @@ void Sim::updateSmoking(const InputFrame &in, float dt) {
     fear *= 0.6f;
     play(Sfx::Drag);
 }
+
+// Blackjack at the card tables (CARDS_* in sim.h).
+int Sim::handValue(const uint8_t *ranks, int n) {
+    int total = 0, aces = 0;
+    for (int i = 0; i < n; i++) {
+        total += ranks[i] >= 10 ? 10 : ranks[i];
+        if (ranks[i] == 1) aces++;
+    }
+    if (aces > 0 && total + 10 <= 21) total += 10;   // one ace counts 11
+    return total;
+}
+
+bool Sim::cardTableInReach(int &a, int &b) {
+    if (level != CASINO || inMenu || deathT > 0) return false;
+    const int pci = cellOf(px), pck = cellOf(pz);
+    float nearest = CARDS_REACH * CARDS_REACH;
+    bool found = false;
+    for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+        const int ca = pci + dx, cb = pck + dz;
+        if (world.propAt(ca, cb) != PROP_CARD_TABLE) continue;
+        const float ddx = px - (ca * CELL + 1.0f), ddz = pz - (cb * CELL + 1.0f), d2 = ddx * ddx + ddz * ddz;
+        if (d2 >= nearest) continue;
+        nearest = d2; a = ca; b = cb; found = true;
+    }
+    return found;
+}
+
+void Sim::dealCards(int a, int b) {
+    if (coins < CARDS_BET) {
+        deckNoteT = 2.2f; deckNote = "one doubloon a hand.";
+        return;
+    }
+    coins -= CARDS_BET;
+    cards = CardHand{};
+    cards.active = true;
+    cards.a = a; cards.b = b;
+    for (int i = 0; i < 2; i++) {   // drawn in dealing order: you, the dealer, you, the dealer
+        cards.you[cards.nYou++] = (uint8_t)cardRng.ri(1, 13);
+        cards.dealer[cards.nDealer++] = (uint8_t)cardRng.ri(1, 13);
+    }
+    play(Sfx::Click).atPitch(1.7f).atVolume(0.5f);
+    if (handValue(cards.you, 2) == 21) standCards();   // a two-card 21 is settled at once
+}
+
+void Sim::hitCards() {
+    if (cards.nYou >= CARDS_MAX) return;
+    cards.you[cards.nYou++] = (uint8_t)cardRng.ri(1, 13);
+    play(Sfx::Click).atPitch(1.7f).atVolume(0.5f);
+    if (handValue(cards.you, cards.nYou) > 21) {
+        cards.active = false; cards.revealed = true;
+        cards.result = CardResult::Bust; cards.showT = CARDS_SHOW;
+        play(Sfx::Click).atPitch(0.6f);
+        deckNoteT = 2.2f; deckNote = "over twenty-one. the doubloon is gone.";
+    }
+}
+
+void Sim::standCards() {
+    cards.active = false;
+    cards.revealed = true;
+    cards.showT = CARDS_SHOW;
+    const int you = handValue(cards.you, cards.nYou);
+    const bool youNatural = cards.nYou == 2 && you == 21;
+    const bool dealerNatural = handValue(cards.dealer, 2) == 21;
+    if (!youNatural)
+        while (handValue(cards.dealer, cards.nDealer) < 17 && cards.nDealer < CARDS_MAX)
+            cards.dealer[cards.nDealer++] = (uint8_t)cardRng.ri(1, 13);
+    const int dealer = handValue(cards.dealer, cards.nDealer);
+    if (youNatural && !dealerNatural) cards.result = CardResult::Blackjack;
+    else if (dealerNatural && !youNatural) cards.result = CardResult::Lose;
+    else if (dealer > 21 || you > dealer) cards.result = CardResult::Win;
+    else if (you == dealer) cards.result = CardResult::Push;
+    else cards.result = CardResult::Lose;
+    switch (cards.result) {
+    case CardResult::Blackjack:
+        coins += 3; play(Sfx::SlotWin).atPitch(1.2f);
+        deckNoteT = 2.6f; deckNote = "twenty-one. three doubloons.";
+        break;
+    case CardResult::Win:
+        coins += 2; play(Sfx::SlotWin).atPitch(1.1f).atVolume(0.7f);
+        deckNoteT = 2.2f; deckNote = "you win. two doubloons.";
+        break;
+    case CardResult::Push:
+        coins += 1; play(Sfx::Click).atPitch(1.2f);
+        deckNoteT = 2.2f; deckNote = "a tie. the doubloon comes back.";
+        break;
+    default:
+        play(Sfx::Click).atPitch(0.6f);
+        deckNoteT = 2.2f; deckNote = "the dealer wins.";
+        break;
+    }
+}
+
+void Sim::updateCards(const InputFrame &in, float dt) {
+    if (cardsEntry != levelEntries) {   // a new level or visit: no hand, a fresh shoe
+        cardsEntry = levelEntries;
+        cards = CardHand{};
+        cardRng = Rng(hash64((uint64_t)world.seed ^ ((uint64_t)world.visit << 32) ^ 0xCA2D5ULL));
+    }
+    cards.showT = fmaxf(0.0f, cards.showT - dt);
+    int a, b;
+    const bool reach = cardTableInReach(a, b);
+    cardsNear = reach && !cards.active;
+    if (!cards.active) return;
+    const float dx = px - (cards.a * CELL + 1.0f), dz = pz - (cards.b * CELL + 1.0f);
+    if (deathT > 0 || level != CASINO || dx * dx + dz * dz > CARDS_LEAVE * CARDS_LEAVE || in.jumpPressed) standCards();
+}

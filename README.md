@@ -491,6 +491,12 @@ AGENTS.md has the module map file by file.
   water from vending machines, so spending them delays escaping. In the
   casino you can gamble them on the slot machines: a jackpot gets you most
   of the way out, but the bells bring the hunter.
+- **Blackjack.** At a casino card table press E (USE) to play a hand for
+  one doubloon: E takes a card, SPACE (JUMP) or stepping away stands, and
+  the dealer draws to 17. A win pays two doubloons, a tie returns yours,
+  and 21 in your first two cards pays three. The cards lie on the felt and
+  the HUD shows both hands with their totals. Unlike the slot machines, a
+  hand makes no noise.
 
   <p align="center"><img src="docs/escape_door.png" width="420" alt="A green exit door"> <img src="docs/escape_win.png" width="420" alt="The escape screen"></p>
 - **LEVEL FUN details.** Red carpet with confetti in it, a black ceiling,
