@@ -1562,8 +1562,10 @@ Level 1 follows the wiki's "Habitable Zone" article (CREDITS.md).
     the whole square first and only candidates in distance order are
     checked against the walls, so few chunks are generated. Rides of 43-65
     m on seeds 1337, 7 and 99.
-  - A hunter that was out goes `Hidden` with `nextSpawn` no sooner than
-    `LIFT_LOSE` (20 s) later.
+  - On every ride the hunter goes `Hidden` with `nextSpawn` no sooner than
+    `LIFT_LOSE` (20 s) later, whether it was out or not. Doing it only for a
+    hunter that was out let one already sent away for less (a lit Smiler
+    returns in 8 s in #224) come straight back.
   - While called, `sceneDraws` adds two additive glows: the call button and
     the floor indicator, pulsing at 2 Hz. The doors do not open on screen:
     the ride is the dark screen.

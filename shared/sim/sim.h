@@ -616,8 +616,8 @@ struct Sim {
     // later with a chime that is a LIFT_NOISE m noise for LIFT_NOISE_TIME s.
     // If the player is then within LIFT_STAY m of the doors they ride it: the
     // screen goes dark for LIFT_RIDE s and they step out of another lift
-    // LIFT_MIN..LIFT_MAX cells away, facing out. A hunter that was out loses
-    // them and returns no sooner than LIFT_LOSE s later.
+    // LIFT_MIN..LIFT_MAX cells away, facing out. The hunter loses them and
+    // returns no sooner than LIFT_LOSE s later, whether it was out or not.
     static constexpr float LIFT_REACH = 1.6f;
     static constexpr float LIFT_WAIT = 5.0f;
     static constexpr float LIFT_STAY = 2.4f;

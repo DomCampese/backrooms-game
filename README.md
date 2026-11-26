@@ -429,8 +429,8 @@ AGENTS.md has the module map file by file.
   of one to call it: the call button and the floor indicator over the doors
   light up, and 5 s later it arrives with a two-note chime that a hunter can
   hear from 22 m. If you are still by the doors, you ride it: the screen goes
-  dark for 3 s and you step out of another lift 40-100 m away. A hunter that
-  was after you loses you and stays away for at least 20 s. If you walked
+  dark for 3 s and you step out of another lift 40-100 m away. The hunter
+  loses you and stays away for at least 20 s. If you walked
   off, the lift comes and goes without you.
 - **Terrain.** Level 0 has sunken areas, Level 1 has raised loading docks, and
   the pools have steps down into the water. You can jump onto most furniture

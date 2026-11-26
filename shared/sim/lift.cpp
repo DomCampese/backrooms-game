@@ -88,10 +88,11 @@ void Sim::updateLift(float dt, double now) {
         lift.dest = dest;
         lift.state = LiftState::Riding;
         lift.t = LIFT_RIDE;
-        if (ent.st != EState::Hidden) {   // the doors shut on it: it loses the player
-            ent.st = EState::Hidden;
-            ent.nextSpawn = fmax(ent.nextSpawn, now + LIFT_LOSE);
-        }
+        // The doors shut on it: whether it was out or not, it comes back no
+        // sooner than LIFT_LOSE. Testing only a hunter that was out let one
+        // sent away for a shorter time (a lit Smiler, #224) come straight back.
+        ent.st = EState::Hidden;
+        ent.nextSpawn = fmax(ent.nextSpawn, now + LIFT_LOSE);
         return;
     }
     // Riding: held in front of the doors, in the dark, until they open elsewhere.
