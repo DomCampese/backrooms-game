@@ -38,7 +38,7 @@ void Sim::spawnUsher(double now) {
         placed = !world.lineOfSight(px, pz, s.x, s.y);
     }
     usher.st = UState::Patrol;
-    usher.life = 0; usher.caught = 0; usher.whistleCd = 0; usher.gait = 0; usher.hp = 2;
+    usher.life = 0; usher.caught = 0; usher.whistleCd = 0; usher.gait = 0; usher.hp = 2; usher.paidT = 0;
     usher.vx = usher.vz = 0;
     usher.dispY = world.groundAt(usher.x, usher.z, 1.0f);
     usher.beamYaw = portableAtan2(usher.z - pz, usher.x - px);   // facing away from the player
@@ -64,9 +64,9 @@ void Sim::usherRoamTarget(double now) {
     usher.nextRoam = now + 14.0 + usherRng.f01() * 10.0;
 }
 
-// Hiding beats the beam outright; crouching halves its reach.
+// Hiding beats the beam outright; crouching halves its reach; a tip blinds it.
 bool Sim::inUsherBeam() {
-    if ((usher.st != UState::Patrol && usher.st != UState::Spot) || hidden) return false;
+    if ((usher.st != UState::Patrol && usher.st != UState::Spot) || hidden || usher.paidT > 0) return false;
     float dx = px - usher.x, dz = pz - usher.z, d = portableHypot(dx, dz);
     float reach = crouchCur > 0.7f ? USHER_BEAM_M * 0.5f : USHER_BEAM_M;
     if (d > reach) return false;
@@ -75,6 +75,29 @@ bool Sim::inUsherBeam() {
         if (along < portableCos(USHER_BEAM_HALF)) return false;
     }
     return world.lineOfSight(usher.x, usher.z, px, pz);
+}
+
+bool Sim::usherInReach() const {
+    if (level != THEATER || deathT > 0 || (usher.st != UState::Patrol && usher.st != UState::Spot)) return false;
+    return portableHypot(px - usher.x, pz - usher.z) < USHER_TIP_REACH && fabsf(usher.dispY - py) < 1.0f;
+}
+
+// A doubloon buys USHER_PAID s of the Usher looking the other way.
+void Sim::tipUsher(double now) {
+    if (coins < USHER_TIP) {
+        deckNoteT = 2.2f; deckNote = "it holds out a hand. it wants a doubloon.";
+        play(Sfx::Click).atPitch(0.8f);
+        return;
+    }
+    coins -= USHER_TIP;
+    usher.paidT = USHER_PAID;
+    usher.caught = 0;
+    if (usher.st == UState::Spot) {
+        usher.st = UState::Patrol; usher.life = 0; usher.whistleCd = USHER_REST;
+        usherRoamTarget(now);
+    }
+    play(Sfx::CoinDrop).atPitch(1.25f).atVolume(0.7f);
+    deckNoteT = 2.6f; deckNote = "it pockets the doubloon and turns its torch away.";
 }
 
 void Sim::usherWhistle() {
@@ -111,8 +134,11 @@ void Sim::bulletHitsUsher() {
 // shot or a lit flashlight it can see. Spot: it stops, holds the beam on the
 // player for USHER_HOLD, then walks on and cannot whistle for USHER_REST.
 void Sim::updateUsher(float dt, double now) {
-    if (level != THEATER) { usher.st = UState::Gone; usherDist = 1e9f; return; }
+    usherNear = false;
+    if (level != THEATER) { usher.st = UState::Gone; usherDist = 1e9f; usher.paidT = 0; return; }
     usher.whistleCd = fmaxf(0.0f, usher.whistleCd - dt);
+    usher.paidT = fmaxf(0.0f, usher.paidT - dt);
+    usherNear = usherInReach();
     if (usher.st == UState::Gone) {
         usherDist = 1e9f;
         if (now > usher.nextSpawn && deathT <= 0) spawnUsher(now);
@@ -129,7 +155,7 @@ void Sim::updateUsher(float dt, double now) {
     const float toPlayer = portableAtan2(dz, dx);
     float aimYaw = usher.beamYaw;
     if (usher.st == UState::Patrol) {
-        bool loud = sprinting || (flashOn && flashCur > 0.5f) || muzzleT > 0;
+        bool loud = (sprinting || (flashOn && flashCur > 0.5f) || muzzleT > 0) && usher.paidT <= 0;   // tipped, it does not turn
         bool heard = loud && usherDist < USHER_HEAR_M && world.lineOfSight(usher.x, usher.z, px, pz);
         if (heard) { usher.roamX = px; usher.roamZ = pz; usher.nextRoam = now + 6.0; }
         float rdx = usher.roamX - usher.x, rdz = usher.roamZ - usher.z;
@@ -151,6 +177,8 @@ void Sim::updateUsher(float dt, double now) {
         }
         world.collideCircle(usher.x, usher.z, 0.32f, usher.dispY);
         if (heard) aimYaw = toPlayer;
+        // Tipped, the torch swings off the player whenever it would cross them.
+        if (usher.paidT > 0 && fabsf(wrapPi(aimYaw - toPlayer)) < USHER_BEAM_HALF * 3.0f) aimYaw = toPlayer + TAU * 0.5f;
         usher.caught = inUsherBeam() ? usher.caught + dt : fmaxf(0.0f, usher.caught - dt);
         if (usher.caught > USHER_SPOT && usher.whistleCd <= 0) {
             usher.st = UState::Spot; usher.life = 0;

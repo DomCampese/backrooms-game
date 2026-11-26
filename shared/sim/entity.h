@@ -22,6 +22,7 @@ struct Usher {
     float whistleCd = 0;         // s before it can whistle again
     float gait = 0;              // footfall count, as Entity::gait
     int hp = 2;
+    float paidT = 0;             // s left of a tip (Sim::tipUsher): it looks the other way
 };
 struct Entity {
     float vx = 0, vz = 0;        // world velocity, for the sprite's lean

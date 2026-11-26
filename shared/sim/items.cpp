@@ -438,6 +438,7 @@ void Sim::useWhatIsNear() {
     if (bedInReach()) { trySleep(); return; }   // Level 94's beds
     int ta, tb;
     if (truckInReach(ta, tb)) { takeFromTruck(ta, tb); return; }   // and its almond water trucks
+    if (usherInReach() && usher.paidT <= 0) { tipUsher(stepNow); return; }   // the theater's Usher
     useDoor();
     if (level == 1) {
         for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {

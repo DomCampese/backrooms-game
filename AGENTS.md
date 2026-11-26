@@ -303,6 +303,19 @@ shared/sim/items.cpp). A shut door is `WALL_SHUT`, which no chunk stores: the
   the only sign of it.
 - F3's E spawns the Usher 9 m ahead in the theater instead of the hunter.
   `BACKROOMS_SPAWN=1` presses it on frame 100 for captures.
+- **A doubloon tips the Usher** (November 2026; `Sim::tipUsher`,
+  `usherInReach`, usher.cpp). The use key within `USHER_TIP_REACH` (1.8 m)
+  of a patrolling or spotting Usher, within 1 m of its height, costs
+  `USHER_TIP` (1) and sets `Usher::paidT` to `USHER_PAID` (60 s). While it
+  runs, `inUsherBeam` is false, a sprint, shot or light does not turn it,
+  and its sweep swings to the far side whenever it would come within three
+  beam half-widths of the player, so the sprite shows its back. A tip during
+  a hold ends it (Patrol, `whistleCd` = `USHER_REST`); the hunter it already
+  called stays called. No doubloon: a note and a click. A second press while
+  paid does nothing, so it is not charged twice. `spawnUsher` clears
+  `paidT`. It is after the truck and before the doors in `useWhatIsNear`, and
+  the HUD prompt is before the door line. No rng, no new `Sfx`
+  (`CoinDrop` at 1.25); the theater is not in walk-l0-l2.trace.
 - **The regression harness crashes at `Game::init` in a fresh sandbox**
   (a null GL call after `InitWindow`), on main as well. The theater's new
   checks were also run from a core-and-sim program with no window.
