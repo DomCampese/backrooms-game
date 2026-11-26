@@ -3457,6 +3457,11 @@ three rules:
     inventory readable over the Poolrooms' white tile.
   - `hudTextC` measures at the scaled size. Measuring at 16 and drawing at 38
     puts the line off centre.
+  - **Wrap long menu hints on portrait screens.** raylib's default font
+    clamps `DrawText` and `MeasureText` to at least 10 pixels. `fitSize`
+    cannot shrink a long line below that width, so the title screen splits
+    its controls into two lines on portrait phones. Check text bounds with
+    the actual font, not only an estimated character width.
   - The viewmodel's `k = 1.25f` is in gun-local metres, not HUD pixels.
 
 # Conventions

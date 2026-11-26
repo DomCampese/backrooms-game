@@ -533,9 +533,9 @@ AGENTS.md has the module map file by file.
   tape effect: colour smeared to the right, slightly soft detail, noise,
   faint scanlines, a slow tracking band, a skewed bottom edge and occasional
   dropouts. Fear moves it toward the full tape effect. There is no toggle.
-- **Title screen.** A camera moves slowly through a hall behind the title,
-  the "press any key" prompt, your best run and the controls. Any key or
-  click starts a run on Level 0.
+- **Title screen.** A camera moves slowly through a hall behind a left-aligned
+  white title and recording marker. The start prompt, records and controls
+  sit below it. Any key, click or touch start gesture starts a run on Level 0.
 
 ## Smaller details
 

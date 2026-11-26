@@ -115,40 +115,64 @@ void Hud::deathCard(float timeF) {
 }
 
 void Hud::titleCard(float timeF) {
-    // Darken the top and bottom so the text is readable over any background.
-    box(HudDraw::GradientV, 0, 0, sw, sh / 2, fade(BLACK_RGBA, 0.62f), fade(BLACK_RGBA, 0.12f));
-    box(HudDraw::GradientV, 0, sh / 2, sw, sh / 2, fade(BLACK_RGBA, 0.12f), fade(BLACK_RGBA, 0.72f));
-    const std::string t1 = "T H E   B A C K R O O M S";
-    // A slight flicker on the title.
-    float fl = 0.86f + 0.14f * sinf(timeF * 27.0f) * sinf(timeF * 41.3f + 0.7f);
-    int ts = fitSize(t1, hud(62), fitW());
-    int tw = measure(t1.c_str(), ts);
-    raw(t1, sw / 2 - tw / 2 + hud(2), sh / 3 + hud(2), ts, fade(BLACK_RGBA, 0.55f));   // drop shadow
-    raw(t1, sw / 2 - tw / 2, sh / 3, ts, fade({ 228, 214, 158, 255 }, fl));
-    textC("and everything under it", sw / 2, sh / 3 + ts + hud(16), hud(20), { 150, 142, 108, 220 });
-    float pl = 0.45f + 0.55f * (0.5f + 0.5f * sinf(timeF * 3.0f));
-    // On touch, the prompt names a tap, not a key.
-    textC(in.touch ? "tap anywhere to descend" : "press any key to descend", sw / 2, sh * 2 / 3, hud(24),
-          fade({ 210, 198, 150, 255 }, pl));
+    const Rgba paper = { 232, 234, 226, 255 };
+    const Rgba muted = { 174, 182, 174, 255 };
+    const Rgba red = { 196, 58, 46, 255 };
+    const int margin = sw * 6 / 100;
+    const int width = sw - 2 * margin;
+    const int rule = hud(1);
+    auto line = [&](const std::string &t, int y, int size, Rgba colour) {
+        text(t, margin, y, fitSize(t, hud(size), width), colour);
+    };
+
+    box(HudDraw::GradientH, 0, 0, sw, sh, fade(BLACK_RGBA, 0.78f), fade(BLACK_RGBA, 0.08f));
+    box(HudDraw::GradientV, 0, sh / 2, sw, sh - sh / 2, fade(BLACK_RGBA, 0), fade(BLACK_RGBA, 0.88f));
+
+    const int marker = hud(9);
+    const int top = sh * 7 / 100;
+    rect(margin, top + hud(3), marker, marker,
+         fade(red, 0.75f + 0.25f * sinf(timeF * 2.0f)));
+    const std::string label = "REC / UNIDENTIFIED LOCATION";
+    text(label, margin + marker + hud(12), top,
+         fitSize(label, hud(16), width - marker - hud(12)), muted);
+    rect(margin, top + hud(35), width, rule, { 174, 182, 174, 65 });
+
+    line("THE", sh * 27 / 100, 28, paper);
+    line("BACKROOMS", sh * 32 / 100, 112, paper);
+    line("NO KNOWN EXIT", sh * 49 / 100, 16, muted);
+
+    const int startY = sh * 61 / 100;
+    rect(margin, startY, hud(3), hud(30), red);
+    const std::string start = in.touch ? "TAP ANYWHERE TO ENTER" : "PRESS ANY KEY TO ENTER";
+    text(start, margin + hud(18), startY + hud(4),
+         fitSize(start, hud(23), width - hud(18)), paper);
+
     const Records &b = sim.best;
-    if (b.escapes || b.kills || b.metres || b.wins) {
-        std::string tb = b.tapes > 0
-            ? fmt("best:  %d got out   ·   %d hunter%s put down   ·   %d m wandered   ·   %d tape%s found", b.wins,
-                  b.kills, b.kills == 1 ? "" : "s", b.metres, b.tapes, b.tapes == 1 ? "" : "s")
-            : fmt("best:  %d got out   ·   %d hunter%s put down   ·   %d m wandered", b.wins, b.kills,
-                  b.kills == 1 ? "" : "s", b.metres);
-        textC(tb, sw / 2, sh * 2 / 3 + hud(40), hud(16), { 140, 132, 100, 200 });
+    int recordY = sh * 71 / 100;
+    if (b.escapes || b.kills || b.metres || b.wins || b.tapes) {
+        line(fmt("RECORD / %d escaped   /   %d hunters   /   %d m", b.wins, b.kills, b.metres),
+             recordY, 16, muted);
+        recordY += hud(24);
+        if (b.tapes > 0) {
+            line(fmt("%d tape%s recovered", b.tapes, b.tapes == 1 ? "" : "s"), recordY, 16, muted);
+            recordY += hud(24);
+        }
     }
     if (b.deepest > 0 || b.longestRun > 0)
-        textC(fmt("deepest  %s   ·   longest run  %02d:%02d", LEVELS[b.deepest].name, b.longestRun / 60,
-                  b.longestRun % 60),
-              sw / 2, sh * 2 / 3 + hud(62), hud(16), { 140, 132, 100, 200 });
-    std::string tc = in.touch
-        ? fmt("STICK move    AIM taps the sights up and down    LAMP torch    ITEM cycle    bank %d doubloons to leave",
-              Sim::ESCAPE_COST)
-        : fmt("WASD move    SHIFT run    C squeeze    F flashlight    1 empty hands    2/4/5 item    bank %d doubloons to leave",
-              Sim::ESCAPE_COST);
-    textC(tc, sw / 2, sh - hud(42), hud(15), { 128, 122, 96, 170 });
+        line(fmt("%s   /   longest run %02d:%02d", LEVELS[b.deepest].name,
+                 b.longestRun / 60, b.longestRun % 60), recordY, 16, muted);
+
+    rect(margin, sh - hud(98), width, rule, { 174, 182, 174, 65 });
+    const bool narrow = sw < sh;
+    if (narrow) {
+        line(in.touch ? "STICK move   /   AIM sights" : "WASD move   /   SHIFT run", sh - hud(84), 16, muted);
+        line(in.touch ? "LAMP torch   /   ITEM cycle" : "C squeeze   /   F flashlight", sh - hud(60), 16, muted);
+    } else {
+        line(in.touch ? "STICK move   /   AIM sights   /   LAMP torch   /   ITEM cycle"
+                      : "WASD move   /   SHIFT run   /   C squeeze   /   F flashlight",
+             sh - hud(76), 16, muted);
+    }
+    line(fmt("Bank %d doubloons to escape.", Sim::ESCAPE_COST), sh - hud(narrow ? 36 : 49), 16, muted);
 }
 
 void Hud::play(double now, double elapsed, bool &everFlashed) {
