@@ -12,6 +12,7 @@
 #include "../core/portable_math.h"
 #include "../core/level_rules.h"
 #include "../core/world.h"
+#include "../core/layout.h"
 #include <cstdint>
 #include <unordered_set>
 #include <vector>
@@ -770,6 +771,37 @@ struct Sim {
     // Level 1's supply crates stand where a hash of the cell and an epoch puts
     // them; the epoch moves on when a blackout ends.
     uint32_t crateEpoch = 0;
+    // Level 1's lifts (lift.cpp; core's liftDoor places them). The use key
+    // within LIFT_REACH m of a lift's doors calls it; it arrives LIFT_WAIT s
+    // later with a chime that is a LIFT_NOISE m noise for LIFT_NOISE_TIME s.
+    // If the player is then within LIFT_STAY m of the doors they ride it: the
+    // screen goes dark for LIFT_RIDE s and they step out of another lift
+    // LIFT_MIN..LIFT_MAX cells away, facing out. The hunter loses them and
+    // returns no sooner than LIFT_LOSE s later, whether it was out or not.
+    static constexpr float LIFT_REACH = 1.6f;
+    static constexpr float LIFT_WAIT = 5.0f;
+    static constexpr float LIFT_STAY = 2.4f;
+    static constexpr float LIFT_RIDE = 3.0f;
+    static constexpr float LIFT_NOISE = 22.0f;
+    static constexpr float LIFT_NOISE_TIME = 1.2f;
+    static constexpr float LIFT_LOSE = 20.0f;
+    static constexpr int LIFT_MIN = 20;
+    static constexpr int LIFT_MAX = 50;
+    enum class LiftState : uint8_t { Idle, Called, Riding };
+    struct Lift {
+        LiftState state = LiftState::Idle;
+        float t = 0;          // s to arrival (Called) or to the doors opening at the far end (Riding)
+        LiftDoor door{};      // the one called
+        LiftDoor dest{};      // where a ride comes out
+    } lift;
+    unsigned liftEntry = ~0u;
+    bool liftNear = false;            // a lift's call button is in reach of the use key, for the HUD
+    float liftMissedT = 0;            // s the HUD says it came and went
+    float liftNoiseT = 0, liftNoiseX = 0, liftNoiseZ = 0;
+    bool liftInReach();
+    void callLift();
+    bool findLiftDest(LiftDoor &out);
+    void updateLift(float dt, double now);
     std::unordered_set<uint64_t> cratesOpened;   // this epoch's, by cell
     bool crateWasDark = false;
 

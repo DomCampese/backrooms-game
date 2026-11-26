@@ -267,3 +267,17 @@ constexpr float TUBE_BUZZ_SPREAD = 10.0f;
 constexpr float TUBE_BUZZ_PHASE = 211.0f;
 constexpr float TUBE_BUZZ_DUTY = 0.5f;
 float tubeStutter(float stutterSeed, float t);
+
+// Level 1's lift doors: one solid north edge in 71 (liftHash) with solid
+// edges either side along its line. The surround runs along the edge from
+// `x0` to x0 + 2 (the cell's width); `pos` is the middle of the doors at the
+// foot of the wall, on the face the doors are on, and `normal` points out of
+// that face into the cell (ci, ck) they open onto. The layout lists it as
+// FixtureKind::LiftDoor and the sim rides it (Sim::updateLift), so the two
+// cannot disagree.
+struct LiftDoor {
+    Vec3 pos, normal;
+    float x0;
+    int ci, ck;
+};
+bool liftDoor(World &w, int gi, int gk, LiftDoor &out);

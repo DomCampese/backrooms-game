@@ -445,6 +445,7 @@ void Sim::useWhatIsNear() {
     if (usherInReach() && usher.paidT <= 0) { tipUsher(stepNow); return; }   // the theater's Usher
     useDoor();
     if (level == 1) {
+        if (liftInReach()) callLift();   // a lift's call button (lift.cpp)
         for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
             int a = pci + dx, b = pck + dz;
             if (!crateAt(a, b) || cratesOpened.count(cellKey2(a, b))) continue;
