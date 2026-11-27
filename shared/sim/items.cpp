@@ -435,6 +435,7 @@ void Sim::useWhatIsNear() {
         int ga, gb;   // LEVEL FUN's presents, beside the party tables
         if (presentInReach(ga, gb)) { openPresent(ga, gb); return; }
     }
+    if (wayOpen() && exitInReach()) { winRun(stepNow); return; }   // the way out, paid for
     int pci = cellOf(px), pck = cellOf(pz);
     if (phone.ringing && portableHypot(phone.x - px, phone.z - pz) < PHONE_REACH) { answerPhone(); return; }
     float bx, bz;

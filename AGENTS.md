@@ -868,6 +868,27 @@ Now the nearest exit within `EXIT_HEAR_M` (64 m) sounds a tone
   once the casino made six (`want[5]` read as `Sfx::Step`). It lists
   `FarJingle` now.
 
+# The escape is a choice at the door (November 2026)
+
+With `ESCAPE_COST` (12) doubloons or more, walking through an exit used to end
+the run as an escape, so a player could not take 12 or more to the next
+level. Now walking through always goes on, and the use key at a green exit
+escapes (`Sim::exitInReach`, `exitNear`, shared/sim/place.cpp).
+
+- **`exitInReach`** is a `WALL_EXIT` doorway's point within
+  `EXIT_USE_REACH` (1.4 m), over the 3 x 3 cells round the player: the same
+  point and cells `updateExits` uses for walking through (0.72 m).
+- **The use key at one escapes first in `useWhatIsNear`**, after LEVEL
+  FUN's presents, only when `wayOpen()`. Below 12 the press falls through
+  to the rest of the chain.
+- **`exitNear`** (set in `updateExits` every tick) drives the HUD line
+  "E · leave the backrooms    walk through · go deeper", near white, since
+  the exit glows green behind it.
+- **There is no cap on doubloons.** Nothing ever limited `coins`; the forced
+  escape was the only limit.
+- No rng and no new `Sfx`. walk-l0-l2.trace never holds 12 doubloons and
+  plays back unchanged.
+
 # Clark's flintlock (November 2026)
 
 On Level 0 a chasing Clark can shoot the player (`Sim::updateFlintlock`,

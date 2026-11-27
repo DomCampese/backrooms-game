@@ -493,8 +493,10 @@ AGENTS.md has the module map file by file.
 - **Exits.** Exit doors are set into wall runs. Each takes you to the next
   level.
 - **Escaping.** Hunters drop doubloons when you put them down. With 12
-  doubloons, exit doors turn green, and walking through one ends the
-  run as an escape, which is timed and recorded. Doubloons also buy almond
+  doubloons, exit doors turn green, and E (USE on touch) at one ends the
+  run as an escape, which is timed and recorded. Walking through a green
+  exit still takes you to the next level, so you can carry more than 12
+  deeper. Doubloons also buy almond
   water from vending machines, so spending them delays escaping. In the
   casino you can gamble them on the slot machines: a jackpot gets you most
   of the way out, but the bells bring the hunter.
