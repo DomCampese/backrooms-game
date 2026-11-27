@@ -259,6 +259,11 @@ struct Sim {
     static constexpr float TAPE_RUN = 26.0f;    // s: one side of a tape
     static constexpr float TAPE_NOISE = 32.0f;  // m a playing deck carries to the hunter
     static constexpr int   ESCAPE_COST = 12;    // doubloons that buy the way out
+    // With ESCAPE_COST or more carried, the use key within EXIT_USE_REACH m of
+    // an exit's doorway ends the run as an escape (exitInReach). Walking
+    // through an exit always goes on to the next level, so a player can carry
+    // more than ESCAPE_COST deeper.
+    static constexpr float EXIT_USE_REACH = 1.4f;
     // The catch: the hunter starts a lunge from LUNGE_REACH, the lunge lasts
     // LUNGE_TIME with a warning, and only a lunge in progress can catch the
     // player, inside CATCH_REACH.
@@ -981,6 +986,7 @@ struct Sim {
     void updateUsher(float dt, double now);
     void updateSlots(float dt);
     void updateExits(double now);
+    bool exitInReach();   // an exit's doorway within EXIT_USE_REACH
     void updateTimers(float dt);
     void updateHealth(float dt);
     void updateBleeding(float dt);
@@ -1078,6 +1084,7 @@ struct Sim {
         return level == LEVEL_FUN ? "THE PARTYGOER" : level == 0 ? "PIRATE CLARK" : level == MOTION ? "AN ANIMATION" : "A SMILER";
     }
     bool wayOpen() const { return coins >= ESCAPE_COST; }
+    bool exitNear = false;   // wayOpen and an exit in reach: the use key escapes
     void spawnHunter();
     float lightAtPlayer();   // 0 dark .. 1 under a working fitting
     // The same at any point; `hunterDims` applies the hunter's dark area.

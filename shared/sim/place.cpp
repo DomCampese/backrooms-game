@@ -187,6 +187,7 @@ bool Sim::shiftAWall() {
 // the first exit taken: after applyLevel the old coordinates are invalid.
 void Sim::updateExits(double now) {
     if (now >= nextExitScan) { scanExits(); nextExitScan = now + EXIT_SCAN_GAP; }
+    exitNear = !inMenu && deathT <= 0 && winT <= 0 && wayOpen() && exitInReach();
     if (escapeT > 0) return;
     int ci = cellOf(px), ck = cellOf(pz);
     for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++)
@@ -197,7 +198,8 @@ void Sim::updateExits(double now) {
         float doorZ = k * CELL + (west ? CELL * 0.5f : 0.0f);
         float ddx = px - doorX, ddz = pz - doorZ;
         if (ddx * ddx + ddz * ddz < 0.72f * 0.72f) {
-            if (wayOpen()) { winRun(now); return; }   // the true way out
+            // Walking through always goes on, whatever is carried. The escape
+            // is the use key at the door (exitInReach, useWhatIsNear).
             play(Sfx::Win);
             escapeT = 6.0f; escapeCount++;
             bankRecords();
@@ -208,6 +210,20 @@ void Sim::updateExits(double now) {
             return;
         }
     }
+}
+
+bool Sim::exitInReach() {
+    const int ci = cellOf(px), ck = cellOf(pz);
+    for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++)
+        for (int west = 0; west < 2; ++west) {
+            const int i = ci + dx, k = ck + dz;
+            if ((west ? world.wallWVal(i, k) : world.wallNVal(i, k)) != WALL_EXIT) continue;
+            const float doorX = i * CELL + (west ? 0.0f : CELL * 0.5f);
+            const float doorZ = k * CELL + (west ? CELL * 0.5f : 0.0f);
+            const float ddx = px - doorX, ddz = pz - doorZ;
+            if (ddx * ddx + ddz * ddz < EXIT_USE_REACH * EXIT_USE_REACH) return true;
+        }
+    return false;
 }
 
 const char *const MANILA_NOTES[MANILA_NOTE_COUNT][4] = {

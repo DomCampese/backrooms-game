@@ -449,8 +449,8 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
             sim.weapon == WEAPON_DECK ? (sim.deck.playing ? Rgba{ 205, 150, 235, 220 } : selc) : dimc);
     }
     if (sim.wayOpen() && sim.winT <= 0 && sim.deathT <= 0 && sim.escapeT <= 0) {   // enough doubloons: find an exit
-        const char *t = sim.level == 0 ? "the walls know you now  ·  find one"
-                                       : "the doors know you now  ·  find one";
+        const char *t = sim.level == 0 ? "the walls know you now  ·  find one to leave by"
+                                       : "the doors know you now  ·  find one to leave by";
         float pl = 0.55f + 0.45f * sinf((float)now * 2.5f);
         textC(t, sw / 2, hud(70), hud(20), fade({ 120, 235, 145, 255 }, pl));
     }
@@ -528,7 +528,10 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
     // Above the breath bar when it shows, or the two overlap.
     const bool breathBar = (sim.headUnder || sim.breath < 0.995f) && sim.deathT <= 0;
     if (coverLine) textC(coverLine, sw / 2, sh - hud(breathBar ? 82 : 62), hud(14), coverCol);
-    if (sim.phoneNear) {   // a ringing phone the use key would answer; it comes first in useWhatIsNear too
+    if (sim.exitNear) {   // enough doubloons at an exit: the use key escapes (before the phone in useWhatIsNear too)
+        textC(fmt("%s · leave the backrooms    walk through · go deeper", in.touch ? "USE" : "E"),
+              sw / 2, sh / 2 + hud(46), hud(14), { 236, 248, 236, 235 });   // near white: the exit glows green behind it
+    } else if (sim.phoneNear) {   // a ringing phone the use key would answer; it comes first in useWhatIsNear too
         textC(fmt("%s · answer the phone", in.touch ? "USE" : "E"), sw / 2, sh / 2 + hud(46), hud(14), { 214, 200, 160, 170 });
     } else if (sim.breakerNear != Sim::BreakerUse::None) {   // a breaker panel; second in useWhatIsNear too
         const char *what = sim.breakerNear == Sim::BreakerUse::Cut ? "cut the power"
