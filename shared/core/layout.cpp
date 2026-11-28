@@ -531,6 +531,14 @@ bool wallBreaker(World &w, int gi, int gk, bool west, WallPhone &out) {
     return true;
 }
 
+bool cellHasFloor(World &w, int gi, int gk) {
+    return w.storeyH <= 0.0f || !(w.vflagAt(gi, gk) & (VF_HOLE | VF_STAIR));
+}
+
+bool cellHasCeiling(World &w, int gi, int gk) {
+    return w.storeyH <= 0.0f || !(w.vflagAt(gi, gk) & VF_OPENUP);
+}
+
 bool floorGlass(World &w, int gi, int gk) {
     if (!DECOR[w.level].fittings) return false;
     const float ls = LEVEL_RULES[w.level].ls;
@@ -549,14 +557,6 @@ bool floorGlass(World &w, int gi, int gk) {
         return false;
     const LightFitting f = fittingAt(w, gx, gz);
     return f.dead && f.gap == FittingGap::None;
-}
-
-bool cellHasFloor(World &w, int gi, int gk) {
-    return w.storeyH <= 0.0f || !(w.vflagAt(gi, gk) & (VF_HOLE | VF_STAIR));
-}
-
-bool cellHasCeiling(World &w, int gi, int gk) {
-    return w.storeyH <= 0.0f || !(w.vflagAt(gi, gk) & VF_OPENUP);
 }
 
 float tubeHash(float gx, float gz) {
