@@ -539,6 +539,26 @@ bool cellHasCeiling(World &w, int gi, int gk) {
     return w.storeyH <= 0.0f || !(w.vflagAt(gi, gk) & VF_OPENUP);
 }
 
+bool floorGlass(World &w, int gi, int gk) {
+    if (!DECOR[w.level].fittings) return false;
+    const float ls = LEVEL_RULES[w.level].ls;
+    // The fitting whose centre is a corner of this cell, if any: centres are at
+    // (g + 0.5) * ls, which is a cell corner on every level's grid.
+    const float cx = gi * CELL + CELL * 0.5f, cz = gk * CELL + CELL * 0.5f;
+    const int gx = (int)floorf(cx / ls), gz = (int)floorf(cz / ls);
+    const float lx = (gx + 0.5f) * ls, lz = (gz + 0.5f) * ls;
+    if (fabsf(cx - lx) > CELL * 0.5f + 0.01f || fabsf(cz - lz) > CELL * 0.5f + 0.01f) return false;
+    const uint32_t h = ih((uint32_t)gx, (uint32_t)gz, w.sseed() ^ 0x61A55u);
+    if (h % (ls < 8.0f ? GLASS_ODDS_DENSE : GLASS_ODDS) != 0) return false;
+    // Which of the four cells round the centre: bit 4 east or west, bit 5 north or south.
+    if (((h >> 4) & 1) != (cx > lx ? 1u : 0u) || ((h >> 5) & 1) != (cz > lz ? 1u : 0u)) return false;
+    if (!cellHasFloor(w, gi, gk) || w.propAt(gi, gk) != PROP_NONE || w.pillarAt(gi, gk) || w.poolAt(gi, gk)
+        || w.softAt(gi, gk))
+        return false;
+    const LightFitting f = fittingAt(w, gx, gz);
+    return f.dead && f.gap == FittingGap::None;
+}
+
 float tubeHash(float gx, float gz) {
     float v = portableSin(gx * TUBE_HASH_X + gz * TUBE_HASH_Z) * TUBE_HASH_SCALE;
     return v - floorf(v);

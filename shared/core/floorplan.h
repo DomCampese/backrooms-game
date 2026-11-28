@@ -56,6 +56,7 @@ struct FloorCell {
     float y;                 // floorY
     bool pool;               // Level 2: water at WATER_Y over this cell
     bool drain;              // a drain grate in its floor (World::poolDrain)
+    bool glass;              // a fallen tube's glass on its floor (floorGlass)
     bool ceiling;            // cellHasCeiling: false where it opens into the storey above
     float ceilY;             // World::ceilY: the storey's pitch where there is no ceiling
     bool pillar;

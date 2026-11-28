@@ -699,6 +699,43 @@ Pcm makeHoldBreath()
     return toPcm(d, 0.6f);
 }
 
+// GlassStep: a shoe on broken tube glass, 0.3 s. A low-passed noise thud
+// (one-pole at 300 Hz, decay 40 per second) for the heel, then 9-14 cracks
+// between 5 and 160 ms, each a 1.5 ms noise burst into two resonators at
+// 2.6-5.8 kHz and 1.4-1.9 times that (decay 90-160 per second), each 0.85 as
+// loud as the last, then six grit taps of 0.5 ms out to 0.26 s. Variants
+// differ by seed. Peak 0.8.
+Pcm makeGlassStep(int variant)
+{
+    Rng r(0x61A55ULL + (uint64_t)variant * 7919u);
+    const int n = (int)(0.3f * SAMPLE_RATE);
+    std::vector<float> d(n, 0.0f);
+    float lp = 0;
+    for (int i = 0; i < (int)(0.08f * SAMPLE_RATE); i++) {   // the heel
+        const float t = (float)i / SAMPLE_RATE, x = r.f01() * 2.0f - 1.0f;
+        lp += (x - lp) * (1.0f - expf(-TAU * 300.0f / SAMPLE_RATE));
+        d[i] += lp * 1.6f * expf(-t * 40.0f);
+    }
+    const int cracks = 9 + (int)(r.f01() * 5.99f);
+    float amp = 0.9f;
+    for (int c = 0; c < cracks; c++) {
+        const float at = 0.005f + r.f01() * 0.155f, f = 2600.0f + r.f01() * 3200.0f, f2 = f * (1.4f + r.f01() * 0.5f);
+        const float dk = 90.0f + r.f01() * 70.0f;
+        const int i0 = (int)(at * SAMPLE_RATE);
+        for (int i = i0; i < n && i < i0 + (int)(0.05f * SAMPLE_RATE); i++) {
+            const float u = (float)(i - i0) / SAMPLE_RATE;
+            const float burst = u < 0.0015f ? (r.f01() * 2.0f - 1.0f) * (1.0f - u / 0.0015f) : 0.0f;
+            d[i] += amp * (burst * 0.6f + (0.5f * sinf(TAU * f * u) + 0.3f * sinf(TAU * f2 * u)) * expf(-u * dk));
+        }
+        amp *= 0.85f;
+    }
+    for (int g = 0; g < 6; g++) {   // grit settling
+        const int i0 = (int)((0.12f + r.f01() * 0.14f) * SAMPLE_RATE);
+        for (int i = i0; i < n && i < i0 + (int)(0.0005f * SAMPLE_RATE); i++) d[i] += (r.f01() * 2.0f - 1.0f) * 0.25f;
+    }
+    return toPcm(d, 0.8f);
+}
+
 // Choke: air escaping under water. Five to eight bubbles in 0.6 s, each a sine
 // chirping up from 260-520 Hz by half again over 25-45 ms, over noise
 // low-passed at about 400 Hz. Variants differ by seed.
@@ -1793,6 +1830,7 @@ ClipSpec clipSpec(Sfx sfx) {
     case Sfx::DoorShut: case Sfx::DoorKnock: case Sfx::Choke: case Sfx::Cough:
     case Sfx::Shutter: return { 3, 1.0f, 1.0f };
     case Sfx::GlassBreak: return { 1, 1.0f, 0.9f };
+    case Sfx::GlassStep:  return { 3, 1.0f, 0.8f };
     case Sfx::Hit:       return { 1, 1.7f, 0.40f };
     case Sfx::Kill:      return { 1, 0.55f, 0.80f };
     case Sfx::Heartbeat: return { 1, 1.0f, 0.55f };
@@ -1866,6 +1904,7 @@ Pcm clipPcm(Sfx sfx, int variant) {
     case Sfx::Whistle:        return makeWhistle();
     case Sfx::Gasp:           return makeGasp();
     case Sfx::Choke:          return makeChoke(variant);
+    case Sfx::GlassStep:      return makeGlassStep(variant);
     case Sfx::FarJingle:      return makeFarJingle(variant);
     case Sfx::SlotSpin:       return makeSlotSpin();
     case Sfx::SlotWin:        return makeSlotWin();

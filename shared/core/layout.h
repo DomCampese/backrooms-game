@@ -243,6 +243,17 @@ constexpr float TUBE_STUTTER_SPREAD = 97.31f;
 // The fitting at grid index (gx, gz) on the storey World::qs reads, as
 // chunkLayout lists it: the same gap, dead flag and output.
 LightFitting fittingAt(World &w, int gx, int gz);
+
+// Broken tube glass on the floor: under one dead fitting in GLASS_ODDS
+// (GLASS_ODDS_DENSE on a grid under 8 m, Level 0's 4 m, which has four times
+// the fittings), on
+// the levels with wall and ceiling fittings, in the one of the four cells
+// round its centre that the fitting's hash picks. Only on plain floor: no
+// prop, pillar, pool, rotten patch, flight or hole. The floorplan carries it
+// (FloorCell::glass) for the mesher, and the sim reads it here for the
+// footfall (Sim::updateGait), so the two agree.
+constexpr uint32_t GLASS_ODDS = 2, GLASS_ODDS_DENSE = 4;
+bool floorGlass(World &w, int gi, int gk);
 float tubeHash(float gx, float gz);
 // Each storey's tubes fail in their own places: the tube hash is offset per
 // storey, fract(s * STOREY_HASH_STEP) * STOREY_HASH_SPAN. Bounded, because the

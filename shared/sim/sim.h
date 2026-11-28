@@ -391,6 +391,12 @@ struct Sim {
     static constexpr float PHONE_HEAR_M = 40.0f, PHONE_NOISE = 18.0f;
     static constexpr float PHONE_REACH = 1.55f, PHONE_VOICE = 3.4f, PHONE_HINT_TIME = 60.0f;
     static constexpr int   PHONE_SEARCH_RINGS = 4, PHONE_SEARCH_CHUNKS = 2;
+    // Fallen tube glass (core's floorGlass; Sim::updateGait, player.cpp).
+    // Each footfall on a glass cell plays Sfx::GlassStep and is a GLASS_NOISE
+    // m noise at the foot for GLASS_NOISE_TIME s, or GLASS_NOISE_QUIET m with
+    // crouch past GLASS_CROUCH of crouchCur.
+    static constexpr float GLASS_NOISE = 14.0f, GLASS_NOISE_QUIET = 3.0f, GLASS_NOISE_TIME = 0.4f;
+    static constexpr float GLASS_CROUCH = 0.5f;
     // Breaker panels (core's wallBreaker; Sim::throwBreaker), on the levels
     // with blackouts. The use key within BREAKER_REACH of one, in front of it:
     // with the lights on, a blackout of BREAKER_CUT s (powerCut); in any
@@ -654,6 +660,8 @@ struct Sim {
     bool powerCut = false;           // the blackout running was made by a breaker
     double breakerRestUntil = 0;     // no cut before this clock time
     float breakerNoiseT = 0, breakerNoiseX = 0, breakerNoiseZ = 0;
+    bool onGlass = false;   // standing on fallen tube glass (floorGlass), for the HUD
+    float glassNoiseT = 0, glassNoiseR = 0, glassNoiseX = 0, glassNoiseZ = 0;
     enum class BreakerUse : uint8_t { None, Cut, Restore, Resting };
     BreakerUse breakerNear = BreakerUse::None;   // what the use key would do at the panel in reach
     // Separate RNG for distant sounds, so they do not shift grng (blackouts,

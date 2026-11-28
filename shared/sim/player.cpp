@@ -253,11 +253,22 @@ void Sim::updateGait(float spd, float speed, bool inWater, float dt) {
         }
     } else floatRoll *= portableExp(-6 * dt);
     eyeY -= swimClimb;
+    // Fallen tube glass: read every tick for the HUD, and a crunch and a noise
+    // on each footfall. No draw from grng: the variant is the footfall's count.
+    glassNoiseT = fmaxf(0.0f, glassNoiseT - dt);
+    onGlass = grounded && !inWater && !swimming && floorGlass(world, cellOf(px), cellOf(pz));
     if (floorf(bobPhase) > floorf(lastPhase)) {
         int v = grng.ri(0, 3);   // wading uses the swim stroke clip, pitched up
         play(inWater ? Sfx::SwimStroke : stepSfx(), v)
             .atPitch((inWater ? 1.15f : 0.9f) + grng.f01() * 0.22f)
             .atVolume((0.35f + 0.3f * bobAmt) * (inWater ? 1.2f : 1.0f));
+        if (onGlass) {
+            const bool quiet = crouchCur > GLASS_CROUCH;
+            play(Sfx::GlassStep, (int)floorf(bobPhase) % 3).atVolume(quiet ? 0.3f : 0.85f);
+            glassNoiseT = GLASS_NOISE_TIME;
+            glassNoiseR = quiet ? GLASS_NOISE_QUIET : GLASS_NOISE;
+            glassNoiseX = px; glassNoiseZ = pz;
+        }
     }
     // Wrap at an even whole number of strides, so the footfall crossing and
     // the two-footfall sway are both continuous across it.

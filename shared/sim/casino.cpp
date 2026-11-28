@@ -361,12 +361,12 @@ void Sim::dealPoker(int a, int b) {
     poker = PokerHand{};
     poker.active = true;
     poker.a = a; poker.b = b;
-    uint8_t deck[52];
-    for (int i = 0; i < 52; i++) deck[i] = (uint8_t)i;
+    uint8_t shoe[52];   // not `deck`, which is Sim's tape deck (-Wshadow in the Unreal build)
+    for (int i = 0; i < 52; i++) shoe[i] = (uint8_t)i;
     for (int i = 0; i < 6; i++) {   // six cards off a shuffled deck: you, the dealer, in turn
         const int j = i + (int)(cardRng.next() % (uint64_t)(52 - i));
-        const uint8_t t = deck[i]; deck[i] = deck[j]; deck[j] = t;
-        (i % 2 == 0 ? poker.you[i / 2] : poker.dealer[i / 2]) = deck[i];
+        const uint8_t t = shoe[i]; shoe[i] = shoe[j]; shoe[j] = t;
+        (i % 2 == 0 ? poker.you[i / 2] : poker.dealer[i / 2]) = shoe[i];
     }
     play(Sfx::Click).atPitch(1.7f).atVolume(0.5f);
 }

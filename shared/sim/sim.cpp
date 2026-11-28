@@ -227,6 +227,7 @@ void Sim::applyLevel(int lv, double now) {
     stopPose = StopPose{};
     sleepT = wakeT = 0; knockT = 0; knockedT = 1e3f; bedNear = false;
     blackoutEnd = -1;
+    onGlass = false; glassNoiseT = 0;
     powerCut = false; breakerRestUntil = 0; breakerNoiseT = 0; breakerNear = BreakerUse::None;
     mannequin = {};
     mannequin.nextSpawn = now + 150;

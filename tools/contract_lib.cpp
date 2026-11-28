@@ -658,7 +658,7 @@ bool plainEdge(const FloorEdge &e, float wallH) {
 // A cell with nothing to say: flat floor at 0 under an unbroken ceiling, no
 // pillar or pool, and both edges plain.
 bool plainCell(const FloorCell &c, float wallH) {
-    return c.floor == FloorKind::Flat && c.y == 0 && c.ceiling && c.ceilY == wallH && !c.pool && !c.pillar &&
+    return c.floor == FloorKind::Flat && c.y == 0 && c.ceiling && c.ceilY == wallH && !c.pool && !c.pillar && !c.glass &&
            plainEdge(c.north, wallH) && plainEdge(c.west, wallH);
 }
 
@@ -680,6 +680,7 @@ void floorplanChunk(Golden &g, World &w, int level, unsigned visit, int storey, 
                      (int)c.floor, c.y, c.ceiling ? 1 : 0, c.ceilY, c.pool ? 1 : 0, c.pillar ? 1 : 0);
             // Printed and hashed only where there is one, so no other line moves.
             if (c.drain) snprintf(buf + strlen(buf), sizeof buf - strlen(buf), " drain 1");
+            if (c.glass) snprintf(buf + strlen(buf), sizeof buf - strlen(buf), " glass 1");
             // The hash takes every field; the printed line leaves out a plain edge.
             std::string line = buf, shown = buf;
             putEdge(line, "N", c.north);

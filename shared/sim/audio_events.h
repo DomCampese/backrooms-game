@@ -62,6 +62,7 @@ enum class Sfx : uint8_t {
     LiftDing,         // a lift arriving: a two-note chime and the doors rolling open (Sim::updateLift)
     AshTap,           // a finger tapping a cigarette, and the ash coming off (Sim::Smoke::flickT)
     LighterSpark,     // a lighter's flint wheel striking a spark that does not catch
+    GlassStep,        // a footstep on fallen tube glass (Sim::updateGait); before Breaker so open PRs' appends do not conflict
     Breaker,          // a breaker panel's main switch thrown (Sim::throwBreaker)
     RouletteSpin,     // a roulette ball circling the wheel and dropping into a pocket (Sim::betRoulette)
 };

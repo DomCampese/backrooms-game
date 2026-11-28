@@ -401,6 +401,13 @@ AGENTS.md has the module map file by file.
   nearest exit is and which way it is from where you face, for 60 s, and a
   chalk arrow by the phone points to it. If no exit is within about 130 m of
   the phone, the line goes dead.
+- **Broken glass.** Under some dead ceiling lights the tube has fallen and
+  broken on the floor. Each step on the glass crunches, and the hunter hears
+  it from 14 m. Crouch across it and it carries 3 m. The HUD says when you
+  are standing on glass. Levels 0 and 1, LEVEL FUN, the theater and the
+  casino have it; the Poolrooms and Level 94 do not.
+
+  <p align="center"><img src="docs/floor_glass.png" width="420" alt="Broken tube glass on the Level 0 carpet"></p>
 - **Breaker panels.** Level 0, Level 1, LEVEL FUN, the theater's lobbies and
   the casino have grey breaker panels on the walls, with a red switch handle
   and a conduit to the ceiling: about one per 45 m square (one per 60 m
