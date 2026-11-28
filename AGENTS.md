@@ -839,6 +839,46 @@ back on (`Sim::throwBreaker`, shared/sim/place.cpp).
   no use key by a panel, so it plays back unchanged. The contract golden
   gained only breaker lines (`kind 19`) and their chunks' fixture counts.
 
+# Broken glass under dead fittings (November 2026)
+
+Under one dead fitting in two (one in four on Level 0's 4 m grid) the tube's
+glass lies on the floor of one of the four cells round its centre. A step on
+it is a noise; crouched it is a quiet one (`floorGlass`, core/layout.cpp;
+`Sim::onGlass` and the footfall in `updateGait`, shared/sim/player.cpp).
+
+- **Where glass is, is core's `floorGlass(world, gi, gk)`**: the fitting
+  whose centre is a corner of the cell (`fittingAt`, dead, `FittingGap::None`),
+  a hash of the fitting's grid index with its own salt (`% GLASS_ODDS`, 2, or
+  `GLASS_ODDS_DENSE`, 4, under an 8 m grid), and bits 4 and 5 of the hash pick
+  the cell. Only on levels whose `DECOR` has fittings, and only on plain
+  floor: no prop, pillar, pool, rotten patch, flight or hole. Seeds 1337, 7
+  and 99 over 64 chunks: 3.0 a chunk on Level 0, 0.8-1.0 on Level 1, LEVEL
+  FUN, the theater and the casino, none in the Poolrooms or on Level 94.
+- **The floorplan carries it** (`FloorCell::glass`), not the layout, so it
+  does not add a `FixtureKind` beside the open ATM PR's. The floorplan
+  golden prints ` glass 1` on a glass cell, and `plainCell` is false for
+  one, so a glass cell on plain floor is printed. The golden gained 33 cell
+  lines (22 of them existing lines with ` glass 1` added) and 19 changed
+  hashes; nothing else moved.
+- **The mesher builds it into the props slot** (`addFloorGlass`,
+  chunk_mesh.cpp): 22 flat shards 2-7 cm across, each 0.4 mm higher than the
+  last so overlapping shards never share a plane, two lengths of tube and an
+  end cap with pins. The shards and tube use vertex alpha 240, the shader's
+  backlit print: under their own dead fitting, plainly lit (254) they were
+  dark grey specks.
+- **Each footfall on a glass cell** (the integer crossing of `bobPhase`,
+  where the footstep plays) plays `Sfx::GlassStep` (3 variants, picked by
+  the footfall count, not `grng`) and sets `glassNoiseT` (`GLASS_NOISE_TIME`,
+  0.4 s), which `loudestNoise` returns as `GLASS_NOISE` (14 m) at the foot,
+  or `GLASS_NOISE_QUIET` (3 m) with crouch past `GLASS_CROUCH` (0.5).
+- `Sfx::GlassStep` is synthesized in port/sounds.cpp (a low-passed heel thud,
+  9-14 resonant cracks at 2.6-5.8 kHz, grit) and **sits before `Breaker` in
+  the enum, not at the end**, so it does not touch the line the open ATM PR
+  appends to. Breaker and RouletteSpin do not play in walk-l0-l2.trace.
+- The HUD's cover line says "[ broken glass · crouch to cross quietly ]" or
+  "[ broken glass · crouched, your steps are quiet ]" (`onGlass`).
+- walk-l0-l2.trace never steps on glass and plays back unchanged.
+
 # Exits can be heard (November 2026)
 
 Exits are rare (mapdump finds one in a 258 m square on Levels 0, 1 and LEVEL

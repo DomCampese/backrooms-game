@@ -1690,6 +1690,39 @@ static void addFitting(MB &pr, MB &ce, const LightFitting &lf, int level) {
             {0,0},{0,1},{1,1},{1,0},panel);
 }
 
+// A fallen tube's glass on the floor (floorGlass): 22 flat shards 2-7 cm
+// across and 2.5-11 mm thick, scattered over the middle 1.4 m of the cell, two
+// lengths of the tube (2.6 cm square, 0.2-0.45 m) and one end cap with its
+// pins. Each piece lies on the floor, not on another, so no two faces share
+// a plane. The shards and tube use vertex alpha 240 (backlit print). The shapes come from a hash of the cell's position; where the
+// glass is was decided in core.
+static void addFloorGlass(MB &pr, float gx, float fy, float gz) {
+    Rng r(hash64(((uint64_t)(uint32_t)(int)floorf(gx) << 32) ^ (uint32_t)(int)floorf(gz) ^ 0x61A55ULL));
+    // The shards use vertex alpha 240, the shader's backlit print: lit by the
+    // room plus part of their own texel. A dead fitting leaves its cell dark,
+    // and plainly lit (254) the shards were dark grey specks under it.
+    const Rgba glass = { 214, 230, 236, 240 }, tube = { 236, 236, 230, 240 }, cap = { 150, 152, 150, 254 },
+               pin = { 196, 170, 90, 254 };
+    const float cx = gx + CELL * 0.5f + (r.f01() - 0.5f) * 0.4f, cz = gz + CELL * 0.5f + (r.f01() - 0.5f) * 0.4f;
+    for (int s = 0; s < 22; s++) {
+        const float a = r.f01() * TAU, d = 0.7f * sqrtf(r.f01()), size = 0.01f + r.f01() * 0.025f;
+        const float x = cx + cosf(a) * d, z = cz + sinf(a) * d;
+        const float sx = size * (0.6f + r.f01() * 0.8f), sz = size * (0.6f + r.f01() * 0.8f);
+        // Each shard's top 0.4 mm above the last, so overlapping shards never share a plane.
+        addSolidBox(pr, x - sx, fy + 0.0015f, z - sz, x + sx, fy + 0.004f + s * 0.0004f, z + sz, glass);
+    }
+    for (int piece = 0; piece < 2; piece++) {   // two lengths of the tube, along x or z
+        const float len = 0.2f + r.f01() * 0.25f, ox = (r.f01() - 0.5f) * 0.9f, oz = (r.f01() - 0.5f) * 0.9f;
+        const bool alongX = r.f01() < 0.5f;
+        const float x0 = cx + ox, z0 = cz + oz, hx = alongX ? len * 0.5f : 0.013f, hz = alongX ? 0.013f : len * 0.5f;
+        addSolidBox(pr, x0 - hx, fy + 0.008f, z0 - hz, x0 + hx, fy + 0.034f, z0 + hz, tube);
+    }
+    const float ex = cx + (r.f01() - 0.5f) * 0.8f, ez = cz + (r.f01() - 0.5f) * 0.8f;   // an end cap and its pins
+    addSolidBox(pr, ex - 0.015f, fy + 0.008f, ez - 0.015f, ex + 0.015f, fy + 0.038f, ez + 0.015f, cap);
+    addSolidBox(pr, ex + 0.015f, fy + 0.016f, ez - 0.008f, ex + 0.027f, fy + 0.020f, ez - 0.004f, pin);
+    addSolidBox(pr, ex + 0.015f, fy + 0.026f, ez + 0.004f, ex + 0.027f, fy + 0.030f, ez + 0.008f, pin);
+}
+
 // A drain in a pool floor (World::poolDrain): a black sump plate, a steel
 // frame round it and seven bars across it, 2 * DRAIN_HALF square. The bars
 // stand on the plate and the frame on the tile, so no two faces share a plane.
@@ -1792,6 +1825,7 @@ void bakeChunkGeometry(World &w, int cx, int cz, ChunkGeometry &out) {
             // The Manila Room lays its own floorboards (addManilaRoom); a hole has no
             // floor, and a flight builds its own treads (the flights, below).
             if (c.floor == FloorKind::Boards || c.floor == FloorKind::Hole || c.floor == FloorKind::Stair) continue;
+            if (c.glass) addFloorGlass(pr, gx, fy, gz);
             if (c.floor == FloorKind::Soft) {
                 // A rotten patch: the cell is built as a shallow bowl, darkening toward the
                 // middle. SOFT_DEPTH and the falloff are World::softDip, which groundAt also

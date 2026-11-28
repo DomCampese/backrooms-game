@@ -509,6 +509,10 @@ void Hud::play(double now, double elapsed, bool &everFlashed) {
         coverCol = { 190, 180, 150, 140 };
     } else if (sim.squeezing) {
         coverLine = "[ squeezing ]";
+    } else if (sim.onGlass) {   // fallen tube glass: each step is a noise (Sim::GLASS_NOISE)
+        coverLine = sim.crouchCur > Sim::GLASS_CROUCH ? "[ broken glass · crouched, your steps are quiet ]"
+                                                      : "[ broken glass · crouch to cross quietly ]";
+        coverCol = { 214, 222, 228, 170 };
     } else if (sim.filmLevel >= Sim::FILM_LOUD) {   // the theater: the soundtrack covers footsteps
         coverLine = "[ loud scene · it covers your steps ]";
         coverCol = { 200, 180, 150, 150 };
